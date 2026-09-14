@@ -1,0 +1,379 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrganizationStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum MembershipRole {
+  ORGANIZATION_OWNER
+  ORGANIZATION_MEMBER
+  ORGANIZATION_VIEWER
+}
+
+enum PlatformRole {
+  USER
+  SUPPORT
+  OPERATOR
+  FINANCE_ADMIN
+  PLATFORM_ADMIN
+  PLATFORM_OWNER
+}
+
+enum PaymentMethod {
+  CASH
+  CHEQUE
+}
+
+enum PaymentStatus {
+  DRAFT
+  PENDING
+  CONFIRMED
+  REJECTED
+  REVERSED
+}
+
+enum LedgerEntryType {
+  PAYMENT_GRANT
+  ADMIN_GRANT
+  RESERVATION
+  CAPTURE
+  RELEASE
+  REFUND
+  ADJUSTMENT
+  REVERSAL
+}
+
+enum ModelProvider {
+  BYTEPLUS
+  NVIDIA
+}
+
+enum MediaKind {
+  IMAGE
+  VIDEO
+  VOICE
+  REASONING
+}
+
+enum GenerationJobStatus {
+  DRAFT
+  QUOTED
+  CREDIT_RESERVED
+  QUEUED
+  SUBMITTED
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  MANUAL_REVIEW
+}
+
+enum AssetStatus {
+  PENDING
+  READY
+  QUARANTINED
+  DELETED
+}
+
+model User {
+  id                String              @id @default(cuid())
+  name              String
+  email             String              @unique
+  emailVerified     Boolean             @default(false)
+  image             String?             @db.Text
+  platformRole      PlatformRole        @default(USER)
+  disabledAt        DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  sessions          Session[]
+  accounts          Account[]
+  memberships       Membership[]
+  createdPayments   ManualPayment[]     @relation("PaymentCreatedBy")
+  confirmedPayments ManualPayment[]     @relation("PaymentConfirmedBy")
+  priceVersions     ModelPriceVersion[] @relation("PriceVersionCreatedBy")
+  generationJobs    GenerationJob[]     @relation("GenerationCreatedBy")
+  auditEvents       AuditEvent[]        @relation("AuditActor")
+
+  @@index([platformRole, disabledAt])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?  @db.Text
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?   @db.Text
+  refreshToken          String?   @db.Text
+  idToken               String?   @db.Text
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?   @db.Text
+  password              String?   @db.Text
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String   @db.Text
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@index([expiresAt])
+}
+
+model Organization {
+  id             String             @id @default(cuid())
+  name           String
+  slug           String             @unique
+  status         OrganizationStatus @default(ACTIVE)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  wallet         Wallet?
+  memberships    Membership[]
+  payments       ManualPayment[]
+  projects       Project[]
+  generationJobs GenerationJob[]
+  auditEvents    AuditEvent[]
+  assets         Asset[]
+
+  @@index([status])
+}
+
+model Membership {
+  id             String         @id @default(cuid())
+  organizationId String
+  userId         String
+  role           MembershipRole @default(ORGANIZATION_MEMBER)
+  spendingCap    BigInt?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+}
+
+model Wallet {
+  id             String        @id @default(cuid())
+  organizationId String        @unique
+  balanceCache   BigInt        @default(0)
+  version        Int           @default(0)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  entries        LedgerEntry[]
+}
+
+model LedgerEntry {
+  id             String          @id @default(cuid())
+  walletId       String
+  type           LedgerEntryType
+  amountCredits  BigInt
+  balanceAfter   BigInt
+  idempotencyKey String          @unique
+  referenceType  String?
+  referenceId    String?
+  reversalOfId   String?         @unique
+  description    String?         @db.Text
+  metadata       Json?
+  createdAt      DateTime        @default(now())
+  wallet         Wallet          @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  reversalOf     LedgerEntry?    @relation("LedgerReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
+  reversedBy     LedgerEntry?    @relation("LedgerReversal")
+
+  @@index([walletId, createdAt])
+  @@index([referenceType, referenceId])
+}
+
+model ManualPayment {
+  id             String        @id @default(cuid())
+  organizationId String
+  method         PaymentMethod
+  status         PaymentStatus @default(DRAFT)
+  amountBaisa    BigInt
+  reference      String?
+  chequeNumber   String?
+  bankName       String?
+  notes          String?       @db.Text
+  receivedAt     DateTime
+  confirmedAt    DateTime?
+  rejectedAt     DateTime?
+  reversedAt     DateTime?
+  createdById    String
+  confirmedById  String?
+  ledgerEntryId  String?       @unique
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  createdBy      User          @relation("PaymentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  confirmedBy    User?         @relation("PaymentConfirmedBy", fields: [confirmedById], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, status])
+  @@index([method, receivedAt])
+}
+
+model Project {
+  id             String          @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?         @db.Text
+  archivedAt     DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  generationJobs GenerationJob[]
+  assets         Asset[]
+
+  @@index([organizationId, archivedAt])
+}
+
+model ProviderModel {
+  id                    String              @id @default(cuid())
+  provider              ModelProvider
+  providerModelId       String
+  mediaKind             MediaKind
+  displayName           String
+  description           String              @db.Text
+  capabilities          Json
+  negotiatedDiscountBps Int                 @default(0)
+  enabled               Boolean             @default(false)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  priceVersions         ModelPriceVersion[]
+  generationJobs        GenerationJob[]
+
+  @@unique([provider, providerModelId])
+  @@index([mediaKind, enabled])
+}
+
+model ModelPriceVersion {
+  id                   String          @id @default(cuid())
+  providerModelId      String
+  providerCostMicroUsd BigInt
+  customerCredits      BigInt
+  fxBaisaNumerator     BigInt
+  fxBaisaDenominator   BigInt
+  targetMarginBps      Int
+  effectiveFrom        DateTime
+  effectiveTo          DateTime?
+  createdById          String
+  createdAt            DateTime        @default(now())
+  providerModel        ProviderModel   @relation(fields: [providerModelId], references: [id], onDelete: Restrict)
+  createdBy            User            @relation("PriceVersionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  generationJobs       GenerationJob[]
+
+  @@index([providerModelId, effectiveFrom])
+  @@index([effectiveFrom, effectiveTo])
+}
+
+model GenerationJob {
+  id                         String              @id @default(cuid())
+  organizationId             String
+  projectId                  String?
+  createdById                String
+  providerModelId            String
+  priceVersionId             String
+  status                     GenerationJobStatus @default(DRAFT)
+  idempotencyKey             String              @unique
+  requestPayload             Json
+  outputPayload              Json?
+  providerRequestId          String?
+  reservedCredits            BigInt              @default(0)
+  chargedCredits             BigInt              @default(0)
+  actualProviderCostMicroUsd BigInt?
+  errorCode                  String?
+  errorMessage               String?             @db.Text
+  quotedAt                   DateTime?
+  queuedAt                   DateTime?
+  submittedAt                DateTime?
+  completedAt                DateTime?
+  createdAt                  DateTime            @default(now())
+  updatedAt                  DateTime            @updatedAt
+  organization               Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  project                    Project?            @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdBy                  User                @relation("GenerationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  providerModel              ProviderModel       @relation(fields: [providerModelId], references: [id], onDelete: Restrict)
+  priceVersion               ModelPriceVersion   @relation(fields: [priceVersionId], references: [id], onDelete: Restrict)
+  assets                     Asset[]
+
+  @@unique([providerModelId, providerRequestId])
+  @@index([organizationId, status, createdAt])
+  @@index([projectId, createdAt])
+  @@index([status, updatedAt])
+}
+
+model Asset {
+  id              String         @id @default(cuid())
+  organizationId  String
+  projectId       String?
+  generationJobId String?
+  status          AssetStatus    @default(PENDING)
+  objectKey       String         @unique
+  mimeType        String
+  byteSize        BigInt
+  sha256          String?
+  width           Int?
+  height          Int?
+  durationMs      Int?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  project         Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  generationJob   GenerationJob? @relation(fields: [generationJobId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([generationJobId])
+  @@index([status])
+}
+
+model AuditEvent {
+  id             String        @id @default(cuid())
+  actorUserId    String?
+  organizationId String?
+  action         String
+  targetType     String
+  targetId       String?
+  requestId      String?
+  ipAddress      String?
+  metadata       Json?
+  createdAt      DateTime      @default(now())
+  actor          User?         @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([actorUserId, createdAt])
+  @@index([organizationId, createdAt])
+  @@index([targetType, targetId])
+}

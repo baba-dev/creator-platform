@@ -2,7 +2,12 @@
   "$schema": "https://turborepo.com/schema.json",
   "globalDependencies": [".env", ".env.local"],
   "globalEnv": ["NODE_ENV", "APP_ENV", "APP_VERSION"],
-  "globalPassThroughEnv": ["DATABASE_URL"],
+  "globalPassThroughEnv": [
+    "APP_URL",
+    "AUTH_SECRET",
+    "DATABASE_URL",
+    "SIGNUPS_ENABLED"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

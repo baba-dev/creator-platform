@@ -1,4 +1,5 @@
 import { Button } from "@aiwa/ui/button";
+import Link from "next/link";
 
 const mediaTools = [
   {
@@ -51,8 +52,8 @@ export default function HomePage() {
             <span className="hidden rounded-full border border-amber-300/20 bg-amber-300/10 px-3 py-1 text-xs font-medium text-amber-200 sm:inline-flex">
               Foundation preview
             </span>
-            <Button variant="secondary" size="sm">
-              Internal access
+            <Button asChild variant="secondary" size="sm">
+              <Link href="/sign-in">Internal access</Link>
             </Button>
           </div>
         </header>

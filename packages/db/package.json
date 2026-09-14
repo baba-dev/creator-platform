@@ -17,6 +17,7 @@
     "lint": "eslint src prisma --max-warnings=0 && prisma validate",
     "migrate:deploy": "prisma migrate deploy",
     "migrate:dev": "prisma migrate dev",
+    "platform:promote-owner": "tsx prisma/promote-owner.ts",
     "seed": "prisma db seed",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit"

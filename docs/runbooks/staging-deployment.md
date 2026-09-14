@@ -15,12 +15,20 @@ Target: `creator.aiwamediagroup.com` on a small Linux VPS.
 
 1. Create `/opt/aiwa-creators` and place `compose.production.yml` plus a
    root-owned, mode `0600` `.env` there.
-2. Set `APP_VERSION` to an immutable `sha-<full commit SHA>` image tag.
-3. Pull and start the services with Docker Compose.
-4. Apply reviewed Prisma migrations from a one-off release container.
-5. Verify `/api/health`, worker logs, MariaDB, Redis, and object-storage access.
-6. Install the supplied Nginx server block and issue the TLS certificate.
-7. Run a non-billable smoke test before enabling any BytePlus model.
+2. Set `APP_URL=https://creator.aiwamediagroup.com`, generate a unique
+   `AUTH_SECRET` of at least 32 characters, and explicitly set
+   `SIGNUPS_ENABLED=true` or `false`.
+3. Set `APP_VERSION` to an immutable `sha-<full commit SHA>` image tag.
+4. Pull the images and apply reviewed Prisma migrations from a one-off release
+   container before starting the new web service.
+5. Start the services with Docker Compose.
+6. Verify `/api/health`, worker logs, MariaDB, Redis, and object-storage access.
+7. Install the supplied Nginx server block and issue the TLS certificate.
+8. Create the first account through `/sign-up`, then grant it platform-owner
+   access with the documented `platform:promote-owner` command.
+9. Test signup, sign-in, organization onboarding, sign-out, and rejected
+   cross-organization access.
+10. Run a non-billable smoke test before enabling any BytePlus model.
 
 ## Rollback
 

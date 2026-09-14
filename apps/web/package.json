@@ -12,8 +12,13 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@aiwa/authz": "workspace:*",
+    "@aiwa/config": "workspace:*",
     "@aiwa/core": "workspace:*",
+    "@aiwa/db": "workspace:*",
     "@aiwa/ui": "workspace:*",
+    "@aiwa/validation": "workspace:*",
+    "better-auth": "1.7.4",
     "next": "16.3.5",
     "react": "19.3.0",
     "react-dom": "19.3.0"

@@ -85,39 +85,43 @@ enum AssetStatus {
 }
 
 model User {
-  id                String              @id @default(cuid())
-  name              String
-  email             String              @unique
-  emailVerified     Boolean             @default(false)
-  image             String?             @db.Text
-  platformRole      PlatformRole        @default(USER)
-  disabledAt        DateTime?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  sessions          Session[]
-  accounts          Account[]
-  memberships       Membership[]
-  createdPayments   ManualPayment[]     @relation("PaymentCreatedBy")
-  confirmedPayments ManualPayment[]     @relation("PaymentConfirmedBy")
-  priceVersions     ModelPriceVersion[] @relation("PriceVersionCreatedBy")
-  generationJobs    GenerationJob[]     @relation("GenerationCreatedBy")
-  auditEvents       AuditEvent[]        @relation("AuditActor")
+  id                    String              @id @default(cuid())
+  name                  String
+  email                 String              @unique
+  emailVerified         Boolean             @default(false)
+  image                 String?             @db.Text
+  platformRole          PlatformRole        @default(USER)
+  disabledAt            DateTime?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  sessions              Session[]
+  accounts              Account[]
+  memberships           Membership[]
+  onboardedOrganization Organization?       @relation("SelfServeOrganization")
+  createdPayments       ManualPayment[]     @relation("PaymentCreatedBy")
+  confirmedPayments     ManualPayment[]     @relation("PaymentConfirmedBy")
+  priceVersions         ModelPriceVersion[] @relation("PriceVersionCreatedBy")
+  generationJobs        GenerationJob[]     @relation("GenerationCreatedBy")
+  auditEvents           AuditEvent[]        @relation("AuditActor")
 
   @@index([platformRole, disabledAt])
 }
 
 model Session {
-  id        String   @id @default(cuid())
-  token     String   @unique
-  expiresAt DateTime
-  ipAddress String?
-  userAgent String?  @db.Text
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                   String        @id @default(cuid())
+  token                String        @unique
+  expiresAt            DateTime
+  ipAddress            String?
+  userAgent            String?       @db.Text
+  userId               String
+  activeOrganizationId String?
+  user                 User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activeOrganization   Organization? @relation(fields: [activeOrganizationId], references: [id], onDelete: SetNull)
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
 
   @@index([userId])
+  @@index([activeOrganizationId])
   @@index([expiresAt])
 }
 
@@ -154,19 +158,22 @@ model Verification {
 }
 
 model Organization {
-  id             String             @id @default(cuid())
-  name           String
-  slug           String             @unique
-  status         OrganizationStatus @default(ACTIVE)
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
-  wallet         Wallet?
-  memberships    Membership[]
-  payments       ManualPayment[]
-  projects       Project[]
-  generationJobs GenerationJob[]
-  auditEvents    AuditEvent[]
-  assets         Asset[]
+  id                     String             @id @default(cuid())
+  name                   String
+  slug                   String             @unique
+  status                 OrganizationStatus @default(ACTIVE)
+  selfServeCreatorUserId String?            @unique
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  selfServeCreator       User?              @relation("SelfServeOrganization", fields: [selfServeCreatorUserId], references: [id], onDelete: SetNull)
+  activeSessions         Session[]
+  wallet                 Wallet?
+  memberships            Membership[]
+  payments               ManualPayment[]
+  projects               Project[]
+  generationJobs         GenerationJob[]
+  auditEvents            AuditEvent[]
+  assets                 Asset[]
 
   @@index([status])
 }

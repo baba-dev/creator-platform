@@ -12,4 +12,4 @@ if (process.env.NODE_ENV !== "production") {
   prismaGlobal.prisma = db;
 }
 
-export * from "@prisma/client";
+export { Prisma } from "@prisma/client";

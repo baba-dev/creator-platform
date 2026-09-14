@@ -5,6 +5,11 @@ const optionalUrl = z.preprocess(
   z.url().optional(),
 );
 
+const booleanFromString = z
+  .enum(["true", "false"])
+  .default("true")
+  .transform((value) => value === "true");
+
 export const serverEnvSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
@@ -13,6 +18,7 @@ export const serverEnvSchema = z.object({
   APP_VERSION: z.string().min(1).default("dev"),
   APP_URL: z.url().default("http://localhost:3000"),
   AUTH_SECRET: z.string().min(32),
+  SIGNUPS_ENABLED: booleanFromString,
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.url().default("redis://127.0.0.1:6379/0"),
   BYTEPLUS_API_KEY: z.string().min(1).optional(),

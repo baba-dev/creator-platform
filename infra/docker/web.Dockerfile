@@ -2,6 +2,9 @@
 FROM node:24-bookworm-slim AS build
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
+ENV APP_URL=https://creator.aiwamediagroup.com
+ENV AUTH_SECRET=container-build-only-secret-not-used-at-runtime
+ENV DATABASE_URL=mysql://build:build@127.0.0.1:3306/build
 WORKDIR /app
 
 RUN corepack enable

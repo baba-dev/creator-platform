@@ -17,6 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
+      AUTH_SECRET: ci-only-auth-secret-at-least-32-characters-long
       DATABASE_URL: mysql://creator:ci-only@127.0.0.1:3306/creator_platform
     steps:
       - name: Check out repository

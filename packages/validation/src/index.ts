@@ -15,6 +15,16 @@ export const paginationSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(25),
 });
 
+export const organizationNameSchema = z.string().trim().min(2).max(80);
+
+export const organizationOnboardingSchema = z.object({
+  name: organizationNameSchema,
+});
+
+export const activateOrganizationSchema = z.object({
+  organizationId: cuidSchema,
+});
+
 export const generationRequestEnvelopeSchema = z.object({
   organizationId: cuidSchema,
   projectId: cuidSchema.optional(),

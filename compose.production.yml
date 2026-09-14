@@ -41,6 +41,7 @@ services:
       redis:
         condition: service_healthy
     networks:
+      - edge
       - private
 
   mariadb:

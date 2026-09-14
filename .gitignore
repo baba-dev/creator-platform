@@ -1,0 +1,29 @@
+# dependencies and package-manager state
+node_modules/
+.pnpm-store/
+
+# environment and secrets
+.env
+.env.*
+!.env.example
+
+# builds and test output
+.next/
+.turbo/
+coverage/
+dist/
+playwright-report/
+test-results/
+*.tsbuildinfo
+packages/db/src/generated/
+
+# local data
+.data/
+*.log
+
+# editors and operating systems
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json

@@ -1,0 +1,21 @@
+{
+  "name": "@aiwa/providers",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./byteplus": "./src/byteplus/index.ts",
+    "./nvidia": "./src/nvidia/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "clean": "rm -rf dist .turbo",
+    "lint": "eslint src --max-warnings=0",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4"
+  }
+}

@@ -1,0 +1,92 @@
+name: aiwa-creators
+
+services:
+  web:
+    image: ghcr.io/baba-dev/creator-platform-web:${APP_VERSION:?set APP_VERSION}
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    expose:
+      - "3000"
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks:
+      - edge
+      - private
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  worker:
+    image:
+      ghcr.io/baba-dev/creator-platform-worker:${APP_VERSION:?set APP_VERSION}
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - private
+
+  mariadb:
+    image: mariadb:11.8
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: ${MARIADB_DATABASE:?set MARIADB_DATABASE}
+      MARIADB_USER: ${MARIADB_USER:?set MARIADB_USER}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:?set MARIADB_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?set MARIADB_ROOT_PASSWORD}
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    networks:
+      - private
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command:
+      [
+        "redis-server",
+        "--appendonly",
+        "yes",
+        "--maxmemory-policy",
+        "noeviction",
+      ]
+    volumes:
+      - redis-data:/data
+    networks:
+      - private
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+
+networks:
+  edge:
+  private:
+    internal: true
+
+volumes:
+  mariadb-data:
+  redis-data:

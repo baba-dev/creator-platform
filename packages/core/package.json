@@ -1,0 +1,19 @@
+{
+  "name": "@aiwa/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "clean": "rm -rf coverage dist .turbo",
+    "lint": "eslint src test --max-warnings=0",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4"
+  }
+}

@@ -1,0 +1,29 @@
+name: Bug report
+description: Report a reproducible product or operational defect.
+title: "bug: "
+labels: [bug]
+body:
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: What is broken and who is affected?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: Provide safe steps without credentials or customer data.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit SHA

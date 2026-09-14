@@ -1,0 +1,52 @@
+name: aiwa-creators-dev
+
+services:
+  mariadb:
+    image: mariadb:11.8
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: ${MARIADB_DATABASE:-creator_platform}
+      MARIADB_USER: ${MARIADB_USER:-creator}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:-creator_local_only}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-root_local_only}
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: quay.io/minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:-creator_local_only}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:-creator_local_secret_only}
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - minio-data:/data
+
+volumes:
+  mariadb-data:
+  minio-data:
+  redis-data:

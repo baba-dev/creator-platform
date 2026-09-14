@@ -24,7 +24,7 @@
   "devDependencies": {
     "@types/react": "^19.2.2",
     "react": "19.3.0",
-    "vitest": "^3.2.4"
+    "vitest": "^4.1.11"
   },
   "peerDependencies": {
     "react": ">=19"

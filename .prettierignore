@@ -5,3 +5,4 @@ dist
 node_modules
 packages/db/src/generated
 pnpm-lock.yaml
+README.md

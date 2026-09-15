@@ -23,11 +23,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@prisma/client": "7.10.0"
+    "@prisma/client": "6.19.3"
   },
   "devDependencies": {
-    "prisma": "7.10.0",
+    "prisma": "6.19.3",
     "tsx": "^4.20.6",
-    "vitest": "^5.0.0"
+    "vitest": "^4.1.11"
   }
 }

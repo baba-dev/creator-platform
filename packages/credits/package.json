@@ -17,6 +17,6 @@
     "@aiwa/core": "workspace:*"
   },
   "devDependencies": {
-    "vitest": "^5.0.0"
+    "vitest": "^4.1.11"
   }
 }

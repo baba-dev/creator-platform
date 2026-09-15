@@ -3,7 +3,7 @@
 
 :root {
   color-scheme: dark;
-  --background: #05070c;
+  --background: #070912;
   --foreground: #f8fafc;
 }
 
@@ -13,6 +13,7 @@
 
 html {
   background: var(--background);
+  scroll-behavior: smooth;
 }
 
 body {
@@ -38,8 +39,37 @@ body {
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
+  text-rendering: optimizeLegibility;
 }
 
 ::selection {
-  background: rgb(103 232 249 / 0.25);
+  background: rgb(139 92 246 / 0.35);
+  color: white;
+}
+
+button,
+a,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+textarea,
+input,
+button,
+select {
+  font: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

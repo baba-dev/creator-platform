@@ -5,15 +5,15 @@ import * as React from "react";
 import { cn } from "./utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-semibold transition-all outline-none disabled:pointer-events-none disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-semibold transition-all duration-200 outline-none disabled:pointer-events-none disabled:opacity-45 focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 active:translate-y-px",
   {
     variants: {
       variant: {
         default:
-          "bg-cyan-300 text-slate-950 shadow-[0_0_30px_rgba(103,232,249,0.18)] hover:bg-cyan-200",
+          "bg-gradient-to-r from-violet-500 to-indigo-500 text-white shadow-[0_10px_30px_rgba(99,102,241,.22)] hover:from-violet-400 hover:to-indigo-400 hover:shadow-[0_12px_34px_rgba(99,102,241,.3)]",
         secondary:
-          "border border-white/10 bg-white/[0.06] text-white hover:bg-white/[0.1]",
-        ghost: "text-slate-300 hover:bg-white/[0.06] hover:text-white",
+          "border border-white/10 bg-white/[0.055] text-white shadow-sm hover:border-white/[0.16] hover:bg-white/[0.09]",
+        ghost: "text-slate-400 hover:bg-white/[0.055] hover:text-white",
       },
       size: {
         default: "h-10 px-5 py-2",

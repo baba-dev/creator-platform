@@ -34,19 +34,23 @@ Create a GitHub environment named `staging` with:
 | ------------------------- | ------------------------------------------------- |
 | `STAGING_SSH_HOST`        | `129.151.137.222`                                 |
 | `STAGING_SSH_PORT`        | `22`                                              |
-| `STAGING_SSH_USER`        | `ubuntu`                                          |
+| `STAGING_SSH_USER`        | `creator-deploy`                                  |
 | `STAGING_SSH_KEY`         | Dedicated ED25519 private key                     |
 | `STAGING_SSH_FINGERPRINT` | SHA256 fingerprint of the server ED25519 host key |
 
-Do not use a root SSH key. The `ubuntu` user receives permission to run only the
-validated deployment entry point through passwordless sudo.
+Do not use a root or general-purpose administrator SSH key. The dedicated
+`creator-deploy` user receives permission to run only the validated deployment
+entry point through passwordless sudo. Do not add this account to the `sudo`
+group.
 
 ## First-time server bootstrap
 
 From a temporary checkout of the repository on the server:
 
 ```bash
-sudo bash infra/deploy/bootstrap-server.sh ubuntu
+id creator-deploy >/dev/null 2>&1 || \
+  sudo adduser --disabled-password --gecos "" creator-deploy
+sudo bash infra/deploy/bootstrap-server.sh creator-deploy
 ```
 
 Ensure `/etc/aiwa-creators/creator.env` explicitly contains:

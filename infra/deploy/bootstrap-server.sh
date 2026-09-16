@@ -6,7 +6,7 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
-deploy_user="${1:-ubuntu}"
+deploy_user="${1:-creator-deploy}"
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 getent passwd aiwa-creator >/dev/null || {

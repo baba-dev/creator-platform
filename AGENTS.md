@@ -30,3 +30,18 @@ These rules apply to every contributor and coding agent.
   `pnpm build` before opening a pull request.
 - Do not commit `.env` files, generated media, database dumps, or real customer
   information.
+
+## Interface and design system
+
+- Read `docs/design-system.md` before creating or changing user interface.
+- Use the Pencil & Pixel semantic tokens from `apps/web/src/app/globals.css`; do
+  not add fixed palette colours when a semantic token exists.
+- Every UI change must work in both `data-theme="light"` and
+  `data-theme="dark"`.
+- Reuse shared primitives before creating a local substitute.
+- Use Bricolage Grotesque for display headings, Manrope for product text, and
+  Caveat only for short annotations.
+- Keep sketch treatments sparse: one focal hand-drawn gesture per major
+  viewport.
+- Preserve keyboard focus, reduced-motion support, and honest demo labels.
+- Treat `/design-system` as the living visual reference.

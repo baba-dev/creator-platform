@@ -5,6 +5,7 @@ import Link from "next/link";
 import { SignOutButton } from "@/components/auth/sign-out-button";
 import { OrganizationSwitcher } from "@/components/organizations/organization-switcher";
 import { GenerationStudio } from "@/components/studio/generation-studio";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Brand } from "@/components/ui/brand";
 import { Button } from "@/components/ui/button";
 import { Icon, type IconName } from "@/components/ui/icon";
@@ -127,11 +128,11 @@ export default async function OrganizationWorkspacePage({
   const firstName = session.user.name.split(/\s+/)[0] || "Creator";
 
   return (
-    <main className="min-h-screen bg-[#070912] text-slate-100">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_72%_-10%,rgba(124,58,237,.16),transparent_35rem),radial-gradient(circle_at_15%_80%,rgba(6,182,212,.08),transparent_30rem)]" />
+    <main className="min-h-screen bg-background text-foreground">
+      <div className="creative-glow pointer-events-none fixed inset-0" />
 
       <div className="relative mx-auto grid min-h-screen max-w-[1800px] xl:grid-cols-[250px_1fr]">
-        <aside className="hidden border-r border-white/[0.07] bg-[#080b13]/80 px-4 py-5 backdrop-blur-xl xl:flex xl:flex-col">
+        <aside className="hidden border-r border-border bg-sidebar/80 px-4 py-5 backdrop-blur-xl xl:flex xl:flex-col">
           <div className="px-2">
             <Brand />
           </div>
@@ -143,42 +144,42 @@ export default async function OrganizationWorkspacePage({
                 href={item.href}
                 className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
                   index === 0
-                    ? "bg-white/[0.075] text-white shadow-sm"
-                    : "text-slate-500 hover:bg-white/[0.04] hover:text-slate-200"
+                    ? "bg-foreground/[0.075] text-foreground shadow-sm"
+                    : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground"
                 }`}
               >
                 <Icon
                   name={item.icon}
-                  className={`size-[18px] ${index === 0 ? "text-violet-300" : "text-slate-600 group-hover:text-slate-300"}`}
+                  className={`size-[18px] ${index === 0 ? "text-primary" : "text-subtle-foreground group-hover:text-foreground/90"}`}
                 />
                 {item.label}
                 {index === 0 ? (
-                  <span className="ml-auto size-1.5 rounded-full bg-violet-400" />
+                  <span className="ml-auto size-1.5 rounded-full bg-primary" />
                 ) : null}
               </a>
             ))}
           </nav>
 
           <div className="mt-8 px-3">
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-700">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-subtle-foreground">
               Workspace
             </p>
             <div className="mt-3 space-y-1">
               <a
                 href="#templates"
-                className="block rounded-lg py-2 text-xs font-medium text-slate-600 transition hover:text-slate-300"
+                className="block rounded-lg py-2 text-xs font-medium text-subtle-foreground transition hover:text-foreground/90"
               >
                 Templates
               </a>
               <a
                 href="#team"
-                className="block rounded-lg py-2 text-xs font-medium text-slate-600 transition hover:text-slate-300"
+                className="block rounded-lg py-2 text-xs font-medium text-subtle-foreground transition hover:text-foreground/90"
               >
                 Team members
               </a>
               <a
                 href="#settings"
-                className="block rounded-lg py-2 text-xs font-medium text-slate-600 transition hover:text-slate-300"
+                className="block rounded-lg py-2 text-xs font-medium text-subtle-foreground transition hover:text-foreground/90"
               >
                 Settings
               </a>
@@ -186,35 +187,35 @@ export default async function OrganizationWorkspacePage({
           </div>
 
           <div className="mt-auto space-y-3">
-            <div className="overflow-hidden rounded-2xl border border-violet-300/10 bg-[linear-gradient(145deg,rgba(124,58,237,.12),rgba(6,182,212,.05))] p-4">
+            <div className="overflow-hidden rounded-2xl border border-primary/10 bg-primary/[0.06] p-4">
               <div className="flex items-center justify-between">
-                <span className="grid size-8 place-items-center rounded-xl bg-violet-400/15 text-violet-200">
+                <span className="grid size-8 place-items-center rounded-xl bg-primary/15 text-primary">
                   <Icon name="credits" className="size-4" />
                 </span>
-                <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-emerald-300">
+                <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-success">
                   Available
                 </span>
               </div>
-              <p className="mt-4 text-2xl font-semibold tracking-tight text-white">
+              <p className="mt-4 text-2xl font-semibold tracking-tight text-foreground">
                 {credits.toLocaleString("en-US")}
               </p>
-              <p className="mt-1 text-[11px] text-slate-500">
+              <p className="mt-1 text-[11px] text-muted-foreground">
                 platform credits
               </p>
-              <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/[0.06]">
-                <div className="h-full w-[64%] rounded-full bg-gradient-to-r from-violet-400 to-cyan-400" />
+              <div className="mt-3 h-1 overflow-hidden rounded-full bg-foreground/[0.06]">
+                <div className="h-full w-[64%] rounded-full bg-gradient-to-r from-primary to-info" />
               </div>
             </div>
 
             <div className="flex items-center gap-3 rounded-xl px-2 py-2">
-              <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white/[0.07] text-xs font-bold text-slate-300">
+              <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-foreground/[0.07] text-xs font-bold text-foreground/90">
                 {initials(session.user.name)}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-xs font-semibold text-slate-200">
+                <span className="block truncate text-xs font-semibold text-foreground">
                   {session.user.name}
                 </span>
-                <span className="mt-0.5 block truncate text-[10px] text-slate-600">
+                <span className="mt-0.5 block truncate text-[10px] text-subtle-foreground">
                   {roleLabel(membership.role)}
                 </span>
               </span>
@@ -224,27 +225,28 @@ export default async function OrganizationWorkspacePage({
         </aside>
 
         <div className="min-w-0">
-          <header className="sticky top-0 z-30 flex min-h-[72px] items-center justify-between gap-4 border-b border-white/[0.07] bg-[#070912]/80 px-4 backdrop-blur-xl sm:px-7 lg:px-9">
+          <header className="sticky top-0 z-30 flex min-h-[72px] items-center justify-between gap-4 border-b border-border bg-background/80 px-4 backdrop-blur-xl sm:px-7 lg:px-9">
             <div className="flex min-w-0 items-center gap-3">
               <div className="xl:hidden">
                 <Brand compact />
               </div>
-              <div className="hidden h-5 w-px bg-white/10 xl:block" />
+              <div className="hidden h-5 w-px bg-foreground/10 xl:block" />
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-white">
+                <p className="truncate text-sm font-semibold text-foreground">
                   {membership.organization.name}
                 </p>
-                <p className="mt-0.5 hidden text-[10px] font-medium uppercase tracking-[0.12em] text-slate-600 sm:block">
+                <p className="mt-0.5 hidden text-[10px] font-medium uppercase tracking-[0.12em] text-subtle-foreground sm:block">
                   Creative workspace
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2 sm:gap-3">
-              <div className="hidden items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.025] px-3 py-2 text-xs text-slate-600 lg:flex">
+              <ThemeToggle />
+              <div className="hidden items-center gap-2 rounded-xl border border-border bg-foreground/[0.025] px-3 py-2 text-xs text-subtle-foreground lg:flex">
                 <Icon name="search" className="size-4" />
                 Search projects
-                <kbd className="ml-8 rounded border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-[9px] text-slate-600">
+                <kbd className="ml-8 rounded border border-border bg-foreground/[0.04] px-1.5 py-0.5 text-[9px] text-subtle-foreground">
                   ⌘ K
                 </kbd>
               </div>
@@ -257,10 +259,10 @@ export default async function OrganizationWorkspacePage({
               <button
                 type="button"
                 aria-label="Notifications"
-                className="relative grid size-9 place-items-center rounded-xl border border-white/[0.08] bg-white/[0.03] text-slate-500 transition hover:text-white"
+                className="relative grid size-9 place-items-center rounded-xl border border-border bg-foreground/[0.03] text-muted-foreground transition hover:text-foreground"
               >
                 <Icon name="bell" className="size-4" />
-                <span className="absolute right-2 top-2 size-1.5 rounded-full bg-violet-400 ring-2 ring-[#090b14]" />
+                <span className="absolute right-2 top-2 size-1.5 rounded-full bg-primary ring-2 ring-background" />
               </button>
               {canAccessAdmin ? (
                 <Button
@@ -283,13 +285,13 @@ export default async function OrganizationWorkspacePage({
               className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"
             >
               <div>
-                <p className="text-xs font-semibold text-violet-300">
+                <p className="text-xs font-semibold text-primary">
                   Welcome back, {firstName}
                 </p>
-                <h1 className="mt-2 text-3xl font-semibold tracking-[-0.035em] text-white sm:text-4xl">
+                <h1 className="mt-2 text-3xl font-semibold tracking-[-0.035em] text-foreground sm:text-4xl">
                   Bring your next idea to life.
                 </h1>
-                <p className="mt-2 max-w-xl text-sm leading-6 text-slate-500">
+                <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
                   Create images, videos, and voices from one controlled
                   workspace.
                 </p>
@@ -343,19 +345,19 @@ export default async function OrganizationWorkspacePage({
               id="projects"
               className="mt-6 grid gap-6 2xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,.6fr)]"
             >
-              <div className="rounded-[26px] border border-white/[0.08] bg-[#0c101a]/85 p-5 sm:p-6">
+              <div className="rounded-[26px] border border-border bg-card/85 p-5 sm:p-6">
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <p className="text-sm font-semibold text-white">
+                    <p className="text-sm font-semibold text-foreground">
                       Recent generations
                     </p>
-                    <p className="mt-1 text-xs text-slate-600">
+                    <p className="mt-1 text-xs text-subtle-foreground">
                       Latest creative work in this organization
                     </p>
                   </div>
                   <button
                     type="button"
-                    className="text-xs font-semibold text-violet-300 transition hover:text-violet-200"
+                    className="text-xs font-semibold text-primary transition hover:text-primary"
                   >
                     View all
                   </button>
@@ -380,10 +382,10 @@ export default async function OrganizationWorkspacePage({
                 ) : (
                   <div className="mt-4">
                     <div className="mb-2 flex items-center gap-2">
-                      <span className="rounded-md bg-amber-300/10 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-amber-300">
+                      <span className="rounded-md bg-warning/10 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-warning">
                         Demo data
                       </span>
-                      <span className="text-[10px] text-slate-700">
+                      <span className="text-[10px] text-subtle-foreground">
                         Replaced automatically after your first generation
                       </span>
                     </div>
@@ -398,18 +400,18 @@ export default async function OrganizationWorkspacePage({
 
               <div
                 id="usage"
-                className="rounded-[26px] border border-white/[0.08] bg-[#0c101a]/85 p-5 sm:p-6"
+                className="rounded-[26px] border border-border bg-card/85 p-5 sm:p-6"
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-semibold text-white">
+                    <p className="text-sm font-semibold text-foreground">
                       Creative mix
                     </p>
-                    <p className="mt-1 text-xs text-slate-600">
+                    <p className="mt-1 text-xs text-subtle-foreground">
                       Demo usage distribution
                     </p>
                   </div>
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-700">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-subtle-foreground">
                     This month
                   </span>
                 </div>
@@ -418,25 +420,27 @@ export default async function OrganizationWorkspacePage({
                     className="relative grid size-32 shrink-0 place-items-center rounded-full"
                     style={{
                       background:
-                        "conic-gradient(#8b5cf6 0 52%, #22d3ee 52% 81%, #f59e0b 81% 100%)",
+                        "conic-gradient(var(--primary) 0 52%, var(--info) 52% 81%, var(--warning) 81% 100%)",
                     }}
                   >
-                    <div className="grid size-[92px] place-items-center rounded-full bg-[#0c101a] text-center">
+                    <div className="grid size-[92px] place-items-center rounded-full bg-card text-center">
                       <div>
-                        <p className="text-xl font-semibold text-white">24</p>
-                        <p className="text-[9px] uppercase tracking-wider text-slate-600">
+                        <p className="text-xl font-semibold text-foreground">
+                          24
+                        </p>
+                        <p className="text-[9px] uppercase tracking-wider text-subtle-foreground">
                           Creations
                         </p>
                       </div>
                     </div>
                   </div>
                   <div className="min-w-0 flex-1 space-y-3">
-                    <Legend color="bg-violet-500" label="Images" value="52%" />
-                    <Legend color="bg-cyan-400" label="Videos" value="29%" />
-                    <Legend color="bg-amber-400" label="Voices" value="19%" />
+                    <Legend color="bg-primary" label="Images" value="52%" />
+                    <Legend color="bg-info" label="Videos" value="29%" />
+                    <Legend color="bg-warning" label="Voices" value="19%" />
                   </div>
                 </div>
-                <p className="mt-7 rounded-xl border border-white/[0.06] bg-white/[0.025] px-3 py-2.5 text-[10px] leading-4 text-slate-600">
+                <p className="mt-7 rounded-xl border border-border bg-foreground/[0.025] px-3 py-2.5 text-[10px] leading-4 text-subtle-foreground">
                   Charts switch to live organization usage after generation
                   billing is connected.
                 </p>
@@ -463,25 +467,25 @@ function MetricCard({
   accent: "violet" | "cyan" | "amber" | "emerald";
 }) {
   const accents = {
-    violet: "bg-violet-400/10 text-violet-300",
-    cyan: "bg-cyan-400/10 text-cyan-300",
-    amber: "bg-amber-400/10 text-amber-300",
-    emerald: "bg-emerald-400/10 text-emerald-300",
+    violet: "bg-primary/10 text-primary",
+    cyan: "bg-info/10 text-info",
+    amber: "bg-warning/10 text-warning",
+    emerald: "bg-success/10 text-success",
   };
 
   return (
-    <article className="flex items-center gap-4 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4 transition hover:border-white/[0.12] hover:bg-white/[0.035]">
+    <article className="flex items-center gap-4 rounded-2xl border border-border bg-foreground/[0.025] p-4 transition hover:border-border hover:bg-foreground/[0.035]">
       <span
         className={`grid size-11 shrink-0 place-items-center rounded-xl ${accents[accent]}`}
       >
         <Icon name={icon} className="size-5" />
       </span>
       <div className="min-w-0">
-        <p className="text-xs text-slate-600">{label}</p>
-        <p className="mt-1 text-xl font-semibold tracking-tight text-white">
+        <p className="text-xs text-subtle-foreground">{label}</p>
+        <p className="mt-1 text-xl font-semibold tracking-tight text-foreground">
           {value}
         </p>
-        <p className="mt-0.5 text-[10px] text-slate-700">{detail}</p>
+        <p className="mt-0.5 text-[10px] text-subtle-foreground">{detail}</p>
       </div>
     </article>
   );
@@ -511,23 +515,25 @@ function ActivityRow({
 
   return (
     <div className="flex items-center gap-3 py-3.5 first:pt-1 last:pb-0">
-      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-white/[0.05] text-slate-400">
+      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-foreground/[0.05] text-muted-foreground">
         <Icon name={icon} className="size-[18px]" />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-semibold capitalize text-slate-200">
+        <p className="truncate text-xs font-semibold capitalize text-foreground">
           {name}
         </p>
-        <p className="mt-1 truncate text-[10px] text-slate-600">{model}</p>
+        <p className="mt-1 truncate text-[10px] text-subtle-foreground">
+          {model}
+        </p>
       </div>
       <span
-        className={`hidden rounded-full px-2.5 py-1 text-[9px] font-bold capitalize sm:inline-flex ${successful ? "bg-emerald-400/10 text-emerald-300" : "bg-violet-400/10 text-violet-300"}`}
+        className={`hidden rounded-full px-2.5 py-1 text-[9px] font-bold capitalize sm:inline-flex ${successful ? "bg-success/10 text-success" : "bg-primary/10 text-primary"}`}
       >
         {status}
       </span>
       <div className="w-16 text-right">
-        <p className="text-xs font-semibold text-slate-300">{cost}</p>
-        <p className="mt-0.5 text-[9px] text-slate-700">credits</p>
+        <p className="text-xs font-semibold text-foreground/90">{cost}</p>
+        <p className="mt-0.5 text-[9px] text-subtle-foreground">credits</p>
       </div>
     </div>
   );
@@ -545,8 +551,8 @@ function Legend({
   return (
     <div className="flex items-center gap-2 text-xs">
       <span className={`size-2 rounded-full ${color}`} />
-      <span className="text-slate-500">{label}</span>
-      <span className="ml-auto font-semibold text-slate-300">{value}</span>
+      <span className="text-muted-foreground">{label}</span>
+      <span className="ml-auto font-semibold text-foreground/90">{value}</span>
     </div>
   );
 }

@@ -40,10 +40,10 @@ export function OnboardingForm() {
 
   return (
     <form className="mt-8" onSubmit={handleSubmit}>
-      <label className="block text-sm font-medium text-slate-300">
+      <label className="block text-sm font-medium text-foreground/90">
         Organization name
         <input
-          className="mt-2 h-12 w-full rounded-xl border border-white/[0.09] bg-white/[0.035] px-4 text-sm text-white outline-none transition placeholder:text-slate-700 focus:border-violet-300/45 focus:ring-4 focus:ring-violet-300/[0.07]"
+          className="mt-2 h-12 w-full rounded-xl border border-border bg-foreground/[0.035] px-4 text-sm text-foreground outline-none transition placeholder:text-subtle-foreground focus:border-primary/45 focus:ring-4 focus:ring-primary/[0.07]"
           name="name"
           type="text"
           autoComplete="organization"
@@ -57,7 +57,7 @@ export function OnboardingForm() {
 
       {error ? (
         <p
-          className="mt-4 rounded-xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200"
+          className="mt-4 rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive"
           role="alert"
         >
           {error}

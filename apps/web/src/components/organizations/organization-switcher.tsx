@@ -41,7 +41,7 @@ export function OrganizationSwitcher({
   return (
     <select
       aria-label="Active organization"
-      className="max-w-36 rounded-xl border border-white/[0.08] bg-[#0d111c] px-3 py-2 text-xs font-semibold text-slate-300 outline-none transition focus:border-violet-300/40 disabled:opacity-60 sm:max-w-52"
+      className="max-w-36 rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground/90 outline-none transition focus:border-primary/40 disabled:opacity-60 sm:max-w-52"
       value={activeOrganizationId}
       disabled={pending}
       onChange={selectOrganization}

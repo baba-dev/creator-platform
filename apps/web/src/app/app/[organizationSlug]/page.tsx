@@ -8,7 +8,9 @@ import { GenerationStudio } from "@/components/studio/generation-studio";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Brand } from "@/components/ui/brand";
 import { Button } from "@/components/ui/button";
+import { Annotation, Eyebrow } from "@/components/ui/creative";
 import { Icon, type IconName } from "@/components/ui/icon";
+import { DemoBadge, StatusDot, Tape } from "@/components/ui/sketch";
 import { requireOrganizationPermission } from "@/lib/request-auth";
 
 const primaryNavigation: readonly {
@@ -128,24 +130,25 @@ export default async function OrganizationWorkspacePage({
   const firstName = session.user.name.split(/\s+/)[0] || "Creator";
 
   return (
-    <main className="min-h-screen bg-background text-foreground">
+    <main className="relative min-h-screen bg-background text-foreground">
       <div className="creative-glow pointer-events-none fixed inset-0" />
+      <div className="paper-grid pointer-events-none fixed inset-x-0 top-0 h-[680px] opacity-35 [mask-image:linear-gradient(to_bottom,black,transparent)]" />
 
-      <div className="relative mx-auto grid min-h-screen max-w-[1800px] xl:grid-cols-[250px_1fr]">
-        <aside className="hidden border-r border-border bg-sidebar/80 px-4 py-5 backdrop-blur-xl xl:flex xl:flex-col">
+      <div className="relative mx-auto grid min-h-screen max-w-[1800px] xl:grid-cols-[264px_1fr]">
+        <aside className="hidden border-r border-border bg-sidebar/88 px-4 py-5 backdrop-blur-xl xl:flex xl:flex-col">
           <div className="px-2">
             <Brand />
           </div>
 
-          <nav className="mt-9 space-y-1" aria-label="Workspace navigation">
+          <nav className="mt-9 space-y-1.5" aria-label="Workspace navigation">
             {primaryNavigation.map((item, index) => (
               <a
                 key={item.label}
                 href={item.href}
-                className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+                className={`group flex items-center gap-3 rounded-xl border px-3 py-2.5 text-sm font-semibold transition ${
                   index === 0
-                    ? "bg-foreground/[0.075] text-foreground shadow-sm"
-                    : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground"
+                    ? "border-primary/20 bg-card text-foreground shadow-xs"
+                    : "border-transparent text-muted-foreground hover:border-border hover:bg-card/60 hover:text-foreground"
                 }`}
               >
                 <Icon
@@ -187,14 +190,15 @@ export default async function OrganizationWorkspacePage({
           </div>
 
           <div className="mt-auto space-y-3">
-            <div className="overflow-hidden rounded-2xl border border-primary/10 bg-primary/[0.06] p-4">
+            <div className="relative overflow-hidden rounded-2xl border border-primary/15 bg-card p-4 shadow-sketch">
+              <Tape className="-right-5 -top-1 h-4 w-16 rotate-12" />
               <div className="flex items-center justify-between">
                 <span className="grid size-8 place-items-center rounded-xl bg-primary/15 text-primary">
                   <Icon name="credits" className="size-4" />
                 </span>
-                <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-success">
+                <StatusDot className="border-0 bg-transparent px-0">
                   Available
-                </span>
+                </StatusDot>
               </div>
               <p className="mt-4 text-2xl font-semibold tracking-tight text-foreground">
                 {credits.toLocaleString("en-US")}
@@ -202,8 +206,8 @@ export default async function OrganizationWorkspacePage({
               <p className="mt-1 text-[11px] text-muted-foreground">
                 platform credits
               </p>
-              <div className="mt-3 h-1 overflow-hidden rounded-full bg-foreground/[0.06]">
-                <div className="h-full w-[64%] rounded-full bg-gradient-to-r from-primary to-info" />
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-foreground/[0.06]">
+                <div className="h-full w-[64%] rounded-full bg-[var(--gradient-spectrum)]" />
               </div>
             </div>
 
@@ -225,12 +229,12 @@ export default async function OrganizationWorkspacePage({
         </aside>
 
         <div className="min-w-0">
-          <header className="sticky top-0 z-30 flex min-h-[72px] items-center justify-between gap-4 border-b border-border bg-background/80 px-4 backdrop-blur-xl sm:px-7 lg:px-9">
+          <header className="sticky top-0 z-30 flex min-h-[72px] items-center justify-between gap-4 border-b border-border bg-background/82 px-4 backdrop-blur-xl sm:px-7 lg:px-9">
             <div className="flex min-w-0 items-center gap-3">
               <div className="xl:hidden">
                 <Brand compact />
               </div>
-              <div className="hidden h-5 w-px bg-foreground/10 xl:block" />
+              <div className="hidden h-5 w-px bg-border xl:block" />
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-foreground">
                   {membership.organization.name}
@@ -243,15 +247,16 @@ export default async function OrganizationWorkspacePage({
 
             <div className="flex items-center gap-2 sm:gap-3">
               <ThemeToggle />
-              <div className="hidden items-center gap-2 rounded-xl border border-border bg-foreground/[0.025] px-3 py-2 text-xs text-subtle-foreground lg:flex">
+              <div className="hidden items-center gap-2 rounded-xl border border-border bg-card/70 px-3 py-2 text-xs text-subtle-foreground shadow-xs lg:flex">
                 <Icon name="search" className="size-4" />
                 Search projects
-                <kbd className="ml-8 rounded border border-border bg-foreground/[0.04] px-1.5 py-0.5 text-[9px] text-subtle-foreground">
+                <kbd className="ml-8 rounded border border-border bg-secondary px-1.5 py-0.5 font-mono text-[9px] text-subtle-foreground">
                   ⌘ K
                 </kbd>
               </div>
               <OrganizationSwitcher
                 activeOrganizationId={membership.organization.id}
+                className="hidden sm:block"
                 organizations={organizations.map(
                   ({ organization }) => organization,
                 )}
@@ -279,22 +284,50 @@ export default async function OrganizationWorkspacePage({
             </div>
           </header>
 
-          <div className="px-4 py-7 sm:px-7 lg:px-9 lg:py-9">
+          <div className="sticky top-[72px] z-20 border-b border-border bg-background/90 px-4 py-2 backdrop-blur-xl xl:hidden">
+            <div className="mb-2 sm:hidden">
+              <OrganizationSwitcher
+                activeOrganizationId={membership.organization.id}
+                className="w-full max-w-none"
+                organizations={organizations.map(
+                  ({ organization }) => organization,
+                )}
+              />
+            </div>
+            <nav
+              className="flex gap-1 overflow-x-auto pb-0.5"
+              aria-label="Mobile workspace navigation"
+            >
+              {primaryNavigation.map((item, index) => (
+                <a
+                  key={item.label}
+                  href={item.href}
+                  className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${index === 0 ? "bg-primary/10 text-primary" : "text-muted-foreground"}`}
+                >
+                  <Icon name={item.icon} className="size-3.5" />
+                  {item.label}
+                </a>
+              ))}
+            </nav>
+          </div>
+
+          <div className="px-4 py-7 sm:px-7 lg:px-9 lg:py-10">
             <section
               id="dashboard"
-              className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"
+              className="relative flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"
             >
               <div>
-                <p className="text-xs font-semibold text-primary">
-                  Welcome back, {firstName}
-                </p>
-                <h1 className="mt-2 text-3xl font-semibold tracking-[-0.035em] text-foreground sm:text-4xl">
-                  Bring your next idea to life.
+                <Eyebrow>Welcome back, {firstName}</Eyebrow>
+                <h1 className="font-display mt-3 text-4xl font-semibold tracking-[-0.045em] text-foreground sm:text-5xl">
+                  What will we make today?
                 </h1>
                 <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-                  Create images, videos, and voices from one controlled
-                  workspace.
+                  Shape images, videos, and voices from one organized creative
+                  desk.
                 </p>
+                <Annotation className="mt-2 hidden text-lg text-primary sm:inline-flex">
+                  rough ideas welcome →
+                </Annotation>
               </div>
               <Button asChild className="self-start sm:self-auto">
                 <a href="#create">
@@ -345,7 +378,7 @@ export default async function OrganizationWorkspacePage({
               id="projects"
               className="mt-6 grid gap-6 2xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,.6fr)]"
             >
-              <div className="rounded-[26px] border border-border bg-card/85 p-5 sm:p-6">
+              <div className="rounded-[24px] border border-border bg-card/88 p-5 shadow-sm sm:p-6">
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <p className="text-sm font-semibold text-foreground">
@@ -364,7 +397,7 @@ export default async function OrganizationWorkspacePage({
                 </div>
 
                 {recentJobs.length > 0 ? (
-                  <div className="mt-5 divide-y divide-white/[0.06]">
+                  <div className="mt-5 divide-y divide-border">
                     {recentJobs.map((job) => (
                       <ActivityRow
                         key={job.id}
@@ -382,14 +415,12 @@ export default async function OrganizationWorkspacePage({
                 ) : (
                   <div className="mt-4">
                     <div className="mb-2 flex items-center gap-2">
-                      <span className="rounded-md bg-warning/10 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-warning">
-                        Demo data
-                      </span>
+                      <DemoBadge>Demo data</DemoBadge>
                       <span className="text-[10px] text-subtle-foreground">
                         Replaced automatically after your first generation
                       </span>
                     </div>
-                    <div className="divide-y divide-white/[0.06]">
+                    <div className="divide-y divide-border">
                       {sampleActivity.map((item) => (
                         <ActivityRow key={item.name} {...item} />
                       ))}
@@ -400,7 +431,7 @@ export default async function OrganizationWorkspacePage({
 
               <div
                 id="usage"
-                className="rounded-[26px] border border-border bg-card/85 p-5 sm:p-6"
+                className="rounded-[24px] border border-border bg-card/88 p-5 shadow-sm sm:p-6"
               >
                 <div className="flex items-center justify-between">
                   <div>
@@ -411,9 +442,7 @@ export default async function OrganizationWorkspacePage({
                       Demo usage distribution
                     </p>
                   </div>
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-subtle-foreground">
-                    This month
-                  </span>
+                  <DemoBadge>Illustrative</DemoBadge>
                 </div>
                 <div className="mt-8 flex items-center gap-6">
                   <div
@@ -440,7 +469,7 @@ export default async function OrganizationWorkspacePage({
                     <Legend color="bg-warning" label="Voices" value="19%" />
                   </div>
                 </div>
-                <p className="mt-7 rounded-xl border border-border bg-foreground/[0.025] px-3 py-2.5 text-[10px] leading-4 text-subtle-foreground">
+                <p className="mt-7 rounded-xl border border-border bg-surface-sunken px-3 py-2.5 text-[10px] leading-4 text-subtle-foreground">
                   Charts switch to live organization usage after generation
                   billing is connected.
                 </p>
@@ -474,7 +503,8 @@ function MetricCard({
   };
 
   return (
-    <article className="flex items-center gap-4 rounded-2xl border border-border bg-foreground/[0.025] p-4 transition hover:border-border hover:bg-foreground/[0.035]">
+    <article className="hover-lift group relative flex items-center gap-4 overflow-hidden rounded-2xl border border-border bg-card/82 p-4 shadow-xs">
+      <span className="absolute inset-x-0 top-0 h-0.5 bg-[var(--gradient-spectrum)] opacity-50 transition group-hover:opacity-100" />
       <span
         className={`grid size-11 shrink-0 place-items-center rounded-xl ${accents[accent]}`}
       >
@@ -515,7 +545,7 @@ function ActivityRow({
 
   return (
     <div className="flex items-center gap-3 py-3.5 first:pt-1 last:pb-0">
-      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-foreground/[0.05] text-muted-foreground">
+      <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-border bg-surface-sunken text-muted-foreground">
         <Icon name={icon} className="size-[18px]" />
       </span>
       <div className="min-w-0 flex-1">

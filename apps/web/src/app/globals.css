@@ -316,6 +316,107 @@ button:not(:disabled),
   background: var(--gradient-hero);
 }
 
+@utility hover-lift {
+  transition:
+    transform var(--motion-base) var(--ease-creative),
+    box-shadow var(--motion-base) var(--ease-creative),
+    border-color var(--motion-fast) ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-4px) rotate(-0.15deg);
+  box-shadow: var(--shadow-md-token);
+}
+
+.paper-sheet {
+  position: relative;
+  border: 1px solid var(--border);
+  background:
+    linear-gradient(var(--card), var(--card)) padding-box,
+    var(--gradient-spectrum) border-box;
+  box-shadow: var(--shadow-md-token);
+}
+
+.paper-sheet::before {
+  position: absolute;
+  inset: 9px;
+  z-index: -1;
+  content: "";
+  border: 1px solid var(--border);
+  border-radius: inherit;
+  background: var(--muted);
+  transform: rotate(1.1deg);
+}
+
+.ruled-paper {
+  background-image: linear-gradient(
+    to bottom,
+    transparent 1.72rem,
+    var(--paper-line) 1.76rem,
+    transparent 1.8rem
+  );
+  background-size: 100% 1.8rem;
+}
+
+.sketch-frame {
+  position: relative;
+  isolation: isolate;
+}
+
+.sketch-frame::after {
+  position: absolute;
+  z-index: -1;
+  inset: -5px 3px 3px -5px;
+  pointer-events: none;
+  content: "";
+  border: 1.5px solid var(--sketch-stroke);
+  border-radius: inherit;
+  transform: rotate(-0.35deg);
+}
+
+.form-control {
+  min-height: 3rem;
+  width: 100%;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-md);
+  background: color-mix(in oklch, var(--card) 76%, transparent);
+  padding-inline: 1rem;
+  color: var(--foreground);
+  box-shadow: inset 0 1px 0
+    color-mix(in oklch, var(--foreground) 4%, transparent);
+  outline: none;
+  transition:
+    border-color var(--motion-fast) ease,
+    box-shadow var(--motion-fast) ease,
+    background-color var(--motion-fast) ease;
+}
+
+.form-control::placeholder {
+  color: var(--subtle-foreground);
+}
+
+.form-control:focus {
+  border-color: color-mix(in oklch, var(--primary) 56%, var(--border));
+  background: var(--card);
+  box-shadow: 0 0 0 4px color-mix(in oklch, var(--primary) 9%, transparent);
+}
+
+.page-reveal > * {
+  animation: reveal 600ms var(--ease-creative) both;
+}
+
+.page-reveal > :nth-child(2) {
+  animation-delay: 80ms;
+}
+
+.page-reveal > :nth-child(3) {
+  animation-delay: 140ms;
+}
+
+.page-reveal > :nth-child(4) {
+  animation-delay: 200ms;
+}
+
 .sketch-underline {
   position: relative;
   isolation: isolate;

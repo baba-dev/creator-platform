@@ -10,8 +10,7 @@ type SignInFormProps = {
   returnTo: Route;
 };
 
-const inputClassName =
-  "mt-2 h-12 w-full rounded-xl border border-border bg-foreground/[0.035] px-4 text-sm text-foreground outline-none transition placeholder:text-subtle-foreground focus:border-primary/45 focus:ring-4 focus:ring-primary/[0.07]";
+const inputClassName = "form-control mt-2 text-sm";
 
 export function SignInForm({ returnTo }: SignInFormProps) {
   const router = useRouter();
@@ -42,7 +41,7 @@ export function SignInForm({ returnTo }: SignInFormProps) {
 
   return (
     <form className="space-y-5" onSubmit={handleSubmit}>
-      <label className="block text-sm font-medium text-foreground/90">
+      <label className="block text-xs font-bold text-foreground/90">
         Work email
         <input
           className={inputClassName}
@@ -56,7 +55,7 @@ export function SignInForm({ returnTo }: SignInFormProps) {
         />
       </label>
 
-      <label className="block text-sm font-medium text-foreground/90">
+      <label className="block text-xs font-bold text-foreground/90">
         Password
         <input
           className={inputClassName}

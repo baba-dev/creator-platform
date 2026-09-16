@@ -6,7 +6,9 @@ import { SignOutButton } from "@/components/auth/sign-out-button";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Brand } from "@/components/ui/brand";
 import { Button } from "@/components/ui/button";
+import { Eyebrow } from "@/components/ui/creative";
 import { Icon, type IconName } from "@/components/ui/icon";
+import { DemoBadge, StatusDot } from "@/components/ui/sketch";
 import { requirePlatformPermission } from "@/lib/request-auth";
 
 const adminNavigation: readonly { label: string; icon: IconName }[] = [
@@ -86,14 +88,15 @@ export default async function AdminPage() {
   const roleLabel = session.user.platformRole.replaceAll("_", " ");
 
   return (
-    <main className="min-h-screen bg-background text-foreground">
+    <main className="relative min-h-screen bg-background text-foreground">
       <div className="creative-glow pointer-events-none fixed inset-0" />
-      <div className="relative mx-auto grid min-h-screen max-w-[1800px] xl:grid-cols-[250px_1fr]">
-        <aside className="hidden border-r border-border bg-sidebar/80 px-4 py-5 backdrop-blur-xl xl:flex xl:flex-col">
+      <div className="paper-grid pointer-events-none fixed inset-x-0 top-0 h-96 opacity-25 [mask-image:linear-gradient(to_bottom,black,transparent)]" />
+      <div className="relative mx-auto grid min-h-screen max-w-[1800px] xl:grid-cols-[264px_1fr]">
+        <aside className="hidden border-r border-border bg-sidebar/88 px-4 py-5 backdrop-blur-xl xl:flex xl:flex-col">
           <div className="px-2">
             <Brand />
           </div>
-          <div className="mx-2 mt-7 rounded-xl border border-warning/10 bg-warning/[0.05] px-3 py-2.5">
+          <div className="mx-2 mt-7 rounded-xl border border-warning/20 bg-warning/[0.07] px-3 py-2.5 shadow-xs">
             <div className="flex items-center gap-2">
               <span className="grid size-6 place-items-center rounded-lg bg-warning/10 text-warning">
                 <Icon name="admin" className="size-3.5" />
@@ -115,7 +118,7 @@ export default async function AdminPage() {
             {adminNavigation.map((item, index) => (
               <span
                 key={item.label}
-                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium ${index === 0 ? "bg-foreground/[0.075] text-foreground" : "text-subtle-foreground"}`}
+                className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 text-sm font-semibold ${index === 0 ? "border-warning/20 bg-card text-foreground shadow-xs" : "border-transparent text-subtle-foreground"}`}
               >
                 <Icon
                   name={item.icon}
@@ -130,7 +133,7 @@ export default async function AdminPage() {
               </span>
             ))}
           </nav>
-          <div className="mt-auto rounded-2xl border border-border bg-foreground/[0.025] p-4">
+          <div className="mt-auto rounded-2xl border border-border bg-card/70 p-4 shadow-xs">
             <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-subtle-foreground">
               Signed in with
             </p>
@@ -147,12 +150,12 @@ export default async function AdminPage() {
         </aside>
 
         <div className="min-w-0">
-          <header className="sticky top-0 z-30 flex min-h-[72px] items-center justify-between gap-4 border-b border-border bg-background/80 px-4 backdrop-blur-xl sm:px-7 lg:px-9">
+          <header className="sticky top-0 z-30 flex min-h-[72px] items-center justify-between gap-4 border-b border-border bg-background/82 px-4 backdrop-blur-xl sm:px-7 lg:px-9">
             <div className="flex items-center gap-3">
               <div className="xl:hidden">
                 <Brand compact />
               </div>
-              <div>
+              <div className="max-[480px]:hidden">
                 <p className="text-sm font-semibold text-foreground">
                   Platform administration
                 </p>
@@ -163,22 +166,40 @@ export default async function AdminPage() {
             </div>
             <div className="flex items-center gap-2">
               <ThemeToggle />
-              <span className="hidden rounded-full border border-primary/15 bg-primary/[0.06] px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.14em] text-primary sm:inline-flex">
-                UI preview
+              <span className="hidden sm:inline-flex">
+                <DemoBadge>UI preview</DemoBadge>
               </span>
               <Button asChild variant="secondary" size="sm">
-                <Link href="/app">Customer workspace</Link>
+                <Link href="/app">
+                  <span className="sm:hidden">Workspace</span>
+                  <span className="hidden sm:inline">Customer workspace</span>
+                </Link>
               </Button>
             </div>
           </header>
 
+          <nav
+            className="sticky top-[72px] z-20 flex gap-1 overflow-x-auto border-b border-border bg-background/90 px-4 py-2 backdrop-blur-xl xl:hidden"
+            aria-label="Mobile administration navigation"
+          >
+            {adminNavigation.map((item, index) => (
+              <span
+                key={item.label}
+                className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${index === 0 ? "bg-warning/10 text-warning" : "text-muted-foreground"}`}
+              >
+                <Icon name={item.icon} className="size-3.5" />
+                {item.label}
+              </span>
+            ))}
+          </nav>
+
           <div className="px-4 py-7 sm:px-7 lg:px-9 lg:py-9">
             <section className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="text-xs font-semibold text-warning">
+                <Eyebrow className="text-warning">
                   Good morning, operations team
-                </p>
-                <h1 className="mt-2 text-3xl font-semibold tracking-[-0.035em] text-foreground sm:text-4xl">
+                </Eyebrow>
+                <h1 className="font-display mt-3 text-4xl font-semibold tracking-[-0.045em] text-foreground sm:text-5xl">
                   Everything under control.
                 </h1>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
@@ -235,7 +256,7 @@ export default async function AdminPage() {
             </section>
 
             <section className="mt-6 grid gap-6 2xl:grid-cols-[minmax(0,1.35fr)_minmax(340px,.65fr)]">
-              <div className="rounded-[26px] border border-border bg-card/85 p-5 sm:p-6">
+              <div className="rounded-[24px] border border-border bg-card/88 p-5 shadow-sm sm:p-6">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-semibold text-foreground">
@@ -263,7 +284,7 @@ export default async function AdminPage() {
                         <th className="pb-3 font-semibold">Status</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/[0.06]">
+                    <tbody className="divide-y divide-border">
                       {organizations.length > 0 ? (
                         organizations.map((organization) => (
                           <tr key={organization.id} className="text-xs">
@@ -329,7 +350,7 @@ export default async function AdminPage() {
               </div>
 
               <div className="space-y-6">
-                <div className="rounded-[26px] border border-border bg-card/85 p-5 sm:p-6">
+                <div className="rounded-[24px] border border-border bg-card/88 p-5 shadow-sm sm:p-6">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-semibold text-foreground">
@@ -339,7 +360,7 @@ export default async function AdminPage() {
                         Operational readiness
                       </p>
                     </div>
-                    <span className="size-2 rounded-full bg-success shadow-[0_0_12px_color-mix(in_oklch,var(--success)_65%,transparent)]" />
+                    <StatusDot>Online</StatusDot>
                   </div>
                   <div className="mt-5 space-y-3">
                     <HealthRow
@@ -366,7 +387,7 @@ export default async function AdminPage() {
                   </div>
                 </div>
 
-                <div className="rounded-[26px] border border-warning/10 bg-warning/[0.06] p-5 sm:p-6">
+                <div className="rounded-[24px] border border-warning/20 bg-warning/[0.07] p-5 shadow-sm sm:p-6">
                   <div className="flex items-start gap-3">
                     <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-warning/10 text-warning">
                       <Icon name="credits" className="size-5" />
@@ -393,7 +414,7 @@ export default async function AdminPage() {
               </div>
             </section>
 
-            <section className="mt-6 rounded-[26px] border border-border bg-card/85 p-5 sm:p-6">
+            <section className="mt-6 rounded-[24px] border border-border bg-card/88 p-5 shadow-sm sm:p-6">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-sm font-semibold text-foreground">
@@ -448,14 +469,19 @@ function AdminMetric({
     amber: "bg-warning/10 text-warning",
   };
   return (
-    <article className="rounded-2xl border border-border bg-foreground/[0.025] p-4">
+    <article className="group relative overflow-hidden rounded-2xl border border-border bg-card/82 p-4 shadow-xs transition hover:-translate-y-0.5 hover:shadow-sm">
+      <span
+        className={`absolute inset-x-0 top-0 h-0.5 ${tone === "amber" ? "bg-warning" : "bg-primary"} opacity-45`}
+      />
       <div className="flex items-start justify-between">
         <span
           className={`grid size-9 place-items-center rounded-xl ${tones[tone]}`}
         >
           <Icon name={icon} className="size-4" />
         </span>
-        <span className="text-[9px] text-subtle-foreground">Live</span>
+        <span className="font-mono text-[9px] uppercase tracking-wider text-subtle-foreground">
+          Live
+        </span>
       </div>
       <p
         className={`mt-4 font-semibold tracking-tight text-foreground ${value === "Restricted" ? "text-sm" : "text-2xl"}`}
@@ -479,7 +505,7 @@ function HealthRow({
   good?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-border bg-foreground/[0.02] p-3">
+    <div className="flex items-center gap-3 rounded-xl border border-border bg-background/45 p-3">
       <span
         className={`size-2 rounded-full ${good ? "bg-success" : "bg-warning"}`}
       />

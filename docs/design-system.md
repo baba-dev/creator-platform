@@ -28,6 +28,7 @@ The living visual reference is available at `/design-system`.
 | Font loading and theme boot | `apps/web/src/app/layout.tsx`                    |
 | Theme control               | `apps/web/src/components/theme/theme-toggle.tsx` |
 | Shared creative primitives  | `apps/web/src/components/ui/creative.tsx`        |
+| Sketch and status accents   | `apps/web/src/components/ui/sketch.tsx`          |
 | Core button variants        | `packages/ui/src/button.tsx`                     |
 | Visual reference route      | `apps/web/src/app/design-system/page.tsx`        |
 
@@ -312,7 +313,8 @@ Any coding agent creating or editing Aiwa Creators UI must:
    `text-muted-foreground`, `border-border`, and `text-primary`.
 3. Verify the result in both light and dark modes.
 4. Reuse `Button`, `ThemeToggle`, `CreativeSurface`, `Eyebrow`, `Annotation`,
-   `Brand`, and `Icon` before inventing equivalents.
+   `DemoBadge`, `StatusDot`, `Tape`, `Brand`, and `Icon` before inventing
+   equivalents.
 5. Use Bricolage for display headings, Manrope for product copy, and Caveat only
    for short annotations.
 6. Keep one focal sketch gesture per major viewport.

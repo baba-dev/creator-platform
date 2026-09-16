@@ -4,6 +4,8 @@ import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import { useState, type ChangeEvent } from "react";
 
+import { cn } from "@/lib/utils";
+
 type OrganizationOption = {
   id: string;
   name: string;
@@ -13,9 +15,11 @@ type OrganizationOption = {
 export function OrganizationSwitcher({
   activeOrganizationId,
   organizations,
+  className,
 }: {
   activeOrganizationId: string;
   organizations: OrganizationOption[];
+  className?: string;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -41,7 +45,10 @@ export function OrganizationSwitcher({
   return (
     <select
       aria-label="Active organization"
-      className="max-w-36 rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground/90 outline-none transition focus:border-primary/40 disabled:opacity-60 sm:max-w-52"
+      className={cn(
+        "max-w-36 rounded-xl border border-input bg-card px-3 py-2 text-xs font-semibold text-foreground/90 shadow-xs outline-none transition focus:border-primary/40 focus:ring-4 focus:ring-primary/[0.07] disabled:opacity-60 sm:max-w-52",
+        className,
+      )}
       value={activeOrganizationId}
       disabled={pending}
       onChange={selectOrganization}

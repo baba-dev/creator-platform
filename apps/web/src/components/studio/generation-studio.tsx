@@ -3,7 +3,9 @@
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Annotation, Eyebrow } from "@/components/ui/creative";
 import { Icon, type IconName } from "@/components/ui/icon";
+import { DemoBadge, StatusDot, Tape } from "@/components/ui/sketch";
 import {
   generationKinds,
   getShowcaseModels,
@@ -93,21 +95,22 @@ export function GenerationStudio({ canGenerate }: { canGenerate: boolean }) {
   return (
     <section
       id="create"
-      className="overflow-hidden rounded-[28px] border border-border bg-card/90 shadow-lg"
+      className="paper-sheet relative overflow-hidden rounded-[28px]"
     >
-      <div className="flex flex-col gap-4 border-b border-border px-5 py-5 sm:px-7 lg:flex-row lg:items-center lg:justify-between">
+      <Tape className="-top-1 right-16 z-10 hidden rotate-6 sm:block" />
+      <div className="paper-dots absolute inset-0 opacity-35" />
+      <div className="relative flex flex-col gap-4 border-b border-border px-5 py-5 sm:px-7 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-            <Icon name="sparkles" className="size-4" />
-            AI creation studio
-          </div>
-          <h2 className="mt-2 text-xl font-semibold tracking-tight text-foreground">
-            What do you want to create?
+          <Eyebrow className="flex items-center gap-2">
+            <Icon name="sparkles" className="size-4" /> AI creation studio
+          </Eyebrow>
+          <h2 className="font-display mt-2 text-2xl font-semibold tracking-tight text-foreground">
+            Start with a rough idea.
           </h2>
         </div>
 
         <div
-          className="grid grid-cols-3 rounded-2xl border border-border bg-surface-sunken p-1"
+          className="grid grid-cols-3 rounded-xl border border-border bg-surface-sunken p-1.5"
           role="tablist"
           aria-label="Generation type"
         >
@@ -122,9 +125,9 @@ export function GenerationStudio({ canGenerate }: { canGenerate: boolean }) {
                 role="tab"
                 aria-selected={active}
                 onClick={() => selectKind(task)}
-                className={`flex min-w-24 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition sm:min-w-28 ${
+                className={`flex min-w-24 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold transition sm:min-w-28 ${
                   active
-                    ? "bg-foreground text-background shadow-lg shadow-black/20"
+                    ? "bg-card text-primary shadow-sm ring-1 ring-border"
                     : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground/90"
                 }`}
               >
@@ -136,22 +139,22 @@ export function GenerationStudio({ canGenerate }: { canGenerate: boolean }) {
         </div>
       </div>
 
-      <div className="grid xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,.8fr)]">
-        <div className="p-5 sm:p-7 xl:border-r xl:border-border">
+      <div className="relative grid xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,.8fr)]">
+        <div className="bg-card/65 p-5 sm:p-7 xl:border-r xl:border-border">
           <div className="flex items-center justify-between gap-3">
             <label
               htmlFor="creation-prompt"
-              className="text-sm font-semibold text-foreground"
+              className="font-display text-base font-semibold text-foreground"
             >
               {taskCopy[kind].heading}
             </label>
             <button
               type="button"
               onClick={() => setEnhanced((value) => !value)}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition ${
                 enhanced
-                  ? "bg-primary/15 text-primary"
-                  : "text-primary hover:bg-primary/10"
+                  ? "border-primary/20 bg-primary/15 text-primary"
+                  : "border-transparent text-primary hover:border-primary/15 hover:bg-primary/10"
               }`}
             >
               <Icon name="wand" className="size-3.5" />
@@ -159,13 +162,13 @@ export function GenerationStudio({ canGenerate }: { canGenerate: boolean }) {
             </button>
           </div>
 
-          <div className="relative mt-3 overflow-hidden rounded-2xl border border-border bg-foreground/[0.035] transition focus-within:border-primary/50 focus-within:ring-4 focus-within:ring-primary/[0.08]">
+          <div className="ruled-paper relative mt-3 overflow-hidden rounded-2xl border border-input bg-card/80 shadow-inner transition focus-within:border-primary/50 focus-within:ring-4 focus-within:ring-primary/[0.08]">
             <textarea
               id="creation-prompt"
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
               placeholder={taskCopy[kind].placeholder}
-              className="min-h-36 w-full resize-none bg-transparent px-4 py-4 text-sm leading-6 text-foreground outline-none placeholder:text-subtle-foreground sm:min-h-40"
+              className="min-h-36 w-full resize-none bg-transparent px-4 py-4 text-sm leading-[1.8rem] text-foreground outline-none placeholder:text-subtle-foreground sm:min-h-40"
               maxLength={2000}
             />
             <div className="flex items-center justify-between border-t border-border px-3 py-2.5">
@@ -176,7 +179,10 @@ export function GenerationStudio({ canGenerate }: { canGenerate: boolean }) {
                 <Icon name="upload" className="size-4" />
                 Add reference
               </button>
-              <span className="text-[11px] tabular-nums text-subtle-foreground">
+              <Annotation className="hidden text-base text-muted-foreground sm:inline-flex">
+                words become worlds
+              </Annotation>
+              <span className="ml-auto text-[11px] tabular-nums text-subtle-foreground">
                 {prompt.length} / 2,000
               </span>
             </div>
@@ -191,9 +197,7 @@ export function GenerationStudio({ canGenerate }: { canGenerate: boolean }) {
                 All media is generated through BytePlus
               </p>
             </div>
-            <span className="rounded-full border border-info/15 bg-info/[0.06] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-info">
-              Catalog preview
-            </span>
+            <DemoBadge>Catalog preview</DemoBadge>
           </div>
 
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -210,10 +214,10 @@ export function GenerationStudio({ canGenerate }: { canGenerate: boolean }) {
                       [kind]: model.id,
                     }))
                   }
-                  className={`group rounded-2xl border p-4 text-left transition ${
+                  className={`group rounded-2xl border p-4 text-left transition duration-200 ${
                     active
-                      ? "border-primary/45 bg-primary/[0.08] ring-4 ring-primary/[0.06]"
-                      : "border-border bg-foreground/[0.025] hover:border-border hover:bg-foreground/[0.04]"
+                      ? "border-primary/45 bg-primary/[0.08] shadow-sketch ring-4 ring-primary/[0.06]"
+                      : "border-border bg-card hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-sm"
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -236,7 +240,7 @@ export function GenerationStudio({ canGenerate }: { canGenerate: boolean }) {
                         </p>
                       </div>
                     </div>
-                    <span className="rounded-md bg-foreground/[0.06] px-2 py-1 text-[10px] font-semibold text-muted-foreground">
+                    <span className="rounded-md border border-border bg-secondary px-2 py-1 text-[10px] font-semibold text-muted-foreground">
                       {model.badge}
                     </span>
                   </div>
@@ -273,8 +277,8 @@ export function GenerationStudio({ canGenerate }: { canGenerate: boolean }) {
                   }
                   className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
                     selectedRatio[kind] === ratio
-                      ? "border-border bg-foreground/[0.09] text-foreground"
-                      : "border-border text-subtle-foreground hover:text-foreground/90"
+                      ? "border-primary/35 bg-primary/10 text-primary shadow-xs"
+                      : "border-border bg-card text-subtle-foreground hover:border-primary/20 hover:text-foreground/90"
                   }`}
                 >
                   {ratio}
@@ -284,7 +288,7 @@ export function GenerationStudio({ canGenerate }: { canGenerate: boolean }) {
           </div>
         </div>
 
-        <div className="creative-glow flex min-h-[520px] flex-col p-5 sm:p-7">
+        <div className="creative-glow flex min-h-[520px] flex-col bg-background/50 p-5 sm:p-7">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-foreground">
@@ -294,19 +298,16 @@ export function GenerationStudio({ canGenerate }: { canGenerate: boolean }) {
                 A visual preview of this workflow
               </p>
             </div>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-success/15 bg-success/[0.06] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-success">
-              <span className="size-1.5 rounded-full bg-success" /> Ready
-            </span>
+            <StatusDot>Ready</StatusDot>
           </div>
 
-          <div className="relative mt-5 flex min-h-80 flex-1 items-center justify-center overflow-hidden rounded-[24px] border border-border bg-surface-sunken p-6">
-            <div className="absolute inset-0 opacity-70 [background-image:linear-gradient(rgba(255,255,255,.025)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.025)_1px,transparent_1px)] [background-size:32px_32px]" />
+          <div className="paper-grid sketch-frame relative mt-5 flex min-h-80 flex-1 items-center justify-center overflow-hidden rounded-[24px] border border-border bg-surface-sunken p-6">
             {kind === "image" ? <ImagePreview /> : null}
             {kind === "video" ? <VideoPreview /> : null}
             {kind === "voice" ? <VoicePreview /> : null}
           </div>
 
-          <div className="mt-5 rounded-2xl border border-border bg-foreground/[0.025] p-4">
+          <div className="mt-5 rounded-2xl border border-border bg-card/85 p-4 shadow-sm">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-xs text-subtle-foreground">Estimated cost</p>

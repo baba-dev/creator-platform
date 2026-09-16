@@ -38,7 +38,8 @@ These rules apply to every contributor and coding agent.
   not add fixed palette colours when a semantic token exists.
 - Every UI change must work in both `data-theme="light"` and
   `data-theme="dark"`.
-- Reuse shared primitives before creating a local substitute.
+- Reuse shared primitives before creating a local substitute, including the
+  creative and sketch primitives in `apps/web/src/components/ui`.
 - Use Bricolage Grotesque for display headings, Manrope for product text, and
   Caveat only for short annotations.
 - Keep sketch treatments sparse: one focal hand-drawn gesture per major

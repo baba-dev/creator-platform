@@ -1,0 +1,178 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+umask 027
+
+readonly application_root=/var/www/creator-platform
+readonly releases_root="$application_root/releases"
+readonly incoming_root="$application_root/incoming"
+readonly current_link="$application_root/current"
+readonly environment_file=/etc/aiwa-creators/creator.env
+readonly backup_root=/var/backups/creator-platform
+readonly runtime_user=aiwa-creator
+readonly runtime_group=aiwa-creator
+
+log() {
+  printf '[creator-deploy] %s\n' "$*"
+}
+
+fail() {
+  log "ERROR: $*" >&2
+  exit 1
+}
+
+[[ $EUID -eq 0 ]] || fail "this command must run as root"
+
+release_sha="${1:-}"
+archive_argument="${2:-}"
+
+[[ "$release_sha" =~ ^[0-9a-f]{40}$ ]] || fail "invalid release SHA"
+[[ -n "$archive_argument" ]] || fail "release archive path is required"
+
+archive_path="$(readlink -f -- "$archive_argument")"
+expected_archive="$incoming_root/creator-platform-${release_sha}.tar.gz"
+[[ "$archive_path" == "$expected_archive" ]] || fail "unexpected archive path"
+[[ -f "$archive_path" ]] || fail "release archive does not exist"
+[[ -f "$environment_file" ]] || fail "environment file does not exist"
+
+exec 9>/run/lock/creator-platform-deploy.lock
+flock -n 9 || fail "another deployment is already running"
+
+if tar -tzf "$archive_path" | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
+  fail "release archive contains an unsafe path"
+fi
+
+release_dir="$releases_root/sha-$release_sha"
+temporary_dir=""
+
+cleanup() {
+  if [[ -n "$temporary_dir" && -d "$temporary_dir" ]]; then
+    rm -rf -- "$temporary_dir"
+  fi
+}
+trap cleanup EXIT
+
+if [[ -d "$release_dir" ]]; then
+  [[ "$(cat "$release_dir/RELEASE_SHA" 2>/dev/null)" == "$release_sha" ]] \
+    || fail "existing release directory is invalid"
+  log "release is already extracted"
+else
+  temporary_dir="$(mktemp -d "$releases_root/.extract-${release_sha}.XXXXXX")"
+  tar --no-same-owner --no-same-permissions -xzf "$archive_path" -C "$temporary_dir"
+
+  [[ "$(cat "$temporary_dir/RELEASE_SHA" 2>/dev/null)" == "$release_sha" ]] \
+    || fail "release identity check failed"
+  [[ -f "$temporary_dir/apps/web/server.js" ]] || fail "web server artifact is missing"
+  [[ -f "$temporary_dir/apps/worker/dist/index.js" ]] || fail "worker artifact is missing"
+  [[ -f "$temporary_dir/packages/db/prisma/schema.prisma" ]] || fail "Prisma schema is missing"
+
+  chown -R "$runtime_user:$runtime_group" "$temporary_dir"
+
+  log "installing migration tooling"
+  runuser --preserve-environment -u "$runtime_user" -- /bin/bash -s -- "$temporary_dir" "$environment_file" <<'MIGRATE'
+set -Eeuo pipefail
+release_dir="$1"
+environment_file="$2"
+
+while IFS= read -r line || [[ -n "$line" ]]; do
+  line="${line%$'\r'}"
+  [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+  key="${line%%=*}"
+  value="${line#*=}"
+  [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+  if [[ "$value" =~ ^\".*\"$ || "$value" =~ ^\'.*\'$ ]]; then
+    value="${value:1:${#value}-2}"
+  fi
+  export "$key=$value"
+done <"$environment_file"
+
+export HOME=/var/www/creator-platform
+export XDG_CACHE_HOME=/var/www/creator-platform/.cache
+export XDG_CONFIG_HOME=/var/www/creator-platform/.config
+export XDG_STATE_HOME=/var/www/creator-platform/.local/state
+
+cd "$release_dir"
+/usr/bin/pnpm install \
+  --frozen-lockfile \
+  --prod=false \
+  --filter @aiwa/db... \
+  --store-dir=/var/www/creator-platform/shared/pnpm-store
+MIGRATE
+
+  install -d -o root -g root -m 0700 "$backup_root"
+  backup_path="$backup_root/predeploy-$(date -u +%Y%m%dT%H%M%SZ)-${release_sha}.sql.gz"
+  log "backing up creator_platform database"
+  mariadb-dump --single-transaction --quick --routines --triggers creator_platform \
+    | gzip -1 >"$backup_path"
+  chmod 0600 "$backup_path"
+
+  log "applying database migrations"
+  runuser --preserve-environment -u "$runtime_user" -- /bin/bash -s -- "$temporary_dir" "$environment_file" <<'MIGRATE'
+set -Eeuo pipefail
+release_dir="$1"
+environment_file="$2"
+
+while IFS= read -r line || [[ -n "$line" ]]; do
+  line="${line%$'\r'}"
+  [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+  key="${line%%=*}"
+  value="${line#*=}"
+  [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+  if [[ "$value" =~ ^\".*\"$ || "$value" =~ ^\'.*\'$ ]]; then
+    value="${value:1:${#value}-2}"
+  fi
+  export "$key=$value"
+done <"$environment_file"
+
+export HOME=/var/www/creator-platform
+export XDG_CACHE_HOME=/var/www/creator-platform/.cache
+export XDG_CONFIG_HOME=/var/www/creator-platform/.config
+export XDG_STATE_HOME=/var/www/creator-platform/.local/state
+
+cd "$release_dir"
+/usr/bin/pnpm --filter @aiwa/db migrate:deploy
+MIGRATE
+
+  mv -- "$temporary_dir" "$release_dir"
+  temporary_dir=""
+  log "release extracted and migrated"
+fi
+
+previous_release="$(readlink -f "$current_link" 2>/dev/null || true)"
+new_link="$application_root/.current-$release_sha"
+rm -f -- "$new_link"
+ln -s "$release_dir" "$new_link"
+mv -Tf "$new_link" "$current_link"
+
+rollback() {
+  log "health check failed; rolling application symlink back" >&2
+  if [[ -n "$previous_release" && -d "$previous_release" ]]; then
+    rollback_link="$application_root/.rollback-$release_sha"
+    rm -f -- "$rollback_link"
+    ln -s "$previous_release" "$rollback_link"
+    mv -Tf "$rollback_link" "$current_link"
+    systemctl restart creator-web.service creator-worker.service || true
+  else
+    rm -f -- "$current_link"
+    systemctl stop creator-web.service creator-worker.service || true
+  fi
+  exit 1
+}
+
+log "restarting application services"
+systemctl restart creator-web.service creator-worker.service || rollback
+
+healthy=false
+for _ in {1..30}; do
+  health_response="$(curl -fsS --max-time 3 http://127.0.0.1:3000/api/health 2>/dev/null || true)"
+  if [[ "$health_response" == *'"status":"ok"'* && "$health_response" == *"\"version\":\"$release_sha\""* ]]; then
+    healthy=true
+    break
+  fi
+  sleep 2
+done
+
+[[ "$healthy" == true ]] || rollback
+systemctl is-active --quiet creator-worker.service || rollback
+
+rm -f -- "$archive_path"
+log "deployment completed: $release_sha"

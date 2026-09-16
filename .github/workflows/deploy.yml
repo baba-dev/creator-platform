@@ -1,0 +1,77 @@
+name: Deploy staging
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: creator-platform-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: staging
+      url: https://creator.aiwamediagroup.com
+    env:
+      RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Download tested release
+        uses: actions/download-artifact@v4
+        with:
+          name: creator-platform-${{ github.event.workflow_run.head_sha }}
+          path: dist
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Validate release artifact
+        run: |
+          test "$RELEASE_SHA" != ""
+          test -f "dist/creator-platform-${RELEASE_SHA}.tar.gz"
+          tar -tzf "dist/creator-platform-${RELEASE_SHA}.tar.gz" >/dev/null
+
+      - name: Upload release to staging
+        uses: appleboy/scp-action@v1.0.0
+        with:
+          host: ${{ secrets.STAGING_SSH_HOST }}
+          port: ${{ secrets.STAGING_SSH_PORT }}
+          username: ${{ secrets.STAGING_SSH_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          fingerprint: ${{ secrets.STAGING_SSH_FINGERPRINT }}
+          protocol: tcp4
+          source:
+            dist/creator-platform-${{ github.event.workflow_run.head_sha
+            }}.tar.gz
+          target: /var/www/creator-platform/incoming
+          strip_components: 1
+          command_timeout: 5m
+
+      - name: Activate release on staging
+        uses: appleboy/ssh-action@v1.2.5
+        env:
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+        with:
+          host: ${{ secrets.STAGING_SSH_HOST }}
+          port: ${{ secrets.STAGING_SSH_PORT }}
+          username: ${{ secrets.STAGING_SSH_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          fingerprint: ${{ secrets.STAGING_SSH_FINGERPRINT }}
+          protocol: tcp4
+          envs: RELEASE_SHA
+          command_timeout: 12m
+          script: |
+            set -eu
+            sudo -n /usr/local/sbin/creator-deploy \
+              "$RELEASE_SHA" \
+              "/var/www/creator-platform/incoming/creator-platform-${RELEASE_SHA}.tar.gz"

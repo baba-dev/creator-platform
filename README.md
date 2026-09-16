@@ -94,7 +94,7 @@ Long-running provider calls must never execute inside a browser request. The web
 | Media generation | BytePlus ModelArk and Seed Speech |
 | Creative reasoning | NVIDIA AI APIs |
 | Testing | Vitest, React Testing Library, and Playwright |
-| Deployment | Docker Compose, Nginx, GHCR, and GitHub Actions |
+| Deployment | Systemd, Nginx, immutable release archives, and GitHub Actions |
 | Observability | OpenTelemetry and structured application logs |
 
 Dependency versions will be pinned by the lockfile when the application bootstrap is committed.
@@ -131,8 +131,9 @@ creator-platform/
 │   ├── runbooks/
 │   └── adr/
 ├── infra/
-│   ├── docker/
-│   └── nginx/
+│   ├── deploy/
+│   ├── nginx/
+│   └── systemd/
 ├── AGENTS.md
 ├── compose.dev.yml
 ├── compose.production.yml
@@ -322,14 +323,14 @@ Initial deployment target:
 
 - Small Linux VPS
 - Nginx reverse proxy and TLS termination
-- Next.js web container
-- Background worker container
-- Private Redis service
+- Next.js standalone web process managed by systemd
+- Bundled background worker managed by systemd
+- Redis bound to localhost
 - MariaDB with persistent storage and encrypted backups
 - Remote S3-compatible media storage
-- GitHub Container Registry images identified by commit SHA
+- Immutable release archives identified by commit SHA
 
-Staging deploys from the protected `main` branch after CI passes. Production deployment will use an approved GitHub release tag and a separate environment.
+Staging deploys from the protected `main` branch after CI passes. GitHub builds the release, transfers it over SSH, and atomically activates it on the server. Production deployment will use an approved GitHub release tag and a separate environment.
 
 ## Development workflow
 

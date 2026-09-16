@@ -1,0 +1,36 @@
+[Unit]
+Description=Aiwa Creators Platform web application
+After=network-online.target mariadb.service redis-server.service
+Wants=network-online.target mariadb.service redis-server.service
+ConditionPathExists=/var/www/creator-platform/current/apps/web/server.js
+
+[Service]
+Type=simple
+User=aiwa-creator
+Group=aiwa-creator
+WorkingDirectory=/var/www/creator-platform/current
+EnvironmentFile=/etc/aiwa-creators/creator.env
+EnvironmentFile=-/var/www/creator-platform/current/release.env
+Environment=HOSTNAME=127.0.0.1
+Environment=PORT=3000
+Environment=NODE_OPTIONS=--max-old-space-size=384
+ExecStart=/usr/bin/node /var/www/creator-platform/current/apps/web/server.js
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=60s
+TimeoutStopSec=30s
+KillSignal=SIGTERM
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=full
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

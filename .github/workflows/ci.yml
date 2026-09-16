@@ -60,7 +60,8 @@ jobs:
         run: pnpm build
 
       - name: Smoke-test worker runtime
-        run: node -e "require('./apps/worker/dist/index.cjs'); setTimeout(() => process.exit(0), 250)"
+        run: |
+          node -e "require('./apps/worker/dist/index.cjs'); setTimeout(() => process.exit(0), 250)"
 
       - name: Package staging release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

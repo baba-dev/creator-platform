@@ -22,7 +22,7 @@ cd "$repository_root"
 
 test -f apps/web/.next/standalone/apps/web/server.js
 test -d apps/web/.next/static
-test -f apps/worker/dist/index.js
+test -f apps/worker/dist/index.cjs
 test -f packages/db/prisma/schema.prisma
 test -d packages/db/prisma/migrations
 

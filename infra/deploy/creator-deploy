@@ -62,7 +62,7 @@ else
   [[ "$(cat "$temporary_dir/RELEASE_SHA" 2>/dev/null)" == "$release_sha" ]] \
     || fail "release identity check failed"
   [[ -f "$temporary_dir/apps/web/server.js" ]] || fail "web server artifact is missing"
-  [[ -f "$temporary_dir/apps/worker/dist/index.js" ]] || fail "worker artifact is missing"
+  [[ -f "$temporary_dir/apps/worker/dist/index.cjs" ]] || fail "worker artifact is missing"
   [[ -f "$temporary_dir/packages/db/prisma/schema.prisma" ]] || fail "Prisma schema is missing"
 
   chown -R "$runtime_user:$runtime_group" "$temporary_dir"

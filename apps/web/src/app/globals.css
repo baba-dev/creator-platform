@@ -1,50 +1,258 @@
 @import "tailwindcss";
 @source "../../../../packages/ui/src";
 
+/*
+ * Aiwa Creators — Pencil & Pixel
+ * Product UI consumes these semantic aliases instead of fixed palette values.
+ * The complete contract lives in docs/design-system.md.
+ */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme inline {
+  --font-sans: var(--font-aiwa-body);
+  --font-display: var(--font-aiwa-display);
+  --font-hand: var(--font-aiwa-hand);
+  --font-mono:
+    ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-subtle-foreground: var(--subtle-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-pencil: var(--pencil);
+  --color-highlighter: var(--highlighter);
+  --color-coral: var(--coral);
+  --color-cyan: var(--cyan);
+  --color-mint: var(--mint);
+  --color-on-vivid: var(--on-vivid);
+
+  --radius-sm: 0.625rem;
+  --radius-md: 0.875rem;
+  --radius-lg: 1.125rem;
+  --radius-xl: 1.5rem;
+  --radius-2xl: 2rem;
+
+  --shadow-xs: var(--shadow-xs-token);
+  --shadow-sm: var(--shadow-sm-token);
+  --shadow-md: var(--shadow-md-token);
+  --shadow-lg: var(--shadow-lg-token);
+  --shadow-sketch: var(--shadow-sketch-token);
+
+  --ease-creative: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --animate-float: float 6s var(--ease-creative) infinite;
+  --animate-draw: draw 700ms var(--ease-creative) both;
+  --animate-reveal: reveal 600ms var(--ease-creative) both;
+  --animate-pulse-soft: pulse-soft 2.8s ease-in-out infinite;
+}
+
 :root {
+  color-scheme: light;
+  --font-aiwa-body: "Manrope Variable";
+  --font-aiwa-display: "Bricolage Grotesque Variable";
+  --font-aiwa-hand: "Caveat Variable";
+
+  /* Warm paper, soft graphite, violet pencil, coral marker. */
+  --background: oklch(0.975 0.014 82);
+  --foreground: oklch(0.235 0.025 264);
+  --card: oklch(0.995 0.006 84);
+  --card-foreground: oklch(0.235 0.025 264);
+  --popover: oklch(0.995 0.006 84);
+  --popover-foreground: oklch(0.235 0.025 264);
+  --primary: oklch(0.525 0.245 291);
+  --primary-foreground: oklch(0.985 0.01 88);
+  --secondary: oklch(0.925 0.027 80);
+  --secondary-foreground: oklch(0.285 0.03 264);
+  --muted: oklch(0.935 0.018 82);
+  --muted-foreground: oklch(0.47 0.028 264);
+  --subtle-foreground: oklch(0.58 0.025 264);
+  --accent: oklch(0.705 0.19 42);
+  --accent-foreground: oklch(0.22 0.025 32);
+  --destructive: oklch(0.57 0.225 27);
+  --destructive-foreground: oklch(0.985 0.01 88);
+  --success: oklch(0.555 0.145 158);
+  --success-foreground: oklch(0.985 0.01 88);
+  --warning: oklch(0.75 0.165 78);
+  --warning-foreground: oklch(0.265 0.04 58);
+  --info: oklch(0.56 0.14 222);
+  --info-foreground: oklch(0.985 0.01 88);
+  --border: oklch(0.82 0.027 76);
+  --input: oklch(0.86 0.023 78);
+  --ring: oklch(0.525 0.245 291);
+  --sidebar: oklch(0.955 0.018 82);
+  --sidebar-foreground: oklch(0.26 0.028 264);
+  --surface-raised: oklch(1 0 0 / 0.72);
+  --surface-sunken: oklch(0.91 0.022 82);
+  --pencil: oklch(0.525 0.245 291);
+  --highlighter: oklch(0.89 0.17 95);
+  --coral: oklch(0.705 0.19 42);
+  --cyan: oklch(0.62 0.14 221);
+  --mint: oklch(0.72 0.135 164);
+  --on-vivid: oklch(0.985 0.01 88);
+
+  --paper-line: oklch(0.68 0.04 255 / 0.12);
+  --paper-dot: oklch(0.35 0.03 265 / 0.13);
+  --sketch-stroke: oklch(0.38 0.04 275 / 0.34);
+  --glow-primary: oklch(0.63 0.245 295 / 0.18);
+  --glow-accent: oklch(0.75 0.19 42 / 0.15);
+  --glow-info: oklch(0.68 0.14 221 / 0.12);
+
+  --gradient-brand: linear-gradient(
+    118deg,
+    oklch(0.54 0.255 292),
+    oklch(0.65 0.235 326) 48%,
+    oklch(0.72 0.19 42)
+  );
+  --gradient-spectrum: linear-gradient(
+    110deg,
+    oklch(0.54 0.255 292),
+    oklch(0.66 0.17 220),
+    oklch(0.72 0.135 164),
+    oklch(0.89 0.17 95),
+    oklch(0.72 0.19 42)
+  );
+  --gradient-hero:
+    radial-gradient(circle at 68% 4%, var(--glow-primary), transparent 35rem),
+    radial-gradient(circle at 12% 82%, var(--glow-accent), transparent 30rem),
+    radial-gradient(circle at 92% 72%, var(--glow-info), transparent 26rem);
+
+  --shadow-xs-token: 0 1px 2px oklch(0.25 0.03 265 / 0.08);
+  --shadow-sm-token: 0 4px 14px oklch(0.25 0.03 265 / 0.08);
+  --shadow-md-token: 0 16px 40px oklch(0.25 0.03 265 / 0.11);
+  --shadow-lg-token: 0 32px 90px oklch(0.25 0.03 265 / 0.16);
+  --shadow-sketch-token: 3px 4px 0 oklch(0.31 0.04 275 / 0.16);
+
+  --motion-instant: 100ms;
+  --motion-fast: 180ms;
+  --motion-base: 280ms;
+  --motion-slow: 520ms;
+}
+
+:root[data-theme="dark"] {
   color-scheme: dark;
-  --background: #070912;
-  --foreground: #f8fafc;
+  --background: oklch(0.16 0.018 267);
+  --foreground: oklch(0.95 0.013 84);
+  --card: oklch(0.205 0.022 267);
+  --card-foreground: oklch(0.95 0.013 84);
+  --popover: oklch(0.225 0.023 267);
+  --popover-foreground: oklch(0.95 0.013 84);
+  --primary: oklch(0.72 0.19 293);
+  --primary-foreground: oklch(0.18 0.025 267);
+  --secondary: oklch(0.26 0.026 267);
+  --secondary-foreground: oklch(0.94 0.014 84);
+  --muted: oklch(0.245 0.024 267);
+  --muted-foreground: oklch(0.7 0.027 265);
+  --subtle-foreground: oklch(0.56 0.027 265);
+  --accent: oklch(0.75 0.17 42);
+  --accent-foreground: oklch(0.18 0.025 267);
+  --destructive: oklch(0.67 0.205 25);
+  --destructive-foreground: oklch(0.97 0.01 84);
+  --success: oklch(0.72 0.14 158);
+  --success-foreground: oklch(0.17 0.025 158);
+  --warning: oklch(0.79 0.15 78);
+  --warning-foreground: oklch(0.21 0.04 58);
+  --info: oklch(0.73 0.13 221);
+  --info-foreground: oklch(0.18 0.025 267);
+  --border: oklch(0.35 0.025 267 / 0.72);
+  --input: oklch(0.34 0.026 267);
+  --ring: oklch(0.72 0.19 293);
+  --sidebar: oklch(0.175 0.019 267);
+  --sidebar-foreground: oklch(0.91 0.016 84);
+  --surface-raised: oklch(0.255 0.025 267 / 0.72);
+  --surface-sunken: oklch(0.125 0.016 267);
+  --pencil: oklch(0.72 0.19 293);
+  --highlighter: oklch(0.85 0.15 95);
+  --coral: oklch(0.75 0.17 42);
+  --cyan: oklch(0.73 0.13 221);
+  --mint: oklch(0.75 0.125 164);
+  --on-vivid: oklch(0.985 0.01 88);
+
+  --paper-line: oklch(0.8 0.04 255 / 0.07);
+  --paper-dot: oklch(0.86 0.025 84 / 0.1);
+  --sketch-stroke: oklch(0.86 0.05 285 / 0.28);
+  --glow-primary: oklch(0.58 0.245 295 / 0.17);
+  --glow-accent: oklch(0.65 0.18 42 / 0.1);
+  --glow-info: oklch(0.62 0.14 221 / 0.09);
+  --shadow-xs-token: 0 1px 2px oklch(0.05 0.02 267 / 0.35);
+  --shadow-sm-token: 0 5px 16px oklch(0.05 0.02 267 / 0.3);
+  --shadow-md-token: 0 18px 46px oklch(0.05 0.02 267 / 0.36);
+  --shadow-lg-token: 0 36px 100px oklch(0.05 0.02 267 / 0.46);
+  --shadow-sketch-token: 3px 4px 0 oklch(0.02 0.01 267 / 0.42);
 }
 
 * {
-  border-color: rgb(255 255 255 / 0.1);
+  border-color: var(--border);
 }
 
 html {
+  min-width: 320px;
   background: var(--background);
   scroll-behavior: smooth;
+  scrollbar-color: var(--subtle-foreground) var(--background);
 }
 
 body {
   min-height: 100vh;
-  background:
-    radial-gradient(
-      circle at 72% 6%,
-      rgb(34 211 238 / 0.13),
-      transparent 32rem
-    ),
-    radial-gradient(
-      circle at 18% 90%,
-      rgb(168 85 247 / 0.08),
-      transparent 30rem
-    ),
-    var(--background);
+  background: var(--gradient-hero), var(--background);
   color: var(--foreground);
-  font-family:
-    Inter,
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
+  font-family: var(--font-aiwa-body), ui-sans-serif, system-ui, sans-serif;
+  font-synthesis: none;
   text-rendering: optimizeLegibility;
+  transition:
+    background-color var(--motion-base) ease,
+    color var(--motion-base) ease;
+}
+
+body::before {
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  background-image: radial-gradient(
+    circle at center,
+    var(--paper-dot) 0.65px,
+    transparent 0.8px
+  );
+  background-size: 12px 12px;
+  mask-image: linear-gradient(to bottom, black, transparent 82%);
+  opacity: 0.42;
 }
 
 ::selection {
-  background: rgb(139 92 246 / 0.35);
-  color: white;
+  background: color-mix(in oklch, var(--primary) 28%, transparent);
+  color: var(--foreground);
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
 }
 
 button,
@@ -60,6 +268,242 @@ select {
   font: inherit;
 }
 
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
+@utility font-display {
+  font-family:
+    var(--font-aiwa-display), var(--font-aiwa-body), ui-sans-serif, system-ui,
+    sans-serif;
+}
+
+@utility font-hand {
+  font-family: var(--font-aiwa-hand), "Segoe Print", "Bradley Hand", cursive;
+}
+
+@utility text-gradient {
+  color: transparent;
+  background-image: var(--gradient-spectrum);
+  background-clip: text;
+}
+
+@utility paper-grid {
+  background-image:
+    linear-gradient(var(--paper-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--paper-line) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+@utility paper-dots {
+  background-image: radial-gradient(
+    circle at center,
+    var(--paper-dot) 0.8px,
+    transparent 0.9px
+  );
+  background-size: 14px 14px;
+}
+
+@utility sketch-card {
+  position: relative;
+  border: 1px solid var(--border);
+  background: var(--card);
+  box-shadow: var(--shadow-sketch-token);
+}
+
+@utility creative-glow {
+  background: var(--gradient-hero);
+}
+
+@utility hover-lift {
+  transition:
+    transform var(--motion-base) var(--ease-creative),
+    box-shadow var(--motion-base) var(--ease-creative),
+    border-color var(--motion-fast) ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-4px) rotate(-0.15deg);
+  box-shadow: var(--shadow-md-token);
+}
+
+.paper-sheet {
+  position: relative;
+  border: 1px solid var(--border);
+  background:
+    linear-gradient(var(--card), var(--card)) padding-box,
+    var(--gradient-spectrum) border-box;
+  box-shadow: var(--shadow-md-token);
+}
+
+.paper-sheet::before {
+  position: absolute;
+  inset: 9px;
+  z-index: -1;
+  content: "";
+  border: 1px solid var(--border);
+  border-radius: inherit;
+  background: var(--muted);
+  transform: rotate(1.1deg);
+}
+
+.ruled-paper {
+  background-image: linear-gradient(
+    to bottom,
+    transparent 1.72rem,
+    var(--paper-line) 1.76rem,
+    transparent 1.8rem
+  );
+  background-size: 100% 1.8rem;
+}
+
+.sketch-frame {
+  position: relative;
+  isolation: isolate;
+}
+
+.sketch-frame::after {
+  position: absolute;
+  z-index: -1;
+  inset: -5px 3px 3px -5px;
+  pointer-events: none;
+  content: "";
+  border: 1.5px solid var(--sketch-stroke);
+  border-radius: inherit;
+  transform: rotate(-0.35deg);
+}
+
+.form-control {
+  min-height: 3rem;
+  width: 100%;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-md);
+  background: color-mix(in oklch, var(--card) 76%, transparent);
+  padding-inline: 1rem;
+  color: var(--foreground);
+  box-shadow: inset 0 1px 0
+    color-mix(in oklch, var(--foreground) 4%, transparent);
+  outline: none;
+  transition:
+    border-color var(--motion-fast) ease,
+    box-shadow var(--motion-fast) ease,
+    background-color var(--motion-fast) ease;
+}
+
+.form-control::placeholder {
+  color: var(--subtle-foreground);
+}
+
+.form-control:focus {
+  border-color: color-mix(in oklch, var(--primary) 56%, var(--border));
+  background: var(--card);
+  box-shadow: 0 0 0 4px color-mix(in oklch, var(--primary) 9%, transparent);
+}
+
+.page-reveal > * {
+  animation: reveal 600ms var(--ease-creative) both;
+}
+
+.page-reveal > :nth-child(2) {
+  animation-delay: 80ms;
+}
+
+.page-reveal > :nth-child(3) {
+  animation-delay: 140ms;
+}
+
+.page-reveal > :nth-child(4) {
+  animation-delay: 200ms;
+}
+
+.sketch-underline {
+  position: relative;
+  isolation: isolate;
+  white-space: nowrap;
+}
+
+.sketch-underline::after {
+  position: absolute;
+  z-index: -1;
+  right: -0.08em;
+  bottom: 0.02em;
+  left: -0.06em;
+  height: 0.3em;
+  content: "";
+  background: color-mix(in oklch, var(--highlighter) 68%, transparent);
+  clip-path: polygon(1% 40%, 98% 4%, 100% 72%, 3% 96%);
+  transform: rotate(-1deg);
+}
+
+.sketch-ring {
+  position: relative;
+}
+
+.sketch-ring::after {
+  position: absolute;
+  inset: -5px -8px;
+  pointer-events: none;
+  content: "";
+  border: 1.5px solid var(--sketch-stroke);
+  border-radius: 48% 52% 46% 54% / 53% 47% 55% 45%;
+  transform: rotate(-1.5deg);
+}
+
+.theme-transition,
+.theme-transition *,
+.theme-transition *::before,
+.theme-transition *::after {
+  transition:
+    background-color var(--motion-base) ease,
+    border-color var(--motion-base) ease,
+    color var(--motion-base) ease,
+    fill var(--motion-base) ease,
+    box-shadow var(--motion-base) ease !important;
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(-1deg);
+  }
+  50% {
+    transform: translate3d(0, -8px, 0) rotate(1deg);
+  }
+}
+
+@keyframes draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.96);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
@@ -68,8 +512,16 @@ select {
   *,
   *::before,
   *::after {
+    scroll-behavior: auto !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+@media (forced-colors: active) {
+  .sketch-underline::after,
+  body::before {
+    display: none;
   }
 }

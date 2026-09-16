@@ -40,10 +40,10 @@ export function OnboardingForm() {
 
   return (
     <form className="mt-8" onSubmit={handleSubmit}>
-      <label className="block text-sm font-medium text-slate-300">
+      <label className="block text-xs font-bold text-foreground/90">
         Organization name
         <input
-          className="mt-2 h-12 w-full rounded-xl border border-white/[0.09] bg-white/[0.035] px-4 text-sm text-white outline-none transition placeholder:text-slate-700 focus:border-violet-300/45 focus:ring-4 focus:ring-violet-300/[0.07]"
+          className="form-control mt-2 text-sm"
           name="name"
           type="text"
           autoComplete="organization"
@@ -57,7 +57,7 @@ export function OnboardingForm() {
 
       {error ? (
         <p
-          className="mt-4 rounded-xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200"
+          className="mt-4 rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive"
           role="alert"
         >
           {error}
@@ -65,7 +65,7 @@ export function OnboardingForm() {
       ) : null}
 
       <Button className="mt-5 w-full" size="lg" disabled={pending}>
-        {pending ? "Creating workspace…" : "Create workspace"}
+        {pending ? "Preparing your canvas…" : "Create workspace"}
       </Button>
     </form>
   );

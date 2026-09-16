@@ -3,9 +3,12 @@ import { db } from "@aiwa/db";
 import Link from "next/link";
 
 import { SignOutButton } from "@/components/auth/sign-out-button";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Brand } from "@/components/ui/brand";
 import { Button } from "@/components/ui/button";
+import { Eyebrow } from "@/components/ui/creative";
 import { Icon, type IconName } from "@/components/ui/icon";
+import { DemoBadge, StatusDot } from "@/components/ui/sketch";
 import { requirePlatformPermission } from "@/lib/request-auth";
 
 const adminNavigation: readonly { label: string; icon: IconName }[] = [
@@ -85,23 +88,24 @@ export default async function AdminPage() {
   const roleLabel = session.user.platformRole.replaceAll("_", " ");
 
   return (
-    <main className="min-h-screen bg-[#070912] text-slate-100">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_85%_-10%,rgba(245,158,11,.09),transparent_32rem),radial-gradient(circle_at_5%_70%,rgba(124,58,237,.09),transparent_30rem)]" />
-      <div className="relative mx-auto grid min-h-screen max-w-[1800px] xl:grid-cols-[250px_1fr]">
-        <aside className="hidden border-r border-white/[0.07] bg-[#080b13]/80 px-4 py-5 backdrop-blur-xl xl:flex xl:flex-col">
+    <main className="relative min-h-screen bg-background text-foreground">
+      <div className="creative-glow pointer-events-none fixed inset-0" />
+      <div className="paper-grid pointer-events-none fixed inset-x-0 top-0 h-96 opacity-25 [mask-image:linear-gradient(to_bottom,black,transparent)]" />
+      <div className="relative mx-auto grid min-h-screen max-w-[1800px] xl:grid-cols-[264px_1fr]">
+        <aside className="hidden border-r border-border bg-sidebar/88 px-4 py-5 backdrop-blur-xl xl:flex xl:flex-col">
           <div className="px-2">
             <Brand />
           </div>
-          <div className="mx-2 mt-7 rounded-xl border border-amber-300/10 bg-amber-300/[0.05] px-3 py-2.5">
+          <div className="mx-2 mt-7 rounded-xl border border-warning/20 bg-warning/[0.07] px-3 py-2.5 shadow-xs">
             <div className="flex items-center gap-2">
-              <span className="grid size-6 place-items-center rounded-lg bg-amber-300/10 text-amber-300">
+              <span className="grid size-6 place-items-center rounded-lg bg-warning/10 text-warning">
                 <Icon name="admin" className="size-3.5" />
               </span>
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-300">
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-warning">
                   Operations console
                 </p>
-                <p className="mt-0.5 text-[9px] text-slate-600">
+                <p className="mt-0.5 text-[9px] text-subtle-foreground">
                   Restricted platform access
                 </p>
               </div>
@@ -114,72 +118,91 @@ export default async function AdminPage() {
             {adminNavigation.map((item, index) => (
               <span
                 key={item.label}
-                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium ${index === 0 ? "bg-white/[0.075] text-white" : "text-slate-600"}`}
+                className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 text-sm font-semibold ${index === 0 ? "border-warning/20 bg-card text-foreground shadow-xs" : "border-transparent text-subtle-foreground"}`}
               >
                 <Icon
                   name={item.icon}
-                  className={`size-[18px] ${index === 0 ? "text-amber-300" : "text-slate-700"}`}
+                  className={`size-[18px] ${index === 0 ? "text-warning" : "text-subtle-foreground"}`}
                 />
                 {item.label}
                 {item.label === "Payments" && pendingPaymentCount ? (
-                  <span className="ml-auto rounded-full bg-amber-300/10 px-2 py-0.5 text-[9px] font-bold text-amber-300">
+                  <span className="ml-auto rounded-full bg-warning/10 px-2 py-0.5 text-[9px] font-bold text-warning">
                     {pendingPaymentCount}
                   </span>
                 ) : null}
               </span>
             ))}
           </nav>
-          <div className="mt-auto rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4">
-            <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-700">
+          <div className="mt-auto rounded-2xl border border-border bg-card/70 p-4 shadow-xs">
+            <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-subtle-foreground">
               Signed in with
             </p>
-            <p className="mt-2 text-xs font-semibold text-slate-300">
+            <p className="mt-2 text-xs font-semibold text-foreground/90">
               {roleLabel}
             </p>
-            <p className="mt-1 truncate text-[10px] text-slate-600">
+            <p className="mt-1 truncate text-[10px] text-subtle-foreground">
               {session.user.email}
             </p>
-            <div className="mt-3 border-t border-white/[0.06] pt-2">
+            <div className="mt-3 border-t border-border pt-2">
               <SignOutButton />
             </div>
           </div>
         </aside>
 
         <div className="min-w-0">
-          <header className="sticky top-0 z-30 flex min-h-[72px] items-center justify-between gap-4 border-b border-white/[0.07] bg-[#070912]/80 px-4 backdrop-blur-xl sm:px-7 lg:px-9">
+          <header className="sticky top-0 z-30 flex min-h-[72px] items-center justify-between gap-4 border-b border-border bg-background/82 px-4 backdrop-blur-xl sm:px-7 lg:px-9">
             <div className="flex items-center gap-3">
               <div className="xl:hidden">
                 <Brand compact />
               </div>
-              <div>
-                <p className="text-sm font-semibold text-white">
+              <div className="max-[480px]:hidden">
+                <p className="text-sm font-semibold text-foreground">
                   Platform administration
                 </p>
-                <p className="mt-0.5 hidden text-[10px] uppercase tracking-[0.12em] text-slate-600 sm:block">
+                <p className="mt-0.5 hidden text-[10px] uppercase tracking-[0.12em] text-subtle-foreground sm:block">
                   Aiwa Creators · Operations
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <span className="hidden rounded-full border border-violet-300/15 bg-violet-300/[0.06] px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.14em] text-violet-300 sm:inline-flex">
-                UI preview
+              <ThemeToggle />
+              <span className="hidden sm:inline-flex">
+                <DemoBadge>UI preview</DemoBadge>
               </span>
               <Button asChild variant="secondary" size="sm">
-                <Link href="/app">Customer workspace</Link>
+                <Link href="/app">
+                  <span className="sm:hidden">Workspace</span>
+                  <span className="hidden sm:inline">Customer workspace</span>
+                </Link>
               </Button>
             </div>
           </header>
 
+          <nav
+            className="sticky top-[72px] z-20 flex gap-1 overflow-x-auto border-b border-border bg-background/90 px-4 py-2 backdrop-blur-xl xl:hidden"
+            aria-label="Mobile administration navigation"
+          >
+            {adminNavigation.map((item, index) => (
+              <span
+                key={item.label}
+                className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${index === 0 ? "bg-warning/10 text-warning" : "text-muted-foreground"}`}
+              >
+                <Icon name={item.icon} className="size-3.5" />
+                {item.label}
+              </span>
+            ))}
+          </nav>
+
           <div className="px-4 py-7 sm:px-7 lg:px-9 lg:py-9">
             <section className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="text-xs font-semibold text-amber-300">
+                <Eyebrow className="text-warning">
                   Good morning, operations team
-                </p>
-                <h1 className="mt-2 text-3xl font-semibold tracking-[-0.035em] text-white sm:text-4xl">
+                </Eyebrow>
+                <h1 className="font-display mt-3 text-4xl font-semibold tracking-[-0.045em] text-foreground sm:text-5xl">
                   Everything under control.
                 </h1>
-                <p className="mt-2 text-sm leading-6 text-slate-500">
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
                   Customers, credits, payments, models, and generation health in
                   one place.
                 </p>
@@ -233,19 +256,19 @@ export default async function AdminPage() {
             </section>
 
             <section className="mt-6 grid gap-6 2xl:grid-cols-[minmax(0,1.35fr)_minmax(340px,.65fr)]">
-              <div className="rounded-[26px] border border-white/[0.08] bg-[#0c101a]/85 p-5 sm:p-6">
+              <div className="rounded-[24px] border border-border bg-card/88 p-5 shadow-sm sm:p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-semibold text-white">
+                    <p className="text-sm font-semibold text-foreground">
                       Organizations
                     </p>
-                    <p className="mt-1 text-xs text-slate-600">
+                    <p className="mt-1 text-xs text-subtle-foreground">
                       Current customer workspaces and balances
                     </p>
                   </div>
                   <button
                     type="button"
-                    className="text-xs font-semibold text-violet-300"
+                    className="text-xs font-semibold text-primary"
                   >
                     View all
                   </button>
@@ -253,7 +276,7 @@ export default async function AdminPage() {
                 <div className="mt-5 overflow-x-auto">
                   <table className="w-full min-w-[560px] border-collapse text-left">
                     <thead>
-                      <tr className="border-b border-white/[0.07] text-[9px] font-bold uppercase tracking-[0.14em] text-slate-700">
+                      <tr className="border-b border-border text-[9px] font-bold uppercase tracking-[0.14em] text-subtle-foreground">
                         <th className="pb-3 font-semibold">Organization</th>
                         <th className="pb-3 font-semibold">Members</th>
                         <th className="pb-3 font-semibold">Jobs</th>
@@ -261,20 +284,20 @@ export default async function AdminPage() {
                         <th className="pb-3 font-semibold">Status</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/[0.06]">
+                    <tbody className="divide-y divide-border">
                       {organizations.length > 0 ? (
                         organizations.map((organization) => (
                           <tr key={organization.id} className="text-xs">
                             <td className="py-4">
                               <div className="flex items-center gap-3">
-                                <span className="grid size-9 place-items-center rounded-xl bg-violet-400/10 font-bold text-violet-200">
+                                <span className="grid size-9 place-items-center rounded-xl bg-primary/10 font-bold text-primary">
                                   {organization.name[0]?.toUpperCase() ?? "O"}
                                 </span>
                                 <div>
-                                  <p className="max-w-56 truncate font-semibold text-slate-200">
+                                  <p className="max-w-56 truncate font-semibold text-foreground">
                                     {organization.name}
                                   </p>
-                                  <p className="mt-0.5 text-[9px] text-slate-700">
+                                  <p className="mt-0.5 text-[9px] text-subtle-foreground">
                                     Added{" "}
                                     {organization.createdAt.toLocaleDateString(
                                       "en-GB",
@@ -288,19 +311,19 @@ export default async function AdminPage() {
                                 </div>
                               </div>
                             </td>
-                            <td className="py-4 text-slate-500">
+                            <td className="py-4 text-muted-foreground">
                               {organization._count.memberships}
                             </td>
-                            <td className="py-4 text-slate-500">
+                            <td className="py-4 text-muted-foreground">
                               {organization._count.generationJobs}
                             </td>
-                            <td className="py-4 font-semibold text-slate-300">
+                            <td className="py-4 font-semibold text-foreground/90">
                               {(
                                 organization.wallet?.balanceCache ?? 0n
                               ).toLocaleString("en-US")}
                             </td>
                             <td className="py-4">
-                              <span className="rounded-full bg-emerald-400/10 px-2.5 py-1 text-[9px] font-bold text-emerald-300">
+                              <span className="rounded-full bg-success/10 px-2.5 py-1 text-[9px] font-bold text-success">
                                 Active
                               </span>
                             </td>
@@ -309,13 +332,13 @@ export default async function AdminPage() {
                       ) : (
                         <tr>
                           <td colSpan={5} className="py-12 text-center">
-                            <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-white/[0.04] text-slate-600">
+                            <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-foreground/[0.04] text-subtle-foreground">
                               <Icon name="projects" />
                             </span>
-                            <p className="mt-3 text-sm font-semibold text-slate-400">
+                            <p className="mt-3 text-sm font-semibold text-muted-foreground">
                               No organization data to display
                             </p>
-                            <p className="mt-1 text-xs text-slate-700">
+                            <p className="mt-1 text-xs text-subtle-foreground">
                               Organizations will appear here after signup.
                             </p>
                           </td>
@@ -327,17 +350,17 @@ export default async function AdminPage() {
               </div>
 
               <div className="space-y-6">
-                <div className="rounded-[26px] border border-white/[0.08] bg-[#0c101a]/85 p-5 sm:p-6">
+                <div className="rounded-[24px] border border-border bg-card/88 p-5 shadow-sm sm:p-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-semibold text-white">
+                      <p className="text-sm font-semibold text-foreground">
                         Platform health
                       </p>
-                      <p className="mt-1 text-xs text-slate-600">
+                      <p className="mt-1 text-xs text-subtle-foreground">
                         Operational readiness
                       </p>
                     </div>
-                    <span className="size-2 rounded-full bg-emerald-300 shadow-[0_0_12px_rgba(110,231,183,.65)]" />
+                    <StatusDot>Online</StatusDot>
                   </div>
                   <div className="mt-5 space-y-3">
                     <HealthRow
@@ -364,26 +387,26 @@ export default async function AdminPage() {
                   </div>
                 </div>
 
-                <div className="rounded-[26px] border border-amber-300/10 bg-[linear-gradient(145deg,rgba(245,158,11,.08),rgba(124,58,237,.04))] p-5 sm:p-6">
+                <div className="rounded-[24px] border border-warning/20 bg-warning/[0.07] p-5 shadow-sm sm:p-6">
                   <div className="flex items-start gap-3">
-                    <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-amber-300/10 text-amber-300">
+                    <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-warning/10 text-warning">
                       <Icon name="credits" className="size-5" />
                     </span>
                     <div>
-                      <p className="text-sm font-semibold text-white">
+                      <p className="text-sm font-semibold text-foreground">
                         Finance workflow next
                       </p>
-                      <p className="mt-2 text-xs leading-5 text-slate-500">
+                      <p className="mt-2 text-xs leading-5 text-muted-foreground">
                         Record cash and cheque payments in OMR, then issue
                         credits through an immutable ledger entry.
                       </p>
                     </div>
                   </div>
-                  <div className="mt-4 flex items-center justify-between border-t border-white/[0.06] pt-4">
-                    <span className="text-[10px] font-semibold text-slate-600">
+                  <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
+                    <span className="text-[10px] font-semibold text-subtle-foreground">
                       Permission required
                     </span>
-                    <span className="rounded-md bg-white/[0.05] px-2 py-1 text-[9px] font-bold text-slate-400">
+                    <span className="rounded-md bg-foreground/[0.05] px-2 py-1 text-[9px] font-bold text-muted-foreground">
                       credits:grant
                     </span>
                   </div>
@@ -391,17 +414,17 @@ export default async function AdminPage() {
               </div>
             </section>
 
-            <section className="mt-6 rounded-[26px] border border-white/[0.08] bg-[#0c101a]/85 p-5 sm:p-6">
+            <section className="mt-6 rounded-[24px] border border-border bg-card/88 p-5 shadow-sm sm:p-6">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="text-sm font-semibold text-white">
+                  <p className="text-sm font-semibold text-foreground">
                     Your access boundary
                   </p>
-                  <p className="mt-1 text-xs text-slate-600">
+                  <p className="mt-1 text-xs text-subtle-foreground">
                     Server-enforced permissions for {roleLabel}
                   </p>
                 </div>
-                <span className="rounded-full border border-emerald-300/15 bg-emerald-300/[0.06] px-3 py-1.5 text-[9px] font-bold uppercase tracking-wider text-emerald-300">
+                <span className="rounded-full border border-success/15 bg-success/[0.06] px-3 py-1.5 text-[9px] font-bold uppercase tracking-wider text-success">
                   RBAC active
                 </span>
               </div>
@@ -409,7 +432,7 @@ export default async function AdminPage() {
                 {permissions.map((permission) => (
                   <span
                     key={permission}
-                    className="rounded-lg border border-white/[0.07] bg-white/[0.025] px-2.5 py-1.5 text-[10px] font-medium text-slate-500"
+                    className="rounded-lg border border-border bg-foreground/[0.025] px-2.5 py-1.5 text-[10px] font-medium text-muted-foreground"
                   >
                     {permission}
                   </span>
@@ -439,28 +462,33 @@ function AdminMetric({
   tone: "violet" | "cyan" | "emerald" | "blue" | "amber";
 }) {
   const tones = {
-    violet: "bg-violet-400/10 text-violet-300",
-    cyan: "bg-cyan-400/10 text-cyan-300",
-    emerald: "bg-emerald-400/10 text-emerald-300",
-    blue: "bg-blue-400/10 text-blue-300",
-    amber: "bg-amber-400/10 text-amber-300",
+    violet: "bg-primary/10 text-primary",
+    cyan: "bg-info/10 text-info",
+    emerald: "bg-success/10 text-success",
+    blue: "bg-info/10 text-info",
+    amber: "bg-warning/10 text-warning",
   };
   return (
-    <article className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4">
+    <article className="group relative overflow-hidden rounded-2xl border border-border bg-card/82 p-4 shadow-xs transition hover:-translate-y-0.5 hover:shadow-sm">
+      <span
+        className={`absolute inset-x-0 top-0 h-0.5 ${tone === "amber" ? "bg-warning" : "bg-primary"} opacity-45`}
+      />
       <div className="flex items-start justify-between">
         <span
           className={`grid size-9 place-items-center rounded-xl ${tones[tone]}`}
         >
           <Icon name={icon} className="size-4" />
         </span>
-        <span className="text-[9px] text-slate-700">Live</span>
+        <span className="font-mono text-[9px] uppercase tracking-wider text-subtle-foreground">
+          Live
+        </span>
       </div>
       <p
-        className={`mt-4 font-semibold tracking-tight text-white ${value === "Restricted" ? "text-sm" : "text-2xl"}`}
+        className={`mt-4 font-semibold tracking-tight text-foreground ${value === "Restricted" ? "text-sm" : "text-2xl"}`}
       >
         {value}
       </p>
-      <p className="mt-1 text-[10px] text-slate-600">{label}</p>
+      <p className="mt-1 text-[10px] text-subtle-foreground">{label}</p>
     </article>
   );
 }
@@ -477,15 +505,19 @@ function HealthRow({
   good?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
+    <div className="flex items-center gap-3 rounded-xl border border-border bg-background/45 p-3">
       <span
-        className={`size-2 rounded-full ${good ? "bg-emerald-300" : "bg-amber-300"}`}
+        className={`size-2 rounded-full ${good ? "bg-success" : "bg-warning"}`}
       />
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-semibold text-slate-300">{label}</p>
-        <p className="mt-0.5 truncate text-[9px] text-slate-700">{detail}</p>
+        <p className="text-xs font-semibold text-foreground/90">{label}</p>
+        <p className="mt-0.5 truncate text-[9px] text-subtle-foreground">
+          {detail}
+        </p>
       </div>
-      <span className="text-[9px] font-semibold text-slate-500">{value}</span>
+      <span className="text-[9px] font-semibold text-muted-foreground">
+        {value}
+      </span>
     </div>
   );
 }

@@ -5,8 +5,7 @@ import { authClient } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
-const inputClassName =
-  "mt-2 h-12 w-full rounded-xl border border-white/[0.09] bg-white/[0.035] px-4 text-sm text-white outline-none transition placeholder:text-slate-700 focus:border-violet-300/45 focus:ring-4 focus:ring-violet-300/[0.07]";
+const inputClassName = "form-control mt-2 text-sm";
 
 export function SignUpForm() {
   const router = useRouter();
@@ -50,7 +49,7 @@ export function SignUpForm() {
 
   return (
     <form className="space-y-5" onSubmit={handleSubmit}>
-      <label className="block text-sm font-medium text-slate-300">
+      <label className="block text-xs font-bold text-foreground/90">
         Your name
         <input
           className={inputClassName}
@@ -65,7 +64,7 @@ export function SignUpForm() {
         />
       </label>
 
-      <label className="block text-sm font-medium text-slate-300">
+      <label className="block text-xs font-bold text-foreground/90">
         Work email
         <input
           className={inputClassName}
@@ -78,7 +77,7 @@ export function SignUpForm() {
         />
       </label>
 
-      <label className="block text-sm font-medium text-slate-300">
+      <label className="block text-xs font-bold text-foreground/90">
         Password
         <input
           className={inputClassName}
@@ -92,7 +91,7 @@ export function SignUpForm() {
         />
       </label>
 
-      <label className="block text-sm font-medium text-slate-300">
+      <label className="block text-xs font-bold text-foreground/90">
         Confirm password
         <input
           className={inputClassName}
@@ -108,7 +107,7 @@ export function SignUpForm() {
 
       {error ? (
         <p
-          className="rounded-xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200"
+          className="rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive"
           role="alert"
         >
           {error}
@@ -119,7 +118,7 @@ export function SignUpForm() {
         {pending ? "Creating account…" : "Create account"}
       </Button>
 
-      <p className="text-xs leading-5 text-slate-500">
+      <p className="text-xs leading-5 text-muted-foreground">
         By continuing, you are creating an organization workspace with you as
         its owner. An administrator can assign credits after signup.
       </p>

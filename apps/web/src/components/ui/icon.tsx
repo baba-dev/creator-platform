@@ -12,11 +12,13 @@ export type IconName =
   | "dashboard"
   | "image"
   | "menu"
+  | "moon"
   | "plus"
   | "projects"
   | "search"
   | "settings"
   | "sparkles"
+  | "sun"
   | "upload"
   | "video"
   | "voice"
@@ -73,6 +75,9 @@ export function Icon({ name, className = "size-5", ...props }: IconProps) {
       </>
     ),
     menu: <path d="M4 7h16M4 12h16M4 17h16" />,
+    moon: (
+      <path d="M20.2 15.4A8.5 8.5 0 0 1 8.6 3.8 8.5 8.5 0 1 0 20.2 15.4Z" />
+    ),
     plus: <path d="M12 5v14M5 12h14" />,
     projects: (
       <>
@@ -93,6 +98,12 @@ export function Icon({ name, className = "size-5", ...props }: IconProps) {
       <>
         <path d="m12 3 1.2 3.3L16.5 7.5l-3.3 1.2L12 12l-1.2-3.3-3.3-1.2 3.3-1.2L12 3Z" />
         <path d="m18 13 .8 2.2L21 16l-2.2.8L18 19l-.8-2.2L15 16l2.2-.8L18 13ZM5.5 13l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7.7-1.8Z" />
+      </>
+    ),
+    sun: (
+      <>
+        <circle cx="12" cy="12" r="3.5" />
+        <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
       </>
     ),
     upload: (

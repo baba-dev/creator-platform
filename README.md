@@ -4,7 +4,7 @@ A private AI creative workspace for Aiwa Media Group teams and client networks.
 
 The platform will provide assisted image, video, and voice generation through BytePlus APIs, supported by NVIDIA-powered creative reasoning, story development, prompt enhancement, and workflow orchestration.
 
-> **Project status:** Architecture and repository bootstrap  
+> **Project status:** Private-alpha foundation and interactive product demo
 > **Staging:** [creator.aiwamediagroup.com](https://creator.aiwamediagroup.com)  
 > **Repository:** [baba-dev/creator-platform](https://github.com/baba-dev/creator-platform)
 
@@ -98,6 +98,18 @@ Long-running provider calls must never execute inside a browser request. The web
 | Observability | OpenTelemetry and structured application logs |
 
 Dependency versions will be pinned by the lockfile when the application bootstrap is committed.
+
+## Interface system
+
+The application uses the **Pencil & Pixel** light/dark design system: a warm
+paper-and-graphite foundation with vivid creative accents and restrained sketch
+details.
+
+- Definitive implementation guide: [docs/design-system.md](docs/design-system.md)
+- Living component and token reference: `/design-system`
+- Semantic tokens: `apps/web/src/app/globals.css`
+
+All new pages must use semantic colour tokens and be reviewed in both modes.
 
 ## Target repository layout
 

@@ -45,13 +45,13 @@ It never restarts a known-damaged extracted release.
 
 Create a GitHub environment named `staging` with:
 
-| Secret                    | Value                              |
-| ------------------------- | ---------------------------------- |
-| `STAGING_SSH_HOST`        | Staging server address             |
-| `STAGING_SSH_PORT`        | `22` or the configured SSH port    |
-| `STAGING_SSH_USER`        | `creator-deploy`                   |
-| `STAGING_SSH_KEY`         | Dedicated ED25519 private key      |
-| `STAGING_SSH_FINGERPRINT` | SHA256 server host-key fingerprint |
+| Secret                    | Value                                             |
+| ------------------------- | ------------------------------------------------- |
+| `STAGING_SSH_HOST`        | `129.151.137.222`                                 |
+| `STAGING_SSH_PORT`        | `22`                                              |
+| `STAGING_SSH_USER`        | `creator-deploy`                                  |
+| `STAGING_SSH_KEY`         | Dedicated ED25519 private key                     |
+| `STAGING_SSH_FINGERPRINT` | SHA256 fingerprint of the server ED25519 host key |
 
 Do not use a root or general-purpose administrator SSH key. The dedicated
 `creator-deploy` user receives permission to run only the validated deployment
@@ -105,6 +105,29 @@ sudo creator-ops promote-owner owner@example.com
 
 The command uses the isolated tooling from the active release, performs an
 idempotent role update, and writes an audit event. It does not invoke pnpm.
+
+## TLS activation
+
+Point the Cloudflare DNS record to `129.151.137.222` and temporarily use
+DNS-only mode. After the first release is healthy:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y certbot
+sudo certbot certonly \
+  --webroot \
+  --webroot-path /var/www/letsencrypt \
+  --domain creator.aiwamediagroup.com
+
+sudo install -o root -g root -m 0644 \
+  infra/nginx/creator.aiwamediagroup.com.conf \
+  /etc/nginx/sites-available/creator.aiwamediagroup.com
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+After HTTPS succeeds, Cloudflare proxying may be re-enabled with SSL/TLS mode
+set to **Full (strict)**.
 
 ## Verification
 

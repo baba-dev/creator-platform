@@ -6,20 +6,23 @@ async function main(): Promise<void> {
   const email = process.argv[2]?.trim().toLowerCase();
 
   if (!email || !email.includes("@")) {
-    throw new Error(
-      "Usage: pnpm --filter @aiwa/db platform:promote-owner -- owner@example.com",
-    );
+    throw new Error("Usage: creator-ops promote-owner owner@example.com");
   }
 
   const user = await db.user.findUnique({
     where: { email },
-    select: { id: true },
+    select: { id: true, platformRole: true },
   });
 
   if (!user) {
     throw new Error(
       "No account exists for that email. Ask the owner to sign up first.",
     );
+  }
+
+  if (user.platformRole === "PLATFORM_OWNER") {
+    console.info("Platform owner access is already granted.");
+    return;
   }
 
   await db.$transaction([
@@ -32,7 +35,7 @@ async function main(): Promise<void> {
         action: "platform.owner_promoted",
         targetType: "User",
         targetId: user.id,
-        metadata: { source: "ops_cli" },
+        metadata: { source: "creator_ops" },
       },
     }),
   ]);

@@ -1,6 +1,7 @@
 import { db } from "@aiwa/db";
 import { hasPlatformPermission } from "@aiwa/authz";
 import Link from "next/link";
+import type { Route } from "next";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { requirePlatformPermission } from "@/lib/request-auth";
@@ -33,7 +34,10 @@ export default async function OrganizationLayout({
   return (
     <div>
       <header className="px-4 pt-8 sm:px-7 lg:px-9">
-        <Link href="/admin/organizations" className="text-sm text-primary">
+        <Link
+          href={"/admin/organizations" as Route}
+          className="text-sm text-primary"
+        >
           ← Organizations
         </Link>
         <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -56,9 +60,9 @@ export default async function OrganizationLayout({
               key={tab.label}
               className="min-h-10 shrink-0 px-3 py-2 text-sm font-semibold text-muted-foreground hover:text-primary"
               href={
-                tab.label === "Overview"
+                (tab.label === "Overview"
                   ? `/admin/organizations/${organizationId}`
-                  : `/admin/organizations/${organizationId}/${tab.label.toLowerCase()}`
+                  : `/admin/organizations/${organizationId}/${tab.label.toLowerCase()}`) as Route
               }
             >
               {tab.label}

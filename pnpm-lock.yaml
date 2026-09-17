@@ -41,6 +41,9 @@ importers:
       '@aiwa/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@aiwa/credits':
+        specifier: workspace:*
+        version: link:../../packages/credits
       '@aiwa/db':
         specifier: workspace:*
         version: link:../../packages/db

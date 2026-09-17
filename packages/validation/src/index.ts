@@ -84,10 +84,97 @@ export const activateOrganizationSchema = z.object({
   organizationId: cuidSchema,
 });
 
+export const platformRoleSchema = z.enum([
+  "USER",
+  "SUPPORT",
+  "OPERATOR",
+  "FINANCE_ADMIN",
+  "PLATFORM_ADMIN",
+  "PLATFORM_OWNER",
+]);
+
+export const userStatusFilterSchema = z.enum(["all", "active", "disabled"]);
+export const userPlatformRoleFilterSchema = z.enum([
+  "all",
+  "USER",
+  "SUPPORT",
+  "OPERATOR",
+  "FINANCE_ADMIN",
+  "PLATFORM_ADMIN",
+  "PLATFORM_OWNER",
+]);
+export const userSearchSchema = paginationSchema.extend({
+  search: z.string().trim().max(120).default(""),
+  status: userStatusFilterSchema.default("all"),
+  role: userPlatformRoleFilterSchema.default("all"),
+});
+
+export const changePlatformRoleSchema = z.object({
+  role: platformRoleSchema,
+});
+
+export const userAccessMutationSchema = z.object({
+  disabled: z.boolean(),
+});
+
+export const attachUserMembershipSchema = z.object({
+  organizationId: cuidSchema,
+  role: managedMembershipRoleSchema.default("ORGANIZATION_MEMBER"),
+  monthlySpendingCapCredits: monthlyCreditCapSchema.optional(),
+});
+
+export const createInvitationSchema = z.object({
+  role: managedMembershipRoleSchema.default("ORGANIZATION_MEMBER"),
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .email()
+    .max(254)
+    .optional()
+    .or(z.literal("")),
+  expiresInDays: z.coerce.number().int().min(1).max(30).default(7),
+});
+
+export const acceptInvitationSchema = z.object({
+  token: z.string().trim().min(16).max(128),
+});
+
+export const revokeInvitationSchema = z.object({
+  invitationId: cuidSchema,
+});
+
 export const generationRequestEnvelopeSchema = z.object({
   organizationId: cuidSchema,
   projectId: cuidSchema.optional(),
   modelId: cuidSchema,
   idempotencyKey: idempotencyKeySchema,
   input: z.record(z.string(), z.unknown()),
+});
+
+export const toggleModelEnabledSchema = z.object({
+  enabled: z.boolean(),
+});
+
+export const publishPriceVersionSchema = z.object({
+  providerCostMicroUsd: z.union([
+    z.bigint().positive(),
+    z.string().regex(/^\d+$/).transform(BigInt),
+  ]),
+  targetMarginBps: z.number().int().min(0).max(9999),
+  fxBaisaNumerator: z
+    .union([z.bigint().positive(), z.string().regex(/^\d+$/).transform(BigInt)])
+    .optional(),
+  fxBaisaDenominator: z
+    .union([z.bigint().positive(), z.string().regex(/^\d+$/).transform(BigInt)])
+    .optional(),
+  creditsPerBaisa: z
+    .union([z.bigint().positive(), z.string().regex(/^\d+$/).transform(BigInt)])
+    .optional(),
+});
+
+export const quoteRequestSchema = z.object({
+  organizationId: cuidSchema,
+  modelId: z.string().trim().min(1).max(128),
+  units: z.coerce.number().int().positive().default(1),
 });

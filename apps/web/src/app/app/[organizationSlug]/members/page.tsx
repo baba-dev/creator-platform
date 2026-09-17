@@ -5,6 +5,10 @@ import {
   MemberTable,
   type MemberRow,
 } from "@/components/organizations/member-table";
+import {
+  InvitationManager,
+  type InvitationRow,
+} from "@/components/organizations/invitation-manager";
 import { OrganizationActions } from "@/components/organizations/organization-actions";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Brand } from "@/components/ui/brand";
@@ -21,7 +25,7 @@ export default async function Team({
     "members:read",
   );
   const organizationId = membership.organizationId;
-  const [members, usage] = await Promise.all([
+  const [members, usage, rawInvitations] = await Promise.all([
     db.membership.findMany({
       where: { organizationId },
       orderBy: [{ role: "asc" }, { createdAt: "asc" }],
@@ -31,6 +35,15 @@ export default async function Team({
       by: ["storageOwnerUserId"],
       where: { organizationId, status: { not: "DELETED" } },
       _sum: { byteSize: true },
+    }),
+    db.organizationInvitation.findMany({
+      where: { organizationId },
+      orderBy: { createdAt: "desc" },
+      include: {
+        createdBy: { select: { name: true, email: true } },
+        acceptedBy: { select: { name: true, email: true } },
+      },
+      take: 20,
     }),
   ]);
   const usageByUser = new Map(
@@ -45,6 +58,17 @@ export default async function Team({
     createdAt: member.createdAt.toISOString(),
     user: member.user,
     usedBytes: (usageByUser.get(member.userId) ?? 0n).toString(),
+  }));
+  const invitations: InvitationRow[] = rawInvitations.map((inv) => ({
+    id: inv.id,
+    token: inv.token,
+    role: inv.role as "ORGANIZATION_MEMBER" | "ORGANIZATION_VIEWER",
+    email: inv.email,
+    status: inv.status,
+    expiresAt: inv.expiresAt.toISOString(),
+    createdAt: inv.createdAt.toISOString(),
+    createdBy: inv.createdBy,
+    acceptedBy: inv.acceptedBy,
   }));
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -72,6 +96,15 @@ export default async function Team({
             membership.role,
             "members:manage",
           )}
+        />
+        <InvitationManager
+          organizationId={organizationId}
+          invitations={invitations}
+          canManage={hasOrganizationPermission(
+            membership.role,
+            "members:manage",
+          )}
+          memberCount={members.length}
         />
         <div className="mt-6">
           <OrganizationActions

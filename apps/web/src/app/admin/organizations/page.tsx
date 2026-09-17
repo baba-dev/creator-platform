@@ -4,6 +4,7 @@ import {
 } from "@aiwa/organizations";
 import { db } from "@aiwa/db";
 import Link from "next/link";
+import type { Route } from "next";
 import { organizationSearchSchema } from "@aiwa/validation";
 import { formatBinaryBytes } from "@/lib/format-bytes";
 import { requirePlatformPermission } from "@/lib/request-auth";
@@ -147,7 +148,7 @@ export default async function OrganizationsPage({
                   <td className="p-4">
                     <Link
                       className="font-semibold text-primary"
-                      href={`/admin/organizations/${org.id}`}
+                      href={`/admin/organizations/${org.id}` as Route}
                     >
                       {org.name}
                     </Link>

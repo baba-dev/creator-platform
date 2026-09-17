@@ -27,6 +27,21 @@ describe("platform RBAC", () => {
   it("does not grant platform-console access to customer users", () => {
     expect(hasPlatformPermission("USER", "platform:access")).toBe(false);
   });
+
+  it("reserves forced ownership transfer for the platform owner", () => {
+    expect(
+      hasPlatformPermission(
+        "PLATFORM_ADMIN",
+        "organizations:transfer-ownership",
+      ),
+    ).toBe(false);
+    expect(
+      hasPlatformPermission(
+        "PLATFORM_OWNER",
+        "organizations:transfer-ownership",
+      ),
+    ).toBe(true);
+  });
 });
 
 describe("organization RBAC", () => {
@@ -52,5 +67,20 @@ describe("organization RBAC", () => {
     expect(
       hasOrganizationPermission("ORGANIZATION_VIEWER", "generation:create"),
     ).toBe(false);
+  });
+
+  it("reserves organization ownership transfer for owners", () => {
+    expect(
+      hasOrganizationPermission(
+        "ORGANIZATION_MEMBER",
+        "organization:transfer-ownership",
+      ),
+    ).toBe(false);
+    expect(
+      hasOrganizationPermission(
+        "ORGANIZATION_OWNER",
+        "organization:transfer-ownership",
+      ),
+    ).toBe(true);
   });
 });

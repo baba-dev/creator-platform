@@ -102,6 +102,8 @@ model User {
   confirmedPayments     ManualPayment[]     @relation("PaymentConfirmedBy")
   priceVersions         ModelPriceVersion[] @relation("PriceVersionCreatedBy")
   generationJobs        GenerationJob[]     @relation("GenerationCreatedBy")
+  ownedOrganizations    Organization[]      @relation("OrganizationOwner")
+  storageAssets         Asset[]             @relation("AssetStorageOwner")
   auditEvents           AuditEvent[]        @relation("AuditActor")
 
   @@index([platformRole, disabledAt])
@@ -163,9 +165,11 @@ model Organization {
   slug                   String             @unique
   status                 OrganizationStatus @default(ACTIVE)
   selfServeCreatorUserId String?            @unique
+  ownerUserId            String
   createdAt              DateTime           @default(now())
   updatedAt              DateTime           @updatedAt
   selfServeCreator       User?              @relation("SelfServeOrganization", fields: [selfServeCreatorUserId], references: [id], onDelete: SetNull)
+  owner                  User               @relation("OrganizationOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
   activeSessions         Session[]
   wallet                 Wallet?
   memberships            Membership[]
@@ -176,6 +180,8 @@ model Organization {
   assets                 Asset[]
 
   @@index([status])
+  @@index([ownerUserId])
+  @@index([status, createdAt])
 }
 
 model Membership {
@@ -183,7 +189,7 @@ model Membership {
   organizationId String
   userId         String
   role           MembershipRole @default(ORGANIZATION_MEMBER)
-  spendingCap    BigInt?
+  monthlySpendingCapCredits BigInt?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
   organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -191,6 +197,7 @@ model Membership {
 
   @@unique([organizationId, userId])
   @@index([userId])
+  @@index([organizationId, role])
 }
 
 model Wallet {
@@ -347,6 +354,7 @@ model Asset {
   organizationId  String
   projectId       String?
   generationJobId String?
+  storageOwnerUserId String?
   status          AssetStatus    @default(PENDING)
   objectKey       String         @unique
   mimeType        String
@@ -360,10 +368,12 @@ model Asset {
   organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   project         Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
   generationJob   GenerationJob? @relation(fields: [generationJobId], references: [id], onDelete: SetNull)
+  storageOwner    User?          @relation("AssetStorageOwner", fields: [storageOwnerUserId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, createdAt])
   @@index([generationJobId])
   @@index([status])
+  @@index([organizationId, storageOwnerUserId, status])
 }
 
 model AuditEvent {

@@ -175,7 +175,7 @@ export default async function OrganizationWorkspacePage({
                 Templates
               </a>
               <a
-                href="#team"
+                href={`/app/${organizationSlug}/members`}
                 className="block rounded-lg py-2 text-xs font-medium text-subtle-foreground transition hover:text-foreground/90"
               >
                 Team members

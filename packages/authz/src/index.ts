@@ -15,6 +15,7 @@ export const platformPermissions = [
   "users:manage",
   "organizations:read",
   "organizations:manage",
+  "organizations:transfer-ownership",
   "payments:read",
   "payments:manage",
   "credits:grant",
@@ -94,6 +95,7 @@ export const organizationPermissions = [
   "members:read",
   "members:manage",
   "organization:manage",
+  "organization:transfer-ownership",
 ] as const;
 
 export type OrganizationPermission = (typeof organizationPermissions)[number];

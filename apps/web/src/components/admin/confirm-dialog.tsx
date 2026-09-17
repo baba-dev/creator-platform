@@ -12,15 +12,18 @@ export function ConfirmDialog({
   confirmLabel,
   onConfirm,
   disabled = false,
+  destructive = false,
 }: {
   triggerLabel: ReactNode;
   title: string;
   description: string;
   confirmLabel: string;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   disabled?: boolean;
+  destructive?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [pending, setPending] = useState(false);
   const titleId = useId();
   const descriptionId = useId();
   const triggerId = useId();
@@ -55,6 +58,7 @@ export function ConfirmDialog({
         id={triggerId}
         type="button"
         disabled={disabled}
+        variant="secondary"
         onClick={() => setOpen(true)}
       >
         {triggerLabel}
@@ -87,12 +91,23 @@ export function ConfirmDialog({
               </Button>
               <Button
                 id={confirmId}
-                onClick={() => {
-                  onConfirm();
-                  close();
+                disabled={pending}
+                className={
+                  destructive
+                    ? "border-destructive/20 bg-destructive text-white hover:bg-destructive/90"
+                    : undefined
+                }
+                onClick={async () => {
+                  setPending(true);
+                  try {
+                    await onConfirm();
+                    close();
+                  } finally {
+                    setPending(false);
+                  }
                 }}
               >
-                {confirmLabel}
+                {pending ? "Working…" : confirmLabel}
               </Button>
             </div>
           </div>

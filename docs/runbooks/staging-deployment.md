@@ -26,20 +26,20 @@ The staging environment runs directly on Ubuntu without Docker:
         └── RELEASE_SHA
 ```
 
-CI creates the application runtime and the operations bundle independently.
-The server never runs pnpm against a release. Prisma migrations execute from
+CI creates the application runtime and the operations bundle independently. The
+server never runs pnpm against a release. Prisma migrations execute from
 `ops/db`, so package-manager activity cannot remove or rewrite the standalone
 Next.js dependencies.
 
-Before activation, the deployment command validates the release identity,
-layout version, web and worker entry points, Next.js runtime, Prisma tools, and
+Before activation, the deployment command validates the release identity, layout
+version, web and worker entry points, Next.js runtime, Prisma tools, and
 operations scripts. It then creates a database backup, applies migrations,
 atomically changes `current`, restarts both services, and checks `/api/health`.
 If the health check fails, it restores the previous valid runtime.
 
 If a same-SHA release directory exists but fails integrity checks, deployment
-rebuilds it from the uploaded archive and quarantines the damaged directory.
-It never restarts a known-damaged extracted release.
+rebuilds it from the uploaded archive and quarantines the damaged directory. It
+never restarts a known-damaged extracted release.
 
 ## Required GitHub staging secrets
 

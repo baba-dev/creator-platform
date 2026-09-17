@@ -10,6 +10,7 @@ readonly environment_file=/etc/aiwa-creators/creator.env
 readonly backup_root=/var/backups/creator-platform
 readonly runtime_user=aiwa-creator
 readonly runtime_group=aiwa-creator
+readonly release_layout=2
 
 log() {
   printf '[creator-deploy] %s\n' "$*"
@@ -18,6 +19,68 @@ log() {
 fail() {
   log "ERROR: $*" >&2
   exit 1
+}
+
+find_next_runtime() {
+  local directory="$1"
+  find "$directory" \
+    -path '*/node_modules/next/package.json' \
+    -print -quit 2>/dev/null
+}
+
+validate_runtime() {
+  local directory="$1"
+  [[ -d "$directory" ]] \
+    && [[ -f "$directory/apps/web/server.js" ]] \
+    && [[ -f "$directory/apps/worker/dist/index.cjs" ]] \
+    && [[ -n "$(find_next_runtime "$directory")" ]]
+}
+
+validate_release() {
+  local directory="$1"
+  local expected_sha="$2"
+
+  validate_runtime "$directory" \
+    && [[ "$(cat "$directory/RELEASE_SHA" 2>/dev/null)" == "$expected_sha" ]] \
+    && [[ "$(cat "$directory/RELEASE_LAYOUT" 2>/dev/null)" == "$release_layout" ]] \
+    && [[ -x "$directory/ops/db/node_modules/.bin/prisma" ]] \
+    && [[ -x "$directory/ops/db/node_modules/.bin/tsx" ]] \
+    && [[ -f "$directory/ops/db/prisma/schema.prisma" ]] \
+    && [[ -d "$directory/ops/db/prisma/migrations" ]] \
+    && [[ -f "$directory/ops/db/prisma/promote-owner.ts" ]] \
+    && [[ -x "$directory/ops/bin/creator-deploy" ]] \
+    && [[ -x "$directory/ops/bin/creator-ops" ]]
+}
+
+load_environment_and_migrate() {
+  local directory="$1"
+
+  runuser --preserve-environment -u "$runtime_user" -- \
+    /bin/bash -s -- "$directory" "$environment_file" <<'MIGRATE'
+set -Eeuo pipefail
+release_dir="$1"
+environment_file="$2"
+
+while IFS= read -r line || [[ -n "$line" ]]; do
+  line="${line%$'\r'}"
+  [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+  key="${line%%=*}"
+  value="${line#*=}"
+  [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+  if [[ "$value" =~ ^\".*\"$ || "$value" =~ ^\'.*\'$ ]]; then
+    value="${value:1:${#value}-2}"
+  fi
+  export "$key=$value"
+done <"$environment_file"
+
+export HOME=/var/www/creator-platform
+export XDG_CACHE_HOME=/var/www/creator-platform/.cache
+export XDG_CONFIG_HOME=/var/www/creator-platform/.config
+export XDG_STATE_HOME=/var/www/creator-platform/.local/state
+
+cd "$release_dir/ops/db"
+exec ./node_modules/.bin/prisma migrate deploy --schema prisma/schema.prisma
+MIGRATE
 }
 
 [[ $EUID -eq 0 ]] || fail "this command must run as root"
@@ -43,6 +106,7 @@ fi
 
 release_dir="$releases_root/sha-$release_sha"
 temporary_dir=""
+previous_release="$(readlink -f "$current_link" 2>/dev/null || true)"
 
 cleanup() {
   if [[ -n "$temporary_dir" && -d "$temporary_dir" ]]; then
@@ -51,52 +115,27 @@ cleanup() {
 }
 trap cleanup EXIT
 
+release_ready=false
+replace_existing=false
+
 if [[ -d "$release_dir" ]]; then
-  [[ "$(cat "$release_dir/RELEASE_SHA" 2>/dev/null)" == "$release_sha" ]] \
-    || fail "existing release directory is invalid"
-  log "release is already extracted"
-else
+  if validate_release "$release_dir" "$release_sha"; then
+    release_ready=true
+    log "release is already extracted and passed integrity checks"
+  else
+    replace_existing=true
+    log "existing release failed integrity checks; rebuilding it from the uploaded archive"
+  fi
+fi
+
+if [[ "$release_ready" != true ]]; then
   temporary_dir="$(mktemp -d "$releases_root/.extract-${release_sha}.XXXXXX")"
   tar --no-same-owner --no-same-permissions -xzf "$archive_path" -C "$temporary_dir"
 
-  [[ "$(cat "$temporary_dir/RELEASE_SHA" 2>/dev/null)" == "$release_sha" ]] \
-    || fail "release identity check failed"
-  [[ -f "$temporary_dir/apps/web/server.js" ]] || fail "web server artifact is missing"
-  [[ -f "$temporary_dir/apps/worker/dist/index.cjs" ]] || fail "worker artifact is missing"
-  [[ -f "$temporary_dir/packages/db/prisma/schema.prisma" ]] || fail "Prisma schema is missing"
+  validate_release "$temporary_dir" "$release_sha" \
+    || fail "extracted release failed integrity checks"
 
   chown -R "$runtime_user:$runtime_group" "$temporary_dir"
-
-  log "installing migration tooling"
-  runuser --preserve-environment -u "$runtime_user" -- /bin/bash -s -- "$temporary_dir" "$environment_file" <<'MIGRATE'
-set -Eeuo pipefail
-release_dir="$1"
-environment_file="$2"
-
-while IFS= read -r line || [[ -n "$line" ]]; do
-  line="${line%$'\r'}"
-  [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
-  key="${line%%=*}"
-  value="${line#*=}"
-  [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
-  if [[ "$value" =~ ^\".*\"$ || "$value" =~ ^\'.*\'$ ]]; then
-    value="${value:1:${#value}-2}"
-  fi
-  export "$key=$value"
-done <"$environment_file"
-
-export HOME=/var/www/creator-platform
-export XDG_CACHE_HOME=/var/www/creator-platform/.cache
-export XDG_CONFIG_HOME=/var/www/creator-platform/.config
-export XDG_STATE_HOME=/var/www/creator-platform/.local/state
-
-cd "$release_dir"
-/usr/bin/pnpm install \
-  --frozen-lockfile \
-  --prod=false \
-  --filter @aiwa/db... \
-  --store-dir=/var/www/creator-platform/shared/pnpm-store
-MIGRATE
 
   install -d -o root -g root -m 0700 "$backup_root"
   backup_path="$backup_root/predeploy-$(date -u +%Y%m%dT%H%M%SZ)-${release_sha}.sql.gz"
@@ -105,39 +144,24 @@ MIGRATE
     | gzip -1 >"$backup_path"
   chmod 0600 "$backup_path"
 
-  log "applying database migrations"
-  runuser --preserve-environment -u "$runtime_user" -- /bin/bash -s -- "$temporary_dir" "$environment_file" <<'MIGRATE'
-set -Eeuo pipefail
-release_dir="$1"
-environment_file="$2"
+  log "applying database migrations with isolated tooling"
+  load_environment_and_migrate "$temporary_dir"
 
-while IFS= read -r line || [[ -n "$line" ]]; do
-  line="${line%$'\r'}"
-  [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
-  key="${line%%=*}"
-  value="${line#*=}"
-  [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
-  if [[ "$value" =~ ^\".*\"$ || "$value" =~ ^\'.*\'$ ]]; then
-    value="${value:1:${#value}-2}"
+  if [[ "$replace_existing" == true ]]; then
+    quarantine_dir="$releases_root/quarantine-${release_sha}-$(date -u +%Y%m%dT%H%M%SZ)"
+    mv -- "$release_dir" "$quarantine_dir"
+    log "moved the invalid release to $quarantine_dir"
+
+    if [[ "$previous_release" == "$release_dir" ]]; then
+      previous_release="$quarantine_dir"
+    fi
   fi
-  export "$key=$value"
-done <"$environment_file"
-
-export HOME=/var/www/creator-platform
-export XDG_CACHE_HOME=/var/www/creator-platform/.cache
-export XDG_CONFIG_HOME=/var/www/creator-platform/.config
-export XDG_STATE_HOME=/var/www/creator-platform/.local/state
-
-cd "$release_dir"
-/usr/bin/pnpm --filter @aiwa/db migrate:deploy
-MIGRATE
 
   mv -- "$temporary_dir" "$release_dir"
   temporary_dir=""
-  log "release extracted and migrated"
+  log "release extracted, verified, and migrated"
 fi
 
-previous_release="$(readlink -f "$current_link" 2>/dev/null || true)"
 new_link="$application_root/.current-$release_sha"
 rm -f -- "$new_link"
 ln -s "$release_dir" "$new_link"
@@ -145,7 +169,7 @@ mv -Tf "$new_link" "$current_link"
 
 rollback() {
   log "health check failed; rolling application symlink back" >&2
-  if [[ -n "$previous_release" && -d "$previous_release" ]]; then
+  if [[ -n "$previous_release" ]] && validate_runtime "$previous_release"; then
     rollback_link="$application_root/.rollback-$release_sha"
     rm -f -- "$rollback_link"
     ln -s "$previous_release" "$rollback_link"
@@ -154,6 +178,7 @@ rollback() {
   else
     rm -f -- "$current_link"
     systemctl stop creator-web.service creator-worker.service || true
+    log "no valid previous runtime was available for rollback" >&2
   fi
   exit 1
 }
@@ -164,7 +189,8 @@ systemctl restart creator-web.service creator-worker.service || rollback
 healthy=false
 for _ in {1..30}; do
   health_response="$(curl -fsS --max-time 3 http://127.0.0.1:3000/api/health 2>/dev/null || true)"
-  if [[ "$health_response" == *'"status":"ok"'* && "$health_response" == *"\"version\":\"$release_sha\""* ]]; then
+  if [[ "$health_response" == *'"status":"ok"'* \
+     && "$health_response" == *"\"version\":\"$release_sha\""* ]]; then
     healthy=true
     break
   fi
@@ -173,6 +199,14 @@ done
 
 [[ "$healthy" == true ]] || rollback
 systemctl is-active --quiet creator-worker.service || rollback
+
+# Update the root-owned control plane only after the new release is healthy.
+install -o root -g root -m 0755 \
+  "$release_dir/ops/bin/creator-deploy" \
+  /usr/local/sbin/creator-deploy
+install -o root -g root -m 0755 \
+  "$release_dir/ops/bin/creator-ops" \
+  /usr/local/sbin/creator-ops
 
 rm -f -- "$archive_path"
 log "deployment completed: $release_sha"

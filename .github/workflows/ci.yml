@@ -44,6 +44,13 @@ jobs:
       - name: Generate Prisma client
         run: pnpm db:generate
 
+      - name: Check deployment shell syntax
+        run: |
+          bash -n infra/deploy/bootstrap-server.sh
+          bash -n infra/deploy/creator-deploy
+          bash -n infra/deploy/creator-ops
+          bash -n infra/deploy/package-release.sh
+
       - name: Check formatting
         run: pnpm format:check
 
@@ -63,8 +70,7 @@ jobs:
         run: |
           node -e "require('./apps/worker/dist/index.cjs'); setTimeout(() => process.exit(0), 250)"
 
-      - name: Package staging release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Package and validate staging release
         run: bash infra/deploy/package-release.sh "$GITHUB_SHA"
 
       - name: Upload staging release

@@ -23,7 +23,6 @@ install -d -o root -g aiwa-creator -m 0755 /var/www/creator-platform
 install -d -o root -g aiwa-creator -m 0755 /var/www/creator-platform/releases
 install -d -o "$deploy_user" -g aiwa-creator -m 0750 /var/www/creator-platform/incoming
 install -d -o aiwa-creator -g aiwa-creator -m 0750 /var/www/creator-platform/shared
-install -d -o aiwa-creator -g aiwa-creator -m 0750 /var/www/creator-platform/shared/pnpm-store
 install -d -o aiwa-creator -g aiwa-creator -m 0750 /var/www/creator-platform/.cache
 install -d -o aiwa-creator -g aiwa-creator -m 0750 /var/www/creator-platform/.config
 install -d -o aiwa-creator -g aiwa-creator -m 0750 /var/www/creator-platform/.local/state
@@ -33,6 +32,10 @@ install -d -o root -g root -m 0755 /var/www/letsencrypt
 install -o root -g root -m 0755 \
   "$repository_root/infra/deploy/creator-deploy" \
   /usr/local/sbin/creator-deploy
+
+install -o root -g root -m 0755 \
+  "$repository_root/infra/deploy/creator-ops" \
+  /usr/local/sbin/creator-ops
 
 install -o root -g root -m 0644 \
   "$repository_root/infra/systemd/creator-web.service" \

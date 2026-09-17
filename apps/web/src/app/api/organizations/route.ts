@@ -56,6 +56,7 @@ export async function POST(request: Request): Promise<NextResponse> {
           name: parsed.data.name,
           slug: createOrganizationSlug(parsed.data.name),
           selfServeCreatorUserId: session.user.id,
+          ownerUserId: session.user.id,
           wallet: { create: {} },
           memberships: {
             create: {

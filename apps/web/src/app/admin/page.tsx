@@ -1,523 +1,583 @@
 import { getPlatformPermissions, hasPlatformPermission } from "@aiwa/authz";
 import { db } from "@aiwa/db";
 import Link from "next/link";
+import type { Route } from "next";
 
-import { SignOutButton } from "@/components/auth/sign-out-button";
-import { ThemeToggle } from "@/components/theme/theme-toggle";
-import { Brand } from "@/components/ui/brand";
+import {
+  DataTable,
+  EmptyState,
+  Pagination,
+  StatusBadge,
+} from "@/components/admin/primitives";
 import { Button } from "@/components/ui/button";
 import { Eyebrow } from "@/components/ui/creative";
 import { Icon, type IconName } from "@/components/ui/icon";
-import { DemoBadge, StatusDot } from "@/components/ui/sketch";
 import { requirePlatformPermission } from "@/lib/request-auth";
 
-const adminNavigation: readonly { label: string; icon: IconName }[] = [
-  { label: "Overview", icon: "dashboard" },
-  { label: "Organizations", icon: "projects" },
-  { label: "Customers", icon: "admin" },
-  { label: "Payments", icon: "credits" },
-  { label: "Model catalog", icon: "sparkles" },
-  { label: "Generation jobs", icon: "activity" },
-];
+const PAGE_SIZE = 5;
 
-export default async function AdminPage() {
+export default async function AdminPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
   const session = await requirePlatformPermission("platform:access");
-  const permissions = getPlatformPermissions(session.user.platformRole);
-  const canReadUsers = hasPlatformPermission(
-    session.user.platformRole,
-    "users:read",
-  );
-  const canReadOrganizations = hasPlatformPermission(
-    session.user.platformRole,
-    "organizations:read",
-  );
-  const canReadPayments = hasPlatformPermission(
-    session.user.platformRole,
-    "payments:read",
-  );
-  const canReadJobs = hasPlatformPermission(
-    session.user.platformRole,
-    "jobs:read",
-  );
-  const canReadModels = hasPlatformPermission(
-    session.user.platformRole,
-    "models:read",
-  );
-  const canGrantCredits = hasPlatformPermission(
-    session.user.platformRole,
-    "credits:grant",
-  );
+  const params = await searchParams;
+  const requestedPage = Number.parseInt(params.page ?? "1", 10);
+  const page =
+    Number.isSafeInteger(requestedPage) && requestedPage > 0
+      ? requestedPage
+      : 1;
+  const role = session.user.platformRole;
+  const can = (permission: Parameters<typeof hasPlatformPermission>[1]) =>
+    hasPlatformPermission(role, permission);
+  const now = new Date();
 
   const [
-    userCount,
-    organizationCount,
-    pendingPaymentCount,
-    jobCount,
-    modelCount,
+    activeUsers,
+    organizationStates,
+    walletCredits,
+    pendingCheques,
+    jobStates,
+    unpricedModels,
     organizations,
+    organizationTotal,
+    recentEvents,
   ] = await Promise.all([
-    canReadUsers
-      ? db.user.count({ where: { disabledAt: null } })
-      : Promise.resolve(null),
-    canReadOrganizations
-      ? db.organization.count({ where: { status: "ACTIVE" } })
-      : Promise.resolve(null),
-    canReadPayments
-      ? db.manualPayment.count({ where: { status: "PENDING" } })
-      : Promise.resolve(null),
-    canReadJobs ? db.generationJob.count() : Promise.resolve(null),
-    canReadModels
-      ? db.providerModel.count({ where: { enabled: true } })
-      : Promise.resolve(null),
-    canReadOrganizations
+    can("users:read") ? db.user.count({ where: { disabledAt: null } }) : null,
+    can("organizations:read")
+      ? db.organization.groupBy({ by: ["status"], _count: true })
+      : [],
+    can("organizations:read")
+      ? db.wallet.aggregate({ _sum: { balanceCache: true } })
+      : null,
+    can("payments:read")
+      ? db.manualPayment.count({
+          where: { method: "CHEQUE", status: "PENDING" },
+        })
+      : null,
+    can("jobs:read")
+      ? db.generationJob.groupBy({ by: ["status"], _count: true })
+      : [],
+    can("models:read")
+      ? db.providerModel.count({
+          where: {
+            enabled: true,
+            priceVersions: {
+              none: {
+                effectiveFrom: { lte: now },
+                OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
+              },
+            },
+          },
+        })
+      : null,
+    can("organizations:read")
       ? db.organization.findMany({
-          where: { status: "ACTIVE" },
           select: {
             id: true,
             name: true,
+            slug: true,
+            status: true,
             createdAt: true,
             wallet: { select: { balanceCache: true } },
             _count: { select: { memberships: true, generationJobs: true } },
           },
           orderBy: { createdAt: "desc" },
-          take: 5,
+          skip: (page - 1) * PAGE_SIZE,
+          take: PAGE_SIZE,
         })
-      : Promise.resolve([]),
+      : [],
+    can("organizations:read") ? db.organization.count() : 0,
+    can("audit:read")
+      ? db.auditEvent.findMany({
+          select: {
+            id: true,
+            action: true,
+            targetType: true,
+            createdAt: true,
+            actor: { select: { name: true } },
+            organization: { select: { name: true } },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 6,
+        })
+      : [],
   ]);
 
-  const roleLabel = session.user.platformRole.replaceAll("_", " ");
+  const orgCount = (status: "ACTIVE" | "SUSPENDED") =>
+    organizationStates.find((item) => item.status === status)?._count ?? 0;
+  const jobCount = (
+    statuses: readonly (typeof jobStates)[number]["status"][],
+  ) =>
+    jobStates
+      .filter((item) => statuses.includes(item.status))
+      .reduce((total, item) => total + item._count, 0);
+  const queuedJobs = jobCount(["QUEUED"]);
+  const processingJobs = jobCount(["SUBMITTED", "PROCESSING"]);
+  const failedJobs = jobCount(["FAILED"]);
+  const reviewJobs = jobCount(["MANUAL_REVIEW"]);
+  const hasNext = page * PAGE_SIZE < organizationTotal;
+  const permissions = getPlatformPermissions(role);
 
   return (
-    <main className="relative min-h-screen bg-background text-foreground">
-      <div className="creative-glow pointer-events-none fixed inset-0" />
-      <div className="paper-grid pointer-events-none fixed inset-x-0 top-0 h-96 opacity-25 [mask-image:linear-gradient(to_bottom,black,transparent)]" />
-      <div className="relative mx-auto grid min-h-screen max-w-[1800px] xl:grid-cols-[264px_1fr]">
-        <aside className="hidden border-r border-border bg-sidebar/88 px-4 py-5 backdrop-blur-xl xl:flex xl:flex-col">
-          <div className="px-2">
-            <Brand />
-          </div>
-          <div className="mx-2 mt-7 rounded-xl border border-warning/20 bg-warning/[0.07] px-3 py-2.5 shadow-xs">
-            <div className="flex items-center gap-2">
-              <span className="grid size-6 place-items-center rounded-lg bg-warning/10 text-warning">
-                <Icon name="admin" className="size-3.5" />
-              </span>
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-warning">
-                  Operations console
-                </p>
-                <p className="mt-0.5 text-[9px] text-subtle-foreground">
-                  Restricted platform access
-                </p>
-              </div>
-            </div>
-          </div>
-          <nav
-            className="mt-6 space-y-1"
-            aria-label="Administration navigation"
-          >
-            {adminNavigation.map((item, index) => (
-              <span
-                key={item.label}
-                className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 text-sm font-semibold ${index === 0 ? "border-warning/20 bg-card text-foreground shadow-xs" : "border-transparent text-subtle-foreground"}`}
-              >
-                <Icon
-                  name={item.icon}
-                  className={`size-[18px] ${index === 0 ? "text-warning" : "text-subtle-foreground"}`}
-                />
-                {item.label}
-                {item.label === "Payments" && pendingPaymentCount ? (
-                  <span className="ml-auto rounded-full bg-warning/10 px-2 py-0.5 text-[9px] font-bold text-warning">
-                    {pendingPaymentCount}
-                  </span>
-                ) : null}
-              </span>
-            ))}
-          </nav>
-          <div className="mt-auto rounded-2xl border border-border bg-card/70 p-4 shadow-xs">
-            <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-subtle-foreground">
-              Signed in with
-            </p>
-            <p className="mt-2 text-xs font-semibold text-foreground/90">
-              {roleLabel}
-            </p>
-            <p className="mt-1 truncate text-[10px] text-subtle-foreground">
-              {session.user.email}
-            </p>
-            <div className="mt-3 border-t border-border pt-2">
-              <SignOutButton />
-            </div>
-          </div>
-        </aside>
-
-        <div className="min-w-0">
-          <header className="sticky top-0 z-30 flex min-h-[72px] items-center justify-between gap-4 border-b border-border bg-background/82 px-4 backdrop-blur-xl sm:px-7 lg:px-9">
-            <div className="flex items-center gap-3">
-              <div className="xl:hidden">
-                <Brand compact />
-              </div>
-              <div className="max-[480px]:hidden">
-                <p className="text-sm font-semibold text-foreground">
-                  Platform administration
-                </p>
-                <p className="mt-0.5 hidden text-[10px] uppercase tracking-[0.12em] text-subtle-foreground sm:block">
-                  Aiwa Creators · Operations
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <ThemeToggle />
-              <span className="hidden sm:inline-flex">
-                <DemoBadge>UI preview</DemoBadge>
-              </span>
-              <Button asChild variant="secondary" size="sm">
-                <Link href="/app">
-                  <span className="sm:hidden">Workspace</span>
-                  <span className="hidden sm:inline">Customer workspace</span>
-                </Link>
-              </Button>
-            </div>
-          </header>
-
-          <nav
-            className="sticky top-[72px] z-20 flex gap-1 overflow-x-auto border-b border-border bg-background/90 px-4 py-2 backdrop-blur-xl xl:hidden"
-            aria-label="Mobile administration navigation"
-          >
-            {adminNavigation.map((item, index) => (
-              <span
-                key={item.label}
-                className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${index === 0 ? "bg-warning/10 text-warning" : "text-muted-foreground"}`}
-              >
-                <Icon name={item.icon} className="size-3.5" />
-                {item.label}
-              </span>
-            ))}
-          </nav>
-
-          <div className="px-4 py-7 sm:px-7 lg:px-9 lg:py-9">
-            <section className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <Eyebrow className="text-warning">
-                  Good morning, operations team
-                </Eyebrow>
-                <h1 className="font-display mt-3 text-4xl font-semibold tracking-[-0.045em] text-foreground sm:text-5xl">
-                  Everything under control.
-                </h1>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  Customers, credits, payments, models, and generation health in
-                  one place.
-                </p>
-              </div>
-              <Button
-                disabled={!canGrantCredits}
-                title={
-                  canGrantCredits
-                    ? "Credit workflow is the next milestone"
-                    : "Finance permission required"
-                }
-              >
-                <Icon name="plus" className="size-4" /> Assign credits
-              </Button>
-            </section>
-
-            <section
-              className="mt-7 grid gap-3 sm:grid-cols-2 2xl:grid-cols-5"
-              aria-label="Platform overview"
-            >
-              <AdminMetric
-                label="Active organizations"
-                value={displayCount(organizationCount)}
-                icon="projects"
-                tone="violet"
-              />
-              <AdminMetric
-                label="Active customers"
-                value={displayCount(userCount)}
-                icon="admin"
-                tone="cyan"
-              />
-              <AdminMetric
-                label="Total jobs"
-                value={displayCount(jobCount)}
-                icon="activity"
-                tone="emerald"
-              />
-              <AdminMetric
-                label="Enabled models"
-                value={displayCount(modelCount)}
-                icon="sparkles"
-                tone="blue"
-              />
-              <AdminMetric
-                label="Pending payments"
-                value={displayCount(pendingPaymentCount)}
-                icon="credits"
-                tone="amber"
-              />
-            </section>
-
-            <section className="mt-6 grid gap-6 2xl:grid-cols-[minmax(0,1.35fr)_minmax(340px,.65fr)]">
-              <div className="rounded-[24px] border border-border bg-card/88 p-5 shadow-sm sm:p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">
-                      Organizations
-                    </p>
-                    <p className="mt-1 text-xs text-subtle-foreground">
-                      Current customer workspaces and balances
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className="text-xs font-semibold text-primary"
-                  >
-                    View all
-                  </button>
-                </div>
-                <div className="mt-5 overflow-x-auto">
-                  <table className="w-full min-w-[560px] border-collapse text-left">
-                    <thead>
-                      <tr className="border-b border-border text-[9px] font-bold uppercase tracking-[0.14em] text-subtle-foreground">
-                        <th className="pb-3 font-semibold">Organization</th>
-                        <th className="pb-3 font-semibold">Members</th>
-                        <th className="pb-3 font-semibold">Jobs</th>
-                        <th className="pb-3 font-semibold">Balance</th>
-                        <th className="pb-3 font-semibold">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {organizations.length > 0 ? (
-                        organizations.map((organization) => (
-                          <tr key={organization.id} className="text-xs">
-                            <td className="py-4">
-                              <div className="flex items-center gap-3">
-                                <span className="grid size-9 place-items-center rounded-xl bg-primary/10 font-bold text-primary">
-                                  {organization.name[0]?.toUpperCase() ?? "O"}
-                                </span>
-                                <div>
-                                  <p className="max-w-56 truncate font-semibold text-foreground">
-                                    {organization.name}
-                                  </p>
-                                  <p className="mt-0.5 text-[9px] text-subtle-foreground">
-                                    Added{" "}
-                                    {organization.createdAt.toLocaleDateString(
-                                      "en-GB",
-                                      {
-                                        day: "2-digit",
-                                        month: "short",
-                                        year: "numeric",
-                                      },
-                                    )}
-                                  </p>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="py-4 text-muted-foreground">
-                              {organization._count.memberships}
-                            </td>
-                            <td className="py-4 text-muted-foreground">
-                              {organization._count.generationJobs}
-                            </td>
-                            <td className="py-4 font-semibold text-foreground/90">
-                              {(
-                                organization.wallet?.balanceCache ?? 0n
-                              ).toLocaleString("en-US")}
-                            </td>
-                            <td className="py-4">
-                              <span className="rounded-full bg-success/10 px-2.5 py-1 text-[9px] font-bold text-success">
-                                Active
-                              </span>
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={5} className="py-12 text-center">
-                            <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-foreground/[0.04] text-subtle-foreground">
-                              <Icon name="projects" />
-                            </span>
-                            <p className="mt-3 text-sm font-semibold text-muted-foreground">
-                              No organization data to display
-                            </p>
-                            <p className="mt-1 text-xs text-subtle-foreground">
-                              Organizations will appear here after signup.
-                            </p>
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <div className="space-y-6">
-                <div className="rounded-[24px] border border-border bg-card/88 p-5 shadow-sm sm:p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">
-                        Platform health
-                      </p>
-                      <p className="mt-1 text-xs text-subtle-foreground">
-                        Operational readiness
-                      </p>
-                    </div>
-                    <StatusDot>Online</StatusDot>
-                  </div>
-                  <div className="mt-5 space-y-3">
-                    <HealthRow
-                      label="Web application"
-                      detail="Online"
-                      value="99.9%"
-                      good
-                    />
-                    <HealthRow
-                      label="Worker queue"
-                      detail="Ready for provider adapter"
-                      value="Staged"
-                    />
-                    <HealthRow
-                      label="BytePlus gateway"
-                      detail="Credentials required"
-                      value="Pending"
-                    />
-                    <HealthRow
-                      label="NVIDIA assistant"
-                      detail="Credentials required"
-                      value="Pending"
-                    />
-                  </div>
-                </div>
-
-                <div className="rounded-[24px] border border-warning/20 bg-warning/[0.07] p-5 shadow-sm sm:p-6">
-                  <div className="flex items-start gap-3">
-                    <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-warning/10 text-warning">
-                      <Icon name="credits" className="size-5" />
-                    </span>
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">
-                        Finance workflow next
-                      </p>
-                      <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                        Record cash and cheque payments in OMR, then issue
-                        credits through an immutable ledger entry.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="mt-4 flex items-center justify-between border-t border-border pt-4">
-                    <span className="text-[10px] font-semibold text-subtle-foreground">
-                      Permission required
-                    </span>
-                    <span className="rounded-md bg-foreground/[0.05] px-2 py-1 text-[9px] font-bold text-muted-foreground">
-                      credits:grant
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section className="mt-6 rounded-[24px] border border-border bg-card/88 p-5 shadow-sm sm:p-6">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-foreground">
-                    Your access boundary
-                  </p>
-                  <p className="mt-1 text-xs text-subtle-foreground">
-                    Server-enforced permissions for {roleLabel}
-                  </p>
-                </div>
-                <span className="rounded-full border border-success/15 bg-success/[0.06] px-3 py-1.5 text-[9px] font-bold uppercase tracking-wider text-success">
-                  RBAC active
-                </span>
-              </div>
-              <div className="mt-5 flex flex-wrap gap-2">
-                {permissions.map((permission) => (
-                  <span
-                    key={permission}
-                    className="rounded-lg border border-border bg-foreground/[0.025] px-2.5 py-1.5 text-[10px] font-medium text-muted-foreground"
-                  >
-                    {permission}
-                  </span>
-                ))}
-              </div>
-            </section>
-          </div>
+    <div className="px-4 py-7 sm:px-7 lg:px-9 lg:py-9">
+      <section className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <Eyebrow>Operations overview</Eyebrow>
+          <h1 className="font-display mt-3 text-4xl font-semibold tracking-[-0.045em] sm:text-5xl">
+            Platform at a glance.
+          </h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+            Point-in-time customer, finance, generation, and infrastructure
+            signals.
+          </p>
         </div>
-      </div>
-    </main>
+        <Button
+          disabled
+          title={
+            can("credits:grant")
+              ? "Credit mutations remain disabled until the transactional wallet workflow is implemented"
+              : "Finance permission required"
+          }
+        >
+          <Icon name="plus" className="size-4" />
+          Assign credits
+        </Button>
+      </section>
+
+      <section
+        className="mt-7 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6"
+        aria-label="Platform overview"
+      >
+        <Metric
+          label="Active organizations"
+          value={formatCount(can("organizations:read"), orgCount("ACTIVE"))}
+          icon="projects"
+        />
+        <Metric
+          label="Suspended organizations"
+          value={formatCount(can("organizations:read"), orgCount("SUSPENDED"))}
+          icon="admin"
+          warning={orgCount("SUSPENDED") > 0}
+        />
+        <Metric
+          label="Active users"
+          value={formatNullable(activeUsers)}
+          icon="admin"
+        />
+        <Metric
+          label="Wallet credits"
+          value={
+            walletCredits
+              ? formatBigInt(walletCredits._sum.balanceCache ?? 0n)
+              : "Restricted"
+          }
+          icon="credits"
+          numeric
+        />
+        <Metric
+          label="Pending cheques"
+          value={formatNullable(pendingCheques)}
+          icon="credits"
+          warning={(pendingCheques ?? 0) > 0}
+        />
+        <Metric
+          label="Models without price"
+          value={formatNullable(unpricedModels)}
+          icon="sparkles"
+          warning={(unpricedModels ?? 0) > 0}
+        />
+      </section>
+
+      {pendingCheques || failedJobs || reviewJobs || unpricedModels ? (
+        <section
+          className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4"
+          aria-label="Action required"
+        >
+          {pendingCheques ? (
+            <WarningCard
+              href="/admin/payments?status=PENDING&method=CHEQUE"
+              label="Pending cheque payments"
+              value={pendingCheques}
+            />
+          ) : null}
+          {failedJobs ? (
+            <WarningCard
+              href="/admin/jobs?status=FAILED"
+              label="Failed generation jobs"
+              value={failedJobs}
+            />
+          ) : null}
+          {reviewJobs ? (
+            <WarningCard
+              href="/admin/jobs?status=MANUAL_REVIEW"
+              label="Jobs awaiting manual review"
+              value={reviewJobs}
+            />
+          ) : null}
+          {unpricedModels ? (
+            <WarningCard
+              href="/admin/models?pricing=missing"
+              label="Enabled models without a price"
+              value={unpricedModels}
+            />
+          ) : null}
+        </section>
+      ) : null}
+
+      <section className="mt-6 grid gap-6 2xl:grid-cols-[minmax(0,1.35fr)_minmax(340px,.65fr)]">
+        <div className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-6">
+          <div className="mb-5 flex items-center justify-between">
+            <div>
+              <h2 className="font-display text-xl font-semibold">
+                Organizations
+              </h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Latest workspaces, balances, and account state
+              </p>
+            </div>
+            {can("organizations:read") ? (
+              <Link
+                href={"/admin/organizations" as Route}
+                className="text-xs font-semibold text-primary"
+              >
+                View all
+              </Link>
+            ) : null}
+          </div>
+          {organizations.length ? (
+            <>
+              <DataTable label="Organizations">
+                <thead>
+                  <tr className="border-b border-border text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                    <th className="pb-3">Organization</th>
+                    <th className="pb-3">Members</th>
+                    <th className="pb-3">Jobs</th>
+                    <th className="pb-3 text-right">Credits</th>
+                    <th className="pb-3 text-right">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {organizations.map((organization) => (
+                    <tr key={organization.id} className="text-xs">
+                      <td className="py-4">
+                        <p className="font-semibold">{organization.name}</p>
+                        <p className="mt-1 font-mono text-[9px] text-muted-foreground">
+                          {organization.slug}
+                        </p>
+                      </td>
+                      <td className="py-4 text-muted-foreground">
+                        {organization._count.memberships}
+                      </td>
+                      <td className="py-4 text-muted-foreground">
+                        {organization._count.generationJobs}
+                      </td>
+                      <td className="py-4 text-right font-mono font-semibold tabular-nums">
+                        {formatBigInt(organization.wallet?.balanceCache ?? 0n)}
+                      </td>
+                      <td className="py-4 text-right">
+                        <StatusBadge
+                          tone={
+                            organization.status === "ACTIVE"
+                              ? "success"
+                              : organization.status === "SUSPENDED"
+                                ? "warning"
+                                : "neutral"
+                          }
+                        >
+                          {titleCase(organization.status)}
+                        </StatusBadge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </DataTable>
+              <Pagination page={page} hasNext={hasNext} basePath="/admin" />
+            </>
+          ) : (
+            <EmptyState
+              icon="projects"
+              title={
+                can("organizations:read")
+                  ? "No organizations yet"
+                  : "Organization data is restricted"
+              }
+              description={
+                can("organizations:read")
+                  ? "New customer workspaces will appear here after onboarding."
+                  : "Your role does not include organizations:read."
+              }
+            />
+          )}
+        </div>
+        <div className="space-y-6">
+          <Panel title="Generation queue" subtitle="Current database state">
+            <QueueRow
+              label="Queued"
+              value={can("jobs:read") ? queuedJobs : null}
+              tone="neutral"
+            />
+            <QueueRow
+              label="Processing"
+              value={can("jobs:read") ? processingJobs : null}
+              tone="info"
+            />
+            <QueueRow
+              label="Failed"
+              value={can("jobs:read") ? failedJobs : null}
+              tone="danger"
+            />
+            <QueueRow
+              label="Manual review"
+              value={can("jobs:read") ? reviewJobs : null}
+              tone="warning"
+            />
+          </Panel>
+          <Panel
+            title="Platform health"
+            subtitle="Configuration and request-time signals"
+          >
+            <HealthRow
+              label="Web and database"
+              status="Healthy"
+              tone="success"
+            />
+            <HealthRow
+              label="Redis / worker"
+              status={process.env.REDIS_URL ? "Degraded" : "Not configured"}
+              detail={
+                process.env.REDIS_URL
+                  ? "Configured; no live heartbeat"
+                  : undefined
+              }
+              tone="warning"
+            />
+            <HealthRow
+              label="BytePlus"
+              status={
+                process.env.BYTEPLUS_API_KEY ? "Degraded" : "Not configured"
+              }
+              detail={
+                process.env.BYTEPLUS_API_KEY
+                  ? "Configured; no live provider probe"
+                  : undefined
+              }
+              tone="warning"
+            />
+            <HealthRow
+              label="NVIDIA"
+              status={
+                process.env.NVIDIA_API_KEY ? "Degraded" : "Not configured"
+              }
+              detail={
+                process.env.NVIDIA_API_KEY
+                  ? "Configured; no live provider probe"
+                  : undefined
+              }
+              tone="warning"
+            />
+          </Panel>
+        </div>
+      </section>
+
+      <section className="mt-6 grid gap-6 xl:grid-cols-[1.3fr_.7fr]">
+        <Panel
+          title="Recent administrative events"
+          subtitle="Immutable audit activity, newest first"
+        >
+          {recentEvents.length ? (
+            <ol className="divide-y divide-border">
+              {recentEvents.map((event) => (
+                <li key={event.id} className="flex gap-3 py-3">
+                  <span className="mt-1 size-2 shrink-0 rounded-full bg-primary" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-semibold">
+                      {event.action} · {event.targetType}
+                    </p>
+                    <p className="mt-1 text-[10px] text-muted-foreground">
+                      {event.actor?.name ?? "System"}
+                      {event.organization
+                        ? ` · ${event.organization.name}`
+                        : ""}
+                    </p>
+                  </div>
+                  <time
+                    className="font-mono text-[9px] text-muted-foreground"
+                    dateTime={event.createdAt.toISOString()}
+                  >
+                    {event.createdAt.toLocaleString("en-GB", {
+                      day: "2-digit",
+                      month: "short",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      timeZone: "UTC",
+                    })}{" "}
+                    UTC
+                  </time>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <EmptyState
+              icon="assets"
+              title={
+                can("audit:read")
+                  ? "No administrative events"
+                  : "Audit activity is restricted"
+              }
+              description={
+                can("audit:read")
+                  ? "Audited operations will appear here."
+                  : "Your role does not include audit:read."
+              }
+            />
+          )}
+        </Panel>
+        <Panel title="Access boundary" subtitle={role.replaceAll("_", " ")}>
+          <div className="flex flex-wrap gap-2">
+            {permissions.map((permission) => (
+              <span
+                key={permission}
+                className="rounded-lg border border-border bg-muted px-2.5 py-1.5 font-mono text-[10px] text-muted-foreground"
+              >
+                {permission}
+              </span>
+            ))}
+          </div>
+        </Panel>
+      </section>
+    </div>
   );
 }
 
-function displayCount(value: number | null): string {
+function formatCount(allowed: boolean, value: number) {
+  return allowed ? value.toLocaleString("en-US") : "Restricted";
+}
+function formatNullable(value: number | null) {
   return value === null ? "Restricted" : value.toLocaleString("en-US");
 }
+function formatBigInt(value: bigint) {
+  return value.toLocaleString("en-US");
+}
+function titleCase(value: string) {
+  return value.charAt(0) + value.slice(1).toLowerCase().replaceAll("_", " ");
+}
 
-function AdminMetric({
+function Metric({
   label,
   value,
   icon,
-  tone,
+  warning = false,
+  numeric = false,
 }: {
   label: string;
   value: string;
   icon: IconName;
-  tone: "violet" | "cyan" | "emerald" | "blue" | "amber";
+  warning?: boolean;
+  numeric?: boolean;
 }) {
-  const tones = {
-    violet: "bg-primary/10 text-primary",
-    cyan: "bg-info/10 text-info",
-    emerald: "bg-success/10 text-success",
-    blue: "bg-info/10 text-info",
-    amber: "bg-warning/10 text-warning",
-  };
   return (
-    <article className="group relative overflow-hidden rounded-2xl border border-border bg-card/82 p-4 shadow-xs transition hover:-translate-y-0.5 hover:shadow-sm">
-      <span
-        className={`absolute inset-x-0 top-0 h-0.5 ${tone === "amber" ? "bg-warning" : "bg-primary"} opacity-45`}
-      />
+    <article className="rounded-2xl border border-border bg-card p-4 shadow-xs">
       <div className="flex items-start justify-between">
         <span
-          className={`grid size-9 place-items-center rounded-xl ${tones[tone]}`}
+          className={`grid size-9 place-items-center rounded-xl ${warning ? "bg-warning/10 text-warning" : "bg-primary/10 text-primary"}`}
         >
           <Icon name={icon} className="size-4" />
         </span>
-        <span className="font-mono text-[9px] uppercase tracking-wider text-subtle-foreground">
-          Live
+        <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+          Now
         </span>
       </div>
       <p
-        className={`mt-4 font-semibold tracking-tight text-foreground ${value === "Restricted" ? "text-sm" : "text-2xl"}`}
+        className={`mt-4 font-semibold tracking-tight ${value === "Restricted" ? "text-sm" : "text-2xl"} ${numeric ? "font-mono tabular-nums" : ""}`}
       >
         {value}
       </p>
-      <p className="mt-1 text-[10px] text-subtle-foreground">{label}</p>
+      <p className="mt-1 text-[10px] text-muted-foreground">{label}</p>
     </article>
   );
 }
-
-function HealthRow({
+function WarningCard({
+  href,
   label,
-  detail,
   value,
-  good = false,
 }: {
+  href: string;
   label: string;
-  detail: string;
-  value: string;
-  good?: boolean;
+  value: number;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-border bg-background/45 p-3">
-      <span
-        className={`size-2 rounded-full ${good ? "bg-success" : "bg-warning"}`}
-      />
-      <div className="min-w-0 flex-1">
-        <p className="text-xs font-semibold text-foreground/90">{label}</p>
-        <p className="mt-0.5 truncate text-[9px] text-subtle-foreground">
-          {detail}
-        </p>
-      </div>
-      <span className="text-[9px] font-semibold text-muted-foreground">
+    <Link
+      href={href as Route}
+      className="flex min-h-20 items-center gap-3 rounded-2xl border border-warning/25 bg-warning/[0.07] p-4 transition-colors hover:bg-warning/10"
+    >
+      <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-warning/15 font-mono font-bold text-warning">
         {value}
       </span>
+      <span className="text-xs font-semibold">{label}</span>
+      <Icon name="chevron" className="ml-auto size-4 text-warning" />
+    </Link>
+  );
+}
+function Panel({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-6">
+      <h2 className="font-display text-xl font-semibold">{title}</h2>
+      <p className="mt-1 mb-4 text-xs text-muted-foreground">{subtitle}</p>
+      {children}
+    </div>
+  );
+}
+function QueueRow({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number | null;
+  tone: "neutral" | "info" | "warning" | "danger";
+}) {
+  return (
+    <div className="flex items-center justify-between border-t border-border py-3 first:border-t-0">
+      <span className="text-xs font-medium">{label}</span>
+      <StatusBadge tone={tone}>
+        {value === null ? "Restricted" : value.toLocaleString("en-US")}
+      </StatusBadge>
+    </div>
+  );
+}
+function HealthRow({
+  label,
+  status,
+  detail,
+  tone,
+}: {
+  label: string;
+  status: string;
+  detail?: string;
+  tone: "success" | "warning";
+}) {
+  return (
+    <div className="flex items-center gap-3 border-t border-border py-3 first:border-t-0">
+      <span
+        className={`size-2 rounded-full ${tone === "success" ? "bg-success" : "bg-warning"}`}
+      />
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-semibold">{label}</p>
+        {detail ? (
+          <p className="mt-0.5 text-[9px] text-muted-foreground">{detail}</p>
+        ) : null}
+      </div>
+      <StatusBadge tone={tone}>{status}</StatusBadge>
     </div>
   );
 }

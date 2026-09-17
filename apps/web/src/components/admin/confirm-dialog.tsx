@@ -92,11 +92,7 @@ export function ConfirmDialog({
               <Button
                 id={confirmId}
                 disabled={pending}
-                className={
-                  destructive
-                    ? "border-destructive/20 bg-destructive text-white hover:bg-destructive/90"
-                    : undefined
-                }
+                variant={destructive ? "destructive" : "default"}
                 onClick={async () => {
                   setPending(true);
                   try {

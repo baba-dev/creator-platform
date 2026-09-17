@@ -1,7 +1,12 @@
-import { hasPlatformPermission, type PlatformPermission } from "@aiwa/authz";
+import {
+  hasPlatformPermission,
+  type PlatformPermission,
+  type PlatformRole,
+} from "@aiwa/authz";
 import { db } from "@aiwa/db";
 import { notFound } from "next/navigation";
 
+import { ModelActions } from "@/components/admin/model-actions";
 import {
   DataTable,
   EmptyState,
@@ -96,7 +101,11 @@ export default async function AdminSectionPage({
       </p>
       <AdminFilters section={sectionName} filters={filters} />
       <div className="mt-4 rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-6">
-        {await renderSection(sectionName as keyof typeof sections, filters)}
+        {await renderSection(
+          sectionName as keyof typeof sections,
+          filters,
+          session.user.platformRole,
+        )}
       </div>
     </div>
   );
@@ -165,6 +174,7 @@ function AdminFilters({
 async function renderSection(
   section: keyof typeof sections,
   filters: AdminListFilters,
+  role: PlatformRole,
 ) {
   const skip = (filters.page - 1) * PAGE_SIZE;
   const query = Object.fromEntries(
@@ -417,6 +427,7 @@ async function renderSection(
       effectiveFrom: { lte: now },
       OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
     };
+    const canManage = hasPlatformPermission(role, "models:manage");
     const [rows, total] = await Promise.all([
       db.providerModel.findMany({
         where,
@@ -429,7 +440,11 @@ async function renderSection(
           enabled: true,
           priceVersions: {
             where: priceWhere,
-            select: { customerCredits: true, providerCostMicroUsd: true },
+            select: {
+              customerCredits: true,
+              providerCostMicroUsd: true,
+              targetMarginBps: true,
+            },
             orderBy: { effectiveFrom: "desc" },
             take: 1,
           },
@@ -457,6 +472,7 @@ async function renderSection(
               "Customer credits",
               "Provider micro-USD",
               "Status",
+              ...(canManage ? ["Actions"] : []),
             ]}
           />
           <tbody className="divide-y divide-border">
@@ -489,6 +505,19 @@ async function renderSection(
                           : "Missing price"}
                     </StatusBadge>
                   </Cell>
+                  {canManage ? (
+                    <Cell>
+                      <ModelActions
+                        modelId={row.id}
+                        displayName={row.displayName}
+                        enabled={row.enabled}
+                        currentProviderCostMicroUsd={price?.providerCostMicroUsd.toString()}
+                        currentCustomerCredits={price?.customerCredits.toString()}
+                        currentTargetMarginBps={price?.targetMarginBps}
+                        canManage={canManage}
+                      />
+                    </Cell>
+                  ) : null}
                 </tr>
               );
             })}

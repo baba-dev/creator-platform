@@ -250,7 +250,7 @@ export function MemberTable({
                     {formatBinaryBytes(BigInt(member.usedBytes))} /{" "}
                     {formatBinaryBytes(MEMBER_STORAGE_QUOTA_BYTES)}
                   </td>
-                  <td className="p-4">
+                  <td className="p-4 tabular-nums">
                     {new Date(member.createdAt).toLocaleDateString("en-OM")}
                   </td>
                   <td className="p-4">

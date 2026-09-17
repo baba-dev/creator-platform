@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aiwa/core": "workspace:*"
+    "@aiwa/core": "workspace:*",
+    "@aiwa/db": "workspace:*"
   },
   "devDependencies": {
     "vitest": "^4.1.11"

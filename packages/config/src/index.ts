@@ -5,6 +5,11 @@ const optionalUrl = z.preprocess(
   z.url().optional(),
 );
 
+const optionalString = z.preprocess(
+  (value) => (value === "" ? undefined : value),
+  z.string().min(1).optional(),
+);
+
 const booleanFromString = z
   .enum(["true", "false"])
   .default("true")
@@ -21,19 +26,19 @@ export const serverEnvSchema = z.object({
   SIGNUPS_ENABLED: booleanFromString,
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.url().default("redis://127.0.0.1:6379/0"),
-  BYTEPLUS_API_KEY: z.string().min(1).optional(),
+  BYTEPLUS_API_KEY: optionalString,
   BYTEPLUS_REGION: z.string().min(1).default("ap-southeast-1"),
   BYTEPLUS_MODELARK_BASE_URL: optionalUrl,
-  BYTEPLUS_SPEECH_APP_ID: z.string().min(1).optional(),
-  BYTEPLUS_SPEECH_ACCESS_TOKEN: z.string().min(1).optional(),
-  NVIDIA_API_KEY: z.string().min(1).optional(),
+  BYTEPLUS_SPEECH_APP_ID: optionalString,
+  BYTEPLUS_SPEECH_ACCESS_TOKEN: optionalString,
+  NVIDIA_API_KEY: optionalString,
   NVIDIA_BASE_URL: z.url().default("https://integrate.api.nvidia.com/v1"),
-  NVIDIA_REASONING_MODEL: z.string().min(1).optional(),
+  NVIDIA_REASONING_MODEL: optionalString,
   S3_ENDPOINT: optionalUrl,
   S3_REGION: z.string().min(1).default("us-east-1"),
-  S3_BUCKET: z.string().min(1).optional(),
-  S3_ACCESS_KEY_ID: z.string().min(1).optional(),
-  S3_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+  S3_BUCKET: optionalString,
+  S3_ACCESS_KEY_ID: optionalString,
+  S3_SECRET_ACCESS_KEY: optionalString,
   S3_FORCE_PATH_STYLE: z
     .enum(["true", "false"])
     .default("false")

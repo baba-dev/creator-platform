@@ -15,10 +15,12 @@ const buttonVariants = cva(
           "border-border bg-card/72 text-foreground shadow-xs backdrop-blur-sm hover:-translate-y-0.5 hover:border-primary/30 hover:bg-secondary",
         ghost:
           "text-muted-foreground hover:bg-secondary/75 hover:text-foreground",
+        destructive:
+          "border-destructive/20 bg-destructive text-destructive-foreground shadow-xs hover:-translate-y-0.5 hover:bg-destructive/90",
       },
       size: {
         default: "h-10 px-5 py-2",
-        sm: "h-9 rounded-sm px-3",
+        sm: "min-h-10 rounded-sm px-3 text-xs",
         lg: "h-12 px-6 text-base",
         icon: "size-10",
       },

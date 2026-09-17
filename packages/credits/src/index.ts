@@ -72,3 +72,39 @@ export function createCreditQuote(input: QuoteInput): CreditQuote {
     targetGrossMarginBps: input.targetGrossMarginBps,
   };
 }
+
+export const DEFAULT_FX_RATE: ExchangeRateSnapshot = {
+  baisaNumerator: 769n,
+  baisaDenominator: 2n,
+} as const;
+
+export const DEFAULT_CREDITS_PER_BAISA = 1n;
+export const DEFAULT_TARGET_MARGIN_BPS = 2_500;
+
+export interface ModelQuoteParams {
+  readonly providerCostMicroUsd: bigint;
+  readonly units?: number | bigint;
+  readonly exchangeRate?: ExchangeRateSnapshot;
+  readonly targetGrossMarginBps?: number;
+  readonly creditsPerBaisa?: bigint;
+}
+
+export function calculateModelQuote(params: ModelQuoteParams): CreditQuote {
+  const rawUnits = params.units ?? 1n;
+  const units = BigInt(rawUnits);
+  if (units <= 0n) {
+    throw new RangeError("units must be greater than zero");
+  }
+
+  const scaledCost = params.providerCostMicroUsd * units;
+
+  return createCreditQuote({
+    providerCostMicroUsd: scaledCost,
+    exchangeRate: params.exchangeRate ?? DEFAULT_FX_RATE,
+    targetGrossMarginBps:
+      params.targetGrossMarginBps ?? DEFAULT_TARGET_MARGIN_BPS,
+    creditsPerBaisa: params.creditsPerBaisa ?? DEFAULT_CREDITS_PER_BAISA,
+  });
+}
+
+export * from "./ledger";

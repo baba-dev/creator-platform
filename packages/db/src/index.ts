@@ -13,3 +13,12 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 export { Prisma } from "@prisma/client";
+export type {
+  LedgerEntry,
+  LedgerEntryType,
+  Wallet,
+  GenerationJob,
+  GenerationJobStatus,
+  ProviderModel,
+  ModelPriceVersion,
+} from "@prisma/client";

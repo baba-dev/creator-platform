@@ -1,3 +1,4 @@
+import { randomBytes } from "crypto";
 import {
   hasOrganizationPermission,
   hasPlatformPermission,
@@ -84,10 +85,56 @@ export class StorageQuotaExceededError extends OrganizationDomainError {
   }
 }
 export class PermissionDeniedError extends OrganizationDomainError {
+  constructor(message = "You do not have permission to perform this action.") {
+    super("PERMISSION_DENIED", message);
+  }
+}
+export class UserNotFoundError extends OrganizationDomainError {
+  constructor() {
+    super("USER_NOT_FOUND", "User not found.");
+  }
+}
+export class CannotDisableSelfError extends OrganizationDomainError {
+  constructor() {
+    super("CANNOT_DISABLE_SELF", "You cannot disable your own account.");
+  }
+}
+export class SolePlatformOwnerError extends OrganizationDomainError {
   constructor() {
     super(
-      "PERMISSION_DENIED",
-      "You do not have permission to perform this action.",
+      "SOLE_PLATFORM_OWNER",
+      "Cannot demote or disable the only active platform owner.",
+    );
+  }
+}
+export class InvitationNotFoundError extends OrganizationDomainError {
+  constructor() {
+    super("INVITATION_NOT_FOUND", "Invitation not found or invalid.");
+  }
+}
+export class InvitationExpiredError extends OrganizationDomainError {
+  constructor() {
+    super("INVITATION_EXPIRED", "This invitation has expired.");
+  }
+}
+export class InvitationRevokedError extends OrganizationDomainError {
+  constructor() {
+    super("INVITATION_REVOKED", "This invitation has been revoked.");
+  }
+}
+export class InvitationAlreadyAcceptedError extends OrganizationDomainError {
+  constructor() {
+    super(
+      "INVITATION_ALREADY_ACCEPTED",
+      "This invitation has already been accepted.",
+    );
+  }
+}
+export class InvitationEmailMismatchError extends OrganizationDomainError {
+  constructor(email: string) {
+    super(
+      "INVITATION_EMAIL_MISMATCH",
+      `This invitation was created specifically for ${email}.`,
     );
   }
 }
@@ -222,7 +269,8 @@ async function lockedOrganization(
 export async function addMember(input: {
   actor: OrganizationActor;
   organizationId: string;
-  email: string;
+  email?: string;
+  userId?: string;
   role: ManagedMemberRole;
   monthlySpendingCapCredits?: bigint | null;
 }) {
@@ -230,10 +278,17 @@ export async function addMember(input: {
   return db.$transaction(
     async (tx) => {
       await lockedOrganization(tx, input.organizationId);
-      const user = await tx.user.findUnique({
-        where: { email: normalizeMemberEmail(input.email) },
-        select: { id: true, disabledAt: true },
-      });
+      const user = input.userId
+        ? await tx.user.findUnique({
+            where: { id: input.userId },
+            select: { id: true, disabledAt: true },
+          })
+        : input.email
+          ? await tx.user.findUnique({
+              where: { email: normalizeMemberEmail(input.email) },
+              select: { id: true, disabledAt: true },
+            })
+          : null;
       if (!user || user.disabledAt) throw new UserUnavailableError();
       if (
         await tx.membership.findUnique({
@@ -520,4 +575,443 @@ export async function withStorageAllocation<T>(input: {
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
   );
+}
+
+export async function setUserPlatformRole(input: {
+  actor: { userId: string; platformRole: PlatformRole };
+  targetUserId: string;
+  role: PlatformRole;
+}) {
+  if (input.actor.platformRole !== "PLATFORM_OWNER") {
+    throw new PermissionDeniedError(
+      "Only platform owners can change platform roles.",
+    );
+  }
+  return db.$transaction(async (tx) => {
+    const targetUser = await tx.user.findUnique({
+      where: { id: input.targetUserId },
+      select: { id: true, platformRole: true, disabledAt: true },
+    });
+    if (!targetUser) throw new UserNotFoundError();
+
+    if (
+      targetUser.platformRole === "PLATFORM_OWNER" &&
+      input.role !== "PLATFORM_OWNER"
+    ) {
+      const otherActiveOwners = await tx.user.count({
+        where: {
+          platformRole: "PLATFORM_OWNER",
+          disabledAt: null,
+          id: { not: targetUser.id },
+        },
+      });
+      if (otherActiveOwners === 0) {
+        throw new SolePlatformOwnerError();
+      }
+    }
+
+    const updated = await tx.user.update({
+      where: { id: targetUser.id },
+      data: { platformRole: input.role },
+    });
+
+    await tx.auditEvent.create({
+      data: {
+        actorUserId: input.actor.userId,
+        action: "user.platform_role_changed",
+        targetType: "User",
+        targetId: targetUser.id,
+        metadata: {
+          previousRole: targetUser.platformRole,
+          newRole: input.role,
+        },
+      },
+    });
+
+    return updated;
+  });
+}
+
+export async function setUserDisabled(input: {
+  actor: { userId: string; platformRole: PlatformRole };
+  targetUserId: string;
+  disabled: boolean;
+}) {
+  if (!hasPlatformPermission(input.actor.platformRole, "users:manage")) {
+    throw new PermissionDeniedError();
+  }
+  if (input.actor.userId === input.targetUserId && input.disabled) {
+    throw new CannotDisableSelfError();
+  }
+  return db.$transaction(async (tx) => {
+    const targetUser = await tx.user.findUnique({
+      where: { id: input.targetUserId },
+      select: { id: true, platformRole: true, disabledAt: true },
+    });
+    if (!targetUser) throw new UserNotFoundError();
+
+    if (input.disabled && targetUser.platformRole === "PLATFORM_OWNER") {
+      const otherActiveOwners = await tx.user.count({
+        where: {
+          platformRole: "PLATFORM_OWNER",
+          disabledAt: null,
+          id: { not: targetUser.id },
+        },
+      });
+      if (otherActiveOwners === 0) {
+        throw new SolePlatformOwnerError();
+      }
+    }
+
+    const updated = await tx.user.update({
+      where: { id: targetUser.id },
+      data: { disabledAt: input.disabled ? new Date() : null },
+    });
+
+    if (input.disabled) {
+      await tx.session.deleteMany({
+        where: { userId: targetUser.id },
+      });
+    }
+
+    await tx.auditEvent.create({
+      data: {
+        actorUserId: input.actor.userId,
+        action: input.disabled ? "user.disabled" : "user.enabled",
+        targetType: "User",
+        targetId: targetUser.id,
+        metadata: {
+          previousDisabledAt: targetUser.disabledAt?.toISOString() ?? null,
+          newDisabledAt: input.disabled
+            ? updated.disabledAt?.toISOString()
+            : null,
+        },
+      },
+    });
+
+    return updated;
+  });
+}
+
+export async function revokeUserSessions(input: {
+  actor: { userId: string; platformRole: PlatformRole };
+  targetUserId: string;
+  sessionId?: string;
+}) {
+  if (!hasPlatformPermission(input.actor.platformRole, "users:manage")) {
+    throw new PermissionDeniedError();
+  }
+  return db.$transaction(async (tx) => {
+    const targetUser = await tx.user.findUnique({
+      where: { id: input.targetUserId },
+      select: { id: true },
+    });
+    if (!targetUser) throw new UserNotFoundError();
+
+    const where = input.sessionId
+      ? { id: input.sessionId, userId: targetUser.id }
+      : { userId: targetUser.id };
+
+    const deleted = await tx.session.deleteMany({ where });
+
+    await tx.auditEvent.create({
+      data: {
+        actorUserId: input.actor.userId,
+        action: "user.sessions_revoked",
+        targetType: "User",
+        targetId: targetUser.id,
+        metadata: {
+          revokedCount: deleted.count,
+          sessionId: input.sessionId ?? null,
+        },
+      },
+    });
+
+    return deleted;
+  });
+}
+
+export function generateInvitationToken(): string {
+  return randomBytes(24).toString("hex");
+}
+
+export async function createOrganizationInvitation(input: {
+  actor: OrganizationActor;
+  organizationId: string;
+  role: ManagedMemberRole;
+  email?: string | null;
+  expiresInDays?: number;
+}) {
+  authorize(input.actor, input.organizationId, "members");
+  return db.$transaction(
+    async (tx) => {
+      await lockedOrganization(tx, input.organizationId);
+
+      const nonOwnerCount = await tx.membership.count({
+        where: {
+          organizationId: input.organizationId,
+          role: { not: "ORGANIZATION_OWNER" },
+        },
+      });
+      if (nonOwnerCount >= MAX_ORGANIZATION_NON_OWNER_MEMBERS) {
+        throw new MemberLimitReachedError();
+      }
+
+      const days = input.expiresInDays ?? 7;
+      const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+      const token = generateInvitationToken();
+      const normalizedEmail = input.email
+        ? normalizeMemberEmail(input.email)
+        : null;
+
+      const invitation = await tx.organizationInvitation.create({
+        data: {
+          organizationId: input.organizationId,
+          token,
+          email: normalizedEmail,
+          role: input.role,
+          expiresAt,
+          createdById: input.actor.userId,
+        },
+      });
+
+      await audit(
+        tx,
+        input.actor,
+        input.organizationId,
+        "organization.invitation_created",
+        "OrganizationInvitation",
+        invitation.id,
+        {
+          invitationId: invitation.id,
+          role: input.role,
+          email: normalizedEmail,
+          expiresAt: expiresAt.toISOString(),
+        },
+      );
+
+      return invitation;
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+  );
+}
+
+export async function revokeOrganizationInvitation(input: {
+  actor: OrganizationActor;
+  organizationId: string;
+  invitationId: string;
+}) {
+  authorize(input.actor, input.organizationId, "members");
+  return db.$transaction(async (tx) => {
+    const invitation = await tx.organizationInvitation.findFirst({
+      where: {
+        id: input.invitationId,
+        organizationId: input.organizationId,
+      },
+    });
+    if (!invitation) throw new InvitationNotFoundError();
+    if (invitation.status !== "PENDING") return invitation;
+
+    const updated = await tx.organizationInvitation.update({
+      where: { id: invitation.id },
+      data: {
+        status: "REVOKED",
+        revokedAt: new Date(),
+      },
+    });
+
+    await audit(
+      tx,
+      input.actor,
+      input.organizationId,
+      "organization.invitation_revoked",
+      "OrganizationInvitation",
+      invitation.id,
+      { invitationId: invitation.id },
+    );
+
+    return updated;
+  });
+}
+
+export async function acceptOrganizationInvitation(input: {
+  actorUserId: string;
+  token: string;
+}) {
+  return db.$transaction(
+    async (tx) => {
+      const user = await tx.user.findUnique({
+        where: { id: input.actorUserId },
+        select: { id: true, email: true, disabledAt: true },
+      });
+      if (!user || user.disabledAt) throw new UserUnavailableError();
+
+      const invitation = await tx.organizationInvitation.findUnique({
+        where: { token: input.token },
+        include: { organization: true },
+      });
+
+      if (!invitation) throw new InvitationNotFoundError();
+
+      if (invitation.status === "ACCEPTED") {
+        throw new InvitationAlreadyAcceptedError();
+      }
+      if (invitation.status === "REVOKED") {
+        throw new InvitationRevokedError();
+      }
+      if (
+        invitation.status === "EXPIRED" ||
+        invitation.expiresAt.getTime() < Date.now()
+      ) {
+        if (invitation.status !== "EXPIRED") {
+          await tx.organizationInvitation.update({
+            where: { id: invitation.id },
+            data: { status: "EXPIRED" },
+          });
+        }
+        throw new InvitationExpiredError();
+      }
+
+      if (
+        invitation.email &&
+        normalizeMemberEmail(user.email) !==
+          normalizeMemberEmail(invitation.email)
+      ) {
+        throw new InvitationEmailMismatchError(invitation.email);
+      }
+
+      await lockedOrganization(tx, invitation.organizationId);
+
+      const existingMembership = await tx.membership.findUnique({
+        where: {
+          organizationId_userId: {
+            organizationId: invitation.organizationId,
+            userId: user.id,
+          },
+        },
+      });
+      if (existingMembership) {
+        throw new DuplicateMembershipError();
+      }
+
+      const nonOwnerCount = await tx.membership.count({
+        where: {
+          organizationId: invitation.organizationId,
+          role: { not: "ORGANIZATION_OWNER" },
+        },
+      });
+      if (nonOwnerCount >= MAX_ORGANIZATION_NON_OWNER_MEMBERS) {
+        throw new MemberLimitReachedError();
+      }
+
+      const membership = await tx.membership.create({
+        data: {
+          organizationId: invitation.organizationId,
+          userId: user.id,
+          role: invitation.role,
+        },
+      });
+
+      const now = new Date();
+      await tx.organizationInvitation.update({
+        where: { id: invitation.id },
+        data: {
+          status: "ACCEPTED",
+          acceptedById: user.id,
+          acceptedAt: now,
+        },
+      });
+
+      await tx.auditEvent.create({
+        data: {
+          actorUserId: user.id,
+          organizationId: invitation.organizationId,
+          action: "organization.invitation_accepted",
+          targetType: "OrganizationInvitation",
+          targetId: invitation.id,
+          metadata: {
+            invitationId: invitation.id,
+            membershipId: membership.id,
+            userId: user.id,
+            role: invitation.role,
+          },
+        },
+      });
+
+      return { membership, organization: invitation.organization };
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+  );
+}
+
+export interface MemberBudgetStatus {
+  readonly monthlyCapCredits: bigint | null;
+  readonly currentMonthSpentCredits: bigint;
+  readonly proposedCredits: bigint;
+  readonly canSpend: boolean;
+  readonly remainingCredits: bigint | null;
+}
+
+export async function getMemberMonthlySpentCredits(
+  organizationId: string,
+  userId: string,
+  date = new Date(),
+): Promise<bigint> {
+  const { start, end } = muscatCalendarMonth(date);
+  const jobs = await db.generationJob.findMany({
+    where: {
+      organizationId,
+      createdById: userId,
+      status: { notIn: ["CANCELLED", "FAILED", "DRAFT"] },
+      createdAt: { gte: start, lt: end },
+    },
+    select: {
+      status: true,
+      reservedCredits: true,
+      chargedCredits: true,
+    },
+  });
+
+  return jobs.reduce((total, job) => {
+    const credits =
+      job.status === "SUCCEEDED" ? job.chargedCredits : job.reservedCredits;
+    return total + credits;
+  }, 0n);
+}
+
+export async function checkMemberSpendingBudget(input: {
+  organizationId: string;
+  userId: string;
+  proposedCredits: bigint;
+  date?: Date;
+}): Promise<MemberBudgetStatus> {
+  const membership = await db.membership.findUnique({
+    where: {
+      organizationId_userId: {
+        organizationId: input.organizationId,
+        userId: input.userId,
+      },
+    },
+    select: {
+      monthlySpendingCapCredits: true,
+    },
+  });
+
+  const cap = membership?.monthlySpendingCapCredits ?? null;
+  const spent = await getMemberMonthlySpentCredits(
+    input.organizationId,
+    input.userId,
+    input.date,
+  );
+
+  const canSpend = canSpendWithinMonthlyCap(cap, spent, input.proposedCredits);
+  const remaining = cap === null ? null : cap > spent ? cap - spent : 0n;
+
+  return {
+    monthlyCapCredits: cap,
+    currentMonthSpentCredits: spent,
+    proposedCredits: input.proposedCredits,
+    canSpend,
+    remainingCredits: remaining,
+  };
 }

@@ -15,6 +15,7 @@
     "@aiwa/authz": "workspace:*",
     "@aiwa/config": "workspace:*",
     "@aiwa/core": "workspace:*",
+    "@aiwa/credits": "workspace:*",
     "@aiwa/db": "workspace:*",
     "@aiwa/ui": "workspace:*",
     "@aiwa/validation": "workspace:*",

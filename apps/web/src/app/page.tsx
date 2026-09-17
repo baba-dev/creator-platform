@@ -343,9 +343,9 @@ function CreativeBoard() {
           mineral colours, sculpted light, editorial photography…
         </p>
       </div>
-      <div className="relative mt-4 overflow-hidden rounded-[24px] border border-border bg-[linear-gradient(145deg,#17162b,#452a65_52%,#d17b54)] p-5 shadow-lg">
-        <div className="absolute -right-10 -top-10 size-40 rounded-full bg-orange-100/55 blur-3xl" />
-        <div className="absolute inset-x-0 bottom-0 h-1/2 bg-[radial-gradient(ellipse_at_bottom,rgba(230,145,95,.78),transparent_68%)]" />
+      <div className="relative mt-4 overflow-hidden rounded-[24px] border border-border bg-[linear-gradient(145deg,oklch(0.2_0.03_270),oklch(0.34_0.13_315)_52%,var(--coral))] p-5 shadow-lg">
+        <div className="absolute -right-10 -top-10 size-40 rounded-full bg-coral/30 blur-3xl" />
+        <div className="absolute inset-x-0 bottom-0 h-1/2 bg-[radial-gradient(ellipse_at_bottom,color-mix(in_oklch,var(--coral)_70%,transparent),transparent_68%)]" />
         <div className="relative min-h-48 text-on-vivid">
           <p className="text-[9px] font-bold uppercase tracking-[0.22em] text-on-vivid/65">
             Generated concept
@@ -353,8 +353,8 @@ function CreativeBoard() {
           <p className="font-display mt-2 text-3xl font-semibold">
             Coastal light
           </p>
-          <div className="absolute bottom-0 left-1/2 h-28 w-16 -translate-x-1/2 rounded-t-[36px] rounded-b-xl border border-white/20 bg-white/10 shadow-2xl backdrop-blur-sm" />
-          <span className="absolute bottom-0 right-0 rounded-full bg-black/30 px-2.5 py-1 text-[9px] font-semibold backdrop-blur">
+          <div className="absolute bottom-0 left-1/2 h-28 w-16 -translate-x-1/2 rounded-t-[36px] rounded-b-xl border border-on-vivid/20 bg-on-vivid/10 shadow-2xl backdrop-blur-sm" />
+          <span className="absolute bottom-0 right-0 rounded-full bg-card/40 px-2.5 py-1 text-[9px] font-semibold backdrop-blur">
             28 credits
           </span>
         </div>

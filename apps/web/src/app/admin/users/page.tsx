@@ -214,7 +214,7 @@ export default async function AdminUsersPage({
                         {user.disabledAt ? "Disabled" : "Active"}
                       </StatusBadge>
                     </td>
-                    <td className="py-4 pr-4 font-mono text-[10px] text-muted-foreground">
+                    <td className="py-4 pr-4 font-mono text-[10px] tabular-nums text-muted-foreground">
                       {user.createdAt.toLocaleDateString("en-OM", {
                         day: "2-digit",
                         month: "short",

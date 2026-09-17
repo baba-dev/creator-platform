@@ -36,7 +36,7 @@ export default async function OrganizationLayout({
       <header className="px-4 pt-8 sm:px-7 lg:px-9">
         <Link
           href={"/admin/organizations" as Route}
-          className="text-sm text-primary"
+          className="inline-flex min-h-10 items-center text-sm font-semibold text-primary hover:underline"
         >
           ← Organizations
         </Link>

@@ -224,7 +224,7 @@ export default async function AdminUserDetailPage({
                       <span className="font-mono font-semibold">
                         {s.ipAddress ?? "Unknown IP"}
                       </span>
-                      <span className="font-mono text-[10px] text-muted-foreground">
+                      <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
                         Expires{" "}
                         {s.expiresAt.toLocaleDateString("en-OM", {
                           day: "2-digit",
@@ -361,7 +361,7 @@ export default async function AdminUserDetailPage({
                     <div className="flex items-center justify-between">
                       <span className="font-semibold">{evt.action}</span>
                       <time
-                        className="font-mono text-[10px] text-muted-foreground"
+                        className="font-mono text-[10px] tabular-nums text-muted-foreground"
                         dateTime={evt.createdAt.toISOString()}
                       >
                         {evt.createdAt.toLocaleDateString("en-OM", {

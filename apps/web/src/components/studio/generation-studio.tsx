@@ -354,10 +354,10 @@ export function GenerationStudio({ canGenerate }: { canGenerate: boolean }) {
 
 function ImagePreview() {
   return (
-    <div className="relative aspect-square w-full max-w-[310px] overflow-hidden rounded-[28px] border border-border bg-[linear-gradient(145deg,#12182b_0%,#342059_48%,#c36d45_100%)] shadow-2xl shadow-violet-950/40">
-      <div className="absolute -right-14 -top-12 size-52 rounded-full bg-orange-200/70 blur-3xl" />
-      <div className="absolute -bottom-16 -left-8 h-44 w-[125%] -rotate-6 rounded-[50%] bg-[#c87852]/70 blur-sm" />
-      <div className="absolute bottom-12 left-1/2 h-40 w-20 -translate-x-1/2 rounded-t-[40px] rounded-b-2xl border border-border bg-[linear-gradient(145deg,rgba(255,255,255,.45),rgba(255,255,255,.08))] shadow-[0_30px_60px_rgba(0,0,0,.45)] backdrop-blur-sm">
+    <div className="relative aspect-square w-full max-w-[310px] overflow-hidden rounded-[28px] border border-border bg-[linear-gradient(145deg,oklch(0.19_0.03_270)_0%,oklch(0.32_0.14_310)_48%,var(--coral)_100%)] shadow-xl">
+      <div className="absolute -right-14 -top-12 size-52 rounded-full bg-coral/40 blur-3xl" />
+      <div className="absolute -bottom-16 -left-8 h-44 w-[125%] -rotate-6 rounded-[50%] bg-accent/50 blur-sm" />
+      <div className="absolute bottom-12 left-1/2 h-40 w-20 -translate-x-1/2 rounded-t-[40px] rounded-b-2xl border border-border bg-[linear-gradient(145deg,color-mix(in_oklch,var(--on-vivid)_45%,transparent),color-mix(in_oklch,var(--on-vivid)_8%,transparent))] shadow-lg backdrop-blur-sm">
         <div className="mx-auto mt-5 h-20 w-px bg-on-vivid/35" />
         <p className="mt-3 text-center text-[8px] font-bold tracking-[.35em] text-on-vivid/80">
           AIWA
@@ -380,13 +380,13 @@ function ImagePreview() {
 
 function VideoPreview() {
   return (
-    <div className="relative aspect-video w-full max-w-md overflow-hidden rounded-[24px] border border-border bg-[linear-gradient(160deg,#14192b,#322050_58%,#744d4b)] shadow-2xl shadow-violet-950/40">
-      <div className="absolute inset-x-0 bottom-0 h-1/2 bg-[radial-gradient(ellipse_at_bottom,#bb785d,transparent_65%)]" />
-      <div className="absolute left-[12%] top-[24%] h-[1px] w-[76%] bg-gradient-to-r from-transparent via-white/40 to-transparent" />
-      <div className="absolute left-1/2 top-1/2 grid size-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-black/30 text-on-vivid backdrop-blur-md">
+    <div className="relative aspect-video w-full max-w-md overflow-hidden rounded-[24px] border border-border bg-[linear-gradient(160deg,oklch(0.2_0.03_265),oklch(0.32_0.12_310)_58%,oklch(0.42_0.08_35))] shadow-xl">
+      <div className="absolute inset-x-0 bottom-0 h-1/2 bg-[radial-gradient(ellipse_at_bottom,color-mix(in_oklch,var(--accent)_60%,transparent),transparent_65%)]" />
+      <div className="absolute left-[12%] top-[24%] h-[1px] w-[76%] bg-gradient-to-r from-transparent via-on-vivid/40 to-transparent" />
+      <div className="absolute left-1/2 top-1/2 grid size-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-on-vivid/20 bg-card/40 text-on-vivid backdrop-blur-md">
         <Icon name="video" className="size-5" />
       </div>
-      <div className="absolute inset-x-4 bottom-4 rounded-xl border border-border bg-black/35 p-3 backdrop-blur-md">
+      <div className="absolute inset-x-4 bottom-4 rounded-xl border border-border bg-card/50 p-3 backdrop-blur-md">
         <div className="flex items-center gap-2">
           <span className="text-[9px] font-semibold text-on-vivid/70">
             00:00
@@ -412,7 +412,7 @@ function VoicePreview() {
   ];
 
   return (
-    <div className="relative w-full max-w-md rounded-[24px] border border-border bg-[linear-gradient(145deg,#111827,#1e1b4b)] p-6 shadow-2xl shadow-violet-950/40">
+    <div className="relative w-full max-w-md rounded-[24px] border border-border bg-[linear-gradient(145deg,oklch(0.18_0.02_265),oklch(0.24_0.06_285))] p-6 shadow-xl">
       <div className="flex items-center gap-3">
         <span className="grid size-11 place-items-center rounded-2xl bg-primary/20 text-primary">
           <Icon name="voice" />

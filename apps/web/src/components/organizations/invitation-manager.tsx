@@ -240,7 +240,7 @@ export function InvitationManager({
                       {inv.status}
                     </StatusBadge>
                   </td>
-                  <td className="py-3 pr-4 font-mono text-[10px] text-muted-foreground">
+                  <td className="py-3 pr-4 font-mono text-[10px] tabular-nums text-muted-foreground">
                     {new Date(inv.expiresAt).toLocaleDateString("en-OM", {
                       day: "2-digit",
                       month: "short",

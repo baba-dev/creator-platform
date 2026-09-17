@@ -16,12 +16,12 @@
     "@aiwa/config": "workspace:*",
     "@aiwa/core": "workspace:*",
     "@aiwa/providers": "workspace:*",
-    "bullmq": "6.3.5",
-    "ioredis": "^5.8.1"
+    "bullmq": "6.3.6",
+    "ioredis": "^6.0.0"
   },
   "devDependencies": {
     "tsup": "^8.5.0",
     "tsx": "^4.20.6",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.0"
   }
 }

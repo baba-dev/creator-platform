@@ -28,7 +28,7 @@ jobs:
       RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
     steps:
       - name: Download tested release
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: creator-platform-${{ github.event.workflow_run.head_sha }}
           path: dist

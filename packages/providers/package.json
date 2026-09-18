@@ -11,9 +11,13 @@
   "scripts": {
     "build": "tsc --noEmit",
     "clean": "rm -rf dist .turbo",
-    "lint": "eslint src --max-warnings=0",
+    "lint": "eslint src test --max-warnings=0",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aiwa/observability": "workspace:*",
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "vitest": "^4.1.11"

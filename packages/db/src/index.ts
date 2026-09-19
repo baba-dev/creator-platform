@@ -12,13 +12,27 @@ if (process.env.NODE_ENV !== "production") {
   prismaGlobal.prisma = db;
 }
 
-export { Prisma } from "@prisma/client";
-export type {
-  LedgerEntry,
+export {
+  Prisma,
+  PaymentStatus,
+  PaymentMethod,
   LedgerEntryType,
-  Wallet,
-  GenerationJob,
   GenerationJobStatus,
-  ProviderModel,
+  MembershipRole,
+  PlatformRole,
+} from "@prisma/client";
+
+export type {
+  AuditEvent,
+  GenerationJob,
+  LedgerEntry,
+  ManualPayment,
+  Membership,
   ModelPriceVersion,
+  Organization,
+  OrganizationInvitation,
+  Project,
+  ProviderModel,
+  User,
+  Wallet,
 } from "@prisma/client";

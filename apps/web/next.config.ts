@@ -10,7 +10,12 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: path.join(directory, "../.."),
   poweredByHeader: false,
   reactStrictMode: true,
-  transpilePackages: ["@aiwa/core", "@aiwa/ui"],
+  transpilePackages: [
+    "@aiwa/core",
+    "@aiwa/ui",
+    "@aiwa/organizations",
+    "@aiwa/payments",
+  ],
   typedRoutes: true,
 };
 

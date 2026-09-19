@@ -243,30 +243,36 @@ model LedgerEntry {
 }
 
 model ManualPayment {
-  id             String        @id @default(cuid())
-  organizationId String
-  method         PaymentMethod
-  status         PaymentStatus @default(DRAFT)
-  amountBaisa    BigInt
-  reference      String?
-  chequeNumber   String?
-  bankName       String?
-  notes          String?       @db.Text
-  receivedAt     DateTime
-  confirmedAt    DateTime?
-  rejectedAt     DateTime?
-  reversedAt     DateTime?
-  createdById    String
-  confirmedById  String?
-  ledgerEntryId  String?       @unique
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  createdBy      User          @relation("PaymentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  confirmedBy    User?         @relation("PaymentConfirmedBy", fields: [confirmedById], references: [id], onDelete: Restrict)
+  id              String        @id @default(cuid())
+  organizationId  String
+  method          PaymentMethod
+  status          PaymentStatus @default(DRAFT)
+  amountBaisa     BigInt
+  reference       String?
+  chequeNumber    String?
+  bankName        String?
+  notes           String?       @db.Text
+  receivedAt      DateTime
+  confirmedAt     DateTime?
+  rejectedAt      DateTime?
+  reversedAt      DateTime?
+  rejectionReason String?       @db.Text
+  reversalReason  String?       @db.Text
+  creditsGranted  BigInt?
+  creditsPerBaisa BigInt?
+  idempotencyKey  String        @unique
+  createdById     String
+  confirmedById   String?
+  ledgerEntryId   String?       @unique
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  createdBy       User          @relation("PaymentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  confirmedBy     User?         @relation("PaymentConfirmedBy", fields: [confirmedById], references: [id], onDelete: Restrict)
 
   @@index([organizationId, status])
   @@index([method, receivedAt])
+  @@index([idempotencyKey])
 }
 
 model Project {

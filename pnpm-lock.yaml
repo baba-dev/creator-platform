@@ -50,6 +50,9 @@ importers:
       '@aiwa/organizations':
         specifier: workspace:*
         version: link:../../packages/organizations
+      '@aiwa/payments':
+        specifier: workspace:*
+        version: link:../../packages/payments
       '@aiwa/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -198,7 +201,27 @@ importers:
         specifier: ^4.1.11
         version: 4.1.11(@types/node@24.13.4)(vite@7.3.6(@types/node@24.13.4)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.13))
 
+  packages/payments:
+    dependencies:
+      '@aiwa/credits':
+        specifier: workspace:*
+        version: link:../credits
+      '@aiwa/db':
+        specifier: workspace:*
+        version: link:../db
+    devDependencies:
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@types/node@24.13.4)(vite@7.3.6(@types/node@24.13.4)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.13))
+
   packages/providers:
+    dependencies:
+      '@aiwa/observability':
+        specifier: workspace:*
+        version: link:../observability
+      zod:
+        specifier: ^4.1.12
+        version: 4.6.4
     devDependencies:
       vitest:
         specifier: ^4.1.11

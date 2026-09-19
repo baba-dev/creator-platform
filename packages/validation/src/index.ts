@@ -178,3 +178,57 @@ export const quoteRequestSchema = z.object({
   modelId: z.string().trim().min(1).max(128),
   units: z.coerce.number().int().positive().default(1),
 });
+
+export const paymentMethodSchema = z.enum(["CASH", "CHEQUE"]);
+
+export const recordPaymentSchema = z.object({
+  method: paymentMethodSchema,
+  amountBaisa: z.union([
+    z.bigint().positive(),
+    z.string().regex(/^\d+$/).transform(BigInt),
+  ]),
+  receivedAt: z.coerce.date(),
+  reference: z.string().trim().max(128).optional(),
+  chequeNumber: z.string().trim().max(64).optional(),
+  bankName: z.string().trim().max(128).optional(),
+  notes: z.string().trim().max(2000).optional(),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+export const confirmPaymentSchema = z.object({
+  creditsPerBaisa: z
+    .union([z.bigint().positive(), z.string().regex(/^\d+$/).transform(BigInt)])
+    .default(1n),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+export const rejectPaymentSchema = z.object({
+  reason: z.string().trim().min(3).max(500),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+export const reversePaymentSchema = z.object({
+  reason: z.string().trim().min(5).max(500),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+export const paymentActionSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("confirm") }).merge(confirmPaymentSchema),
+  z.object({ action: z.literal("reject") }).merge(rejectPaymentSchema),
+  z.object({ action: z.literal("reverse") }).merge(reversePaymentSchema),
+]);
+
+export const grantAdminCreditsSchema = z.object({
+  amountCredits: z.union([
+    z.bigint().positive(),
+    z.string().regex(/^\d+$/).transform(BigInt),
+  ]),
+  reason: z.string().trim().min(5).max(500),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+export const ledgerExportQuerySchema = z.object({
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+  type: z.string().trim().optional(),
+});

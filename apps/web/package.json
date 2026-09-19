@@ -27,7 +27,8 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "zod": "^4.1.12",
-    "@aiwa/organizations": "workspace:*"
+    "@aiwa/organizations": "workspace:*",
+    "@aiwa/payments": "workspace:*"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.3",

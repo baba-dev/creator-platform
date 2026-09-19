@@ -33,7 +33,7 @@ export const managedMembershipRoleSchema = z.enum([
   "ORGANIZATION_MEMBER",
   "ORGANIZATION_VIEWER",
 ]);
-const MAX_SIGNED_BIGINT = 9_223_372_036_854_775_807n;
+export const MAX_SIGNED_BIGINT = 9_223_372_036_854_775_807n;
 export const monthlyCreditCapSchema = z.union([
   z.bigint().nonnegative().max(MAX_SIGNED_BIGINT),
   z
@@ -178,3 +178,127 @@ export const quoteRequestSchema = z.object({
   modelId: z.string().trim().min(1).max(128),
   units: z.coerce.number().int().positive().default(1),
 });
+
+export const paymentMethodSchema = z.enum(["CASH", "CHEQUE"]);
+export const paymentStatusSchema = z.enum([
+  "DRAFT",
+  "PENDING",
+  "CONFIRMED",
+  "REJECTED",
+  "REVERSED",
+]);
+export const ledgerEntryTypeSchema = z.enum([
+  "PAYMENT_GRANT",
+  "ADMIN_GRANT",
+  "RESERVATION",
+  "CAPTURE",
+  "RELEASE",
+  "REFUND",
+  "ADJUSTMENT",
+  "REVERSAL",
+]);
+
+const positiveDatabaseBigIntSchema = z
+  .union([
+    z.bigint(),
+    z
+      .string()
+      .trim()
+      .min(1)
+      .max(19)
+      .regex(/^[1-9]\d*$/)
+      .transform(BigInt),
+  ])
+  .pipe(z.bigint().positive().max(MAX_SIGNED_BIGINT));
+
+export const recordPaymentSchema = z
+  .object({
+    method: paymentMethodSchema,
+    amountBaisa: positiveDatabaseBigIntSchema,
+    receivedAt: z.coerce.date(),
+    reference: z.string().trim().max(128).optional(),
+    chequeNumber: z.string().trim().max(64).optional(),
+    bankName: z.string().trim().max(128).optional(),
+    notes: z.string().trim().max(2000).optional(),
+    idempotencyKey: idempotencyKeySchema,
+  })
+  .superRefine((value, context) => {
+    if (value.method === "CHEQUE") {
+      if (!value.chequeNumber) {
+        context.addIssue({
+          code: "custom",
+          path: ["chequeNumber"],
+          message: "Cheque number is required for cheque payments.",
+        });
+      }
+      if (!value.bankName) {
+        context.addIssue({
+          code: "custom",
+          path: ["bankName"],
+          message: "Bank name is required for cheque payments.",
+        });
+      }
+    }
+  });
+
+export const confirmPaymentSchema = z.object({
+  creditsPerBaisa: positiveDatabaseBigIntSchema.default(1n),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+export const rejectPaymentSchema = z.object({
+  reason: z.string().trim().min(3).max(500),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+export const reversePaymentSchema = z.object({
+  reason: z.string().trim().min(5).max(500),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+export const paymentActionSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("confirm") }).merge(confirmPaymentSchema),
+  z.object({ action: z.literal("reject") }).merge(rejectPaymentSchema),
+  z.object({ action: z.literal("reverse") }).merge(reversePaymentSchema),
+]);
+
+export const grantAdminCreditsSchema = z.object({
+  amountCredits: positiveDatabaseBigIntSchema,
+  reason: z.string().trim().min(5).max(500),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+export const paymentListQuerySchema = z.object({
+  cursor: cuidSchema.optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+  status: paymentStatusSchema.optional(),
+  method: paymentMethodSchema.optional(),
+});
+
+const exportDateRangeSchema = z
+  .object({
+    from: z.coerce.date().optional(),
+    to: z.coerce.date().optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.from && value.to && value.from > value.to) {
+      context.addIssue({
+        code: "custom",
+        path: ["to"],
+        message: "The end date must be on or after the start date.",
+      });
+    }
+  });
+
+export const paymentExportQuerySchema = exportDateRangeSchema.and(
+  z.object({
+    status: paymentStatusSchema.optional(),
+    method: paymentMethodSchema.optional(),
+  }),
+);
+
+export const ledgerExportQuerySchema = exportDateRangeSchema.and(
+  z.object({
+    type: ledgerEntryTypeSchema.optional(),
+  }),
+);

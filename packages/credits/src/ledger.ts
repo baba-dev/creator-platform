@@ -498,6 +498,12 @@ export async function grantCredits(
     throw new InvalidAmountError("Grant amount must be greater than zero");
   }
 
+  const description =
+    params.description ??
+    (params.type === "PAYMENT_GRANT"
+      ? "Payment credit grant"
+      : "Administrative credit grant");
+
   const existing = await tx.ledgerEntry.findUnique({
     where: { idempotencyKey: params.idempotencyKey },
   });
@@ -505,7 +511,10 @@ export async function grantCredits(
     if (
       existing.walletId === params.walletId &&
       existing.amountCredits === amount &&
-      existing.type === params.type
+      existing.type === params.type &&
+      existing.referenceType === (params.referenceType ?? null) &&
+      existing.referenceId === (params.referenceId ?? null) &&
+      existing.description === description
     ) {
       return existing;
     }
@@ -527,11 +536,7 @@ export async function grantCredits(
       idempotencyKey: params.idempotencyKey,
       referenceType: params.referenceType,
       referenceId: params.referenceId,
-      description:
-        params.description ??
-        (params.type === "PAYMENT_GRANT"
-          ? "Payment credit grant"
-          : "Administrative credit grant"),
+      description,
       metadata: params.metadata,
     },
   });

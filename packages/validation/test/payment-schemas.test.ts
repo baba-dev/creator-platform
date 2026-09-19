@@ -80,12 +80,12 @@ describe("payment validation", () => {
     expect(
       paymentListQuerySchema.safeParse({ status: "UNKNOWN" }).success,
     ).toBe(false);
-    expect(
-      paymentExportQuerySchema.safeParse({ method: "CARD" }).success,
-    ).toBe(false);
-    expect(
-      ledgerExportQuerySchema.safeParse({ type: "UNKNOWN" }).success,
-    ).toBe(false);
+    expect(paymentExportQuerySchema.safeParse({ method: "CARD" }).success).toBe(
+      false,
+    );
+    expect(ledgerExportQuerySchema.safeParse({ type: "UNKNOWN" }).success).toBe(
+      false,
+    );
   });
 
   it("rejects inverted export date ranges", () => {

@@ -4,9 +4,7 @@ import { escapeCsvCell } from "./csv";
 
 describe("CSV export safety", () => {
   it("escapes RFC 4180 control characters", () => {
-    expect(escapeCsvCell('Bank "A", Muscat')).toBe(
-      '"Bank ""A"", Muscat"',
-    );
+    expect(escapeCsvCell('Bank "A", Muscat')).toBe('"Bank ""A"", Muscat"');
   });
 
   it("neutralizes spreadsheet formulas", () => {

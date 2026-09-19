@@ -111,7 +111,11 @@ function createMockTx(initial?: {
         }) => {
           if (where.id) {
             const p = payments.get(where.id);
-            if (!p || (where.organizationId && p.organizationId !== where.organizationId)) {
+            if (
+              !p ||
+              (where.organizationId &&
+                p.organizationId !== where.organizationId)
+            ) {
               return null;
             }
             return { ...p };
@@ -125,9 +129,7 @@ function createMockTx(initial?: {
           }
           if (where.rejectionIdempotencyKey) {
             for (const p of payments.values()) {
-              if (
-                p.rejectionIdempotencyKey === where.rejectionIdempotencyKey
-              ) {
+              if (p.rejectionIdempotencyKey === where.rejectionIdempotencyKey) {
                 return { ...p };
               }
             }
@@ -178,8 +180,7 @@ function createMockTx(initial?: {
             rejectedAt: data.rejectedAt ?? null,
             reversedAt: data.reversedAt ?? null,
             rejectionReason: data.rejectionReason ?? null,
-            rejectionIdempotencyKey:
-              data.rejectionIdempotencyKey ?? null,
+            rejectionIdempotencyKey: data.rejectionIdempotencyKey ?? null,
             reversalReason: data.reversalReason ?? null,
             creditsGranted: data.creditsGranted ?? null,
             creditsPerBaisa: data.creditsPerBaisa ?? null,
@@ -1210,5 +1211,4 @@ describe("@aiwa/payments", () => {
       ).rejects.toThrow(PaymentDomainError);
     });
   });
-
 });

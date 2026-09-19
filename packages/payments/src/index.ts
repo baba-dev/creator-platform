@@ -123,10 +123,7 @@ export async function _recordPaymentTx(
   tx: Prisma.TransactionClient,
   params: RecordPaymentParams,
 ): Promise<ManualPayment> {
-  if (
-    params.amountBaisa <= 0n ||
-    params.amountBaisa > MAX_SIGNED_BIGINT
-  ) {
+  if (params.amountBaisa <= 0n || params.amountBaisa > MAX_SIGNED_BIGINT) {
     throw new PaymentDomainError(
       "INVALID_PAYMENT_AMOUNT",
       "Payment amount must be a positive signed 64-bit integer.",

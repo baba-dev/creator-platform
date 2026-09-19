@@ -3,10 +3,7 @@ import { db } from "@aiwa/db";
 import Link from "next/link";
 import type { Route } from "next";
 import { requirePlatformPermission } from "@/lib/request-auth";
-import {
-  formatCredits,
-  formatMuscatDateTime,
-} from "@/lib/format-baisa";
+import { formatCredits, formatMuscatDateTime } from "@/lib/format-baisa";
 import { GrantCreditsDialog } from "@/components/admin/payment-actions";
 
 const PAGE_SIZE = 25;

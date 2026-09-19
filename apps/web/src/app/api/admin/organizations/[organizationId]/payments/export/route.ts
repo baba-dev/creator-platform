@@ -1,14 +1,8 @@
 import { hasPlatformPermission } from "@aiwa/authz";
 import { db, type Prisma } from "@aiwa/db";
-import {
-  cuidSchema,
-  paymentExportQuerySchema,
-} from "@aiwa/validation";
+import { cuidSchema, paymentExportQuerySchema } from "@aiwa/validation";
 import { NextResponse } from "next/server";
-import {
-  formatBaisa,
-  formatMuscatCsvTimestamp,
-} from "@/lib/format-baisa";
+import { formatBaisa, formatMuscatCsvTimestamp } from "@/lib/format-baisa";
 import { escapeCsvCell, MAX_EXPORT_ROWS } from "@/lib/csv";
 import { getRequestSession } from "@/lib/request-auth";
 
@@ -106,9 +100,7 @@ export async function GET(
     payment.chequeNumber ?? "",
     payment.bankName ?? "",
     formatMuscatCsvTimestamp(payment.receivedAt),
-    payment.confirmedAt
-      ? formatMuscatCsvTimestamp(payment.confirmedAt)
-      : "",
+    payment.confirmedAt ? formatMuscatCsvTimestamp(payment.confirmedAt) : "",
     payment.rejectedAt ? formatMuscatCsvTimestamp(payment.rejectedAt) : "",
     payment.reversedAt ? formatMuscatCsvTimestamp(payment.reversedAt) : "",
     payment.rejectionReason ?? "",

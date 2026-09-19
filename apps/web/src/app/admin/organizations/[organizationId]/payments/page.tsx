@@ -62,7 +62,12 @@ export default async function Page({
   });
   const query = parsedQuery.success
     ? parsedQuery.data
-    : { cursor: undefined, limit: PAGE_SIZE, status: undefined, method: undefined };
+    : {
+        cursor: undefined,
+        limit: PAGE_SIZE,
+        status: undefined,
+        method: undefined,
+      };
 
   const canManage = hasPlatformPermission(
     session.user.platformRole,

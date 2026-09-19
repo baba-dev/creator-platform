@@ -31,10 +31,9 @@ function muscatParts(date: Date) {
     hourCycle: "h23",
   }).formatToParts(date);
 
-  return Object.fromEntries(parts.map((part) => [part.type, part.value])) as Record<
-    string,
-    string
-  >;
+  return Object.fromEntries(
+    parts.map((part) => [part.type, part.value]),
+  ) as Record<string, string>;
 }
 
 export function formatMuscatDate(date: Date): string {

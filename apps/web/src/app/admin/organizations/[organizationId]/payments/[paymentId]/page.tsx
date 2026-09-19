@@ -335,7 +335,9 @@ export default async function PaymentDetailPage({
                         </dd>
                       </div>
                       <div className="flex justify-between gap-4 py-2">
-                        <dt className="text-muted-foreground">Amount credits</dt>
+                        <dt className="text-muted-foreground">
+                          Amount credits
+                        </dt>
                         <dd
                           className={
                             positive

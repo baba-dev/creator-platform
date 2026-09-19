@@ -5,9 +5,27 @@ const optionalUrl = z.preprocess(
   z.url().optional(),
 );
 
+const optionalHttpsUrl = z.preprocess(
+  (value) => (value === "" ? undefined : value),
+  z
+    .url()
+    .refine((url) => new URL(url).protocol === "https:", "HTTPS URL required")
+    .optional(),
+);
+
 const optionalString = z.preprocess(
   (value) => (value === "" ? undefined : value),
   z.string().min(1).optional(),
+);
+
+const optionalPositiveInteger = z.preprocess(
+  (value) => (value === "" || value === undefined ? undefined : value),
+  z.coerce.number().int().positive().max(600_000).optional(),
+);
+
+const optionalSmokeAcknowledgement = z.preprocess(
+  (value) => (value === "" ? undefined : value),
+  z.literal("I_UNDERSTAND_THIS_IS_BILLABLE").optional(),
 );
 
 const booleanFromString = z
@@ -27,10 +45,18 @@ export const serverEnvSchema = z.object({
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.url().default("redis://127.0.0.1:6379/0"),
   BYTEPLUS_API_KEY: optionalString,
-  BYTEPLUS_REGION: z.string().min(1).default("ap-southeast-1"),
-  BYTEPLUS_MODELARK_BASE_URL: optionalUrl,
+  BYTEPLUS_REGION: z
+    .enum(["ap-southeast-1", "eu-west-1"])
+    .default("ap-southeast-1"),
+  BYTEPLUS_MODELARK_BASE_URL: optionalHttpsUrl,
+  BYTEPLUS_SPEECH_API_KEY: optionalString,
+  BYTEPLUS_SPEECH_APP_KEY: optionalString,
+  BYTEPLUS_SPEECH_BASE_URL: optionalHttpsUrl,
   BYTEPLUS_SPEECH_APP_ID: optionalString,
   BYTEPLUS_SPEECH_ACCESS_TOKEN: optionalString,
+  BYTEPLUS_REQUEST_TIMEOUT_MS: optionalPositiveInteger,
+  BYTEPLUS_LIVE_SMOKE_ACK: optionalSmokeAcknowledgement,
+  BYTEPLUS_SMOKE_PROMPT: optionalString,
   NVIDIA_API_KEY: optionalString,
   NVIDIA_BASE_URL: z.url().default("https://integrate.api.nvidia.com/v1"),
   NVIDIA_REASONING_MODEL: optionalString,

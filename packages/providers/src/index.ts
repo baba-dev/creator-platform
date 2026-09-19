@@ -1,7 +1,12 @@
 export type MediaKind = "image" | "video" | "voice";
 
 export type ProviderJobStatus =
-  "submitted" | "processing" | "succeeded" | "failed";
+  "submitted" | "processing" | "succeeded" | "failed" | "cancelled";
+
+export interface ProviderInlineOutput {
+  readonly mediaType: string;
+  readonly dataBase64: string;
+}
 
 export interface ProviderModelDescriptor {
   readonly id: string;
@@ -23,6 +28,7 @@ export interface ProviderJob {
   readonly providerRequestId: string;
   readonly status: ProviderJobStatus;
   readonly outputUrls?: readonly string[];
+  readonly inlineOutputs?: readonly ProviderInlineOutput[];
   readonly rawUsage?: Readonly<Record<string, unknown>>;
   readonly errorCode?: string;
 }
@@ -64,8 +70,11 @@ export class ProviderRequestError extends Error {
   constructor(
     message: string,
     readonly retryable: boolean,
-    options?: ErrorOptions,
+    options?: ErrorOptions & { readonly code?: string },
   ) {
     super(message, options);
+    this.code = options?.code;
   }
+
+  readonly code?: string;
 }

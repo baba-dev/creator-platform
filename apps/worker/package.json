@@ -7,7 +7,8 @@
     "build": "tsup --format cjs",
     "clean": "rm -rf dist .turbo",
     "dev": "tsx watch src/index.ts",
-    "lint": "eslint src --max-warnings=0",
+    "lint": "eslint src scripts --max-warnings=0",
+    "smoke:byteplus": "node --env-file-if-exists=../../.env --import tsx scripts/byteplus-smoke.ts",
     "start": "node dist/index.cjs",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit"

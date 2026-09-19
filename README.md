@@ -294,9 +294,10 @@ Expected local services:
 
 ## Environment configuration
 
-No real credentials may be committed. The future `.env.example` will contain names and safe placeholders only.
+No real credentials may be committed. Copy `.env.example` to `.env`; the
+example contains variable names and safe placeholders only.
 
-Planned server-side configuration groups:
+Server-side configuration groups:
 
 ```dotenv
 APP_URL=
@@ -305,10 +306,14 @@ DATABASE_URL=
 REDIS_URL=
 
 BYTEPLUS_API_KEY=
-BYTEPLUS_REGION=
+BYTEPLUS_REGION=ap-southeast-1
 BYTEPLUS_MODELARK_BASE_URL=
+BYTEPLUS_SPEECH_API_KEY=
+BYTEPLUS_SPEECH_APP_KEY=aGjiRDfUWi
+BYTEPLUS_SPEECH_BASE_URL=
 BYTEPLUS_SPEECH_APP_ID=
 BYTEPLUS_SPEECH_ACCESS_TOKEN=
+BYTEPLUS_REQUEST_TIMEOUT_MS=180000
 
 NVIDIA_API_KEY=
 NVIDIA_BASE_URL=
@@ -324,6 +329,28 @@ OTEL_EXPORTER_OTLP_ENDPOINT=
 ```
 
 Provider credentials must never use the `NEXT_PUBLIC_` prefix.
+
+### BytePlus live smoke test
+
+After CI passes and the provider changes are merged, add the ModelArk key to
+the untracked root `.env`. The image smoke test is deliberately billable and
+will not run until its acknowledgement is set:
+
+```dotenv
+BYTEPLUS_API_KEY=your-modelark-api-key
+BYTEPLUS_REGION=ap-southeast-1
+BYTEPLUS_LIVE_SMOKE_ACK=I_UNDERSTAND_THIS_IS_BILLABLE
+```
+
+```bash
+pnpm --filter @aiwa/worker smoke:byteplus
+```
+
+The command generates one 2K PNG, validates the download, and writes it with
+owner-only permissions under `.data/byteplus-smoke/`. It never logs the API
+key, prompt, or temporary provider output URL. Seed Speech uses a separate
+`BYTEPLUS_SPEECH_API_KEY`; the legacy App ID/access-token pair remains available
+only for accounts that have not migrated.
 
 ## Staging
 

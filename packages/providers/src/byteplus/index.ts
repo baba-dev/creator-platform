@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { createLogger } from "@aiwa/observability";
 import { z } from "zod";
 
@@ -5,52 +7,115 @@ import {
   ProviderConfigurationError,
   ProviderRequestError,
   type MediaGenerationProvider,
+  type MediaKind,
   type MediaSubmission,
   type ProviderJob,
   type ProviderJobStatus,
   type ProviderModelDescriptor,
 } from "../index";
 
+const MODELARK_BASE_URLS = {
+  "ap-southeast-1": "https://ark.ap-southeast.bytepluses.com/api/v3",
+  "eu-west-1": "https://ark.eu-west.bytepluses.com/api/v3",
+} as const;
+
+const DEFAULT_SPEECH_BASE_URL =
+  "https://voice.ap-southeast-1.bytepluses.com/api/v3";
+const DEFAULT_TIMEOUT_MS = 180_000;
+const MAX_ERROR_BODY_BYTES = 32 * 1024;
+const MAX_JSON_RESPONSE_BYTES = 1024 * 1024;
+const MAX_SPEECH_RESPONSE_BYTES = 36 * 1024 * 1024;
+const MAX_SPEECH_AUDIO_BYTES = 25 * 1024 * 1024;
+const SPEECH_RESOURCE_ID = "seed-tts-2.0";
+const DEFAULT_SPEECH_APP_KEY = "aGjiRDfUWi";
+
 export interface BytePlusAdapterConfig {
   readonly apiKey: string;
-  readonly region: string;
+  readonly region: keyof typeof MODELARK_BASE_URLS;
   readonly modelArkBaseUrl?: string;
+  readonly speechApiKey?: string;
+  readonly speechAppKey?: string;
+  readonly speechBaseUrl?: string;
   readonly speechAppId?: string;
   readonly speechAccessToken?: string;
+  readonly requestTimeoutMs?: number;
   readonly fetch?: typeof globalThis.fetch;
 }
 
+const httpsUrlSchema = z
+  .url()
+  .refine(
+    (value) => new URL(value).protocol === "https:",
+    "HTTPS URL required",
+  );
+
+const adapterConfigSchema = z.object({
+  apiKey: z.string().trim().min(1),
+  region: z.enum(["ap-southeast-1", "eu-west-1"]),
+  modelArkBaseUrl: httpsUrlSchema.optional(),
+  speechApiKey: z.string().trim().min(1).optional(),
+  speechAppKey: z.string().trim().min(1).optional(),
+  speechBaseUrl: httpsUrlSchema.optional(),
+  speechAppId: z.string().trim().min(1).optional(),
+  speechAccessToken: z.string().trim().min(1).optional(),
+  requestTimeoutMs: z.number().int().min(1_000).max(600_000).optional(),
+});
+
+const providerIdentifierSchema = z
+  .string()
+  .min(1)
+  .max(200)
+  .regex(/^[A-Za-z0-9._:-]+$/);
+const providerErrorCodeSchema = z
+  .string()
+  .min(1)
+  .max(100)
+  .regex(/^[A-Za-z0-9_.:-]+$/);
+
+const imageAspectRatioSchema = z.enum([
+  "1:1",
+  "16:9",
+  "9:16",
+  "4:3",
+  "3:4",
+  "3:2",
+  "2:3",
+  "21:9",
+]);
+
 export const bytePlusImageInputSchema = z.object({
-  prompt: z.string().trim().min(1, "Prompt is required"),
-  aspectRatio: z.string().trim().optional(),
-  steps: z.number().int().min(1).max(100).optional(),
-  style: z.string().trim().optional(),
-  seed: z.number().int().optional(),
+  prompt: z.string().trim().min(1),
+  aspectRatio: imageAspectRatioSchema.default("1:1"),
+  resolution: z.enum(["2K", "4K"]).default("2K"),
+  outputFormat: z.enum(["jpeg", "png"]).default("png"),
+  watermark: z.boolean().default(false),
 });
 
 export const bytePlusVideoInputSchema = z.object({
-  prompt: z.string().trim().min(1, "Prompt is required"),
-  aspectRatio: z.string().trim().optional(),
-  durationSeconds: z.union([z.literal(5), z.literal(10)]).optional(),
-  fps: z.number().int().min(1).max(60).optional(),
-  seed: z.number().int().optional(),
+  prompt: z.string().trim().min(1),
+  aspectRatio: z
+    .enum(["16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "adaptive"])
+    .default("16:9"),
+  resolution: z.enum(["480p", "720p", "1080p"]).default("720p"),
+  durationSeconds: z.number().int().min(4).max(30).default(5),
+  generateAudio: z.boolean().default(false),
+  watermark: z.boolean().default(false),
+  seed: z.number().int().min(-1).max(2_147_483_647).optional(),
 });
 
-export const bytePlusVoiceInputSchema = z
-  .object({
-    prompt: z.string().trim().min(1).optional(),
-    text: z.string().trim().min(1).optional(),
-    language: z.string().trim().optional(),
-    voiceType: z.string().trim().optional(),
-    speedRatio: z.number().min(0.2).max(3.0).optional(),
-  })
-  .refine((data) => Boolean(data.prompt || data.text), {
-    message: "Either prompt or text must be provided for voice generation",
-  });
+export const bytePlusVoiceInputSchema = z.object({
+  text: z.string().trim().min(1),
+  speaker: z.string().trim().min(1),
+  format: z.enum(["mp3", "ogg_opus", "pcm"]).default("mp3"),
+  sampleRate: z
+    .union([z.literal(8_000), z.literal(16_000), z.literal(24_000)])
+    .default(24_000),
+  speechRate: z.number().int().min(-50).max(100).default(0),
+});
 
 export const VERIFIED_BYTEPLUS_MODELS: readonly ProviderModelDescriptor[] = [
   {
-    id: "seedream-5-lite",
+    id: "seedream-5-0-260128",
     provider: "byteplus",
     displayName: "Seedream 5.0 Lite",
     description:
@@ -60,159 +125,449 @@ export const VERIFIED_BYTEPLUS_MODELS: readonly ProviderModelDescriptor[] = [
       "aspectRatio:1:1": true,
       "aspectRatio:16:9": true,
       "aspectRatio:9:16": true,
-      "aspectRatio:4:5": true,
-      maxSteps: 50,
-      defaultSteps: 30,
+      "resolution:2K": true,
+      "resolution:4K": true,
     },
   },
   {
-    id: "seedream-4-5",
+    id: "seedream-4-5-251128",
     provider: "byteplus",
     displayName: "Seedream 4.5",
     description:
-      "Reliable 4K campaign visuals, typography, and multi-reference composition.",
+      "Reliable campaign visuals, typography, and multi-reference composition.",
     mediaKind: "image",
     capabilities: {
       "aspectRatio:1:1": true,
       "aspectRatio:16:9": true,
       "aspectRatio:9:16": true,
-      "aspectRatio:4:5": true,
-      resolution: "4k",
+      "resolution:2K": true,
+      "resolution:4K": true,
     },
   },
   {
-    id: "seedance-2-5",
+    id: "dreamina-seedance-2-5-260628",
     provider: "byteplus",
     displayName: "Seedance 2.5",
-    description:
-      "Cinematic multi-shot video generation with rich multimodal direction.",
+    description: "Cinematic video generation with optional synchronized audio.",
     mediaKind: "video",
     capabilities: {
       "aspectRatio:16:9": true,
       "aspectRatio:9:16": true,
       "aspectRatio:1:1": true,
-      "duration:5": true,
-      "duration:10": true,
+      minimumDurationSeconds: 4,
+      maximumDurationSeconds: 30,
+      fps: 24,
     },
   },
   {
-    id: "seed-speech-2",
+    id: SPEECH_RESOURCE_ID,
     provider: "byteplus",
     displayName: "Seed Speech TTS 2.0",
     description:
-      "Expressive, context-aware narration with natural rhythm and pauses.",
+      "Expressive, context-aware narration returned as synthesized audio bytes.",
     mediaKind: "voice",
     capabilities: {
-      "language:en": true,
-      "language:ar": true,
-      "language:hi": true,
+      streaming: true,
+      "format:mp3": true,
+      "format:ogg_opus": true,
+      "format:pcm": true,
     },
   },
 ];
 
-function mapAspectRatioToSize(aspectRatio?: string): string {
-  switch (aspectRatio) {
-    case "16:9":
-      return "1920x1080";
-    case "9:16":
-      return "1080x1920";
-    case "4:5":
-      return "864x1080";
-    case "1:1":
+const imageResponseSchema = z.object({
+  id: providerIdentifierSchema.optional(),
+  data: z.array(z.object({ url: httpsUrlSchema })).min(1),
+  usage: z.record(z.string(), z.unknown()).optional(),
+});
+
+const videoCreateResponseSchema = z.object({ id: providerIdentifierSchema });
+
+const videoTaskResponseSchema = z.object({
+  id: providerIdentifierSchema,
+  status: z.string().min(1),
+  content: z.object({ video_url: httpsUrlSchema.optional() }).optional(),
+  error: z
+    .object({
+      code: providerErrorCodeSchema.optional(),
+    })
+    .optional(),
+  usage: z.record(z.string(), z.unknown()).optional(),
+});
+
+const speechChunkSchema = z.object({
+  reqid: providerIdentifierSchema.optional(),
+  code: z.coerce.number(),
+  sequence: z.number().int().optional(),
+  data: z.base64().optional(),
+});
+
+const bytePlusErrorSchema = z.object({
+  code: providerErrorCodeSchema.optional(),
+  error: z.object({ code: providerErrorCodeSchema.optional() }).optional(),
+});
+
+function trimTrailingSlashes(value: string): string {
+  return value.replace(/\/+$/, "");
+}
+
+function mapAspectRatioToSize(
+  aspectRatio: z.infer<typeof imageAspectRatioSchema>,
+  resolution: "2K" | "4K",
+): string {
+  const sizes = {
+    "2K": {
+      "1:1": "2048x2048",
+      "16:9": "2848x1600",
+      "9:16": "1600x2848",
+      "4:3": "2304x1728",
+      "3:4": "1728x2304",
+      "3:2": "2496x1664",
+      "2:3": "1664x2496",
+      "21:9": "3136x1344",
+    },
+    "4K": {
+      "1:1": "4096x4096",
+      "16:9": "5696x3200",
+      "9:16": "3200x5696",
+      "4:3": "4608x3456",
+      "3:4": "3456x4608",
+      "3:2": "4992x3328",
+      "2:3": "3328x4992",
+      "21:9": "6272x2688",
+    },
+  } as const;
+  return sizes[resolution][aspectRatio];
+}
+
+function mapTaskStatus(status: string): ProviderJobStatus {
+  switch (status.toLowerCase()) {
+    case "queued":
+    case "pending":
+      return "submitted";
+    case "running":
+    case "processing":
+      return "processing";
+    case "succeeded":
+    case "success":
+      return "succeeded";
+    case "failed":
+    case "error":
+    case "expired":
+      return "failed";
+    case "cancelled":
+    case "canceled":
+      return "cancelled";
     default:
-      return "1024x1024";
+      throw new ProviderRequestError(
+        "BytePlus returned an unknown task status",
+        true,
+        { code: "INVALID_PROVIDER_RESPONSE" },
+      );
   }
 }
 
-function mapTaskStatus(status?: string): ProviderJobStatus {
-  switch (status?.toUpperCase()) {
-    case "SUCCEEDED":
-    case "SUCCESS":
-      return "succeeded";
-    case "RUNNING":
-    case "PROCESSING":
-      return "processing";
-    case "FAILED":
-    case "ERROR":
-      return "failed";
-    case "QUEUED":
-    case "PENDING":
-    case "SUBMITTED":
-    default:
-      return "submitted";
+function stableRequestId(prefix: string, idempotencyKey: string): string {
+  const digest = createHash("sha256").update(idempotencyKey).digest("hex");
+  return `${prefix}-${digest.slice(0, 24)}`;
+}
+
+function requestUuid(idempotencyKey: string): string {
+  const digest = createHash("sha256").update(idempotencyKey).digest("hex");
+  return `${digest.slice(0, 8)}-${digest.slice(8, 12)}-4${digest.slice(13, 16)}-a${digest.slice(17, 20)}-${digest.slice(20, 32)}`;
+}
+
+function assertModelSupportsMediaKind(
+  modelId: string,
+  mediaKind: MediaKind,
+): void {
+  const model = VERIFIED_BYTEPLUS_MODELS.find((item) => item.id === modelId);
+  if (!model || model.mediaKind !== mediaKind) {
+    throw new ProviderRequestError(
+      "Unsupported BytePlus model for requested media kind",
+      false,
+      { code: "UNSUPPORTED_MODEL" },
+    );
   }
+}
+
+function parseProviderRequestId(providerRequestId: string): string {
+  const parsed = providerIdentifierSchema.safeParse(providerRequestId);
+  if (!parsed.success) {
+    throw new ProviderRequestError(
+      "Invalid BytePlus provider request identifier",
+      false,
+      { code: "INVALID_INPUT" },
+    );
+  }
+  return parsed.data;
 }
 
 export function mapBytePlusError(
   status: number,
   bodyText: string,
 ): ProviderRequestError {
-  let errorMessage = `BytePlus API returned status ${status}`;
-  let isRateLimitOrThrottle = false;
-
+  let code: string | undefined;
   try {
-    const parsed = JSON.parse(bodyText) as {
-      error?: { message?: string; code?: string };
-      message?: string;
-    };
-    const msg = parsed.error?.message ?? parsed.message;
-    if (msg) {
-      errorMessage = msg;
-    }
-    if (
-      parsed.error?.code === "RateLimitExceeded" ||
-      parsed.error?.code === "RESOURCE_EXHAUSTED" ||
-      /rate limit|too many requests|throttled/i.test(errorMessage)
-    ) {
-      isRateLimitOrThrottle = true;
-    }
+    const parsed = bytePlusErrorSchema.safeParse(JSON.parse(bodyText));
+    if (parsed.success) code = parsed.data.error?.code ?? parsed.data.code;
   } catch {
-    if (bodyText.length > 0 && bodyText.length < 200) {
-      errorMessage = bodyText;
-    }
+    // Error bodies are intentionally not reflected in application errors.
   }
 
+  const safeCode =
+    code && /^[A-Za-z0-9_.:-]{1,100}$/.test(code) ? code : undefined;
   const retryable =
-    status === 429 || isRateLimitOrThrottle || (status >= 500 && status <= 504);
-
-  return new ProviderRequestError(errorMessage, retryable);
+    status === 408 ||
+    status === 429 ||
+    (status >= 500 && status <= 599) ||
+    (safeCode !== undefined &&
+      /rate.?limit|throttl|resource.?exhausted/i.test(safeCode));
+  const suffix = safeCode ? ` (${safeCode})` : "";
+  return new ProviderRequestError(
+    `BytePlus request failed with status ${status}${suffix}`,
+    retryable,
+    { code: safeCode ?? `HTTP_${status}` },
+  );
 }
 
 async function safeFetch(
   fetchFn: typeof globalThis.fetch,
   url: string,
   options: RequestInit,
+  timeoutMs: number,
 ): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetchFn(url, options);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Network error";
-    throw new ProviderRequestError(
-      `BytePlus network failure: ${message}`,
-      true,
-      { cause: err },
+    return await fetchFn(url, { ...options, signal: controller.signal });
+  } catch (error) {
+    throw new ProviderRequestError("BytePlus network request failed", true, {
+      cause: error,
+      code: controller.signal.aborted ? "REQUEST_TIMEOUT" : "NETWORK_ERROR",
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function readResponseTextUnsafe(
+  response: Response,
+  maximumBytes: number,
+): Promise<string> {
+  if (!response.body?.getReader) {
+    const value = await response.text();
+    if (new TextEncoder().encode(value).byteLength > maximumBytes) {
+      throw new ProviderRequestError(
+        "BytePlus response exceeded size limit",
+        true,
+        {
+          code: "RESPONSE_TOO_LARGE",
+        },
+      );
+    }
+    return value;
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let byteCount = 0;
+  let value = "";
+  while (true) {
+    const next = await reader.read();
+    if (next.done) break;
+    byteCount += next.value.byteLength;
+    if (byteCount > maximumBytes) {
+      await reader.cancel();
+      throw new ProviderRequestError(
+        "BytePlus response exceeded size limit",
+        true,
+        {
+          code: "RESPONSE_TOO_LARGE",
+        },
+      );
+    }
+    value += decoder.decode(next.value, { stream: true });
+  }
+  return value + decoder.decode();
+}
+
+async function readResponseText(
+  response: Response,
+  maximumBytes: number,
+): Promise<string> {
+  try {
+    return await readResponseTextUnsafe(response, maximumBytes);
+  } catch (error) {
+    if (error instanceof ProviderRequestError) throw error;
+    throw new ProviderRequestError("BytePlus response read failed", true, {
+      cause: error,
+      code: "NETWORK_ERROR",
+    });
+  }
+}
+
+async function assertSuccessfulResponse(response: Response): Promise<void> {
+  if (response.ok) return;
+  const body = await readResponseText(response, MAX_ERROR_BODY_BYTES).catch(
+    () => "",
+  );
+  throw mapBytePlusError(response.status, body);
+}
+
+async function parseJsonResponse<T>(
+  response: Response,
+  schema: z.ZodType<T>,
+): Promise<T> {
+  let value: unknown;
+  try {
+    value = JSON.parse(
+      await readResponseText(response, MAX_JSON_RESPONSE_BYTES),
     );
+  } catch (error) {
+    if (error instanceof ProviderRequestError) throw error;
+    throw new ProviderRequestError("BytePlus returned invalid JSON", true, {
+      cause: error,
+      code: "INVALID_PROVIDER_RESPONSE",
+    });
+  }
+  const parsed = schema.safeParse(value);
+  if (!parsed.success) {
+    throw new ProviderRequestError(
+      "BytePlus returned an invalid response shape",
+      true,
+      { code: "INVALID_PROVIDER_RESPONSE" },
+    );
+  }
+  return parsed.data;
+}
+
+function parseSpeechChunks(body: string): z.infer<typeof speechChunkSchema>[] {
+  const parseValue = (value: unknown) => {
+    const parsed = speechChunkSchema.safeParse(value);
+    if (!parsed.success) {
+      throw new ProviderRequestError(
+        "BytePlus returned an invalid speech response",
+        true,
+        { code: "INVALID_PROVIDER_RESPONSE" },
+      );
+    }
+    return parsed.data;
+  };
+
+  try {
+    const value: unknown = JSON.parse(body);
+    return Array.isArray(value) ? value.map(parseValue) : [parseValue(value)];
+  } catch (error) {
+    if (error instanceof ProviderRequestError) throw error;
+  }
+
+  const chunks: z.infer<typeof speechChunkSchema>[] = [];
+  for (const rawLine of body.split(/\r?\n/)) {
+    const line = rawLine.trim().replace(/^data:\s*/, "");
+    if (!line || line === "[DONE]") continue;
+    try {
+      chunks.push(parseValue(JSON.parse(line)));
+    } catch (error) {
+      if (error instanceof ProviderRequestError) throw error;
+      throw new ProviderRequestError(
+        "BytePlus returned an invalid speech stream",
+        true,
+        { cause: error, code: "INVALID_PROVIDER_RESPONSE" },
+      );
+    }
+  }
+  if (chunks.length === 0) {
+    throw new ProviderRequestError(
+      "BytePlus returned an empty speech stream",
+      true,
+      {
+        code: "INVALID_PROVIDER_RESPONSE",
+      },
+    );
+  }
+  return chunks;
+}
+
+function decodeSpeechAudio(
+  chunks: readonly z.infer<typeof speechChunkSchema>[],
+): Buffer {
+  const successfulCodes = new Set([0, 3_000, 20_000_000]);
+  const audioParts: Buffer[] = [];
+  let totalBytes = 0;
+  for (const chunk of chunks) {
+    if (!successfulCodes.has(chunk.code)) {
+      throw new ProviderRequestError(
+        "BytePlus speech synthesis failed",
+        false,
+        {
+          code: `SPEECH_${chunk.code}`,
+        },
+      );
+    }
+    if (!chunk.data) continue;
+    const part = Buffer.from(chunk.data, "base64");
+    totalBytes += part.byteLength;
+    if (totalBytes > MAX_SPEECH_AUDIO_BYTES) {
+      throw new ProviderRequestError(
+        "BytePlus speech audio exceeded size limit",
+        true,
+        {
+          code: "RESPONSE_TOO_LARGE",
+        },
+      );
+    }
+    audioParts.push(part);
+  }
+  if (audioParts.length === 0) {
+    throw new ProviderRequestError("BytePlus returned no speech audio", true, {
+      code: "INVALID_PROVIDER_RESPONSE",
+    });
+  }
+  return Buffer.concat(audioParts);
+}
+
+function audioMediaType(format: "mp3" | "ogg_opus" | "pcm"): string {
+  switch (format) {
+    case "mp3":
+      return "audio/mpeg";
+    case "ogg_opus":
+      return "audio/ogg; codecs=opus";
+    case "pcm":
+      return "audio/L16";
   }
 }
 
 export function createBytePlusProvider(
   config: BytePlusAdapterConfig,
 ): MediaGenerationProvider {
-  if (!config.apiKey || !config.region) {
+  const parsedConfig = adapterConfigSchema.safeParse(config);
+  if (!parsedConfig.success) {
     throw new ProviderConfigurationError(
-      "BytePlus API key and region are required",
+      "BytePlus adapter configuration is invalid",
     );
   }
 
+  const validated = parsedConfig.data;
   const fetchClient = config.fetch ?? globalThis.fetch;
-  const baseUrl = (
-    config.modelArkBaseUrl ?? `https://ark.${config.region}.byteplus.com/api/v3`
-  ).replace(/\/+$/, "");
-
+  if (!fetchClient) {
+    throw new ProviderConfigurationError("A fetch implementation is required");
+  }
+  const baseUrl = trimTrailingSlashes(
+    validated.modelArkBaseUrl ?? MODELARK_BASE_URLS[validated.region],
+  );
+  const speechBaseUrl = trimTrailingSlashes(
+    validated.speechBaseUrl ?? DEFAULT_SPEECH_BASE_URL,
+  );
+  const timeoutMs = validated.requestTimeoutMs ?? DEFAULT_TIMEOUT_MS;
   const logger = createLogger({
     service: "byteplus-adapter",
     version: "0.1.0",
   });
+  const modelArkHeaders = {
+    authorization: `Bearer ${validated.apiKey}`,
+    "content-type": "application/json",
+  };
 
   return {
     name: "byteplus",
@@ -222,264 +577,253 @@ export function createBytePlusProvider(
     },
 
     async submit(submission: MediaSubmission): Promise<ProviderJob> {
+      assertModelSupportsMediaKind(submission.modelId, submission.mediaKind);
       logger.info("Submitting BytePlus media generation job", {
         modelId: submission.modelId,
         mediaKind: submission.mediaKind,
-        idempotencyKey: submission.idempotencyKey,
       });
 
       switch (submission.mediaKind) {
         case "image": {
-          const parseResult = bytePlusImageInputSchema.safeParse(
-            submission.input,
-          );
-          if (!parseResult.success) {
+          const input = bytePlusImageInputSchema.safeParse(submission.input);
+          if (!input.success) {
             throw new ProviderRequestError(
-              `Invalid image generation input: ${parseResult.error.message}`,
+              "Invalid BytePlus image input",
               false,
+              {
+                code: "INVALID_INPUT",
+              },
             );
           }
-
-          const input = parseResult.data;
-          const url = `${baseUrl}/images/generations`;
-          const response = await safeFetch(fetchClient, url, {
-            method: "POST",
-            headers: {
-              authorization: `Bearer ${config.apiKey}`,
-              "content-type": "application/json",
-              "x-idempotency-key": submission.idempotencyKey,
+          const response = await safeFetch(
+            fetchClient,
+            `${baseUrl}/images/generations`,
+            {
+              method: "POST",
+              headers: modelArkHeaders,
+              body: JSON.stringify({
+                model: submission.modelId,
+                prompt: input.data.prompt,
+                size: mapAspectRatioToSize(
+                  input.data.aspectRatio,
+                  input.data.resolution,
+                ),
+                output_format: input.data.outputFormat,
+                response_format: "url",
+                watermark: input.data.watermark,
+              }),
             },
-            body: JSON.stringify({
-              model: submission.modelId,
-              prompt: input.prompt,
-              response_format: "url",
-              size: mapAspectRatioToSize(input.aspectRatio),
-              steps: input.steps ?? 30,
-            }),
-          });
-
-          if (!response.ok) {
-            const body = await response.text().catch(() => "");
-            throw mapBytePlusError(response.status, body);
-          }
-
-          const rawData = (await response.json()) as {
-            id?: string;
-            data?: Array<{ url: string }>;
-            usage?: Record<string, unknown>;
-          };
-
-          const outputUrls = rawData.data?.map((item) => item.url) ?? [];
+            timeoutMs,
+          );
+          await assertSuccessfulResponse(response);
+          const data = await parseJsonResponse(response, imageResponseSchema);
           const providerRequestId =
-            rawData.id ?? `img-${submission.idempotencyKey}`;
-
+            data.id ?? stableRequestId("image", submission.idempotencyKey);
           logger.info("BytePlus image generation succeeded", {
             providerRequestId,
             modelId: submission.modelId,
-            status: "succeeded",
           });
-
           return {
             providerRequestId,
             status: "succeeded",
-            outputUrls,
-            rawUsage: rawData.usage,
+            outputUrls: data.data.map((item) => item.url),
+            rawUsage: data.usage,
           };
         }
 
         case "video": {
-          const parseResult = bytePlusVideoInputSchema.safeParse(
-            submission.input,
-          );
-          if (!parseResult.success) {
+          const input = bytePlusVideoInputSchema.safeParse(submission.input);
+          if (!input.success) {
             throw new ProviderRequestError(
-              `Invalid video generation input: ${parseResult.error.message}`,
+              "Invalid BytePlus video input",
               false,
+              {
+                code: "INVALID_INPUT",
+              },
             );
           }
-
-          const input = parseResult.data;
-          const url = `${baseUrl}/contents/generations/tasks`;
-          const response = await safeFetch(fetchClient, url, {
-            method: "POST",
-            headers: {
-              authorization: `Bearer ${config.apiKey}`,
-              "content-type": "application/json",
-              "x-idempotency-key": submission.idempotencyKey,
+          const response = await safeFetch(
+            fetchClient,
+            `${baseUrl}/contents/generations/tasks`,
+            {
+              method: "POST",
+              headers: modelArkHeaders,
+              body: JSON.stringify({
+                model: submission.modelId,
+                content: [{ type: "text", text: input.data.prompt }],
+                resolution: input.data.resolution,
+                ratio: input.data.aspectRatio,
+                duration: input.data.durationSeconds,
+                generate_audio: input.data.generateAudio,
+                watermark: input.data.watermark,
+                ...(input.data.seed === undefined
+                  ? {}
+                  : { seed: input.data.seed }),
+              }),
             },
-            body: JSON.stringify({
-              model: submission.modelId,
-              prompt: input.prompt,
-              aspect_ratio: input.aspectRatio ?? "16:9",
-              duration: input.durationSeconds ?? 5,
-            }),
-          });
-
-          if (!response.ok) {
-            const body = await response.text().catch(() => "");
-            throw mapBytePlusError(response.status, body);
-          }
-
-          const rawData = (await response.json()) as {
-            id: string;
-            status?: string;
-          };
-
-          const status = mapTaskStatus(rawData.status ?? "QUEUED");
+            timeoutMs,
+          );
+          await assertSuccessfulResponse(response);
+          const data = await parseJsonResponse(
+            response,
+            videoCreateResponseSchema,
+          );
           logger.info("BytePlus video generation task submitted", {
-            providerRequestId: rawData.id,
+            providerRequestId: data.id,
             modelId: submission.modelId,
-            status,
           });
-
-          return {
-            providerRequestId: rawData.id,
-            status,
-          };
+          return { providerRequestId: data.id, status: "submitted" };
         }
 
         case "voice": {
-          const parseResult = bytePlusVoiceInputSchema.safeParse(
-            submission.input,
-          );
-          if (!parseResult.success) {
+          const input = bytePlusVoiceInputSchema.safeParse(submission.input);
+          if (!input.success) {
             throw new ProviderRequestError(
-              `Invalid voice generation input: ${parseResult.error.message}`,
+              "Invalid BytePlus voice input",
               false,
+              {
+                code: "INVALID_INPUT",
+              },
+            );
+          }
+          const usesApiKey = Boolean(validated.speechApiKey);
+          const usesLegacyCredentials = Boolean(
+            validated.speechAppId && validated.speechAccessToken,
+          );
+          if (!usesApiKey && !usesLegacyCredentials) {
+            throw new ProviderConfigurationError(
+              "BytePlus speech credentials are not configured",
             );
           }
 
-          const input = parseResult.data;
-          const url = `${baseUrl}/audio/speech`;
-          const response = await safeFetch(fetchClient, url, {
-            method: "POST",
-            headers: {
-              authorization: `Bearer ${config.speechAccessToken ?? config.apiKey}`,
-              "content-type": "application/json",
-              "x-idempotency-key": submission.idempotencyKey,
-            },
-            body: JSON.stringify({
-              model: submission.modelId,
-              input: input.text ?? input.prompt,
-              voice: input.voiceType ?? "default",
-              language: input.language ?? "en",
-              response_format: "url",
-            }),
-          });
-
-          if (!response.ok) {
-            const body = await response.text().catch(() => "");
-            throw mapBytePlusError(response.status, body);
+          const speechHeaders: Record<string, string> = {
+            "content-type": "application/json",
+            "x-api-request-id": requestUuid(submission.idempotencyKey),
+            "x-api-resource-id": SPEECH_RESOURCE_ID,
+          };
+          if (validated.speechApiKey) {
+            speechHeaders["x-api-key"] = validated.speechApiKey;
+            speechHeaders["x-api-app-key"] =
+              validated.speechAppKey ?? DEFAULT_SPEECH_APP_KEY;
+          } else {
+            speechHeaders["x-api-app-key"] = validated.speechAppId!;
+            speechHeaders["x-api-access-key"] = validated.speechAccessToken!;
           }
 
-          const rawData = (await response.json()) as {
-            id?: string;
-            data?: Array<{ url: string }>;
-            output_url?: string;
-            audio_url?: string;
-          };
-
-          const outputUrls = rawData.data
-            ? rawData.data.map((d) => d.url)
-            : rawData.output_url
-              ? [rawData.output_url]
-              : rawData.audio_url
-                ? [rawData.audio_url]
-                : [];
-
+          const response = await safeFetch(
+            fetchClient,
+            `${speechBaseUrl}/tts/unidirectional`,
+            {
+              method: "POST",
+              headers: speechHeaders,
+              body: JSON.stringify({
+                user: { id: "creator-platform" },
+                req_params: {
+                  text: input.data.text,
+                  speaker: input.data.speaker,
+                  audio_params: {
+                    format: input.data.format,
+                    sample_rate: input.data.sampleRate,
+                    speech_rate: input.data.speechRate,
+                  },
+                },
+              }),
+            },
+            timeoutMs,
+          );
+          await assertSuccessfulResponse(response);
+          const responseBody = await readResponseText(
+            response,
+            MAX_SPEECH_RESPONSE_BYTES,
+          );
+          const chunks = parseSpeechChunks(responseBody);
+          const audio = decodeSpeechAudio(chunks);
+          const responseLogId = providerIdentifierSchema.safeParse(
+            response.headers?.get("x-tt-logid"),
+          );
           const providerRequestId =
-            rawData.id ?? `tts-${submission.idempotencyKey}`;
-
-          logger.info("BytePlus voice generation succeeded", {
+            (responseLogId.success ? responseLogId.data : undefined) ??
+            chunks.find((chunk) => chunk.reqid)?.reqid ??
+            stableRequestId("speech", submission.idempotencyKey);
+          logger.info("BytePlus speech synthesis succeeded", {
             providerRequestId,
             modelId: submission.modelId,
-            status: "succeeded",
+            outputBytes: audio.byteLength,
           });
-
           return {
             providerRequestId,
             status: "succeeded",
-            outputUrls,
+            inlineOutputs: [
+              {
+                mediaType: audioMediaType(input.data.format),
+                dataBase64: audio.toString("base64"),
+              },
+            ],
+            rawUsage: { outputBytes: audio.byteLength },
           };
-        }
-
-        default: {
-          const exhaustiveCheck: never = submission.mediaKind;
-          throw new ProviderRequestError(
-            `Unsupported media kind: ${String(exhaustiveCheck)}`,
-            false,
-          );
         }
       }
     },
 
     async getJob(providerRequestId: string): Promise<ProviderJob> {
-      logger.debug("Polling BytePlus task status", { providerRequestId });
-
-      const url = `${baseUrl}/contents/generations/tasks/${providerRequestId}`;
-      const response = await safeFetch(fetchClient, url, {
-        method: "GET",
-        headers: {
-          authorization: `Bearer ${config.apiKey}`,
+      const safeProviderRequestId = parseProviderRequestId(providerRequestId);
+      logger.debug("Polling BytePlus task status", {
+        providerRequestId: safeProviderRequestId,
+      });
+      const response = await safeFetch(
+        fetchClient,
+        `${baseUrl}/contents/generations/tasks/${encodeURIComponent(safeProviderRequestId)}`,
+        {
+          method: "GET",
+          headers: { authorization: `Bearer ${validated.apiKey}` },
         },
-      });
-
-      if (!response.ok) {
-        const body = await response.text().catch(() => "");
-        throw mapBytePlusError(response.status, body);
+        timeoutMs,
+      );
+      await assertSuccessfulResponse(response);
+      const data = await parseJsonResponse(response, videoTaskResponseSchema);
+      const status = mapTaskStatus(data.status);
+      const outputUrl = data.content?.video_url;
+      if (status === "succeeded" && !outputUrl) {
+        throw new ProviderRequestError(
+          "BytePlus succeeded without a video output",
+          true,
+          { code: "INVALID_PROVIDER_RESPONSE" },
+        );
       }
-
-      const rawData = (await response.json()) as {
-        id: string;
-        status: string;
-        content?: { video_url?: string };
-        data?: Array<{ url?: string }>;
-        error?: { code?: string; message?: string };
-        usage?: Record<string, unknown>;
-      };
-
-      const status = mapTaskStatus(rawData.status);
-      const outputUrls: string[] = [];
-      if (rawData.content?.video_url) {
-        outputUrls.push(rawData.content.video_url);
-      } else if (rawData.data) {
-        for (const item of rawData.data) {
-          if (item.url) outputUrls.push(item.url);
-        }
-      }
-
       logger.info("BytePlus task polled", {
-        providerRequestId: rawData.id,
+        providerRequestId: data.id,
         status,
       });
-
       return {
-        providerRequestId: rawData.id,
+        providerRequestId: data.id,
         status,
-        outputUrls: outputUrls.length > 0 ? outputUrls : undefined,
-        rawUsage: rawData.usage,
+        outputUrls: outputUrl ? [outputUrl] : undefined,
+        rawUsage: data.usage,
         errorCode:
           status === "failed"
-            ? (rawData.error?.code ?? "TASK_FAILED")
+            ? (data.error?.code ??
+              (data.status.toLowerCase() === "expired"
+                ? "TASK_EXPIRED"
+                : "TASK_FAILED"))
             : undefined,
       };
     },
 
     async cancel(providerRequestId: string): Promise<void> {
-      logger.info("Cancelling BytePlus task", { providerRequestId });
-
-      const url = `${baseUrl}/contents/generations/tasks/${providerRequestId}/cancel`;
-      const response = await safeFetch(fetchClient, url, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${config.apiKey}`,
-        },
+      const safeProviderRequestId = parseProviderRequestId(providerRequestId);
+      logger.info("Cancelling BytePlus task", {
+        providerRequestId: safeProviderRequestId,
       });
-
-      if (!response.ok && response.status !== 404) {
-        const body = await response.text().catch(() => "");
-        throw mapBytePlusError(response.status, body);
-      }
+      const response = await safeFetch(
+        fetchClient,
+        `${baseUrl}/contents/generations/tasks/${encodeURIComponent(safeProviderRequestId)}`,
+        {
+          method: "DELETE",
+          headers: { authorization: `Bearer ${validated.apiKey}` },
+        },
+        timeoutMs,
+      );
+      await assertSuccessfulResponse(response);
     },
   };
 }

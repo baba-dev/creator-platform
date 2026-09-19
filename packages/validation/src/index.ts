@@ -33,7 +33,7 @@ export const managedMembershipRoleSchema = z.enum([
   "ORGANIZATION_MEMBER",
   "ORGANIZATION_VIEWER",
 ]);
-const MAX_SIGNED_BIGINT = 9_223_372_036_854_775_807n;
+export const MAX_SIGNED_BIGINT = 9_223_372_036_854_775_807n;
 export const monthlyCreditCapSchema = z.union([
   z.bigint().nonnegative().max(MAX_SIGNED_BIGINT),
   z
@@ -197,8 +197,6 @@ export const ledgerEntryTypeSchema = z.enum([
   "ADJUSTMENT",
   "REVERSAL",
 ]);
-
-export const MAX_SIGNED_BIGINT = 9_223_372_036_854_775_807n;
 
 const positiveDatabaseBigIntSchema = z
   .union([

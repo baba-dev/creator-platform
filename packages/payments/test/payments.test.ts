@@ -6,6 +6,7 @@ import {
   InsufficientCreditsError,
   InvalidPaymentTransitionError,
   PaymentAlreadySettledError,
+  PaymentDomainError,
   PaymentNotFoundError,
   _confirmPaymentTx,
   _grantAdminCreditsTx,
@@ -53,6 +54,7 @@ interface ManualPaymentRecord {
   rejectedAt?: Date | null;
   reversedAt?: Date | null;
   rejectionReason?: string | null;
+  rejectionIdempotencyKey?: string | null;
   reversalReason?: string | null;
   creditsGranted?: bigint | null;
   creditsPerBaisa?: bigint | null;
@@ -100,15 +102,32 @@ function createMockTx(initial?: {
         async ({
           where,
         }: {
-          where: { id?: string; idempotencyKey?: string };
+          where: {
+            id?: string;
+            organizationId?: string;
+            idempotencyKey?: string;
+            rejectionIdempotencyKey?: string;
+          };
         }) => {
           if (where.id) {
             const p = payments.get(where.id);
-            return p ? { ...p } : null;
+            if (!p || (where.organizationId && p.organizationId !== where.organizationId)) {
+              return null;
+            }
+            return { ...p };
           }
           if (where.idempotencyKey) {
             for (const p of payments.values()) {
               if (p.idempotencyKey === where.idempotencyKey) {
+                return { ...p };
+              }
+            }
+          }
+          if (where.rejectionIdempotencyKey) {
+            for (const p of payments.values()) {
+              if (
+                p.rejectionIdempotencyKey === where.rejectionIdempotencyKey
+              ) {
                 return { ...p };
               }
             }
@@ -159,6 +178,8 @@ function createMockTx(initial?: {
             rejectedAt: data.rejectedAt ?? null,
             reversedAt: data.reversedAt ?? null,
             rejectionReason: data.rejectionReason ?? null,
+            rejectionIdempotencyKey:
+              data.rejectionIdempotencyKey ?? null,
             reversalReason: data.reversalReason ?? null,
             creditsGranted: data.creditsGranted ?? null,
             creditsPerBaisa: data.creditsPerBaisa ?? null,
@@ -496,6 +517,7 @@ describe("@aiwa/payments", () => {
       });
 
       const result = await _confirmPaymentTx(mock.tx, {
+        organizationId: orgId,
         paymentId: "pay_draft_1",
         confirmedById: userId,
         creditsPerBaisa: 2n,
@@ -532,6 +554,7 @@ describe("@aiwa/payments", () => {
       });
 
       const result = await _confirmPaymentTx(mock.tx, {
+        organizationId: orgId,
         paymentId: "pay_pending_1",
         confirmedById: userId,
         creditsPerBaisa: 1n,
@@ -546,6 +569,7 @@ describe("@aiwa/payments", () => {
       const mock = createMockTx();
       await expect(
         _confirmPaymentTx(mock.tx, {
+          organizationId: orgId,
           paymentId: "missing_pay",
           confirmedById: userId,
           creditsPerBaisa: 1n,
@@ -574,6 +598,7 @@ describe("@aiwa/payments", () => {
 
       await expect(
         _confirmPaymentTx(mock.tx, {
+          organizationId: orgId,
           paymentId: "pay_rejected_1",
           confirmedById: userId,
           creditsPerBaisa: 1n,
@@ -603,6 +628,7 @@ describe("@aiwa/payments", () => {
       });
 
       const rejected = await _rejectPaymentTx(mock.tx, {
+        organizationId: orgId,
         paymentId: "pay_chq_rej",
         actorUserId: userId,
         reason: "Signature mismatch on cheque leaf",
@@ -636,6 +662,7 @@ describe("@aiwa/payments", () => {
 
       await expect(
         _rejectPaymentTx(mock.tx, {
+          organizationId: orgId,
           paymentId: "pay_cash_draft",
           actorUserId: userId,
           reason: "Cash cannot be rejected",
@@ -676,6 +703,7 @@ describe("@aiwa/payments", () => {
       });
 
       const result = await _reversePaymentTx(mock.tx, {
+        organizationId: orgId,
         paymentId: "pay_conf_1",
         actorUserId: userId,
         reason: "Erroneous duplicate entry",
@@ -724,6 +752,7 @@ describe("@aiwa/payments", () => {
 
       await expect(
         _reversePaymentTx(mock.tx, {
+          organizationId: orgId,
           paymentId: "pay_conf_spent",
           actorUserId: userId,
           reason: "Chargeback",
@@ -752,6 +781,7 @@ describe("@aiwa/payments", () => {
 
       await expect(
         _reversePaymentTx(mock.tx, {
+          organizationId: orgId,
           paymentId: "pay_pending_rev",
           actorUserId: userId,
           reason: "Cannot reverse pending",
@@ -875,6 +905,7 @@ describe("@aiwa/payments", () => {
       });
 
       const res = await _reversePaymentTx(mock.tx, {
+        organizationId: orgId,
         paymentId: "pay_rev_replay",
         actorUserId: userId,
         reason: "Reversed already",
@@ -921,6 +952,7 @@ describe("@aiwa/payments", () => {
 
       await expect(
         _reversePaymentTx(mock.tx, {
+          organizationId: orgId,
           paymentId: "pay_rev_settled",
           actorUserId: userId,
           reason: "Another reversal attempt",
@@ -940,6 +972,7 @@ describe("@aiwa/payments", () => {
             status: "REJECTED",
             amountBaisa: 1000n,
             rejectionReason: "Signature mismatch",
+            rejectionIdempotencyKey: "idem_act_rej",
             receivedAt: new Date(),
             idempotencyKey: "idem_rec_rej",
             createdAt: new Date(),
@@ -949,6 +982,7 @@ describe("@aiwa/payments", () => {
       });
 
       const res = await _rejectPaymentTx(mock.tx, {
+        organizationId: orgId,
         paymentId: "pay_rej_rep",
         actorUserId: userId,
         reason: "Signature mismatch",
@@ -979,6 +1013,7 @@ describe("@aiwa/payments", () => {
 
       await expect(
         _rejectPaymentTx(mock.tx, {
+          organizationId: orgId,
           paymentId: "pay_rej_diff",
           actorUserId: userId,
           reason: "Bounced cheque leaf",
@@ -991,6 +1026,7 @@ describe("@aiwa/payments", () => {
       const mock = createMockTx();
       await expect(
         _rejectPaymentTx(mock.tx, {
+          organizationId: orgId,
           paymentId: "missing_reject",
           actorUserId: userId,
           reason: "Missing",
@@ -1003,6 +1039,7 @@ describe("@aiwa/payments", () => {
       const mock = createMockTx();
       await expect(
         _reversePaymentTx(mock.tx, {
+          organizationId: orgId,
           paymentId: "missing_reverse",
           actorUserId: userId,
           reason: "Missing",
@@ -1037,6 +1074,7 @@ describe("@aiwa/payments", () => {
 
       // 2. Confirm payment (rate 1)
       const conf = await _confirmPaymentTx(mock.tx, {
+        organizationId: orgId,
         paymentId: p1.id,
         confirmedById: userId,
         creditsPerBaisa: 1n,
@@ -1060,6 +1098,7 @@ describe("@aiwa/payments", () => {
 
       // 4. Reverse original payment (deducts 10,000 credits)
       const rev = await _reversePaymentTx(mock.tx, {
+        organizationId: orgId,
         paymentId: p1.id,
         actorUserId: userId,
         reason: "Bank transaction recall",
@@ -1070,4 +1109,106 @@ describe("@aiwa/payments", () => {
       expect(mock.getWallet("wal_1")?.balanceCache).toBe(5_000n);
     });
   });
+
+  describe("production integrity guards", () => {
+    it("rejects record replay when receipt details changed", async () => {
+      const mock = createMockTx();
+      const params = {
+        organizationId: orgId,
+        createdById: userId,
+        method: "CASH" as const,
+        amountBaisa: 1_000n,
+        receivedAt: new Date("2026-09-19T08:00:00.000Z"),
+        reference: "receipt-a",
+        idempotencyKey: "idem_record_fingerprint",
+      };
+
+      await _recordPaymentTx(mock.tx, params);
+
+      await expect(
+        _recordPaymentTx(mock.tx, { ...params, reference: "receipt-b" }),
+      ).rejects.toThrow(IdempotencyConflictError);
+    });
+
+    it("does not resolve a payment through another organization", async () => {
+      const mock = createMockTx({
+        payments: [
+          {
+            id: "pay_scoped",
+            organizationId: orgId,
+            createdById: userId,
+            method: "CASH",
+            status: "DRAFT",
+            amountBaisa: 1_000n,
+            receivedAt: new Date(),
+            idempotencyKey: "idem_scoped_record",
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ],
+      });
+
+      await expect(
+        _confirmPaymentTx(mock.tx, {
+          organizationId: "org_other",
+          paymentId: "pay_scoped",
+          confirmedById: userId,
+          creditsPerBaisa: 1n,
+          idempotencyKey: "idem_scoped_confirm",
+        }),
+      ).rejects.toThrow(PaymentNotFoundError);
+    });
+
+    it("rejects an admin-grant key reused for another organization", async () => {
+      const mock = createMockTx();
+
+      await _grantAdminCreditsTx(mock.tx, {
+        organizationId: orgId,
+        actorUserId: userId,
+        amountCredits: 500n,
+        reason: "Partner credit",
+        idempotencyKey: "idem_cross_org_grant",
+      });
+
+      await expect(
+        _grantAdminCreditsTx(mock.tx, {
+          organizationId: "org_other",
+          actorUserId: userId,
+          amountCredits: 500n,
+          reason: "Partner credit",
+          idempotencyKey: "idem_cross_org_grant",
+        }),
+      ).rejects.toThrow(IdempotencyConflictError);
+    });
+
+    it("rejects credit calculations that exceed the database range", async () => {
+      const mock = createMockTx({
+        payments: [
+          {
+            id: "pay_overflow",
+            organizationId: orgId,
+            createdById: userId,
+            method: "CASH",
+            status: "DRAFT",
+            amountBaisa: 9_223_372_036_854_775_807n,
+            receivedAt: new Date(),
+            idempotencyKey: "idem_overflow_record",
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ],
+      });
+
+      await expect(
+        _confirmPaymentTx(mock.tx, {
+          organizationId: orgId,
+          paymentId: "pay_overflow",
+          confirmedById: userId,
+          creditsPerBaisa: 2n,
+          idempotencyKey: "idem_overflow_confirm",
+        }),
+      ).rejects.toThrow(PaymentDomainError);
+    });
+  });
+
 });

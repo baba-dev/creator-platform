@@ -256,8 +256,9 @@ model ManualPayment {
   confirmedAt     DateTime?
   rejectedAt      DateTime?
   reversedAt      DateTime?
-  rejectionReason String?       @db.Text
-  reversalReason  String?       @db.Text
+  rejectionReason         String?       @db.Text
+  rejectionIdempotencyKey String?       @unique
+  reversalReason          String?       @db.Text
   creditsGranted  BigInt?
   creditsPerBaisa BigInt?
   idempotencyKey  String        @unique
@@ -272,7 +273,6 @@ model ManualPayment {
 
   @@index([organizationId, status])
   @@index([method, receivedAt])
-  @@index([idempotencyKey])
 }
 
 model Project {

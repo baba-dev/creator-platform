@@ -1,12 +1,26 @@
 import { hasPlatformPermission } from "@aiwa/authz";
 import { db } from "@aiwa/db";
+import { paymentListQuerySchema } from "@aiwa/validation";
 import Link from "next/link";
 import type { Route } from "next";
 import { requirePlatformPermission } from "@/lib/request-auth";
-import { formatBaisa, formatCredits } from "@/lib/format-baisa";
+import {
+  formatBaisa,
+  formatCredits,
+  formatMuscatDate,
+} from "@/lib/format-baisa";
 import { RecordPaymentDialog } from "@/components/admin/payment-actions";
 
 const PAGE_SIZE = 25;
+
+const paymentStatuses = [
+  "DRAFT",
+  "PENDING",
+  "CONFIRMED",
+  "REJECTED",
+  "REVERSED",
+] as const;
+const paymentMethods = ["CASH", "CHEQUE"] as const;
 
 function PaymentStatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
@@ -31,11 +45,24 @@ export default async function Page({
   searchParams,
 }: {
   params: Promise<{ organizationId: string }>;
-  searchParams: Promise<{ cursor?: string }>;
+  searchParams: Promise<{
+    cursor?: string;
+    status?: string;
+    method?: string;
+  }>;
 }) {
   const session = await requirePlatformPermission("payments:read");
   const { organizationId } = await params;
-  const { cursor } = await searchParams;
+  const rawQuery = await searchParams;
+  const parsedQuery = paymentListQuerySchema.safeParse({
+    cursor: rawQuery.cursor,
+    limit: PAGE_SIZE,
+    status: rawQuery.status || undefined,
+    method: rawQuery.method || undefined,
+  });
+  const query = parsedQuery.success
+    ? parsedQuery.data
+    : { cursor: undefined, limit: PAGE_SIZE, status: undefined, method: undefined };
 
   const canManage = hasPlatformPermission(
     session.user.platformRole,
@@ -48,10 +75,14 @@ export default async function Page({
       select: { balanceCache: true },
     }),
     db.manualPayment.findMany({
-      where: { organizationId },
+      where: {
+        organizationId,
+        ...(query.status ? { status: query.status } : {}),
+        ...(query.method ? { method: query.method } : {}),
+      },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: PAGE_SIZE + 1,
-      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
       select: {
         id: true,
         method: true,
@@ -67,6 +98,12 @@ export default async function Page({
   ]);
 
   const rows = records.slice(0, PAGE_SIZE);
+  const activeFilters = new URLSearchParams();
+  if (query.status) activeFilters.set("status", query.status);
+  if (query.method) activeFilters.set("method", query.method);
+  const exportQuery = activeFilters.toString();
+  const nextPageQuery = new URLSearchParams(activeFilters);
+  if (rows.at(-1)?.id) nextPageQuery.set("cursor", rows.at(-1)!.id);
 
   return (
     <main className="px-4 py-7 sm:px-7 lg:px-9">
@@ -83,15 +120,63 @@ export default async function Page({
 
         <div className="flex flex-wrap items-center gap-3">
           <a
-            href={`/api/admin/organizations/${organizationId}/payments/export`}
+            href={`/api/admin/organizations/${organizationId}/payments/export${exportQuery ? `?${exportQuery}` : ""}`}
             download
             className="inline-flex min-h-10 items-center justify-center rounded-lg border border-border bg-background px-4 text-sm font-medium text-foreground hover:bg-card"
           >
-            Export CSV
+            Export filtered CSV
           </a>
           {canManage && <RecordPaymentDialog organizationId={organizationId} />}
         </div>
       </div>
+
+      <form
+        method="get"
+        className="mt-6 grid gap-3 rounded-2xl border border-border bg-card p-4 sm:grid-cols-[1fr_1fr_auto_auto]"
+      >
+        <label className="text-xs font-semibold text-muted-foreground">
+          Status
+          <select
+            name="status"
+            defaultValue={query.status ?? ""}
+            className="mt-1 min-h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground"
+          >
+            <option value="">All statuses</option>
+            {paymentStatuses.map((status) => (
+              <option key={status} value={status}>
+                {status}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs font-semibold text-muted-foreground">
+          Method
+          <select
+            name="method"
+            defaultValue={query.method ?? ""}
+            className="mt-1 min-h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground"
+          >
+            <option value="">All methods</option>
+            {paymentMethods.map((method) => (
+              <option key={method} value={method}>
+                {method}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="submit"
+          className="min-h-10 self-end rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground"
+        >
+          Apply filters
+        </button>
+        <Link
+          href={`/admin/organizations/${organizationId}/payments` as Route}
+          className="inline-flex min-h-10 items-center justify-center self-end rounded-md border border-border px-4 text-sm font-semibold text-foreground hover:bg-muted"
+        >
+          Clear
+        </Link>
+      </form>
 
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <div className="rounded-2xl border border-border bg-card p-5">
@@ -102,7 +187,7 @@ export default async function Page({
             {formatCredits(wallet?.balanceCache ?? 0n)}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Derived from immutable ledger entries
+            Cached from immutable ledger entries
           </p>
         </div>
       </div>
@@ -116,7 +201,7 @@ export default async function Page({
               <th className="p-4 text-right font-medium">Amount (OMR)</th>
               <th className="p-4 text-right font-medium">Credits granted</th>
               <th className="p-4 font-medium">Recorded by</th>
-              <th className="p-4 font-medium">Received</th>
+              <th className="p-4 font-medium">Received (Muscat)</th>
               <th className="p-4 text-right font-medium">Action</th>
             </tr>
           </thead>
@@ -139,11 +224,7 @@ export default async function Page({
                   {row.createdBy.name}
                 </td>
                 <td className="p-4 tabular-nums text-muted-foreground">
-                  {row.receivedAt.toLocaleDateString("en-OM", {
-                    year: "numeric",
-                    month: "short",
-                    day: "numeric",
-                  })}
+                  {formatMuscatDate(row.receivedAt)}
                 </td>
                 <td className="p-4 text-right">
                   <Link
@@ -161,7 +242,7 @@ export default async function Page({
         </table>
         {rows.length === 0 ? (
           <p className="p-10 text-center text-muted-foreground">
-            No payments recorded yet.
+            No payments match the selected filters.
           </p>
         ) : null}
       </div>
@@ -169,7 +250,7 @@ export default async function Page({
       {records.length > PAGE_SIZE ? (
         <Link
           className="mt-4 inline-flex min-h-10 items-center font-semibold text-primary hover:underline"
-          href={`?cursor=${rows.at(-1)?.id}` as Route}
+          href={`?${nextPageQuery.toString()}` as Route}
         >
           Next page →
         </Link>

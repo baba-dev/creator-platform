@@ -3,7 +3,10 @@ import { db } from "@aiwa/db";
 import Link from "next/link";
 import type { Route } from "next";
 import { requirePlatformPermission } from "@/lib/request-auth";
-import { formatCredits } from "@/lib/format-baisa";
+import {
+  formatCredits,
+  formatMuscatDateTime,
+} from "@/lib/format-baisa";
 import { GrantCreditsDialog } from "@/components/admin/payment-actions";
 
 const PAGE_SIZE = 25;
@@ -161,7 +164,7 @@ export default async function Page({
                     {row.description ?? "—"}
                   </td>
                   <td className="p-4 tabular-nums text-muted-foreground">
-                    {row.createdAt.toLocaleString("en-OM")}
+                    {formatMuscatDateTime(row.createdAt)}
                   </td>
                 </tr>
               );

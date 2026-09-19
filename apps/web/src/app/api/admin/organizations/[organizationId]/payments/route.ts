@@ -1,7 +1,11 @@
 import { hasPlatformPermission } from "@aiwa/authz";
 import { db } from "@aiwa/db";
 import { recordPayment } from "@aiwa/payments";
-import { cuidSchema, recordPaymentSchema } from "@aiwa/validation";
+import {
+  cuidSchema,
+  paymentListQuerySchema,
+  recordPaymentSchema,
+} from "@aiwa/validation";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { paymentError, serializePayment } from "@/lib/payments-api";
@@ -33,14 +37,26 @@ export async function GET(
   }
 
   const { searchParams } = new URL(request.url);
-  const cursor = searchParams.get("cursor");
-  const limit = Math.min(
-    Math.max(Number(searchParams.get("limit") ?? 25), 1),
-    100,
-  );
+  const query = paymentListQuerySchema.safeParse({
+    cursor: searchParams.get("cursor") ?? undefined,
+    limit: searchParams.get("limit") ?? undefined,
+    status: searchParams.get("status") ?? undefined,
+    method: searchParams.get("method") ?? undefined,
+  });
+  if (!query.success) {
+    return NextResponse.json(
+      { error: "Invalid payment query", details: query.error.issues },
+      { status: 400 },
+    );
+  }
 
+  const { cursor, limit, status, method } = query.data;
   const payments = await db.manualPayment.findMany({
-    where: { organizationId },
+    where: {
+      organizationId,
+      ...(status ? { status } : {}),
+      ...(method ? { method } : {}),
+    },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: limit + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),

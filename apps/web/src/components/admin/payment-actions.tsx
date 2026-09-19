@@ -1,9 +1,39 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@aiwa/ui";
-import { formatBaisa, formatCredits } from "@/lib/format-baisa";
+import {
+  formatBaisa,
+  formatCredits,
+  muscatLocalDateTimeToIso,
+  toMuscatDateTimeLocalValue,
+} from "@/lib/format-baisa";
+
+function safeBigInt(value: string, fallback = 0n): bigint {
+  try {
+    return value ? BigInt(value) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function useStableIdempotencyKey() {
+  const requestRef = useRef<{ fingerprint: string; key: string } | null>(null);
+
+  const getKey = (fingerprint: string) => {
+    if (!requestRef.current || requestRef.current.fingerprint !== fingerprint) {
+      requestRef.current = { fingerprint, key: crypto.randomUUID() };
+    }
+    return requestRef.current.key;
+  };
+
+  const resetKey = () => {
+    requestRef.current = null;
+  };
+
+  return { getKey, resetKey };
+}
 
 interface RecordPaymentDialogProps {
   organizationId: string;
@@ -15,8 +45,8 @@ export function RecordPaymentDialog({
   const [open, setOpen] = useState(false);
   const [method, setMethod] = useState<"CASH" | "CHEQUE">("CASH");
   const [amountBaisa, setAmountBaisa] = useState("");
-  const [receivedAt, setReceivedAt] = useState(
-    new Date().toISOString().slice(0, 16),
+  const [receivedAt, setReceivedAt] = useState(() =>
+    toMuscatDateTimeLocalValue(new Date()),
   );
   const [reference, setReference] = useState("");
   const [chequeNumber, setChequeNumber] = useState("");
@@ -25,11 +55,12 @@ export function RecordPaymentDialog({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
+  const { getKey, resetKey } = useStableIdempotencyKey();
 
   const resetForm = () => {
     setMethod("CASH");
     setAmountBaisa("");
-    setReceivedAt(new Date().toISOString().slice(0, 16));
+    setReceivedAt(toMuscatDateTimeLocalValue(new Date()));
     setReference("");
     setChequeNumber("");
     setBankName("");
@@ -41,7 +72,7 @@ export function RecordPaymentDialog({
     e.preventDefault();
     setError(null);
 
-    const baisaVal = BigInt(amountBaisa || "0");
+    const baisaVal = safeBigInt(amountBaisa);
     if (baisaVal <= 0n) {
       setError("Amount must be greater than 0 baisa.");
       return;
@@ -49,7 +80,16 @@ export function RecordPaymentDialog({
 
     startTransition(async () => {
       try {
-        const idempotencyKey = crypto.randomUUID();
+        const fingerprint = JSON.stringify({
+          method,
+          amountBaisa: baisaVal.toString(),
+          receivedAt,
+          reference: reference.trim(),
+          chequeNumber: chequeNumber.trim(),
+          bankName: bankName.trim(),
+          notes: notes.trim(),
+        });
+        const idempotencyKey = getKey(fingerprint);
         const res = await fetch(
           `/api/admin/organizations/${organizationId}/payments`,
           {
@@ -58,7 +98,7 @@ export function RecordPaymentDialog({
             body: JSON.stringify({
               method,
               amountBaisa: baisaVal.toString(),
-              receivedAt: new Date(receivedAt).toISOString(),
+              receivedAt: muscatLocalDateTimeToIso(receivedAt),
               reference: reference.trim() || undefined,
               chequeNumber:
                 method === "CHEQUE"
@@ -79,6 +119,7 @@ export function RecordPaymentDialog({
         }
 
         setOpen(false);
+        resetKey();
         resetForm();
         router.refresh();
       } catch (err) {
@@ -168,7 +209,7 @@ export function RecordPaymentDialog({
                   <p className="mt-1 text-xs text-muted-foreground">
                     Equivalent:{" "}
                     <span className="font-semibold text-foreground tabular-nums">
-                      {formatBaisa(BigInt(amountBaisa || "0"))}
+                      {formatBaisa(safeBigInt(amountBaisa))}
                     </span>
                   </p>
                 )}
@@ -285,9 +326,10 @@ export function ConfirmPaymentForm({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
+  const { getKey, resetKey } = useStableIdempotencyKey();
 
-  const parsedAmountBaisa = BigInt(amountBaisa || "0");
-  const rate = BigInt(creditsPerBaisa || "1");
+  const parsedAmountBaisa = safeBigInt(amountBaisa);
+  const rate = safeBigInt(creditsPerBaisa, 1n);
   const previewCredits = parsedAmountBaisa * (rate > 0n ? rate : 1n);
 
   const handleConfirm = (e: React.FormEvent) => {
@@ -301,7 +343,13 @@ export function ConfirmPaymentForm({
 
     startTransition(async () => {
       try {
-        const idempotencyKey = crypto.randomUUID();
+        const idempotencyKey = getKey(
+          JSON.stringify({
+            action: "confirm",
+            paymentId,
+            creditsPerBaisa: rate.toString(),
+          }),
+        );
         const res = await fetch(
           `/api/admin/organizations/${organizationId}/payments/${paymentId}`,
           {
@@ -321,6 +369,7 @@ export function ConfirmPaymentForm({
           return;
         }
 
+        resetKey();
         router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Network error");
@@ -398,6 +447,7 @@ export function RejectPaymentForm({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
+  const { getKey, resetKey } = useStableIdempotencyKey();
 
   const handleReject = (e: React.FormEvent) => {
     e.preventDefault();
@@ -410,7 +460,13 @@ export function RejectPaymentForm({
 
     startTransition(async () => {
       try {
-        const idempotencyKey = crypto.randomUUID();
+        const idempotencyKey = getKey(
+          JSON.stringify({
+            action: "reject",
+            paymentId,
+            reason: reason.trim(),
+          }),
+        );
         const res = await fetch(
           `/api/admin/organizations/${organizationId}/payments/${paymentId}`,
           {
@@ -430,6 +486,7 @@ export function RejectPaymentForm({
           return;
         }
 
+        resetKey();
         router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Network error");
@@ -503,9 +560,11 @@ export function ReversePaymentForm({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
+  const { getKey, resetKey } = useStableIdempotencyKey();
 
-  const creditsVal = BigInt(creditsGranted || "0");
-  const balanceVal = walletBalance !== undefined ? BigInt(walletBalance) : null;
+  const creditsVal = safeBigInt(creditsGranted);
+  const balanceVal =
+    walletBalance !== undefined ? safeBigInt(walletBalance) : null;
   const isBalanceSufficient = balanceVal === null || balanceVal >= creditsVal;
 
   const handleReverse = (e: React.FormEvent) => {
@@ -519,7 +578,13 @@ export function ReversePaymentForm({
 
     startTransition(async () => {
       try {
-        const idempotencyKey = crypto.randomUUID();
+        const idempotencyKey = getKey(
+          JSON.stringify({
+            action: "reverse",
+            paymentId,
+            reason: reason.trim(),
+          }),
+        );
         const res = await fetch(
           `/api/admin/organizations/${organizationId}/payments/${paymentId}`,
           {
@@ -540,6 +605,7 @@ export function ReversePaymentForm({
         }
 
         setOpen(false);
+        resetKey();
         router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Network error");
@@ -658,12 +724,13 @@ export function GrantCreditsDialog({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
+  const { getKey, resetKey } = useStableIdempotencyKey();
 
   const handleGrant = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    const creditsVal = BigInt(amountCredits || "0");
+    const creditsVal = safeBigInt(amountCredits);
     if (creditsVal <= 0n) {
       setError("Grant amount must be greater than 0.");
       return;
@@ -676,7 +743,12 @@ export function GrantCreditsDialog({
 
     startTransition(async () => {
       try {
-        const idempotencyKey = crypto.randomUUID();
+        const idempotencyKey = getKey(
+          JSON.stringify({
+            amountCredits: creditsVal.toString(),
+            reason: reason.trim(),
+          }),
+        );
         const res = await fetch(
           `/api/admin/organizations/${organizationId}/wallet/credits`,
           {
@@ -697,6 +769,7 @@ export function GrantCreditsDialog({
         }
 
         setOpen(false);
+        resetKey();
         setAmountCredits("");
         setReason("");
         router.refresh();

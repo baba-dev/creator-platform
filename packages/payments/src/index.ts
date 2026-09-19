@@ -8,6 +8,12 @@ import {
 export type { LedgerEntry, ManualPayment } from "@aiwa/db";
 import type { LedgerEntry, ManualPayment } from "@aiwa/db";
 
+const MAX_SIGNED_BIGINT = 9_223_372_036_854_775_807n;
+
+function normalizeOptional(value: string | null | undefined): string | null {
+  return value ?? null;
+}
+
 // ---------------------------------------------------------------------------
 // Re-export errors from @aiwa/credits
 // ---------------------------------------------------------------------------
@@ -78,6 +84,7 @@ export interface RecordPaymentParams {
 }
 
 export interface ConfirmPaymentParams {
+  organizationId: string;
   paymentId: string;
   confirmedById: string;
   creditsPerBaisa: bigint;
@@ -85,6 +92,7 @@ export interface ConfirmPaymentParams {
 }
 
 export interface RejectPaymentParams {
+  organizationId: string;
   paymentId: string;
   actorUserId: string;
   reason: string;
@@ -92,6 +100,7 @@ export interface RejectPaymentParams {
 }
 
 export interface ReversePaymentParams {
+  organizationId: string;
   paymentId: string;
   actorUserId: string;
   reason: string;
@@ -114,6 +123,16 @@ export async function _recordPaymentTx(
   tx: Prisma.TransactionClient,
   params: RecordPaymentParams,
 ): Promise<ManualPayment> {
+  if (
+    params.amountBaisa <= 0n ||
+    params.amountBaisa > MAX_SIGNED_BIGINT
+  ) {
+    throw new PaymentDomainError(
+      "INVALID_PAYMENT_AMOUNT",
+      "Payment amount must be a positive signed 64-bit integer.",
+    );
+  }
+
   const existing = await tx.manualPayment.findUnique({
     where: { idempotencyKey: params.idempotencyKey },
   });
@@ -121,8 +140,14 @@ export async function _recordPaymentTx(
   if (existing) {
     if (
       existing.organizationId === params.organizationId &&
+      existing.createdById === params.createdById &&
       existing.method === params.method &&
-      existing.amountBaisa === params.amountBaisa
+      existing.amountBaisa === params.amountBaisa &&
+      existing.receivedAt.getTime() === params.receivedAt.getTime() &&
+      existing.reference === normalizeOptional(params.reference) &&
+      existing.chequeNumber === normalizeOptional(params.chequeNumber) &&
+      existing.bankName === normalizeOptional(params.bankName) &&
+      existing.notes === normalizeOptional(params.notes)
     ) {
       return existing;
     }
@@ -157,6 +182,7 @@ export async function _recordPaymentTx(
       action: "payment.recorded",
       targetType: "ManualPayment",
       targetId: payment.id,
+      requestId: params.idempotencyKey,
       metadata: {
         method: params.method,
         amountBaisa: params.amountBaisa.toString(),
@@ -172,10 +198,23 @@ export async function _confirmPaymentTx(
   tx: Prisma.TransactionClient,
   params: ConfirmPaymentParams,
 ): Promise<{ payment: ManualPayment; ledgerEntry: LedgerEntry }> {
-  await tx.$queryRaw`SELECT id FROM ManualPayment WHERE id = ${params.paymentId} FOR UPDATE`;
+  if (
+    params.creditsPerBaisa <= 0n ||
+    params.creditsPerBaisa > MAX_SIGNED_BIGINT
+  ) {
+    throw new PaymentDomainError(
+      "INVALID_CREDIT_RATE",
+      "Credits per baisa must be a positive signed 64-bit integer.",
+    );
+  }
+
+  await tx.$queryRaw`SELECT id FROM ManualPayment WHERE id = ${params.paymentId} AND organizationId = ${params.organizationId} FOR UPDATE`;
 
   const payment = await tx.manualPayment.findUnique({
-    where: { id: params.paymentId },
+    where: {
+      id: params.paymentId,
+      organizationId: params.organizationId,
+    },
   });
 
   if (!payment) {
@@ -199,6 +238,13 @@ export async function _confirmPaymentTx(
 
   if (payment.status !== "DRAFT" && payment.status !== "PENDING") {
     throw new InvalidPaymentTransitionError(payment.status, "CONFIRMED");
+  }
+
+  if (payment.amountBaisa > MAX_SIGNED_BIGINT / params.creditsPerBaisa) {
+    throw new PaymentDomainError(
+      "CREDIT_GRANT_OVERFLOW",
+      "The calculated credit grant exceeds the supported ledger range.",
+    );
   }
 
   const creditsGranted = payment.amountBaisa * params.creditsPerBaisa;
@@ -242,6 +288,7 @@ export async function _confirmPaymentTx(
       action: "payment.confirmed",
       targetType: "ManualPayment",
       targetId: payment.id,
+      requestId: params.idempotencyKey,
       metadata: {
         creditsGranted: creditsGranted.toString(),
         creditsPerBaisa: params.creditsPerBaisa.toString(),
@@ -256,10 +303,13 @@ export async function _rejectPaymentTx(
   tx: Prisma.TransactionClient,
   params: RejectPaymentParams,
 ): Promise<ManualPayment> {
-  await tx.$queryRaw`SELECT id FROM ManualPayment WHERE id = ${params.paymentId} FOR UPDATE`;
+  await tx.$queryRaw`SELECT id FROM ManualPayment WHERE id = ${params.paymentId} AND organizationId = ${params.organizationId} FOR UPDATE`;
 
   const payment = await tx.manualPayment.findUnique({
-    where: { id: params.paymentId },
+    where: {
+      id: params.paymentId,
+      organizationId: params.organizationId,
+    },
   });
 
   if (!payment) {
@@ -267,7 +317,10 @@ export async function _rejectPaymentTx(
   }
 
   if (payment.status === "REJECTED") {
-    if (payment.rejectionReason === params.reason) {
+    if (
+      payment.rejectionIdempotencyKey === params.idempotencyKey &&
+      payment.rejectionReason === params.reason
+    ) {
       return payment;
     }
     throw new PaymentAlreadySettledError(params.paymentId);
@@ -277,12 +330,24 @@ export async function _rejectPaymentTx(
     throw new InvalidPaymentTransitionError(payment.status, "REJECTED");
   }
 
+  const reusedKey = await tx.manualPayment.findUnique({
+    where: { rejectionIdempotencyKey: params.idempotencyKey },
+    select: { id: true },
+  });
+  if (reusedKey && reusedKey.id !== payment.id) {
+    throw new IdempotencyConflictError(
+      params.idempotencyKey,
+      "Rejection key was already used for another payment",
+    );
+  }
+
   const updated = await tx.manualPayment.update({
     where: { id: payment.id },
     data: {
       status: "REJECTED",
       rejectedAt: new Date(),
       rejectionReason: params.reason,
+      rejectionIdempotencyKey: params.idempotencyKey,
     },
   });
 
@@ -293,6 +358,7 @@ export async function _rejectPaymentTx(
       action: "payment.rejected",
       targetType: "ManualPayment",
       targetId: payment.id,
+      requestId: params.idempotencyKey,
       metadata: {
         reason: params.reason,
       },
@@ -306,10 +372,13 @@ export async function _reversePaymentTx(
   tx: Prisma.TransactionClient,
   params: ReversePaymentParams,
 ): Promise<{ payment: ManualPayment; ledgerEntry: LedgerEntry }> {
-  await tx.$queryRaw`SELECT id FROM ManualPayment WHERE id = ${params.paymentId} FOR UPDATE`;
+  await tx.$queryRaw`SELECT id FROM ManualPayment WHERE id = ${params.paymentId} AND organizationId = ${params.organizationId} FOR UPDATE`;
 
   const payment = await tx.manualPayment.findUnique({
-    where: { id: params.paymentId },
+    where: {
+      id: params.paymentId,
+      organizationId: params.organizationId,
+    },
   });
 
   if (!payment) {
@@ -406,6 +475,7 @@ export async function _reversePaymentTx(
       action: "payment.reversed",
       targetType: "ManualPayment",
       targetId: payment.id,
+      requestId: params.idempotencyKey,
       metadata: {
         reason: params.reason,
         creditsDeducted: creditsToDeduct.toString(),
@@ -420,23 +490,6 @@ export async function _grantAdminCreditsTx(
   tx: Prisma.TransactionClient,
   params: GrantAdminCreditsParams,
 ): Promise<LedgerEntry> {
-  const existing = await tx.ledgerEntry.findUnique({
-    where: { idempotencyKey: params.idempotencyKey },
-  });
-
-  if (existing) {
-    if (
-      existing.amountCredits === params.amountCredits &&
-      existing.type === "ADMIN_GRANT"
-    ) {
-      return existing;
-    }
-    throw new IdempotencyConflictError(
-      params.idempotencyKey,
-      "Existing grant entry does not match parameters",
-    );
-  }
-
   const wallet = await tx.wallet.upsert({
     where: { organizationId: params.organizationId },
     create: {
@@ -446,6 +499,25 @@ export async function _grantAdminCreditsTx(
     },
     update: {},
   });
+
+  const existing = await tx.ledgerEntry.findUnique({
+    where: { idempotencyKey: params.idempotencyKey },
+  });
+
+  if (existing) {
+    if (
+      existing.walletId === wallet.id &&
+      existing.amountCredits === params.amountCredits &&
+      existing.type === "ADMIN_GRANT" &&
+      existing.description === params.reason
+    ) {
+      return existing;
+    }
+    throw new IdempotencyConflictError(
+      params.idempotencyKey,
+      "Existing grant entry does not match organization or parameters",
+    );
+  }
 
   const ledgerEntry = await grantCredits(tx, {
     walletId: wallet.id,
@@ -462,6 +534,7 @@ export async function _grantAdminCreditsTx(
       action: "payment.admin_credit_granted",
       targetType: "LedgerEntry",
       targetId: ledgerEntry.id,
+      requestId: params.idempotencyKey,
       metadata: {
         amountCredits: params.amountCredits.toString(),
         reason: params.reason,

@@ -12,6 +12,8 @@ import { NextResponse } from "next/server";
 export function serializePayment(payment: ManualPayment) {
   return {
     ...payment,
+    idempotencyKey: undefined,
+    rejectionIdempotencyKey: undefined,
     amountBaisa: payment.amountBaisa.toString(),
     creditsGranted:
       payment.creditsGranted !== null
@@ -51,7 +53,8 @@ export function paymentError(error: unknown) {
   if (error instanceof PaymentDomainError) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
-  const message =
-    error instanceof Error ? error.message : "Internal server error";
-  return NextResponse.json({ error: message }, { status: 500 });
+  return NextResponse.json(
+    { error: "Internal server error." },
+    { status: 500 },
+  );
 }

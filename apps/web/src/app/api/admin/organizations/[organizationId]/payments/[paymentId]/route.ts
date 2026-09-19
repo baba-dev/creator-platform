@@ -112,6 +112,7 @@ export async function PATCH(
     switch (parsed.data.action) {
       case "confirm": {
         const { payment, ledgerEntry } = await confirmPayment({
+          organizationId,
           paymentId,
           confirmedById: session.user.id,
           creditsPerBaisa: parsed.data.creditsPerBaisa,
@@ -126,6 +127,7 @@ export async function PATCH(
       }
       case "reject": {
         const payment = await rejectPayment({
+          organizationId,
           paymentId,
           actorUserId: session.user.id,
           reason: parsed.data.reason,
@@ -139,6 +141,7 @@ export async function PATCH(
       }
       case "reverse": {
         const { payment, ledgerEntry } = await reversePayment({
+          organizationId,
           paymentId,
           actorUserId: session.user.id,
           reason: parsed.data.reason,

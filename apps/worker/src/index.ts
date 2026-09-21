@@ -115,7 +115,17 @@ async function dispatch() {
     await db.generationJob.updateMany({
       where: {
         status: "PROCESSING",
-        submittedAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        OR: [
+          {
+            submittedAt: {
+              lt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+            },
+          },
+          {
+            submittedAt: null,
+            updatedAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+          },
+        ],
       },
       data: {
         status: "MANUAL_REVIEW",

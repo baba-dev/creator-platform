@@ -20,10 +20,14 @@ vi.mock("@aiwa/credits", () => ({
   releaseOrRefundCredits: mocks.release,
 }));
 vi.mock("../src/index", () => ({ requireMembership: mocks.membership }));
-vi.mock("../src/storage", () => ({
-  downloadImage: mocks.download,
-  storeImage: mocks.store,
-}));
+vi.mock("../src/storage", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/storage")>();
+  return {
+    ...actual,
+    downloadImage: mocks.download,
+    storeImage: mocks.store,
+  };
+});
 import {
   ProviderRequestError,
   type MediaGenerationProvider,
@@ -142,6 +146,16 @@ describe("image processing", () => {
     await expect(processImageJob("job1", p)).rejects.toThrow();
     expect(p.submit).not.toHaveBeenCalled();
     expect(mocks.capture).not.toHaveBeenCalled();
+    expect(mocks.db.generationJob.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "job1", status: "PROCESSING" },
+        data: expect.objectContaining({
+          errorCode: "STORAGE_RECOVERY_FAILED",
+          errorMessage:
+            "Generated image could not be saved. Credits remain reserved while storage recovery retries.",
+        }),
+      }),
+    );
   });
   it.each(["SUBMITTED", "SUCCEEDED", "FAILED", "CANCELLED", "MANUAL_REVIEW"])(
     "does not replay %s",

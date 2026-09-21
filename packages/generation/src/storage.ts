@@ -179,7 +179,9 @@ async function downloadTrustedImage(
 
           let redirected: URL;
           try {
-            redirected = parseTrustedImageUrl(new URL(location, url).toString());
+            redirected = parseTrustedImageUrl(
+              new URL(location, url).toString(),
+            );
           } catch (error) {
             rejectDownload(error);
             return;

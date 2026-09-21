@@ -1,15 +1,14 @@
 # NVIDIA prompt enhancement
 
 Studio can optionally enhance an image prompt through the NVIDIA reasoning
-provider before the user submits the image-generation request. Prompt enhancement
-is an assistive editing step: it never queues a BytePlus generation and does not
-reserve or capture wallet credits.
+provider before the user submits the image-generation request. Prompt
+enhancement is an assistive editing step: it never queues a BytePlus generation
+and does not reserve or capture wallet credits.
 
 ## Provider
 
-The default hosted model is
-`nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` through NVIDIA's
-OpenAI-compatible `/v1/chat/completions` endpoint.
+The default hosted model is `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning`
+through NVIDIA's OpenAI-compatible `/v1/chat/completions` endpoint.
 
 The adapter uses the model's instruct-mode settings for this short structured
 task:
@@ -20,9 +19,9 @@ task:
 - `stream: false`
 - thinking disabled for prompt enhancement
 
-The system prompt requests one JSON object containing only
-`enhancedPrompt`. Provider output is still parsed and validated server-side;
-the application does not trust model formatting.
+The system prompt requests one JSON object containing only `enhancedPrompt`.
+Provider output is still parsed and validated server-side; the application does
+not trust model formatting.
 
 ## Environment
 

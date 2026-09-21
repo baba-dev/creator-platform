@@ -61,7 +61,7 @@ INSERT IGNORE INTO `ProviderModel` (
   'REASONING',
   'NVIDIA Nemotron 3 Nano Omni',
   'Creative reasoning for prompt enhancement and future copilot workflows.',
-  JSON_OBJECT('task:prompt-enhancement', TRUE, 'structuredJson', TRUE),
+  JSON_OBJECT('task:prompt-enhancement', TRUE, 'instructMode', TRUE),
   0,
   TRUE,
   CURRENT_TIMESTAMP(3),

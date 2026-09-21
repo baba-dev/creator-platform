@@ -50,6 +50,7 @@ export interface ReasoningRequest {
 }
 
 export interface ReasoningResult {
+  readonly providerRequestId?: string;
   readonly content: unknown;
   readonly inputTokens?: number;
   readonly outputTokens?: number;

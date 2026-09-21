@@ -66,6 +66,7 @@ export const serverEnvSchema = z.object({
   NVIDIA_API_KEY: optionalString,
   NVIDIA_BASE_URL: z.url().default("https://integrate.api.nvidia.com/v1"),
   NVIDIA_REASONING_MODEL: optionalString,
+  NVIDIA_REQUEST_TIMEOUT_MS: optionalPositiveInteger,
   S3_ENDPOINT: optionalUrl,
   S3_REGION: z.string().min(1).default("us-east-1"),
   S3_BUCKET: optionalString,

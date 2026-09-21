@@ -109,6 +109,7 @@ model User {
   confirmedPayments     ManualPayment[]     @relation("PaymentConfirmedBy")
   priceVersions         ModelPriceVersion[] @relation("PriceVersionCreatedBy")
   generationJobs        GenerationJob[]     @relation("GenerationCreatedBy")
+  reasoningJobs         ReasoningJob[]      @relation("ReasoningCreatedBy")
   ownedOrganizations    Organization[]      @relation("OrganizationOwner")
   storageAssets         Asset[]             @relation("AssetStorageOwner")
   auditEvents           AuditEvent[]        @relation("AuditActor")
@@ -185,6 +186,7 @@ model Organization {
   payments               ManualPayment[]
   projects               Project[]
   generationJobs         GenerationJob[]
+  reasoningJobs          ReasoningJob[]
   auditEvents            AuditEvent[]
   assets                 Asset[]
   invitations            OrganizationInvitation[]
@@ -304,6 +306,7 @@ model ProviderModel {
   updatedAt             DateTime            @updatedAt
   priceVersions         ModelPriceVersion[]
   generationJobs        GenerationJob[]
+  reasoningJobs         ReasoningJob[]
 
   @@unique([provider, providerModelId])
   @@index([mediaKind, enabled])
@@ -432,5 +435,43 @@ model OrganizationInvitation {
   @@index([organizationId, status])
   @@index([token])
   @@index([email])
+}
+
+enum ReasoningJobStatus {
+  QUEUED
+  PROCESSING
+  SUCCEEDED
+  FAILED
+}
+
+model ReasoningJob {
+  id                 String             @id @default(cuid())
+  organizationId     String
+  createdById        String
+  providerModelId    String
+  status             ReasoningJobStatus @default(QUEUED)
+  idempotencyKey     String             @unique
+  requestPayload     Json
+  outputPayload      Json?
+  providerRequestId  String?
+  inputTokens        Int?
+  outputTokens       Int?
+  errorCode          String?
+  errorMessage       String?            @db.Text
+  queuedAt           DateTime?
+  processingAt       DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  organization       Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  createdBy          User               @relation("ReasoningCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  providerModel      ProviderModel      @relation(fields: [providerModelId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, status, createdAt])
+  @@index([createdById, organizationId, status, createdAt])
+  @@index([createdById, organizationId, createdAt])
+  @@index([status, updatedAt])
+  @@index([providerRequestId])
 }
 

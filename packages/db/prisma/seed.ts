@@ -136,6 +136,42 @@ async function main(): Promise<void> {
     }
   }
 
+  const nvidiaReasoningModel =
+    process.env.NVIDIA_REASONING_MODEL ||
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning";
+  await db.providerModel.upsert({
+    where: {
+      provider_providerModelId: {
+        provider: "NVIDIA",
+        providerModelId: nvidiaReasoningModel,
+      },
+    },
+    update: {
+      mediaKind: "REASONING",
+      displayName: "NVIDIA Nemotron 3 Nano Omni",
+      description:
+        "Creative reasoning for prompt enhancement and future copilot workflows.",
+      capabilities: {
+        "task:prompt-enhancement": true,
+        instructMode: true,
+      },
+      enabled: true,
+    },
+    create: {
+      provider: "NVIDIA",
+      providerModelId: nvidiaReasoningModel,
+      mediaKind: "REASONING",
+      displayName: "NVIDIA Nemotron 3 Nano Omni",
+      description:
+        "Creative reasoning for prompt enhancement and future copilot workflows.",
+      capabilities: {
+        "task:prompt-enhancement": true,
+        instructMode: true,
+      },
+      enabled: true,
+    },
+  });
+
   console.info("Seeding completed successfully.");
 }
 

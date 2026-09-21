@@ -2,8 +2,10 @@ import { parseServerEnv } from "@aiwa/config";
 import { db } from "@aiwa/db";
 import { processImageJob } from "@aiwa/generation/process";
 import { createBytePlusProvider } from "@aiwa/providers/byteplus";
+import { createNvidiaProvider } from "@aiwa/providers/nvidia";
 import { Queue, Worker } from "bullmq";
 import Redis from "ioredis";
+import { processReasoningJob } from "./reasoning";
 
 const env = parseServerEnv();
 const redis = new Redis(env.REDIS_URL, {
@@ -25,35 +27,26 @@ function log(
     ...fields,
   });
 
-  if (level === "error") {
-    console.error(entry);
-  } else {
-    console.info(entry);
-  }
+  if (level === "error") console.error(entry);
+  else console.info(entry);
 }
 
-const worker = new Worker(
+const maintenanceWorker = new Worker(
   "maintenance",
   async (job) => {
     log("info", "maintenance job received", {
       jobId: job.id,
       jobName: job.name,
     });
-
     return { processedAt: new Date().toISOString() };
   },
-  {
-    connection: redis,
-    concurrency: 1,
-    prefix: "aiwa",
-  },
+  { connection: redis, concurrency: 1, prefix: "aiwa" },
 );
 
-worker.on("completed", (job) => {
+maintenanceWorker.on("completed", (job) => {
   log("info", "job completed", { jobId: job.id, queue: job.queueName });
 });
-
-worker.on("failed", (job, error) => {
+maintenanceWorker.on("failed", (job, error) => {
   log("error", "job failed", {
     jobId: job?.id,
     queue: job?.queueName,
@@ -65,7 +58,7 @@ const generationQueue = new Queue("generation", {
   connection: redis,
   prefix: "aiwa",
 });
-const provider = env.BYTEPLUS_API_KEY
+const bytePlusProvider = env.BYTEPLUS_API_KEY
   ? createBytePlusProvider({
       apiKey: env.BYTEPLUS_API_KEY,
       region: env.BYTEPLUS_REGION,
@@ -73,16 +66,19 @@ const provider = env.BYTEPLUS_API_KEY
       requestTimeoutMs: env.BYTEPLUS_REQUEST_TIMEOUT_MS,
     })
   : null;
+
 const generationWorker = new Worker(
   "generation",
   async (job) => {
-    if (!provider) throw new Error("Generation provider is not configured");
+    if (!bytePlusProvider)
+      throw new Error("Generation provider is not configured");
     if (typeof job.data.jobId !== "string" || job.data.jobId !== job.id)
       throw new Error("Invalid generation queue payload");
-    await processImageJob(job.data.jobId, provider);
+    await processImageJob(job.data.jobId, bytePlusProvider);
   },
   { connection: redis, prefix: "aiwa", concurrency: 1 },
 );
+
 generationWorker.on("error", () =>
   log("error", "Generation queue connection failed"),
 );
@@ -94,10 +90,48 @@ generationWorker.on("failed", (job, error) =>
     errorMessage: error.message,
   }),
 );
-let dispatching = false;
-async function dispatch() {
-  if (dispatching || !provider) return;
-  dispatching = true;
+
+const reasoningQueue = new Queue("reasoning", {
+  connection: redis,
+  prefix: "aiwa",
+});
+const nvidiaProvider = env.NVIDIA_API_KEY
+  ? createNvidiaProvider({
+      apiKey: env.NVIDIA_API_KEY,
+      baseUrl: env.NVIDIA_BASE_URL,
+      defaultModel:
+        env.NVIDIA_REASONING_MODEL ||
+        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+      requestTimeoutMs: env.NVIDIA_REQUEST_TIMEOUT_MS,
+    })
+  : null;
+
+const reasoningWorker = new Worker(
+  "reasoning",
+  async (job) => {
+    if (!nvidiaProvider)
+      throw new Error("Reasoning provider is not configured");
+    await processReasoningJob(job, nvidiaProvider);
+  },
+  { connection: redis, prefix: "aiwa", concurrency: 2 },
+);
+
+reasoningWorker.on("error", () =>
+  log("error", "Reasoning queue connection failed"),
+);
+reasoningWorker.on("failed", (job, error) =>
+  log("error", "Reasoning job failed", {
+    jobId: job?.id,
+    attemptsMade: job?.attemptsMade,
+    errorName: error.name,
+    errorMessage: error.message,
+  }),
+);
+
+let generationDispatching = false;
+async function dispatchGeneration() {
+  if (generationDispatching || !bytePlusProvider) return;
+  generationDispatching = true;
   try {
     // Lost responses cannot safely be replayed for synchronous image generation.
     await db.generationJob.updateMany({
@@ -134,6 +168,7 @@ async function dispatch() {
           "Image could not be stored. Credits remain reserved for review.",
       },
     });
+
     const retryBefore = new Date(Date.now() - 60 * 1000);
     const jobs = await db.generationJob.findMany({
       where: {
@@ -152,6 +187,7 @@ async function dispatch() {
       orderBy: { createdAt: "asc" },
       take: 100,
     });
+
     for (const job of jobs) {
       const queued = await generationQueue.getJob(job.id);
       if (queued && ["failed", "completed"].includes(await queued.getState()))
@@ -162,28 +198,102 @@ async function dispatch() {
         {
           jobId: job.id,
           attempts: 3,
-          backoff: { type: "exponential", delay: 10000 },
+          backoff: { type: "exponential", delay: 10_000 },
           removeOnComplete: true,
           removeOnFail: 100,
         },
       );
     }
-  } catch {
-    log("error", "Generation dispatch unavailable; database jobs retained");
+  } catch (error) {
+    log("error", "Generation dispatch unavailable; database jobs retained", {
+      errorName: error instanceof Error ? error.name : "UnknownError",
+    });
   } finally {
-    dispatching = false;
+    generationDispatching = false;
   }
 }
-const dispatchTimer = setInterval(() => void dispatch(), 10000);
-void dispatch();
+
+let reasoningDispatching = false;
+async function dispatchReasoning() {
+  if (reasoningDispatching || !nvidiaProvider) return;
+  reasoningDispatching = true;
+  try {
+    // A PROCESSING row left behind by a worker crash has an unknown provider
+    // outcome. Never replay it automatically because the hosted API has no
+    // request-status reconciliation endpoint.
+    await db.reasoningJob.updateMany({
+      where: {
+        status: "PROCESSING",
+        updatedAt: { lt: new Date(Date.now() - 5 * 60 * 1000) },
+      },
+      data: {
+        status: "FAILED",
+        errorCode: "WORKER_INTERRUPTED",
+        errorMessage:
+          "Prompt enhancement was interrupted. Retry from Studio if needed.",
+        completedAt: new Date(),
+      },
+    });
+
+    const jobs = await db.reasoningJob.findMany({
+      where: { status: "QUEUED" },
+      select: { id: true },
+      orderBy: { createdAt: "asc" },
+      take: 100,
+    });
+
+    for (const job of jobs) {
+      const queued = await reasoningQueue.getJob(job.id);
+      if (queued) {
+        const state = await queued.getState();
+        if (["failed", "completed"].includes(state)) await queued.remove();
+        else continue;
+      }
+
+      await reasoningQueue.add(
+        "prompt-enhancement",
+        { jobId: job.id },
+        {
+          jobId: job.id,
+          attempts: 2,
+          backoff: { type: "exponential", delay: 2_000 },
+          removeOnComplete: true,
+          removeOnFail: 100,
+        },
+      );
+    }
+  } catch (error) {
+    log("error", "Reasoning dispatch unavailable; database jobs retained", {
+      errorName: error instanceof Error ? error.name : "UnknownError",
+    });
+  } finally {
+    reasoningDispatching = false;
+  }
+}
+
+const generationDispatchTimer = setInterval(
+  () => void dispatchGeneration(),
+  10_000,
+);
+const reasoningDispatchTimer = setInterval(
+  () => void dispatchReasoning(),
+  2_000,
+);
+void dispatchGeneration();
+void dispatchReasoning();
 
 async function shutdown(signal: NodeJS.Signals): Promise<void> {
   log("info", "worker shutting down", { signal });
-  clearInterval(dispatchTimer);
-  await generationWorker.close();
-  await generationQueue.close();
+  clearInterval(generationDispatchTimer);
+  clearInterval(reasoningDispatchTimer);
+  await Promise.all([
+    generationWorker.close(),
+    reasoningWorker.close(),
+    generationQueue.close(),
+    reasoningQueue.close(),
+  ]);
   await db.$disconnect();
-  await worker.close();
+  await maintenanceWorker.close();
   await redis.quit();
 }
 
@@ -201,6 +311,8 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
 }
 
 log("info", "worker started", {
-  queue: "maintenance",
+  queues: ["maintenance", "generation", "reasoning"],
   environment: env.APP_ENV,
+  bytePlusConfigured: Boolean(bytePlusProvider),
+  nvidiaConfigured: Boolean(nvidiaProvider),
 });

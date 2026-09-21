@@ -56,6 +56,9 @@ importers:
       '@aiwa/payments':
         specifier: workspace:*
         version: link:../../packages/payments
+      '@aiwa/providers':
+        specifier: workspace:*
+        version: link:../../packages/providers
       '@aiwa/ui':
         specifier: workspace:*
         version: link:../../packages/ui

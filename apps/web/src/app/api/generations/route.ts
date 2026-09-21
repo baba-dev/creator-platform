@@ -118,8 +118,10 @@ export async function GET(request: Request) {
                 {
                   id: m.id,
                   name: m.displayName,
+                  description: m.description,
                   priceVersionId: m.priceVersions[0].id,
                   credits: priceCredits(m.priceVersions[0]).toString(),
+                  capabilities: m.capabilities,
                 },
               ]
             : [],

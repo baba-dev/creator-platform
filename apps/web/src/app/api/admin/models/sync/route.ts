@@ -21,7 +21,8 @@ export async function POST() {
         update: {
           displayName: model.displayName,
           description: model.description,
-          mediaKind: model.mediaKind.toUpperCase() as "IMAGE" | "VIDEO" | "VOICE",
+          mediaKind: model.mediaKind.toUpperCase() as
+            "IMAGE" | "VIDEO" | "VOICE",
           capabilities: model.capabilities ?? {},
         },
         create: {
@@ -29,7 +30,8 @@ export async function POST() {
           providerModelId: model.id,
           displayName: model.displayName,
           description: model.description,
-          mediaKind: model.mediaKind.toUpperCase() as "IMAGE" | "VIDEO" | "VOICE",
+          mediaKind: model.mediaKind.toUpperCase() as
+            "IMAGE" | "VIDEO" | "VOICE",
           capabilities: model.capabilities ?? {},
           enabled: false,
         },
@@ -49,7 +51,12 @@ export async function POST() {
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Sync failed" },
-      { status: error instanceof Error && error.message.includes("Access denied") ? 403 : 500 },
+      {
+        status:
+          error instanceof Error && error.message.includes("Access denied")
+            ? 403
+            : 500,
+      },
     );
   }
 }

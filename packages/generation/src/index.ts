@@ -30,6 +30,20 @@ export const imageRequestSchema = z
     resolution: z.enum(["2K", "4K"]).default("2K"),
   })
   .strict();
+
+export function hasModelCapability(
+  capabilities: unknown,
+  capability: string,
+): boolean {
+  if (
+    !capabilities ||
+    typeof capabilities !== "object" ||
+    Array.isArray(capabilities)
+  )
+    return false;
+  return (capabilities as Record<string, unknown>)[capability] === true;
+}
+
 export class GenerationError extends Error {
   constructor(
     message: string,
@@ -153,16 +167,23 @@ export async function createImageJob(userId: string, raw: unknown) {
           409,
         );
 
-      const caps = model.capabilities as { aspectRatios?: string[], resolution?: string } | null;
-      if (caps?.aspectRatios && !caps.aspectRatios.includes(input.aspectRatio)) {
-        throw new GenerationError("Aspect ratio is not supported by this model.");
+      if (
+        !hasModelCapability(
+          model.capabilities,
+          `aspectRatio:${input.aspectRatio}`,
+        )
+      ) {
+        throw new GenerationError(
+          "Aspect ratio is not supported by this model.",
+        );
       }
       if (
-        input.resolution === "4K" &&
-        caps?.resolution !== "4K" &&
-        caps?.resolution !== "4k"
+        !hasModelCapability(
+          model.capabilities,
+          `resolution:${input.resolution}`,
+        )
       ) {
-        throw new GenerationError("4K resolution is not supported by this model.");
+        throw new GenerationError("Resolution is not supported by this model.");
       }
 
       const credits = priceCredits(price);

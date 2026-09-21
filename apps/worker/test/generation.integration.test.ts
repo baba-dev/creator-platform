@@ -64,7 +64,11 @@ describe.skipIf(!enabled)("generation with MariaDB and Redis", () => {
         mediaKind: "IMAGE",
         displayName: "Test",
         description: "Test",
-        capabilities: {},
+        capabilities: {
+          "aspectRatio:1:1": true,
+          "resolution:2K": true,
+          "resolution:4K": true,
+        },
         enabled: true,
       },
     });

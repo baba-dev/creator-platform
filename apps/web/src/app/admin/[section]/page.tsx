@@ -493,7 +493,10 @@ async function renderSection(
                   <Cell>
                     <strong>{row.displayName}</strong>
                     <Meta>{row.providerModelId}</Meta>
-                    <p className="mt-1 max-w-[200px] truncate text-[10px] text-muted-foreground" title={row.description}>
+                    <p
+                      className="mt-1 max-w-[200px] truncate text-[10px] text-muted-foreground"
+                      title={row.description}
+                    >
                       {row.description}
                     </p>
                   </Cell>

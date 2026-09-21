@@ -33,6 +33,7 @@ validate_runtime() {
   [[ -d "$directory" ]] \
     && [[ -f "$directory/apps/web/server.js" ]] \
     && [[ -f "$directory/apps/worker/dist/index.cjs" ]] \
+    && [[ -f "$directory/apps/worker/dist/byteplus-smoke.cjs" ]] \
     && [[ -n "$(find_next_runtime "$directory")" ]]
 }
 

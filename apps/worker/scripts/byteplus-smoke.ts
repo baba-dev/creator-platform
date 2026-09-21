@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 
 import { serverEnvSchema } from "@aiwa/config";
 import { createBytePlusProvider } from "@aiwa/providers/byteplus";
@@ -10,6 +10,7 @@ const smokeEnvSchema = serverEnvSchema.pick({
   BYTEPLUS_API_KEY: true,
   BYTEPLUS_REGION: true,
   BYTEPLUS_MODELARK_BASE_URL: true,
+  BYTEPLUS_SMOKE_OUTPUT_DIR: true,
   BYTEPLUS_SMOKE_PROMPT: true,
 });
 
@@ -106,8 +107,9 @@ async function main(): Promise<void> {
   }
   const bytes = await readImageWithLimit(response);
 
-  const repositoryRoot = fileURLToPath(new URL("../../..", import.meta.url));
-  const outputDirectory = `${repositoryRoot}/.data/byteplus-smoke`;
+  const outputDirectory =
+    env.BYTEPLUS_SMOKE_OUTPUT_DIR ??
+    resolve(process.cwd(), "../..", ".data/byteplus-smoke");
   const outputPath = `${outputDirectory}/${new Date().toISOString().replaceAll(":", "-")}.png`;
   await mkdir(outputDirectory, { recursive: true });
   await writeFile(outputPath, bytes, { flag: "wx", mode: 0o600 });

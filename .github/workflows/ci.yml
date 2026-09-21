@@ -69,6 +69,11 @@ jobs:
       - name: Smoke-test worker runtime
         run: |
           node -e "require('./apps/worker/dist/index.cjs'); setTimeout(() => process.exit(0), 250)"
+          if node apps/worker/dist/byteplus-smoke.cjs >byteplus-smoke.log 2>&1; then
+            echo "BytePlus smoke command unexpectedly ran without credentials" >&2
+            exit 1
+          fi
+          grep -q '"status":"failed"' byteplus-smoke.log
 
       - name: Package and validate staging release
         run: bash infra/deploy/package-release.sh "$GITHUB_SHA"

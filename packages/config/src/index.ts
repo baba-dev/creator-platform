@@ -18,6 +18,11 @@ const optionalString = z.preprocess(
   z.string().min(1).optional(),
 );
 
+const optionalAbsolutePath = z.preprocess(
+  (value) => (value === "" ? undefined : value),
+  z.string().startsWith("/", "Absolute path required").optional(),
+);
+
 const optionalPositiveInteger = z.preprocess(
   (value) => (value === "" || value === undefined ? undefined : value),
   z.coerce.number().int().positive().max(600_000).optional(),
@@ -56,6 +61,7 @@ export const serverEnvSchema = z.object({
   BYTEPLUS_SPEECH_ACCESS_TOKEN: optionalString,
   BYTEPLUS_REQUEST_TIMEOUT_MS: optionalPositiveInteger,
   BYTEPLUS_LIVE_SMOKE_ACK: optionalSmokeAcknowledgement,
+  BYTEPLUS_SMOKE_OUTPUT_DIR: optionalAbsolutePath,
   BYTEPLUS_SMOKE_PROMPT: optionalString,
   NVIDIA_API_KEY: optionalString,
   NVIDIA_BASE_URL: z.url().default("https://integrate.api.nvidia.com/v1"),

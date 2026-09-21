@@ -19,6 +19,8 @@ describe("hasModelCapability", () => {
   it("fails closed when capabilities are missing or malformed", () => {
     expect(hasModelCapability(null, "resolution:2K")).toBe(false);
     expect(hasModelCapability([], "resolution:2K")).toBe(false);
-    expect(hasModelCapability({ "resolution:2K": "true" }, "resolution:2K")).toBe(false);
+    expect(
+      hasModelCapability({ "resolution:2K": "true" }, "resolution:2K"),
+    ).toBe(false);
   });
 });

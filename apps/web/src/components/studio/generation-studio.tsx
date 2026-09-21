@@ -199,8 +199,10 @@ export function GenerationStudio({
           enhancementAttempt.current = null;
           return;
         }
-        if (job.status === "FAILED")
+        if (job.status === "FAILED") {
+          enhancementAttempt.current = null;
           throw new Error(job.errorMessage ?? "Prompt enhancement failed.");
+        }
       }
 
       throw new Error("Prompt enhancement timed out. Retry the same request.");
@@ -276,6 +278,7 @@ export function GenerationStudio({
               type="button"
               onClick={() => void enhancePrompt()}
               disabled={busy || isEnhancing || !canGenerate || !prompt.trim()}
+              aria-busy={isEnhancing}
               className="absolute bottom-3 right-3 flex items-center gap-1.5 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition hover:bg-primary/20 disabled:opacity-50"
             >
               {isEnhancing ? (

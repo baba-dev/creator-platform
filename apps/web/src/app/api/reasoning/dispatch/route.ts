@@ -40,7 +40,8 @@ function failure(error: unknown) {
 function supportsPromptEnhancement(capabilities: unknown): boolean {
   if (!capabilities || typeof capabilities !== "object") return false;
   return (
-    (capabilities as Record<string, unknown>)["task:prompt-enhancement"] === true
+    (capabilities as Record<string, unknown>)["task:prompt-enhancement"] ===
+    true
   );
 }
 
@@ -169,8 +170,7 @@ export async function POST(request: Request) {
     if (recentJobs >= MAX_REASONING_JOBS_PER_HOUR)
       return NextResponse.json(
         {
-          error:
-            "Prompt enhancement hourly limit reached. Try again later.",
+          error: "Prompt enhancement hourly limit reached. Try again later.",
         },
         { status: 429, headers: { "Retry-After": "60" } },
       );

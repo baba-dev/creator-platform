@@ -22,9 +22,7 @@ export async function POST() {
           displayName: model.displayName,
           description: model.description,
           mediaKind: model.mediaKind.toUpperCase() as
-            | "IMAGE"
-            | "VIDEO"
-            | "VOICE",
+            "IMAGE" | "VIDEO" | "VOICE",
           capabilities: model.capabilities ?? {},
         },
         create: {
@@ -33,9 +31,7 @@ export async function POST() {
           displayName: model.displayName,
           description: model.description,
           mediaKind: model.mediaKind.toUpperCase() as
-            | "IMAGE"
-            | "VIDEO"
-            | "VOICE",
+            "IMAGE" | "VIDEO" | "VOICE",
           capabilities: model.capabilities ?? {},
           enabled: false,
         },

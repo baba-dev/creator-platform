@@ -14,6 +14,7 @@ import {
   Pagination,
   StatusBadge,
 } from "@/components/admin/primitives";
+import { SyncModelsButton } from "@/components/admin/sync-models-button";
 import { Button } from "@/components/ui/button";
 import { Eyebrow } from "@/components/ui/creative";
 import { type IconName } from "@/components/ui/icon";
@@ -92,13 +93,21 @@ export default async function AdminSectionPage({
 
   return (
     <div className="px-4 py-7 sm:px-7 lg:px-9 lg:py-9">
-      <Eyebrow>Operations</Eyebrow>
-      <h1 className="font-display mt-3 text-4xl font-semibold tracking-tight">
-        {section.title}
-      </h1>
-      <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-        {section.description}
-      </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <Eyebrow>Operations</Eyebrow>
+          <h1 className="font-display mt-3 text-4xl font-semibold tracking-tight">
+            {section.title}
+          </h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+            {section.description}
+          </p>
+        </div>
+        {sectionName === "models" &&
+        hasPlatformPermission(session.user.platformRole, "models:manage") ? (
+          <SyncModelsButton />
+        ) : null}
+      </div>
       <AdminFilters section={sectionName} filters={filters} />
       <div className="mt-4 rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-6">
         {await renderSection(
@@ -435,6 +444,7 @@ async function renderSection(
           id: true,
           displayName: true,
           providerModelId: true,
+          description: true,
           provider: true,
           mediaKind: true,
           enabled: true,
@@ -483,6 +493,9 @@ async function renderSection(
                   <Cell>
                     <strong>{row.displayName}</strong>
                     <Meta>{row.providerModelId}</Meta>
+                    <p className="mt-1 max-w-[200px] truncate text-[10px] text-muted-foreground" title={row.description}>
+                      {row.description}
+                    </p>
                   </Cell>
                   <Cell>{titleCase(row.provider)}</Cell>
                   <Cell>{titleCase(row.mediaKind)}</Cell>

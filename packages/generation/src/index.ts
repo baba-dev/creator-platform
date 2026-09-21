@@ -27,6 +27,7 @@ export const imageRequestSchema = z
       "2:3",
       "21:9",
     ]),
+    resolution: z.enum(["2K", "4K"]).default("2K"),
   })
   .strict();
 export class GenerationError extends Error {
@@ -83,7 +84,7 @@ export async function createImageJob(userId: string, raw: unknown) {
   const payload = {
     prompt: input.prompt,
     aspectRatio: input.aspectRatio,
-    resolution: "2K",
+    resolution: input.resolution,
     outputFormat: "png",
     watermark: false,
   };
@@ -151,6 +152,19 @@ export async function createImageJob(userId: string, raw: unknown) {
           "Model or price changed. Refresh the Studio and try again.",
           409,
         );
+
+      const caps = model.capabilities as { aspectRatios?: string[], resolution?: string } | null;
+      if (caps?.aspectRatios && !caps.aspectRatios.includes(input.aspectRatio)) {
+        throw new GenerationError("Aspect ratio is not supported by this model.");
+      }
+      if (
+        input.resolution === "4K" &&
+        caps?.resolution !== "4K" &&
+        caps?.resolution !== "4k"
+      ) {
+        throw new GenerationError("4K resolution is not supported by this model.");
+      }
+
       const credits = priceCredits(price);
       const { start, end } = muscatCalendarMonth(now);
       const jobs = await tx.generationJob.findMany({

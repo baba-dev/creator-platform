@@ -17,6 +17,10 @@
     "@aiwa/core": "workspace:*",
     "@aiwa/credits": "workspace:*",
     "@aiwa/db": "workspace:*",
+    "@aiwa/generation": "workspace:*",
+    "@aiwa/organizations": "workspace:*",
+    "@aiwa/payments": "workspace:*",
+    "@aiwa/providers": "workspace:*",
     "@aiwa/ui": "workspace:*",
     "@aiwa/validation": "workspace:*",
     "@fontsource-variable/bricolage-grotesque": "^5.3.0",
@@ -26,10 +30,7 @@
     "next": "16.3.5",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "zod": "^4.1.12",
-    "@aiwa/organizations": "workspace:*",
-    "@aiwa/payments": "workspace:*",
-    "@aiwa/generation": "workspace:*"
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.3",

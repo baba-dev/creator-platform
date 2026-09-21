@@ -10,6 +10,7 @@ type Model = {
   name: string;
   priceVersionId: string;
   credits: string;
+  capabilities?: { aspectRatios?: string[]; resolution?: string };
 };
 type Job = {
   id: string;
@@ -47,10 +48,38 @@ export function GenerationStudio({
   const [modelId, setModelId] = useState("");
   const [prompt, setPrompt] = useState("");
   const [ratio, setRatio] = useState("1:1");
+  const [resolution, setResolution] = useState("2K");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const attempt = useRef<{ fingerprint: string; key: string } | null>(null);
   const model = data?.models.find((m) => m.id === modelId) ?? data?.models[0];
+
+  const availableRatios = model?.capabilities?.aspectRatios ?? [
+    "1:1",
+    "16:9",
+    "9:16",
+    "4:3",
+    "3:4",
+    "3:2",
+    "2:3",
+    "21:9",
+  ];
+  const is4KSupported =
+    model?.capabilities?.resolution === "4K" ||
+    model?.capabilities?.resolution === "4k";
+
+  useEffect(() => {
+    if (!availableRatios.includes(ratio)) {
+      setRatio(availableRatios[0] ?? "1:1");
+    }
+  }, [availableRatios, ratio]);
+
+  useEffect(() => {
+    if (!is4KSupported && resolution === "4K") {
+      setResolution("2K");
+    }
+  }, [is4KSupported, resolution]);
+
   const refresh = useCallback(async () => {
     const response = await fetch(
       `/api/generations?organizationId=${encodeURIComponent(organizationId)}`,
@@ -86,6 +115,7 @@ export function GenerationStudio({
       priceVersionId: model.priceVersionId,
       prompt,
       aspectRatio: ratio,
+      resolution,
     };
     const fingerprint = JSON.stringify(input);
     if (attempt.current?.fingerprint !== fingerprint)
@@ -177,12 +207,30 @@ export function GenerationStudio({
             disabled={busy}
             className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
           >
-            {["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "21:9"].map(
-              (r) => (
-                <option key={r}>{r}</option>
-              ),
-            )}
+            {availableRatios.map((r) => (
+              <option key={r}>{r}</option>
+            ))}
           </select>
+          {is4KSupported ? (
+            <>
+              <label
+                htmlFor="image-resolution"
+                className="block text-sm font-semibold text-foreground"
+              >
+                Resolution
+              </label>
+              <select
+                id="image-resolution"
+                value={resolution}
+                onChange={(e) => setResolution(e.target.value)}
+                disabled={busy}
+                className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
+              >
+                <option value="2K">2K</option>
+                <option value="4K">4K</option>
+              </select>
+            </>
+          ) : null}
           <p className="text-sm tabular-nums text-muted-foreground">
             Available balance: {data?.balance ?? "…"} credits
           </p>

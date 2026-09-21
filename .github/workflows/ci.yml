@@ -74,10 +74,7 @@ jobs:
           bash -n infra/deploy/package-release.sh
 
       - name: Check formatting
-        run: |
-          pnpm exec prettier --write docs/image-generation.md packages/generation/src/process.ts packages/generation/src/storage.ts
-          git diff --no-ext-diff -- docs/image-generation.md packages/generation/src/process.ts packages/generation/src/storage.ts
-          exit 1
+        run: pnpm format:check
 
       - name: Lint
         run: pnpm lint

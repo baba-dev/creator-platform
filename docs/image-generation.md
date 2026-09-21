@@ -1,8 +1,8 @@
 # Image generation
 
 Studio now submits one 2K PNG through the verified BytePlus adapter. Video,
-voice, reference images and prompt enhancement are not enabled in this flow.
-The generation integration is exercised in CI with real MariaDB and Redis services.
+voice, reference images and prompt enhancement are not enabled in this flow. The
+generation integration is exercised in CI with real MariaDB and Redis services.
 
 ## Deployment
 

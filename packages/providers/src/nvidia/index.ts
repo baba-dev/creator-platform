@@ -113,9 +113,14 @@ async function safeFetch(
   try {
     return await fetchFn(url, { ...options, signal: controller.signal });
   } catch (error) {
-    throw new ProviderRequestError("NVIDIA network request failed", true, {
+    // A lost response has an unknown provider outcome. Do not automatically
+    // replay it because the hosted chat API does not expose request
+    // reconciliation by client idempotency key.
+    throw new ProviderRequestError("NVIDIA network request failed", false, {
       cause: error,
-      code: controller.signal.aborted ? "REQUEST_TIMEOUT" : "NETWORK_ERROR",
+      code: controller.signal.aborted
+        ? "REQUEST_OUTCOME_UNKNOWN"
+        : "NETWORK_OUTCOME_UNKNOWN",
     });
   } finally {
     clearTimeout(timeout);

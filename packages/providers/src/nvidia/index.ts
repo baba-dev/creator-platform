@@ -187,7 +187,7 @@ function parseStructuredContent(content: string): unknown {
   const trimmed = content.trim();
 
   const candidates = [trimmed];
-  const fenced = /\`\`\`(?:json)?\s*([\s\S]*?)\s*\`\`\`/i.exec(trimmed)?.[1];
+  const fenced = /```(?:json)?\s*([\s\S]*?)\s*```/i.exec(trimmed)?.[1];
   if (fenced) candidates.push(fenced);
 
   const firstBrace = trimmed.indexOf("{");

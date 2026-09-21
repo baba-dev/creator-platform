@@ -1,0 +1,30 @@
+{
+  "name": "@aiwa/generation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./process": "./src/process.ts",
+    "./storage": "./src/storage.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "eslint src test --max-warnings=0",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf .turbo"
+  },
+  "dependencies": {
+    "@aiwa/credits": "workspace:*",
+    "@aiwa/db": "workspace:*",
+    "@aiwa/authz": "workspace:*",
+    "@aiwa/config": "workspace:*",
+    "@aiwa/organizations": "workspace:*",
+    "@aiwa/providers": "workspace:*",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.11"
+  }
+}

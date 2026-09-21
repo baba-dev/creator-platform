@@ -371,7 +371,11 @@ export default async function OrganizationWorkspacePage({
             </section>
 
             <div className="mt-6">
-              <GenerationStudio canGenerate={canGenerate} />
+              <GenerationStudio
+                key={membership.organizationId}
+                canGenerate={canGenerate}
+                organizationId={membership.organizationId}
+              />
             </div>
 
             <section

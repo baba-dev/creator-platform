@@ -424,3 +424,10 @@ Financial-ledger, authentication, pricing, and provider-adapter changes require 
 This repository currently includes the GNU General Public License v3.0. See [LICENSE](./LICENSE).
 
 Before distributing the platform or sharing source with customers, the company should confirm that GPL-3.0 matches the intended commercial and source-distribution model.
+
+## Image generation
+
+Studio supports queued BytePlus image generation with wallet reservation,
+persistent PNG assets and authenticated downloads. See
+[the image-generation runbook](docs/image-generation.md) for deployment,
+recovery behavior and the live acceptance check.

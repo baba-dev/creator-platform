@@ -1,5 +1,8 @@
 import { parseServerEnv } from "@aiwa/config";
-import { Worker } from "bullmq";
+import { db } from "@aiwa/db";
+import { processImageJob } from "@aiwa/generation/process";
+import { createBytePlusProvider } from "@aiwa/providers/byteplus";
+import { Queue, Worker } from "bullmq";
 import Redis from "ioredis";
 
 const env = parseServerEnv();
@@ -58,8 +61,101 @@ worker.on("failed", (job, error) => {
   });
 });
 
+const generationQueue = new Queue("generation", {
+  connection: redis,
+  prefix: "aiwa",
+});
+const provider = env.BYTEPLUS_API_KEY
+  ? createBytePlusProvider({
+      apiKey: env.BYTEPLUS_API_KEY,
+      region: env.BYTEPLUS_REGION,
+      modelArkBaseUrl: env.BYTEPLUS_MODELARK_BASE_URL,
+      requestTimeoutMs: env.BYTEPLUS_REQUEST_TIMEOUT_MS,
+    })
+  : null;
+const generationWorker = new Worker(
+  "generation",
+  async (job) => {
+    if (!provider) throw new Error("Generation provider is not configured");
+    if (typeof job.data.jobId !== "string" || job.data.jobId !== job.id)
+      throw new Error("Invalid generation queue payload");
+    await processImageJob(job.data.jobId, provider);
+  },
+  { connection: redis, prefix: "aiwa", concurrency: 1 },
+);
+generationWorker.on("error", () =>
+  log("error", "Generation queue connection failed"),
+);
+generationWorker.on("failed", () =>
+  log("error", "Generation processing will be recovered"),
+);
+let dispatching = false;
+async function dispatch() {
+  if (dispatching || !provider) return;
+  dispatching = true;
+  try {
+    // Lost responses cannot safely be replayed for synchronous image generation.
+    await db.generationJob.updateMany({
+      where: {
+        status: "SUBMITTED",
+        submittedAt: { lt: new Date(Date.now() - 15 * 60 * 1000) },
+      },
+      data: {
+        status: "MANUAL_REVIEW",
+        errorCode: "WORKER_INTERRUPTED",
+        errorMessage:
+          "Submission was interrupted. Credits remain reserved for review.",
+      },
+    });
+    await db.generationJob.updateMany({
+      where: {
+        status: "PROCESSING",
+        updatedAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+      },
+      data: {
+        status: "MANUAL_REVIEW",
+        errorCode: "STORAGE_FAILED",
+        errorMessage:
+          "Image could not be stored. Credits remain reserved for review.",
+      },
+    });
+    const jobs = await db.generationJob.findMany({
+      where: { status: { in: ["QUEUED", "PROCESSING"] } },
+      select: { id: true },
+      orderBy: { createdAt: "asc" },
+      take: 100,
+    });
+    for (const job of jobs) {
+      const queued = await generationQueue.getJob(job.id);
+      if (queued && ["failed", "completed"].includes(await queued.getState()))
+        await queued.remove();
+      await generationQueue.add(
+        "image",
+        { jobId: job.id },
+        {
+          jobId: job.id,
+          attempts: 3,
+          backoff: { type: "exponential", delay: 10000 },
+          removeOnComplete: true,
+          removeOnFail: 100,
+        },
+      );
+    }
+  } catch {
+    log("error", "Generation dispatch unavailable; database jobs retained");
+  } finally {
+    dispatching = false;
+  }
+}
+const dispatchTimer = setInterval(() => void dispatch(), 10000);
+void dispatch();
+
 async function shutdown(signal: NodeJS.Signals): Promise<void> {
   log("info", "worker shutting down", { signal });
+  clearInterval(dispatchTimer);
+  await generationWorker.close();
+  await generationQueue.close();
+  await db.$disconnect();
   await worker.close();
   await redis.quit();
 }

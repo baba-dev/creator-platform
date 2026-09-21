@@ -1,14 +1,16 @@
 import { db } from "@aiwa/db";
 import {
   createImageJob,
+  createVideoJob,
   GenerationError,
   imageModelIds,
+  videoModelIds,
   priceCredits,
   requireMembership,
 } from "@aiwa/generation";
 import { LedgerDomainError } from "@aiwa/credits";
 import { NextResponse } from "next/server";
-import { ZodError } from "zod";
+import { z, ZodError } from "zod";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
 
@@ -25,7 +27,7 @@ function failure(error: unknown) {
     error instanceof GenerationError || error instanceof LedgerDomainError
       ? error.message
       : status === 400
-        ? "Invalid image request."
+        ? "Invalid generation request."
         : "Generation service unavailable. Retry with the same request.";
   return NextResponse.json({ error: message }, { status });
 }
@@ -40,7 +42,7 @@ export async function POST(request: Request) {
     );
   if (!process.env.BYTEPLUS_API_KEY)
     return NextResponse.json(
-      { error: "Image generation is not configured." },
+      { error: "Media generation is not configured." },
       { status: 503 },
     );
   try {
@@ -50,7 +52,25 @@ export async function POST(request: Request) {
         { error: "Request too large." },
         { status: 413 },
       );
-    const job = await createImageJob(session.user.id, JSON.parse(text));
+    const parsed = JSON.parse(text);
+    const { modelId } = z
+      .object({ modelId: z.string().min(1).max(100) })
+      .parse(parsed);
+    const model = await db.providerModel.findUnique({
+      where: { id: modelId },
+      select: { mediaKind: true },
+    });
+    if (!model)
+      return NextResponse.json({ error: "Model not found." }, { status: 404 });
+    if (model.mediaKind !== "IMAGE" && model.mediaKind !== "VIDEO")
+      return NextResponse.json(
+        { error: "Model does not support Studio generation." },
+        { status: 400 },
+      );
+    const job =
+      model.mediaKind === "VIDEO"
+        ? await createVideoJob(session.user.id, parsed)
+        : await createImageJob(session.user.id, parsed);
     return NextResponse.json(
       { jobId: job.id, status: job.status },
       { status: 202 },
@@ -75,9 +95,10 @@ export async function GET(request: Request) {
       where: {
         enabled: true,
         provider: "BYTEPLUS",
-        mediaKind: "IMAGE",
-        providerModelId: { in: imageModelIds },
+        mediaKind: { in: ["IMAGE", "VIDEO"] },
+        providerModelId: { in: [...imageModelIds, ...videoModelIds] },
       },
+      orderBy: [{ mediaKind: "asc" }, { displayName: "asc" }],
       include: {
         priceVersions: {
           where: {
@@ -100,8 +121,11 @@ export async function GET(request: Request) {
         reservedCredits: true,
         chargedCredits: true,
         createdAt: true,
-        providerModel: { select: { displayName: true } },
-        assets: { where: { status: "READY" }, select: { id: true } },
+        providerModel: { select: { displayName: true, mediaKind: true } },
+        assets: {
+          where: { status: "READY" },
+          select: { id: true, mimeType: true },
+        },
       },
     });
     const wallet = await db.wallet.findUnique({
@@ -118,6 +142,7 @@ export async function GET(request: Request) {
                 {
                   id: m.id,
                   name: m.displayName,
+                  mediaKind: m.mediaKind,
                   description: m.description,
                   priceVersionId: m.priceVersions[0].id,
                   credits: priceCredits(m.priceVersions[0]).toString(),

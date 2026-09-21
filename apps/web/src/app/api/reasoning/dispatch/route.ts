@@ -9,17 +9,22 @@ const DEFAULT_NVIDIA_REASONING_MODEL =
   "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning";
 const MAX_ACTIVE_REASONING_JOBS_PER_USER = 3;
 const MAX_REASONING_JOBS_PER_HOUR = 60;
-const PROMPT_ENHANCEMENT_SYSTEM_PROMPT = [
-  "You are an expert creative director for AI image generation.",
-  "Improve the user prompt with concrete visual details such as subject, composition, lighting, lens or camera language when useful, atmosphere, materials, and style.",
-  "Preserve the user's intent and factual constraints. Do not add unrelated subjects, brands, people, claims, text, or sensitive attributes.",
-  'Return only one JSON object with exactly one string property named "enhancedPrompt". Do not use markdown fences or commentary.',
-  "Keep enhancedPrompt at or below 2000 characters.",
-].join(" ");
+function promptEnhancementSystemPrompt(targetMedia: "IMAGE" | "VIDEO") {
+  return [
+    `You are an expert creative director for AI ${targetMedia === "VIDEO" ? "video" : "image"} generation.`,
+    targetMedia === "VIDEO"
+      ? "Improve the prompt with concrete subject, action, composition, shot progression, camera movement, lighting, atmosphere, pacing, and style details when useful."
+      : "Improve the prompt with concrete subject, composition, lighting, lens or camera language, atmosphere, materials, and style details when useful.",
+    "Preserve the user's intent and factual constraints. Do not add unrelated subjects, brands, people, claims, text, or sensitive attributes.",
+    'Return only one JSON object with exactly one string property named "enhancedPrompt". Do not use markdown fences or commentary.',
+    "Keep enhancedPrompt at or below 2000 characters.",
+  ].join(" ");
+}
 
 const requestSchema = z.object({
   organizationId: z.string().min(1),
   userPrompt: z.string().trim().min(1).max(2000),
+  targetMedia: z.enum(["IMAGE", "VIDEO"]),
   idempotencyKey: z.uuid(),
 });
 
@@ -49,6 +54,7 @@ async function existingResponse(
   idempotencyKey: string,
   organizationId: string,
   userPrompt: string,
+  targetMedia: "IMAGE" | "VIDEO",
 ) {
   const existing = await db.reasoningJob.findUnique({
     where: { idempotencyKey },
@@ -58,11 +64,13 @@ async function existingResponse(
   const payload = existing.requestPayload as {
     task?: unknown;
     userPrompt?: unknown;
+    targetMedia?: unknown;
   };
   if (
     existing.organizationId !== organizationId ||
     payload.task !== "prompt-enhancement" ||
-    payload.userPrompt !== userPrompt
+    payload.userPrompt !== userPrompt ||
+    payload.targetMedia !== targetMedia
   )
     return NextResponse.json(
       { error: "Idempotency key was already used for different inputs." },
@@ -148,6 +156,7 @@ export async function POST(request: Request) {
       idempotencyKey,
       parsed.organizationId,
       parsed.userPrompt,
+      parsed.targetMedia,
     );
     if (previous) return previous;
 
@@ -196,8 +205,9 @@ export async function POST(request: Request) {
             idempotencyKey,
             requestPayload: {
               task: "prompt-enhancement",
-              systemPrompt: PROMPT_ENHANCEMENT_SYSTEM_PROMPT,
+              systemPrompt: promptEnhancementSystemPrompt(parsed.targetMedia),
               userPrompt: parsed.userPrompt,
+              targetMedia: parsed.targetMedia,
               responseSchemaName: "prompt-enhancement-v1",
             },
           },
@@ -229,6 +239,7 @@ export async function POST(request: Request) {
           idempotencyKey,
           parsed.organizationId,
           parsed.userPrompt,
+          parsed.targetMedia,
         );
         if (raced) return raced;
       }

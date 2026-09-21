@@ -6,9 +6,11 @@ import { Eyebrow } from "@/components/ui/creative";
 import { StatusDot, Tape } from "@/components/ui/sketch";
 
 type CapabilityValue = boolean | number | string;
+type MediaKind = "IMAGE" | "VIDEO";
 type Model = {
   id: string;
   name: string;
+  mediaKind: MediaKind;
   description?: string | null;
   priceVersionId: string;
   credits: string;
@@ -20,8 +22,8 @@ type Job = {
   errorMessage: string | null;
   reservedCredits: string;
   chargedCredits: string;
-  providerModel: { displayName: string };
-  assets: { id: string }[];
+  providerModel: { displayName: string; mediaKind: MediaKind };
+  assets: { id: string; mimeType: string }[];
 };
 type Studio = {
   configured: boolean;
@@ -29,15 +31,19 @@ type Studio = {
   models: Model[];
   jobs: Job[];
 };
-const statuses: Record<string, string> = {
-  QUEUED: "Queued",
-  SUBMITTED: "Generating image",
-  PROCESSING: "Saving image",
-  SUCCEEDED: "Ready",
-  FAILED: "Failed — credits released",
-  MANUAL_REVIEW: "Needs review — credits reserved",
-  CANCELLED: "Cancelled",
-};
+function statusLabel(status: string, mediaKind: MediaKind): string {
+  const media = mediaKind === "VIDEO" ? "video" : "image";
+  const statuses: Record<string, string> = {
+    QUEUED: "Queued",
+    SUBMITTED: `Submitting ${media}`,
+    PROCESSING: mediaKind === "VIDEO" ? "Rendering video" : "Saving image",
+    SUCCEEDED: "Ready",
+    FAILED: "Failed — credits released",
+    MANUAL_REVIEW: "Needs review — credits reserved",
+    CANCELLED: "Cancelled",
+  };
+  return statuses[status] ?? status;
+}
 
 function capabilityValues(
   capabilities: Model["capabilities"],
@@ -62,6 +68,7 @@ export function GenerationStudio({
   const [prompt, setPrompt] = useState("");
   const [ratio, setRatio] = useState("1:1");
   const [resolution, setResolution] = useState("2K");
+  const [duration, setDuration] = useState("5");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEnhancing, setIsEnhancing] = useState(false);
@@ -80,6 +87,10 @@ export function GenerationStudio({
     () => capabilityValues(model?.capabilities, "resolution"),
     [model?.capabilities],
   );
+  const availableDurations = useMemo(
+    () => capabilityValues(model?.capabilities, "durationSeconds"),
+    [model?.capabilities],
+  );
 
   const selectedRatio = availableRatios.includes(ratio)
     ? ratio
@@ -87,6 +98,9 @@ export function GenerationStudio({
   const selectedResolution = availableResolutions.includes(resolution)
     ? resolution
     : (availableResolutions[0] ?? "");
+  const selectedDuration = availableDurations.includes(duration)
+    ? duration
+    : (availableDurations[0] ?? "5");
 
   const refresh = useCallback(async () => {
     const response = await fetch(
@@ -124,6 +138,9 @@ export function GenerationStudio({
       prompt,
       aspectRatio: selectedRatio,
       resolution: selectedResolution,
+      ...(model.mediaKind === "VIDEO" && {
+        durationSeconds: Number.parseInt(selectedDuration, 10),
+      }),
     };
     const fingerprint = JSON.stringify(input);
     if (attempt.current?.fingerprint !== fingerprint)
@@ -152,9 +169,13 @@ export function GenerationStudio({
 
   async function enhancePrompt() {
     const sourcePrompt = prompt.trim();
-    if (!sourcePrompt || isEnhancing || busy || !canGenerate) return;
+    if (!sourcePrompt || !model || isEnhancing || busy || !canGenerate) return;
 
-    const fingerprint = JSON.stringify({ organizationId, sourcePrompt });
+    const fingerprint = JSON.stringify({
+      organizationId,
+      sourcePrompt,
+      targetMedia: model.mediaKind,
+    });
     if (enhancementAttempt.current?.fingerprint !== fingerprint)
       enhancementAttempt.current = {
         fingerprint,
@@ -170,6 +191,7 @@ export function GenerationStudio({
         body: JSON.stringify({
           organizationId,
           userPrompt: sourcePrompt,
+          targetMedia: model.mediaKind,
           idempotencyKey: enhancementAttempt.current.key,
         }),
       });
@@ -228,30 +250,31 @@ export function GenerationStudio({
         Start with a rough idea.
       </h2>
       <p className="mt-2 text-sm text-muted-foreground">
-        Create an image with the options advertised by the selected BytePlus
-        model. Video and voice generation are coming later.
+        Create media with the options advertised by the selected BytePlus model.
+        Voice generation is coming later.
       </p>
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <div className="space-y-4">
           <label
             className="block text-sm font-semibold text-foreground"
-            htmlFor="image-model"
+            htmlFor="media-model"
           >
-            Image model
+            Generation model
           </label>
           <select
-            id="image-model"
+            id="media-model"
             value={model?.id ?? ""}
             onChange={(e) => setModelId(e.target.value)}
-            disabled={busy}
+            disabled={busy || isEnhancing}
             className="min-h-11 w-full rounded-xl border border-input bg-card px-3 text-foreground"
           >
             {!data?.models.length ? (
-              <option>No enabled image models with active pricing</option>
+              <option>No enabled models with active pricing</option>
             ) : null}
             {data?.models.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.name} · {m.credits} credits
+                {m.mediaKind === "VIDEO" ? "Video" : "Image"} · {m.name} ·{" "}
+                {m.credits} credits
               </option>
             ))}
           </select>
@@ -262,7 +285,7 @@ export function GenerationStudio({
             htmlFor="creation-prompt"
             className="block text-sm font-semibold text-foreground"
           >
-            Describe your visual
+            Describe your {model?.mediaKind === "VIDEO" ? "video" : "image"}
           </label>
           <div className="relative">
             <textarea
@@ -279,7 +302,9 @@ export function GenerationStudio({
               variant="secondary"
               size="sm"
               onClick={() => void enhancePrompt()}
-              disabled={busy || isEnhancing || !canGenerate || !prompt.trim()}
+              disabled={
+                busy || isEnhancing || !canGenerate || !model || !prompt.trim()
+              }
               aria-busy={isEnhancing}
               className="absolute bottom-3 right-3"
             >
@@ -297,13 +322,13 @@ export function GenerationStudio({
             </Button>
           </div>
           <label
-            htmlFor="image-ratio"
+            htmlFor="media-ratio"
             className="block text-sm font-semibold text-foreground"
           >
             Aspect ratio
           </label>
           <select
-            id="image-ratio"
+            id="media-ratio"
             value={selectedRatio}
             onChange={(e) => setRatio(e.target.value)}
             disabled={busy || availableRatios.length === 0}
@@ -320,13 +345,13 @@ export function GenerationStudio({
             )}
           </select>
           <label
-            htmlFor="image-resolution"
+            htmlFor="media-resolution"
             className="block text-sm font-semibold text-foreground"
           >
             Resolution
           </label>
           <select
-            id="image-resolution"
+            id="media-resolution"
             value={selectedResolution}
             onChange={(e) => setResolution(e.target.value)}
             disabled={busy || availableResolutions.length === 0}
@@ -342,6 +367,33 @@ export function GenerationStudio({
               <option>No supported resolutions advertised</option>
             )}
           </select>
+          {model?.mediaKind === "VIDEO" && (
+            <>
+              <label
+                htmlFor="video-duration"
+                className="block text-sm font-semibold text-foreground"
+              >
+                Duration
+              </label>
+              <select
+                id="video-duration"
+                value={selectedDuration}
+                onChange={(e) => setDuration(e.target.value)}
+                disabled={busy || availableDurations.length === 0}
+                className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
+              >
+                {availableDurations.length ? (
+                  availableDurations.map((value) => (
+                    <option key={value} value={value}>
+                      {value} seconds
+                    </option>
+                  ))
+                ) : (
+                  <option>No supported durations advertised</option>
+                )}
+              </select>
+            </>
+          )}
           <p className="text-sm tabular-nums text-muted-foreground">
             Available balance: {data?.balance ?? "…"} credits
           </p>
@@ -349,6 +401,7 @@ export function GenerationStudio({
             type="button"
             className="w-full"
             onClick={() => void generate()}
+            aria-busy={busy}
             disabled={
               busy ||
               !canGenerate ||
@@ -357,15 +410,16 @@ export function GenerationStudio({
               !prompt.trim() ||
               !selectedRatio ||
               !selectedResolution ||
+              (model.mediaKind === "VIDEO" && !selectedDuration) ||
               BigInt(data?.balance ?? "0") < BigInt(model?.credits ?? "0")
             }
           >
             {busy
-              ? "Queuing image…"
-              : `Generate image · ${model?.credits ?? "—"} credits`}
+              ? "Queuing media…"
+              : `Generate ${model?.mediaKind === "VIDEO" ? "video" : "image"} · ${model?.credits ?? "—"} credits`}
           </Button>
           <p className="text-xs text-muted-foreground">
-            Credits are reserved when queued and charged once the image is
+            Credits are reserved when queued and charged once the media is
             saved.
           </p>
           {!canGenerate ? (
@@ -375,12 +429,14 @@ export function GenerationStudio({
           ) : null}
           {data && !data.configured ? (
             <p className="text-sm text-muted-foreground">
-              Image generation is not configured yet.
+              Media generation is not configured yet.
             </p>
           ) : null}
           {model &&
           (availableRatios.length === 0 ||
-            availableResolutions.length === 0) ? (
+            availableResolutions.length === 0 ||
+            (model.mediaKind === "VIDEO" &&
+              availableDurations.length === 0)) ? (
             <p className="text-sm text-destructive">
               This model is missing generation capabilities. Ask an admin to
               sync provider models before generating.
@@ -397,12 +453,12 @@ export function GenerationStudio({
         </div>
         <div>
           <h3 className="font-display text-lg font-semibold text-foreground">
-            Recent images
+            Recent creations
           </h3>
           <div className="mt-4 space-y-4" aria-live="polite">
             {data?.jobs.length === 0 ? (
               <p className="rounded-2xl border border-border p-6 text-muted-foreground">
-                Your first generated image will appear here.
+                Your first generated media will appear here.
               </p>
             ) : null}
             {data?.jobs.map((job) => (
@@ -423,22 +479,34 @@ export function GenerationStudio({
                           : "info"
                     }
                   >
-                    {statuses[job.status] ?? job.status}
+                    {statusLabel(job.status, job.providerModel.mediaKind)}
                   </StatusDot>
                 </div>
                 {job.assets.map((asset) => (
                   <div key={asset.id} className="mt-3">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={`/api/assets/${asset.id}`}
-                      alt={`Generated image from ${job.providerModel.displayName}`}
-                      className="max-h-96 w-full rounded-xl object-contain"
-                    />
+                    {asset.mimeType.startsWith("video/") ? (
+                      <video
+                        src={`/api/assets/${asset.id}`}
+                        controls
+                        playsInline
+                        preload="metadata"
+                        aria-label={`Generated video from ${job.providerModel.displayName}`}
+                        className="max-h-96 w-full rounded-xl bg-muted object-contain"
+                      />
+                    ) : (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={`/api/assets/${asset.id}`}
+                        alt={`Generated image from ${job.providerModel.displayName}`}
+                        className="max-h-96 w-full rounded-xl bg-muted object-contain"
+                      />
+                    )}
                     <a
                       href={`/api/assets/${asset.id}?download=1`}
                       className="mt-2 inline-flex min-h-10 items-center text-sm font-semibold text-primary"
                     >
-                      Download PNG
+                      Download{" "}
+                      {asset.mimeType.startsWith("video/") ? "MP4" : "PNG"}
                     </a>
                   </div>
                 ))}

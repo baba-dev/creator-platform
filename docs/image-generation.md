@@ -1,9 +1,9 @@
-# Image generation
+# Image and video generation
 
-Studio now submits one 2K PNG through the verified BytePlus adapter. Video,
-voice, reference images and prompt enhancement are not enabled in this flow. The
-generation integration is exercised in CI with real MariaDB and Redis services.
-Studio requests PNG output so asset validation and serving remain deterministic.
+Studio submits PNG images and asynchronous MP4 video tasks through the verified
+BytePlus adapter. Prompt enhancement can target either medium. Voice and
+reference-media inputs are not enabled in this Studio flow. The generation
+integration is exercised in CI with real MariaDB and Redis services.
 
 ## Deployment
 
@@ -26,18 +26,20 @@ package. No server-side dependency installation is required.
 1. Authenticated submission validates origin, input, active organization,
    membership, model, current price version, spending cap and storage quota.
 2. An organization row lock serializes admission. Job creation, credit
-   reservation, a 25 MiB pending asset allocation and QUEUED status commit in
-   one database transaction. The browser never sets credit amounts.
+   reservation, a pending asset allocation (25 MiB image or 100 MiB video) and
+   QUEUED status commit in one database transaction. The browser never sets
+   credit amounts.
 3. Every ten seconds the worker publishes durable QUEUED/PROCESSING records into
    Redis/BullMQ. Redis failures do not lose accepted jobs.
 4. An atomic QUEUED → SUBMITTED claim permits only one provider submission.
-   Provider output metadata is saved before downloading.
+   Image output metadata or the asynchronous video task ID is persisted before
+   recovery continues. Video task status is polled without resubmission.
 5. The worker validates the HTTPS CDN destination against explicit BytePlus and
    documented ModelArk object-storage hosts, resolves and pins a public IPv4
    address, revalidates up to three redirects, limits downloads to 25 MiB, and
-   verifies the PNG signature before persistence. It atomically writes the PNG
-   into shared storage. A second database transaction marks the asset READY,
-   captures reserved credits and marks the job SUCCEEDED.
+   verifies the PNG or MP4 signature before persistence. It atomically writes
+   media into shared storage. A second database transaction marks the asset
+   READY, captures reserved credits and marks the job SUCCEEDED.
 6. Studio polls job history and balance. Previews/downloads authorize current
    membership on every request; provider URLs and filesystem paths are private.
 
@@ -48,12 +50,12 @@ are retried with queue backoff plus a one-minute redispatch cooldown rather than
 a tight loop. Synchronous provider timeouts and interrupted submissions enter
 MANUAL_REVIEW with credits reserved: BytePlus does not provide a verified
 image-submission idempotency/retrieval guarantee, so retrying could incur
-another provider charge. After 24 hours from provider submission, unresolved
-storage failures also require review even though retry attempts update the job
-record. An operator must reconcile the provider outcome before
-refunding/releasing a reservation or restoring PROCESSING for storage recovery;
-do not requeue uncertain submissions. There is no automated manual-review
-resolution UI in this flow.
+another provider charge. After 24 hours, unresolved image storage failures
+require review; video tasks enter review after a two-hour recovery window. An
+operator must reconcile the provider outcome before refunding/releasing a
+reservation or restoring PROCESSING for storage recovery; do not requeue
+uncertain submissions. There is no automated manual-review resolution UI in this
+flow.
 
 ## Verification
 
@@ -63,12 +65,12 @@ insufficient funds, spending caps and access checks. Only the external provider
 response and CDN download are mocked; no credentials or paid calls are required.
 Unit tests cover definite failures, uncertain timeouts and storage retries.
 
-After deployment, use a funded workspace with an enabled, priced image model:
-enter a prompt in Studio, generate, wait for Ready, and download the PNG.
-Confirm one RESERVATION and one CAPTURE for the job and a corresponding wallet
-decrease. This live Studio acceptance check requires the deployed server's
-provider key; the earlier adapter smoke test alone does not prove the complete
-deployed flow.
+After deployment, use a funded workspace with enabled, priced image and video
+models. Generate one of each, wait for Ready, verify in-browser MP4 seeking, and
+download the PNG/MP4. Confirm one RESERVATION and one CAPTURE per successful job
+and the corresponding wallet decreases. This live Studio acceptance check
+requires the deployed server's provider key; the adapter smoke test alone does
+not prove the complete deployed flow.
 
 ## Production storage origins
 

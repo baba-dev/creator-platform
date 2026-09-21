@@ -18,6 +18,7 @@ export {
   PaymentMethod,
   LedgerEntryType,
   GenerationJobStatus,
+  ReasoningJobStatus,
   MembershipRole,
   PlatformRole,
 } from "@prisma/client";
@@ -25,6 +26,7 @@ export {
 export type {
   AuditEvent,
   GenerationJob,
+  ReasoningJob,
   LedgerEntry,
   ManualPayment,
   Membership,

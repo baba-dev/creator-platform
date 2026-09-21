@@ -178,7 +178,10 @@ export async function createImageJob(userId: string, raw: unknown) {
         );
       }
       if (
-        !hasModelCapability(model.capabilities, `resolution:${input.resolution}`)
+        !hasModelCapability(
+          model.capabilities,
+          `resolution:${input.resolution}`,
+        )
       ) {
         throw new GenerationError("Resolution is not supported by this model.");
       }

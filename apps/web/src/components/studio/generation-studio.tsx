@@ -1,16 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Eyebrow } from "@/components/ui/creative";
 import { StatusDot, Tape } from "@/components/ui/sketch";
 
+type CapabilityValue = boolean | number | string;
 type Model = {
   id: string;
   name: string;
+  description?: string | null;
   priceVersionId: string;
   credits: string;
-  capabilities?: { aspectRatios?: string[]; resolution?: string };
+  capabilities?: Record<string, CapabilityValue> | null;
 };
 type Job = {
   id: string;
@@ -37,6 +39,17 @@ const statuses: Record<string, string> = {
   CANCELLED: "Cancelled",
 };
 
+function capabilityValues(
+  capabilities: Model["capabilities"],
+  prefix: string,
+): string[] {
+  if (!capabilities) return [];
+  const marker = `${prefix}:`;
+  return Object.entries(capabilities)
+    .filter(([key, value]) => key.startsWith(marker) && value === true)
+    .map(([key]) => key.slice(marker.length));
+}
+
 export function GenerationStudio({
   canGenerate,
   organizationId,
@@ -54,31 +67,29 @@ export function GenerationStudio({
   const attempt = useRef<{ fingerprint: string; key: string } | null>(null);
   const model = data?.models.find((m) => m.id === modelId) ?? data?.models[0];
 
-  const availableRatios = model?.capabilities?.aspectRatios ?? [
-    "1:1",
-    "16:9",
-    "9:16",
-    "4:3",
-    "3:4",
-    "3:2",
-    "2:3",
-    "21:9",
-  ];
-  const is4KSupported =
-    model?.capabilities?.resolution === "4K" ||
-    model?.capabilities?.resolution === "4k";
+  const availableRatios = useMemo(
+    () => capabilityValues(model?.capabilities, "aspectRatio"),
+    [model?.capabilities],
+  );
+  const availableResolutions = useMemo(
+    () => capabilityValues(model?.capabilities, "resolution"),
+    [model?.capabilities],
+  );
 
   useEffect(() => {
-    if (!availableRatios.includes(ratio)) {
-      setRatio(availableRatios[0] ?? "1:1");
+    if (availableRatios.length && !availableRatios.includes(ratio)) {
+      setRatio(availableRatios[0]);
     }
   }, [availableRatios, ratio]);
 
   useEffect(() => {
-    if (!is4KSupported && resolution === "4K") {
-      setResolution("2K");
+    if (
+      availableResolutions.length &&
+      !availableResolutions.includes(resolution)
+    ) {
+      setResolution(availableResolutions[0]);
     }
-  }, [is4KSupported, resolution]);
+  }, [availableResolutions, resolution]);
 
   const refresh = useCallback(async () => {
     const response = await fetch(
@@ -152,8 +163,8 @@ export function GenerationStudio({
         Start with a rough idea.
       </h2>
       <p className="mt-2 text-sm text-muted-foreground">
-        Create a 2K image with BytePlus. Video and voice generation are coming
-        later.
+        Create an image with the options advertised by the selected BytePlus
+        model. Video and voice generation are coming later.
       </p>
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <div className="space-y-4">
@@ -179,6 +190,9 @@ export function GenerationStudio({
               </option>
             ))}
           </select>
+          {model?.description ? (
+            <p className="text-xs text-muted-foreground">{model.description}</p>
+          ) : null}
           <label
             htmlFor="creation-prompt"
             className="block text-sm font-semibold text-foreground"
@@ -204,33 +218,42 @@ export function GenerationStudio({
             id="image-ratio"
             value={ratio}
             onChange={(e) => setRatio(e.target.value)}
-            disabled={busy}
+            disabled={busy || availableRatios.length === 0}
             className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
           >
-            {availableRatios.map((r) => (
-              <option key={r}>{r}</option>
-            ))}
+            {availableRatios.length ? (
+              availableRatios.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))
+            ) : (
+              <option>No supported aspect ratios advertised</option>
+            )}
           </select>
-          {is4KSupported ? (
-            <>
-              <label
-                htmlFor="image-resolution"
-                className="block text-sm font-semibold text-foreground"
-              >
-                Resolution
-              </label>
-              <select
-                id="image-resolution"
-                value={resolution}
-                onChange={(e) => setResolution(e.target.value)}
-                disabled={busy}
-                className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
-              >
-                <option value="2K">2K</option>
-                <option value="4K">4K</option>
-              </select>
-            </>
-          ) : null}
+          <label
+            htmlFor="image-resolution"
+            className="block text-sm font-semibold text-foreground"
+          >
+            Resolution
+          </label>
+          <select
+            id="image-resolution"
+            value={resolution}
+            onChange={(e) => setResolution(e.target.value)}
+            disabled={busy || availableResolutions.length === 0}
+            className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
+          >
+            {availableResolutions.length ? (
+              availableResolutions.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))
+            ) : (
+              <option>No supported resolutions advertised</option>
+            )}
+          </select>
           <p className="text-sm tabular-nums text-muted-foreground">
             Available balance: {data?.balance ?? "…"} credits
           </p>
@@ -244,6 +267,8 @@ export function GenerationStudio({
               !data?.configured ||
               !model ||
               !prompt.trim() ||
+              !availableRatios.includes(ratio) ||
+              !availableResolutions.includes(resolution) ||
               BigInt(data?.balance ?? "0") < BigInt(model?.credits ?? "0")
             }
           >
@@ -263,6 +288,13 @@ export function GenerationStudio({
           {data && !data.configured ? (
             <p className="text-sm text-muted-foreground">
               Image generation is not configured yet.
+            </p>
+          ) : null}
+          {model &&
+          (availableRatios.length === 0 || availableResolutions.length === 0) ? (
+            <p className="text-sm text-destructive">
+              This model is missing generation capabilities. Ask an admin to
+              sync provider models before generating.
             </p>
           ) : null}
           {error ? (

@@ -8,6 +8,7 @@ import { hasTrustedMutationOrigin } from "@/lib/request-security";
 const DEFAULT_NVIDIA_REASONING_MODEL =
   "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning";
 const MAX_ACTIVE_REASONING_JOBS_PER_USER = 3;
+const MAX_REASONING_JOBS_PER_HOUR = 60;
 const PROMPT_ENHANCEMENT_SYSTEM_PROMPT = [
   "You are an expert creative director for AI image generation.",
   "Improve the user prompt with concrete visual details such as subject, composition, lighting, lens or camera language when useful, atmosphere, materials, and style.",
@@ -149,13 +150,31 @@ export async function POST(request: Request) {
     );
     if (previous) return previous;
 
-    const activeJobs = await db.reasoningJob.count({
-      where: {
-        createdById: session.user.id,
-        organizationId: parsed.organizationId,
-        status: { in: ["QUEUED", "PROCESSING"] },
-      },
-    });
+    const [activeJobs, recentJobs] = await Promise.all([
+      db.reasoningJob.count({
+        where: {
+          createdById: session.user.id,
+          organizationId: parsed.organizationId,
+          status: { in: ["QUEUED", "PROCESSING"] },
+        },
+      }),
+      db.reasoningJob.count({
+        where: {
+          createdById: session.user.id,
+          organizationId: parsed.organizationId,
+          createdAt: { gte: new Date(Date.now() - 60 * 60 * 1000) },
+        },
+      }),
+    ]);
+    if (recentJobs >= MAX_REASONING_JOBS_PER_HOUR)
+      return NextResponse.json(
+        {
+          error:
+            "Prompt enhancement hourly limit reached. Try again later.",
+        },
+        { status: 429, headers: { "Retry-After": "60" } },
+      );
+
     if (activeJobs >= MAX_ACTIVE_REASONING_JOBS_PER_USER)
       return NextResponse.json(
         {

@@ -153,7 +153,7 @@ async function main(): Promise<void> {
         "Creative reasoning for prompt enhancement and future copilot workflows.",
       capabilities: {
         "task:prompt-enhancement": true,
-        structuredJson: true,
+        instructMode: true,
       },
       enabled: true,
     },
@@ -166,7 +166,7 @@ async function main(): Promise<void> {
         "Creative reasoning for prompt enhancement and future copilot workflows.",
       capabilities: {
         "task:prompt-enhancement": true,
-        structuredJson: true,
+        instructMode: true,
       },
       enabled: true,
     },

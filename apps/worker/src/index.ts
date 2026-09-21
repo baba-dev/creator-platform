@@ -1,6 +1,10 @@
 import { parseServerEnv } from "@aiwa/config";
 import { db } from "@aiwa/db";
-import { processImageJob } from "@aiwa/generation/process";
+import {
+  processImageJob,
+  processVideoPollJob,
+  processVideoSubmitJob,
+} from "@aiwa/generation/process";
 import { createBytePlusProvider } from "@aiwa/providers/byteplus";
 import { createNvidiaProvider } from "@aiwa/providers/nvidia";
 import { Queue, Worker } from "bullmq";
@@ -74,7 +78,19 @@ const generationWorker = new Worker(
       throw new Error("Generation provider is not configured");
     if (typeof job.data.jobId !== "string" || job.data.jobId !== job.id)
       throw new Error("Invalid generation queue payload");
-    await processImageJob(job.data.jobId, bytePlusProvider);
+    switch (job.name) {
+      case "image":
+        await processImageJob(job.data.jobId, bytePlusProvider);
+        return;
+      case "video-submit":
+        await processVideoSubmitJob(job.data.jobId, bytePlusProvider);
+        return;
+      case "video-poll":
+        await processVideoPollJob(job.data.jobId, bytePlusProvider);
+        return;
+      default:
+        throw new Error("Unknown generation queue job");
+    }
   },
   { connection: redis, prefix: "aiwa", concurrency: 1 },
 );
@@ -149,6 +165,7 @@ async function dispatchGeneration() {
     await db.generationJob.updateMany({
       where: {
         status: "PROCESSING",
+        providerModel: { mediaKind: "IMAGE" },
         OR: [
           {
             submittedAt: {
@@ -168,6 +185,19 @@ async function dispatchGeneration() {
           "Image could not be stored. Credits remain reserved for review.",
       },
     });
+    await db.generationJob.updateMany({
+      where: {
+        status: "PROCESSING",
+        providerModel: { mediaKind: "VIDEO" },
+        submittedAt: { lt: new Date(Date.now() - 2 * 60 * 60 * 1000) },
+      },
+      data: {
+        status: "MANUAL_REVIEW",
+        errorCode: "PROVIDER_TIMEOUT",
+        errorMessage:
+          "Video generation exceeded the recovery window. Credits remain reserved for review.",
+      },
+    });
 
     const retryBefore = new Date(Date.now() - 60 * 1000);
     const jobs = await db.generationJob.findMany({
@@ -183,21 +213,34 @@ async function dispatchGeneration() {
           },
         ],
       },
-      select: { id: true },
+      select: {
+        id: true,
+        status: true,
+        providerModel: { select: { mediaKind: true } },
+      },
       orderBy: { createdAt: "asc" },
       take: 100,
     });
 
     for (const job of jobs) {
       const queued = await generationQueue.getJob(job.id);
-      if (queued && ["failed", "completed"].includes(await queued.getState()))
-        await queued.remove();
+      if (queued) {
+        const state = await queued.getState();
+        if (["failed", "completed"].includes(state)) await queued.remove();
+        else continue;
+      }
+      const isVideo = job.providerModel.mediaKind === "VIDEO";
+      const jobName = isVideo
+        ? job.status === "QUEUED"
+          ? "video-submit"
+          : "video-poll"
+        : "image";
       await generationQueue.add(
-        "image",
+        jobName,
         { jobId: job.id },
         {
           jobId: job.id,
-          attempts: 3,
+          attempts: isVideo ? 1 : 3,
           backoff: { type: "exponential", delay: 10_000 },
           removeOnComplete: true,
           removeOnFail: 100,

@@ -20,9 +20,12 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
     description:
       "Prompt-aware image creation with strong consistency and editing control.",
     capabilities: {
-      aspectRatios: ["1:1", "16:9", "9:16", "4:3"],
-      maxSteps: 50,
-      defaultSteps: 30,
+      "aspectRatio:1:1": true,
+      "aspectRatio:16:9": true,
+      "aspectRatio:9:16": true,
+      "aspectRatio:4:3": true,
+      "resolution:2K": true,
+      "resolution:4K": true,
     },
     providerCostMicroUsd: 54_000n,
     customerCredits: 28n,
@@ -34,21 +37,30 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
     description:
       "Reliable 4K campaign visuals, typography, and multi-reference composition.",
     capabilities: {
-      aspectRatios: ["1:1", "16:9", "9:16", "4:3"],
-      resolution: "4k",
+      "aspectRatio:1:1": true,
+      "aspectRatio:16:9": true,
+      "aspectRatio:9:16": true,
+      "aspectRatio:4:3": true,
+      "resolution:2K": true,
+      "resolution:4K": true,
     },
     providerCostMicroUsd: 41_000n,
     customerCredits: 22n,
   },
   {
-    providerModelId: "seedance-2-5",
+    providerModelId: "dreamina-seedance-2-5-260628",
     mediaKind: "VIDEO",
     displayName: "Seedance 2.5",
     description:
       "Cinematic multi-shot video generation with rich multimodal direction.",
     capabilities: {
-      aspectRatios: ["16:9", "9:16", "1:1"],
-      durationSeconds: [5, 10],
+      "aspectRatio:16:9": true,
+      "aspectRatio:9:16": true,
+      "aspectRatio:1:1": true,
+      "resolution:720p": true,
+      "resolution:1080p": true,
+      "durationSeconds:5": true,
+      "durationSeconds:10": true,
     },
     providerCostMicroUsd: 468_000n,
     customerCredits: 240n,
@@ -60,7 +72,9 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
     description:
       "Expressive, context-aware narration with natural rhythm and pauses.",
     capabilities: {
-      languages: ["en", "ar", "hi"],
+      "language:en": true,
+      "language:ar": true,
+      "language:hi": true,
     },
     providerCostMicroUsd: 10_000n,
     customerCredits: 6n,

@@ -1,10 +1,18 @@
 import { createHash, randomUUID } from "node:crypto";
 import { lookup } from "node:dns/promises";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  open,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { get } from "node:https";
 import { BlockList, isIP } from "node:net";
-import { resolve } from "node:path";
-import { MAX_IMAGE_BYTES } from "./index";
+import { isAbsolute, resolve } from "node:path";
+import { MAX_IMAGE_BYTES, MAX_VIDEO_BYTES } from "./index";
 
 const MAX_REDIRECTS = 3;
 const DOWNLOAD_TIMEOUT_MS = 120_000;
@@ -60,6 +68,14 @@ export type ImageStorageErrorCode =
   | "IMAGE_OUTPUT_TOO_LARGE"
   | "IMAGE_OUTPUT_INVALID_PNG"
   | "IMAGE_OUTPUT_DOWNLOAD_FAILED"
+  | "VIDEO_OUTPUT_URL_INVALID"
+  | "VIDEO_OUTPUT_HOST_UNTRUSTED"
+  | "VIDEO_OUTPUT_DNS_UNSAFE"
+  | "VIDEO_OUTPUT_HTTP_FAILED"
+  | "VIDEO_OUTPUT_CONTENT_TYPE"
+  | "VIDEO_OUTPUT_TOO_LARGE"
+  | "VIDEO_OUTPUT_INVALID_MP4"
+  | "VIDEO_OUTPUT_DOWNLOAD_FAILED"
   | "STORAGE_WRITE_FAILED";
 
 export class ImageStorageError extends Error {
@@ -280,17 +296,42 @@ async function downloadTrustedImage(
 }
 
 export function storagePath(key: string) {
-  if (!/^[a-zA-Z0-9_-]+\.png$/.test(key))
+  if (!/^[a-zA-Z0-9_-]+\.(png|mp4)$/.test(key))
     throw new Error("Invalid storage key");
   const root =
     process.env.ASSET_STORAGE_ROOT ?? "/var/www/creator-platform/shared/assets";
-  if (!root.startsWith("/")) throw new Error("Storage root must be absolute");
+  if (!isAbsolute(root)) throw new Error("Storage root must be absolute");
   return resolve(root, key);
 }
 
-export async function readStoredImage(key: string) {
-  return readFile(storagePath(key));
+export async function readStoredAsset(key: string) {
+  // Shared assets live outside the immutable Next.js release bundle.
+  return readFile(/* turbopackIgnore: true */ storagePath(key));
 }
+
+export async function storedAssetSize(key: string): Promise<number> {
+  const result = await stat(/* turbopackIgnore: true */ storagePath(key));
+  return result.size;
+}
+
+export async function readStoredAssetRange(
+  key: string,
+  start: number,
+  end: number,
+): Promise<Buffer> {
+  const length = end - start + 1;
+  const output = Buffer.allocUnsafe(length);
+  const handle = await open(/* turbopackIgnore: true */ storagePath(key), "r");
+  try {
+    const { bytesRead } = await handle.read(output, 0, length, start);
+    return output.subarray(0, bytesRead);
+  } finally {
+    await handle.close();
+  }
+}
+
+// Kept for compatibility with callers introduced by the image-only milestone.
+export const readStoredImage = readStoredAsset;
 
 export async function downloadImage(urlString: string) {
   const url = parseTrustedImageUrl(urlString);
@@ -324,6 +365,224 @@ export async function storeImage(key: string, bytes: Buffer) {
     await rm(temporary, { force: true }).catch(() => undefined);
   }
 
+  return {
+    byteSize: BigInt(bytes.byteLength),
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+  };
+}
+
+function parseTrustedVideoUrl(urlString: string): URL {
+  let url: URL;
+  try {
+    url = new URL(urlString);
+  } catch (error) {
+    throw new ImageStorageError(
+      "VIDEO_OUTPUT_URL_INVALID",
+      "Provider returned an invalid video URL.",
+      { cause: error },
+    );
+  }
+  if (
+    url.protocol !== "https:" ||
+    url.username ||
+    url.password ||
+    (url.port && url.port !== "443") ||
+    isIP(url.hostname) ||
+    !isTrustedImageHostname(url.hostname)
+  )
+    throw new ImageStorageError(
+      "VIDEO_OUTPUT_HOST_UNTRUSTED",
+      "Provider returned an untrusted video host.",
+    );
+  return url;
+}
+
+async function downloadTrustedVideo(
+  url: URL,
+  redirectsRemaining: number,
+): Promise<Buffer> {
+  let addresses: { address: string; family: number }[];
+  try {
+    addresses = await lookup(url.hostname, { all: true, family: 4 });
+  } catch (error) {
+    throw new ImageStorageError(
+      "VIDEO_OUTPUT_DNS_UNSAFE",
+      "Generated video host could not be resolved safely.",
+      { cause: error },
+    );
+  }
+  if (
+    !addresses.length ||
+    addresses.some((a) => a.family !== 4 || blocked.check(a.address, "ipv4"))
+  )
+    throw new ImageStorageError(
+      "VIDEO_OUTPUT_DNS_UNSAFE",
+      "Generated video host resolved to an unsafe address.",
+    );
+  const address = addresses[0]!;
+  return new Promise<Buffer>((resolveDownload, reject) => {
+    const request = get(
+      url,
+      {
+        family: 4,
+        lookup: (_hostname, _options, callback) =>
+          callback(null, address.address, 4),
+        signal: AbortSignal.timeout(120000),
+      },
+      (response) => {
+        const status = response.statusCode ?? 0;
+        if (status >= 300 && status < 400) {
+          const location = response.headers.location;
+          response.resume();
+          if (!location || redirectsRemaining <= 0) {
+            reject(
+              new ImageStorageError(
+                "VIDEO_OUTPUT_HTTP_FAILED",
+                "Generated video redirect was rejected.",
+              ),
+            );
+            return;
+          }
+          let redirected: URL;
+          try {
+            redirected = parseTrustedVideoUrl(
+              new URL(location, url).toString(),
+            );
+          } catch (error) {
+            reject(error);
+            return;
+          }
+          void downloadTrustedVideo(redirected, redirectsRemaining - 1).then(
+            resolveDownload,
+            reject,
+          );
+          return;
+        }
+        if (status !== 200) {
+          response.resume();
+          reject(
+            new ImageStorageError(
+              "VIDEO_OUTPUT_HTTP_FAILED",
+              "Generated video download returned an unexpected status.",
+            ),
+          );
+          return;
+        }
+        const contentType = responseContentType(
+          Array.isArray(response.headers["content-type"])
+            ? response.headers["content-type"][0]
+            : response.headers["content-type"],
+        );
+        if (
+          contentType &&
+          ![
+            "video/mp4",
+            "application/octet-stream",
+            "binary/octet-stream",
+          ].includes(contentType)
+        ) {
+          response.resume();
+          reject(
+            new ImageStorageError(
+              "VIDEO_OUTPUT_CONTENT_TYPE",
+              "Generated video response had an unexpected content type.",
+            ),
+          );
+          return;
+        }
+        const declaredLength = Number(response.headers["content-length"]);
+        if (
+          Number.isFinite(declaredLength) &&
+          declaredLength > MAX_VIDEO_BYTES
+        ) {
+          response.resume();
+          reject(
+            new ImageStorageError(
+              "VIDEO_OUTPUT_TOO_LARGE",
+              "Generated video exceeded the storage size limit.",
+            ),
+          );
+          return;
+        }
+        const parts: Buffer[] = [];
+        let size = 0;
+        response.on("data", (part: Buffer) => {
+          size += part.length;
+          if (size > MAX_VIDEO_BYTES) {
+            response.destroy(
+              new ImageStorageError(
+                "VIDEO_OUTPUT_TOO_LARGE",
+                "Generated video exceeded the storage size limit.",
+              ),
+            );
+            return;
+          }
+          parts.push(part);
+        });
+        response.on("end", () => resolveDownload(Buffer.concat(parts)));
+        response.on("error", (error) =>
+          reject(
+            error instanceof ImageStorageError
+              ? error
+              : new ImageStorageError(
+                  "VIDEO_OUTPUT_DOWNLOAD_FAILED",
+                  "Generated video download was interrupted.",
+                  { cause: error },
+                ),
+          ),
+        );
+      },
+    );
+    request.on("error", (error) =>
+      reject(
+        error instanceof ImageStorageError
+          ? error
+          : new ImageStorageError(
+              "VIDEO_OUTPUT_DOWNLOAD_FAILED",
+              "Generated video download failed.",
+              { cause: error },
+            ),
+      ),
+    );
+  });
+}
+
+export async function downloadVideo(urlString: string) {
+  const url = parseTrustedVideoUrl(urlString);
+  const bytes = await downloadTrustedVideo(url, MAX_REDIRECTS);
+
+  if (bytes.length < 12)
+    throw new ImageStorageError(
+      "VIDEO_OUTPUT_INVALID_MP4",
+      "Generated video failed MP4 validation.",
+    );
+  const ftyp = bytes.subarray(4, 8).toString("ascii");
+  if (ftyp !== "ftyp") {
+    throw new ImageStorageError(
+      "VIDEO_OUTPUT_INVALID_MP4",
+      "Generated video failed MP4 validation.",
+    );
+  }
+  return bytes;
+}
+
+export async function storeVideo(key: string, bytes: Buffer) {
+  const path = storagePath(key);
+  const temporary = `${path}.${randomUUID()}.tmp`;
+
+  try {
+    await mkdir(resolve(path, ".."), { recursive: true, mode: 0o750 });
+    await writeFile(temporary, bytes, { mode: 0o640, flag: "wx" });
+    await rename(temporary, path);
+  } catch (error) {
+    throw new ImageStorageError(
+      "STORAGE_WRITE_FAILED",
+      "Generated video could not be written to persistent storage.",
+      { cause: error },
+    );
+  } finally {
+    await rm(temporary, { force: true }).catch(() => undefined);
+  }
   return {
     byteSize: BigInt(bytes.byteLength),
     sha256: createHash("sha256").update(bytes).digest("hex"),

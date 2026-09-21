@@ -7,8 +7,12 @@ import { Queue, QueueEvents, Worker } from "bullmq";
 import Redis from "ioredis";
 import { db } from "@aiwa/db";
 import type * as Storage from "@aiwa/generation/storage";
-import { createImageJob } from "@aiwa/generation";
-import { processImageJob } from "@aiwa/generation/process";
+import { createImageJob, createVideoJob } from "@aiwa/generation";
+import {
+  processImageJob,
+  processVideoSubmitJob,
+  processVideoPollJob,
+} from "@aiwa/generation/process";
 import { createBytePlusProvider } from "@aiwa/providers/byteplus";
 
 vi.mock("@aiwa/generation/storage", async (importOriginal) => {
@@ -18,6 +22,15 @@ vi.mock("@aiwa/generation/storage", async (importOriginal) => {
     downloadImage: vi
       .fn()
       .mockResolvedValue(Buffer.from("provider PNG fixture")),
+    downloadVideo: vi
+      .fn()
+      .mockResolvedValue(
+        Buffer.concat([
+          Buffer.from([0, 0, 0, 0]),
+          Buffer.from("ftyp"),
+          Buffer.from(" fake video"),
+        ]),
+      ),
   };
 });
 const enabled = process.env.GENERATION_INTEGRATION_TEST === "true";
@@ -25,7 +38,9 @@ const id = `integration-${randomUUID()}`;
 const orgId = `${id}-org`,
   userId = `${id}-user`,
   modelId = `${id}-model`,
-  priceId = `${id}-price`;
+  priceId = `${id}-price`,
+  videoModelId = `${id}-video-model`,
+  videoPriceId = `${id}-video-price`;
 let directory: string;
 const request = () => ({
   organizationId: orgId,
@@ -90,6 +105,35 @@ describe.skipIf(!enabled)("generation with MariaDB and Redis", () => {
         createdById: userId,
       },
     });
+
+    await db.providerModel.create({
+      data: {
+        id: videoModelId,
+        provider: "BYTEPLUS",
+        providerModelId: "dreamina-seedance-2-5-260628",
+        mediaKind: "VIDEO",
+        displayName: "Test Video",
+        description: "Test Video",
+        capabilities: {
+          "aspectRatio:16:9": true,
+          "durationSeconds:5": true,
+        },
+        enabled: true,
+      },
+    });
+    await db.modelPriceVersion.create({
+      data: {
+        id: videoPriceId,
+        providerModelId: videoModelId,
+        providerCostMicroUsd: 100000n,
+        customerCredits: 50n,
+        fxBaisaNumerator: 769n,
+        fxBaisaDenominator: 2n,
+        targetMarginBps: 2500,
+        effectiveFrom: new Date(0),
+        createdById: userId,
+      },
+    });
   });
   afterAll(async () => {
     await db.auditEvent.deleteMany({ where: { organizationId: orgId } });
@@ -105,9 +149,11 @@ describe.skipIf(!enabled)("generation with MariaDB and Redis", () => {
     }
     await db.generationJob.deleteMany({ where: { organizationId: orgId } });
     await db.modelPriceVersion.deleteMany({
-      where: { providerModelId: modelId },
+      where: { providerModelId: { in: [modelId, videoModelId] } },
     });
-    await db.providerModel.deleteMany({ where: { id: modelId } });
+    await db.providerModel.deleteMany({
+      where: { id: { in: [modelId, videoModelId] } },
+    });
     await db.wallet.deleteMany({ where: { organizationId: orgId } });
     await db.membership.deleteMany({ where: { organizationId: orgId } });
     await db.organization.deleteMany({ where: { id: orgId } });
@@ -188,6 +234,59 @@ describe.skipIf(!enabled)("generation with MariaDB and Redis", () => {
       await connection.quit();
     }
   }, 30000);
+
+  it("processes video jobs asynchronously via submit and poll", async () => {
+    const videoInput = {
+      ...request(),
+      modelId: videoModelId,
+      priceVersionId: videoPriceId,
+      prompt: "Video test prompt",
+      durationSeconds: 5,
+    };
+
+    const jobRecord = await createVideoJob(userId, videoInput);
+    expect(jobRecord.status).toBe("QUEUED");
+
+    const submitMock = vi.fn().mockResolvedValue({
+      providerRequestId: "mock-task-id",
+      status: "submitted",
+    });
+    const getJobMock = vi.fn().mockResolvedValue({
+      providerRequestId: "mock-task-id",
+      status: "succeeded",
+      outputUrls: ["https://fixture.bytepluscdn.com/result.mp4"],
+    });
+
+    const provider = {
+      name: "byteplus" as const,
+      listModels: vi.fn(),
+      cancel: vi.fn(),
+      submit: submitMock,
+      getJob: getJobMock,
+    };
+
+    await processVideoSubmitJob(jobRecord.id, provider);
+    expect(submitMock).toHaveBeenCalledTimes(1);
+
+    const processingJob = await db.generationJob.findUniqueOrThrow({
+      where: { id: jobRecord.id },
+    });
+    expect(processingJob.status).toBe("PROCESSING");
+    expect(processingJob.providerRequestId).toBe("mock-task-id");
+
+    await processVideoPollJob(jobRecord.id, provider);
+    expect(getJobMock).toHaveBeenCalledTimes(1);
+
+    const finishedJob = await db.generationJob.findUniqueOrThrow({
+      where: { id: jobRecord.id },
+      include: { assets: true },
+    });
+
+    expect(finishedJob.status).toBe("SUCCEEDED");
+    expect(finishedJob.assets[0]?.status).toBe("READY");
+    expect(finishedJob.assets[0]?.mimeType).toBe("video/mp4");
+  }, 10000);
+
   it("rolls back insufficient credit and member-cap requests", async () => {
     await db.membership.update({
       where: { organizationId_userId: { organizationId: orgId, userId } },

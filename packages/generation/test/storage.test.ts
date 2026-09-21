@@ -4,10 +4,15 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   downloadImage,
+  downloadVideo,
   isTrustedImageHostname,
+  readStoredAsset,
+  readStoredAssetRange,
   readStoredImage,
   storagePath,
   storeImage,
+  storeVideo,
+  storedAssetSize,
 } from "../src/storage";
 
 afterEach(() => vi.unstubAllEnvs());
@@ -53,6 +58,32 @@ describe("private image storage", () => {
       expect(result.byteSize).toBe(BigInt(bytes.length));
       expect(result.sha256).toMatch(/^[a-f0-9]{64}$/);
       expect(await readStoredImage("job.png")).toEqual(bytes);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    "http://cdn.bytepluscdn.com/a.mp4",
+    "https://127.0.0.1/a.mp4",
+    "https://cdn.bytepluscdn.com.evil.example/a.mp4",
+  ])("rejects unsafe video output URL %s", async (url) => {
+    await expect(downloadVideo(url)).rejects.toThrow("untrusted video host");
+  });
+
+  it("writes and reads a private MP4 object", async () => {
+    const root = await mkdtemp(join(tmpdir(), "creator-video-storage-"));
+    vi.stubEnv("ASSET_STORAGE_ROOT", root);
+    try {
+      const bytes = Buffer.from("video fixture");
+      const result = await storeVideo("job.mp4", bytes);
+      expect(result.byteSize).toBe(BigInt(bytes.length));
+      expect(result.sha256).toMatch(/^[a-f0-9]{64}$/);
+      expect(await readStoredAsset("job.mp4")).toEqual(bytes);
+      expect(await storedAssetSize("job.mp4")).toBe(bytes.length);
+      expect(await readStoredAssetRange("job.mp4", 2, 6)).toEqual(
+        bytes.subarray(2, 7),
+      );
     } finally {
       await rm(root, { recursive: true, force: true });
     }

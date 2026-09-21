@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   release: vi.fn(),
   download: vi.fn(),
   store: vi.fn(),
+  downloadVideo: vi.fn(),
+  storeVideo: vi.fn(),
   membership: vi.fn(),
 }));
 vi.mock("@aiwa/db", () => ({ db: mocks.db }));
@@ -33,12 +35,18 @@ vi.mock("../src/storage", () => ({
   ImageStorageError: mocks.ImageStorageError,
   downloadImage: mocks.download,
   storeImage: mocks.store,
+  downloadVideo: mocks.downloadVideo,
+  storeVideo: mocks.storeVideo,
 }));
 import {
   ProviderRequestError,
   type MediaGenerationProvider,
 } from "@aiwa/providers";
-import { processImageJob } from "../src/process";
+import {
+  processImageJob,
+  processVideoPollJob,
+  processVideoSubmitJob,
+} from "../src/process";
 const base = {
   id: "job1",
   organizationId: "org1",
@@ -76,6 +84,90 @@ beforeEach(() => {
   mocks.db.generationJob.updateMany.mockResolvedValue({ count: 1 });
   mocks.store.mockResolvedValue({ byteSize: 100n, sha256: "hash" });
   mocks.download.mockResolvedValue(Buffer.from("png"));
+  mocks.downloadVideo.mockResolvedValue(Buffer.from("mp4"));
+  mocks.storeVideo.mockResolvedValue({ byteSize: 200n, sha256: "video-hash" });
+});
+
+describe("video processing", () => {
+  it("submits a queued video exactly once and records its provider task", async () => {
+    const p = provider();
+    vi.mocked(p.submit).mockResolvedValue({
+      status: "submitted",
+      providerRequestId: "video-request-1",
+    });
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+      ...base,
+      status: "QUEUED",
+    });
+
+    await processVideoSubmitJob("job1", p);
+
+    expect(p.submit).toHaveBeenCalledWith(
+      expect.objectContaining({ mediaKind: "video" }),
+    );
+    expect(mocks.db.generationJob.updateMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: { id: "job1", status: "SUBMITTED" },
+        data: expect.objectContaining({
+          status: "PROCESSING",
+          providerRequestId: "video-request-1",
+        }),
+      }),
+    );
+  });
+
+  it("keeps credits reserved while a video is still processing", async () => {
+    const p = provider();
+    vi.mocked(p.getJob).mockResolvedValue({
+      status: "processing",
+      providerRequestId: "video-request-1",
+    });
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+      ...base,
+      status: "PROCESSING",
+      providerRequestId: "video-request-1",
+      errorCode: null,
+    });
+
+    await processVideoPollJob("job1", p);
+
+    expect(mocks.capture).not.toHaveBeenCalled();
+    expect(mocks.release).not.toHaveBeenCalled();
+    expect(mocks.downloadVideo).not.toHaveBeenCalled();
+  });
+
+  it("stores a completed video before capturing reserved credits", async () => {
+    const p = provider();
+    vi.mocked(p.getJob).mockResolvedValue({
+      status: "succeeded",
+      providerRequestId: "video-request-1",
+      outputUrls: ["https://cdn.bytepluscdn.com/video.mp4"],
+    });
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+      ...base,
+      status: "PROCESSING",
+      providerRequestId: "video-request-1",
+      errorCode: null,
+    });
+    const tx = transaction();
+
+    await processVideoPollJob("job1", p);
+
+    expect(mocks.storeVideo).toHaveBeenCalledWith(
+      "job1.mp4",
+      Buffer.from("mp4"),
+    );
+    expect(mocks.storeVideo.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.capture.mock.invocationCallOrder[0]!,
+    );
+    expect(mocks.capture).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ amountCredits: 28n }),
+    );
+    expect(tx.asset.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { objectKey: "job1.mp4" } }),
+    );
+  });
 });
 describe("image processing", () => {
   it("stores output before capture and success", async () => {

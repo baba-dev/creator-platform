@@ -1,5 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
+  ImageStorageError: class extends Error {
+    constructor(
+      public readonly code: string,
+      message: string,
+    ) {
+      super(message);
+      this.name = "ImageStorageError";
+    }
+  },
   db: {
     generationJob: {
       findUniqueOrThrow: vi.fn(),
@@ -20,14 +29,11 @@ vi.mock("@aiwa/credits", () => ({
   releaseOrRefundCredits: mocks.release,
 }));
 vi.mock("../src/index", () => ({ requireMembership: mocks.membership }));
-vi.mock("../src/storage", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/storage")>();
-  return {
-    ...actual,
-    downloadImage: mocks.download,
-    storeImage: mocks.store,
-  };
-});
+vi.mock("../src/storage", () => ({
+  ImageStorageError: mocks.ImageStorageError,
+  downloadImage: mocks.download,
+  storeImage: mocks.store,
+}));
 import {
   ProviderRequestError,
   type MediaGenerationProvider,

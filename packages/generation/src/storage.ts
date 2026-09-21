@@ -78,8 +78,7 @@ export function isTrustedImageHostname(hostname: string): boolean {
   return (
     trustedExactImageHosts.has(normalized) ||
     trustedImageDomainSuffixes.some(
-      (trusted) =>
-        normalized === trusted || normalized.endsWith(`.${trusted}`),
+      (trusted) => normalized === trusted || normalized.endsWith(`.${trusted}`),
     )
   );
 }

@@ -173,7 +173,9 @@ export async function createImageJob(userId: string, raw: unknown) {
           `aspectRatio:${input.aspectRatio}`,
         )
       ) {
-        throw new GenerationError("Aspect ratio is not supported by this model.");
+        throw new GenerationError(
+          "Aspect ratio is not supported by this model.",
+        );
       }
       if (
         !hasModelCapability(model.capabilities, `resolution:${input.resolution}`)

@@ -135,7 +135,7 @@ describe("createNvidiaProvider", () => {
               message: {
                 role: "assistant",
                 content:
-                  'Here is the result:\n\`\`\`json\n{"enhancedPrompt":"Cinematic light"}\n\`\`\`',
+                  'Here is the result:\n```json\n{"enhancedPrompt":"Cinematic light"}\n```',
               },
             },
           ],

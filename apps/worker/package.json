@@ -7,7 +7,7 @@
     "build": "tsup --format cjs",
     "clean": "rm -rf dist .turbo",
     "dev": "tsx watch src/index.ts",
-    "lint": "eslint src scripts --max-warnings=0",
+    "lint": "eslint src scripts test --max-warnings=0",
     "smoke:byteplus": "node --env-file-if-exists=../../.env --import tsx scripts/byteplus-smoke.ts",
     "start": "node dist/index.cjs",
     "test": "vitest run --passWithNoTests",
@@ -18,7 +18,10 @@
     "@aiwa/core": "workspace:*",
     "@aiwa/providers": "workspace:*",
     "bullmq": "6.3.5",
-    "ioredis": "^5.8.1"
+    "ioredis": "^5.8.1",
+    "@aiwa/generation": "workspace:*",
+    "@aiwa/db": "workspace:*",
+    "@prisma/client": "6.19.3"
   },
   "devDependencies": {
     "tsup": "^8.5.0",

@@ -16,6 +16,24 @@ jobs:
   quality:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    services:
+      mariadb:
+        image: mariadb:10.6
+        env:
+          MARIADB_ROOT_PASSWORD: ci-root-only
+          MARIADB_DATABASE: creator_platform
+          MARIADB_USER: creator
+          MARIADB_PASSWORD: ci-only
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd="redis-cli ping" --health-interval=5s --health-timeout=5s
+          --health-retries=20
     env:
       AUTH_SECRET: ci-only-auth-secret-at-least-32-characters-long
       DATABASE_URL: mysql://creator:ci-only@127.0.0.1:3306/creator_platform
@@ -23,6 +41,7 @@ jobs:
       APP_URL: http://localhost:3000
       APP_VERSION: ${{ github.sha }}
       SIGNUPS_ENABLED: "true"
+      GENERATION_INTEGRATION_TEST: "true"
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -43,6 +62,9 @@ jobs:
 
       - name: Generate Prisma client
         run: pnpm db:generate
+
+      - name: Apply database migrations for integration tests
+        run: pnpm --filter @aiwa/db migrate:deploy
 
       - name: Check deployment shell syntax
         run: |

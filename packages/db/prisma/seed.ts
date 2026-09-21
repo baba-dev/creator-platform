@@ -14,13 +14,13 @@ interface SeedModel {
 
 const verifiedBytePlusModels: readonly SeedModel[] = [
   {
-    providerModelId: "seedream-5-lite",
+    providerModelId: "seedream-5-0-260128",
     mediaKind: "IMAGE",
     displayName: "Seedream 5.0 Lite",
     description:
       "Prompt-aware image creation with strong consistency and editing control.",
     capabilities: {
-      aspectRatios: ["1:1", "16:9", "9:16", "4:5"],
+      aspectRatios: ["1:1", "16:9", "9:16", "4:3"],
       maxSteps: 50,
       defaultSteps: 30,
     },
@@ -28,13 +28,13 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
     customerCredits: 28n,
   },
   {
-    providerModelId: "seedream-4-5",
+    providerModelId: "seedream-4-5-251128",
     mediaKind: "IMAGE",
     displayName: "Seedream 4.5",
     description:
       "Reliable 4K campaign visuals, typography, and multi-reference composition.",
     capabilities: {
-      aspectRatios: ["1:1", "16:9", "9:16", "4:5"],
+      aspectRatios: ["1:1", "16:9", "9:16", "4:3"],
       resolution: "4k",
     },
     providerCostMicroUsd: 41_000n,

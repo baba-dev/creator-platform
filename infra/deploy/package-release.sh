@@ -51,6 +51,11 @@ test -f "$release_root/apps/worker/dist/byteplus-smoke.cjs"
 # Build a portable Prisma/operations package in CI. It has its own node_modules
 # and can be executed on the server without pnpm touching the web runtime.
 pnpm --filter @aiwa/db deploy --legacy "$operations_root"
+node "$operations_root/node_modules/prisma/build/index.js" generate --schema "$operations_root/prisma/schema.prisma"
+
+# Worker uses the same generated Prisma runtime as the isolated DB package.
+mkdir -p "$release_root/apps/worker/node_modules/@prisma"
+ln -s ../../../../ops/db/node_modules/@prisma/client "$release_root/apps/worker/node_modules/@prisma/client"
 
 cp infra/deploy/creator-deploy "$release_root/ops/bin/creator-deploy"
 cp infra/deploy/creator-ops "$release_root/ops/bin/creator-ops"

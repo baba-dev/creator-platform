@@ -6,7 +6,9 @@
     "APP_URL",
     "AUTH_SECRET",
     "DATABASE_URL",
-    "SIGNUPS_ENABLED"
+    "SIGNUPS_ENABLED",
+    "REDIS_URL",
+    "ASSET_STORAGE_ROOT"
   ],
   "tasks": {
     "build": {
@@ -23,7 +25,8 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "outputs": []
+      "outputs": [],
+      "env": ["GENERATION_INTEGRATION_TEST"]
     },
     "typecheck": {
       "dependsOn": ["^typecheck"],

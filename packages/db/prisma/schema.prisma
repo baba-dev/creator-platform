@@ -469,6 +469,8 @@ model ReasoningJob {
   providerModel      ProviderModel      @relation(fields: [providerModelId], references: [id], onDelete: Restrict)
 
   @@index([organizationId, status, createdAt])
+  @@index([createdById, organizationId, status, createdAt])
   @@index([status, updatedAt])
+  @@index([providerRequestId])
 }
 

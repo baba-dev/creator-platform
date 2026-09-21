@@ -470,6 +470,7 @@ model ReasoningJob {
 
   @@index([organizationId, status, createdAt])
   @@index([createdById, organizationId, status, createdAt])
+  @@index([createdById, organizationId, createdAt])
   @@index([status, updatedAt])
   @@index([providerRequestId])
 }

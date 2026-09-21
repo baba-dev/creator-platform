@@ -70,7 +70,6 @@ decrease. This live Studio acceptance check requires the deployed server's
 provider key; the earlier adapter smoke test alone does not prove the complete
 deployed flow.
 
-
 ## Production storage origins
 
 ModelArk output URLs are provider-managed signed object URLs. AP Southeast image

@@ -47,13 +47,13 @@ Failures are recorded on the job with sanitized storage error codes/messages and
 are retried with queue backoff plus a one-minute redispatch cooldown rather than
 a tight loop. Synchronous provider timeouts and interrupted submissions enter
 MANUAL_REVIEW with credits reserved: BytePlus does not provide a verified
-image-submission idempotency/retrieval guarantee, so retrying could incur another
-provider charge. After 24 hours from provider submission, unresolved storage
-failures also require review even though retry attempts update the job record.
-An operator must reconcile the provider outcome before refunding/releasing a
-reservation or restoring PROCESSING for storage recovery; do not requeue
-uncertain submissions. There is no automated manual-review resolution UI in this
-flow.
+image-submission idempotency/retrieval guarantee, so retrying could incur
+another provider charge. After 24 hours from provider submission, unresolved
+storage failures also require review even though retry attempts update the job
+record. An operator must reconcile the provider outcome before
+refunding/releasing a reservation or restoring PROCESSING for storage recovery;
+do not requeue uncertain submissions. There is no automated manual-review
+resolution UI in this flow.
 
 ## Verification
 

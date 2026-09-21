@@ -106,7 +106,9 @@ describe("createNvidiaProvider", () => {
     expect(result.outputTokens).toBe(20);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, options] = fetchMock.mock.calls[0];
+    const call = fetchMock.mock.calls[0];
+    expect(call).toBeDefined();
+    const [url, options] = call!;
     expect(url).toBe("https://integrate.api.nvidia.com/v1/chat/completions");
     expect(options.method).toBe("POST");
     expect(options.headers).toEqual({

@@ -1,5 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
+  ImageStorageError: class extends Error {
+    constructor(
+      public readonly code: string,
+      message: string,
+    ) {
+      super(message);
+      this.name = "ImageStorageError";
+    }
+  },
   db: {
     generationJob: {
       findUniqueOrThrow: vi.fn(),
@@ -21,6 +30,7 @@ vi.mock("@aiwa/credits", () => ({
 }));
 vi.mock("../src/index", () => ({ requireMembership: mocks.membership }));
 vi.mock("../src/storage", () => ({
+  ImageStorageError: mocks.ImageStorageError,
   downloadImage: mocks.download,
   storeImage: mocks.store,
 }));
@@ -142,6 +152,16 @@ describe("image processing", () => {
     await expect(processImageJob("job1", p)).rejects.toThrow();
     expect(p.submit).not.toHaveBeenCalled();
     expect(mocks.capture).not.toHaveBeenCalled();
+    expect(mocks.db.generationJob.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "job1", status: "PROCESSING" },
+        data: expect.objectContaining({
+          errorCode: "STORAGE_RECOVERY_FAILED",
+          errorMessage:
+            "Generated image could not be saved. Credits remain reserved while storage recovery retries.",
+        }),
+      }),
+    );
   });
   it.each(["SUBMITTED", "SUCCEEDED", "FAILED", "CANCELLED", "MANUAL_REVIEW"])(
     "does not replay %s",

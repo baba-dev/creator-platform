@@ -32,23 +32,28 @@ package. No server-side dependency installation is required.
    Redis/BullMQ. Redis failures do not lose accepted jobs.
 4. An atomic QUEUED → SUBMITTED claim permits only one provider submission.
    Provider output metadata is saved before downloading.
-5. The worker validates the HTTPS CDN destination, pins a public IPv4 address,
-   rejects redirects and limits downloads to 25 MiB. It atomically writes a PNG
-   into persistent storage. A second database transaction marks the asset READY,
+5. The worker validates the HTTPS CDN destination against explicit BytePlus and
+   documented ModelArk object-storage hosts, resolves and pins a public IPv4
+   address, revalidates up to three redirects, limits downloads to 25 MiB, and
+   verifies the PNG signature before persistence. It atomically writes the PNG
+   into shared storage. A second database transaction marks the asset READY,
    captures reserved credits and marks the job SUCCEEDED.
 6. Studio polls job history and balance. Previews/downloads authorize current
    membership on every request; provider URLs and filesystem paths are private.
 
 Definite provider rejection releases credits and the pending storage allocation.
 Storage retries reuse saved output metadata without another generation call.
-Synchronous provider timeouts and interrupted submissions enter MANUAL_REVIEW
-with credits reserved: BytePlus does not provide a verified image-submission
-idempotency/retrieval guarantee, so retrying could incur another provider
-charge. After 24 hours, unresolved storage failures also require review. An
-operator must reconcile the provider outcome before refunding/releasing a
-reservation or restoring PROCESSING for storage recovery; do not requeue
-uncertain submissions. There is no automated manual-review resolution UI in this
-PR.
+Failures are recorded on the job with sanitized storage error codes/messages and
+are retried with queue backoff plus a one-minute redispatch cooldown rather than
+a tight loop. Synchronous provider timeouts and interrupted submissions enter
+MANUAL_REVIEW with credits reserved: BytePlus does not provide a verified
+image-submission idempotency/retrieval guarantee, so retrying could incur
+another provider charge. After 24 hours from provider submission, unresolved
+storage failures also require review even though retry attempts update the job
+record. An operator must reconcile the provider outcome before
+refunding/releasing a reservation or restoring PROCESSING for storage recovery;
+do not requeue uncertain submissions. There is no automated manual-review
+resolution UI in this flow.
 
 ## Verification
 
@@ -64,3 +69,16 @@ Confirm one RESERVATION and one CAPTURE for the job and a corresponding wallet
 decrease. This live Studio acceptance check requires the deployed server's
 provider key; the earlier adapter smoke test alone does not prove the complete
 deployed flow.
+
+## Production storage origins
+
+ModelArk output URLs are provider-managed signed object URLs. AP Southeast image
+generation can use Volcengine TOS origins such as
+`ark-acg-ap-southeast-1.tos-ap-southeast-1.volces.com`. The downloader trusts
+only the documented generated-media bucket hosts plus existing BytePlus CDN/TOS
+domains; it does not trust the whole `volces.com` namespace. When BytePlus adds
+or changes an output origin, verify it against BytePlus documentation before
+changing the allowlist.
+
+The worker never logs or exposes signed provider URLs. Storage/download failures
+may log the job ID, safe error class/message, and retry count only.

@@ -5,7 +5,7 @@ import {
   type MediaGenerationProvider,
 } from "@aiwa/providers";
 import { requireMembership } from "./index";
-import { downloadImage, storeImage } from "./storage";
+import { downloadImage, ImageStorageError, storeImage } from "./storage";
 
 export async function failJob(id: string, message: string) {
   await db.$transaction(async (tx) => {
@@ -36,6 +36,24 @@ export async function failJob(id: string, message: string) {
     });
   });
 }
+
+async function recordStorageFailure(id: string, error: unknown) {
+  const code =
+    error instanceof ImageStorageError ? error.code : "STORAGE_RECOVERY_FAILED";
+  const message =
+    error instanceof ImageStorageError
+      ? `${error.message} Credits remain reserved while storage recovery retries.`
+      : "Generated image could not be saved. Credits remain reserved while storage recovery retries.";
+
+  await db.generationJob.updateMany({
+    where: { id, status: "PROCESSING" },
+    data: {
+      errorCode: code,
+      errorMessage: message,
+    },
+  });
+}
+
 export async function processImageJob(
   id: string,
   provider: MediaGenerationProvider,
@@ -71,6 +89,8 @@ export async function processImageJob(
           status: "PROCESSING",
           providerRequestId: result.providerRequestId,
           outputPayload: { url: result.outputUrls[0]! },
+          errorCode: null,
+          errorMessage: null,
         },
       });
     } catch (error) {
@@ -99,9 +119,23 @@ export async function processImageJob(
     });
   }
   if (job.status !== "PROCESSING") return;
-  const output = job.outputPayload as { url: string };
-  const bytes = await downloadImage(output.url);
-  const stored = await storeImage(`${id}.png`, bytes);
+
+  let stored: Awaited<ReturnType<typeof storeImage>>;
+  try {
+    const output = job.outputPayload as { url?: unknown } | null;
+    if (!output || typeof output.url !== "string" || !output.url) {
+      throw new ImageStorageError(
+        "IMAGE_OUTPUT_URL_INVALID",
+        "Provider image output metadata was unavailable.",
+      );
+    }
+    const bytes = await downloadImage(output.url);
+    stored = await storeImage(`${id}.png`, bytes);
+  } catch (error) {
+    await recordStorageFailure(id, error);
+    throw error;
+  }
+
   await db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM GenerationJob WHERE id = ${id} FOR UPDATE`;
     const current = await tx.generationJob.findUniqueOrThrow({ where: { id } });

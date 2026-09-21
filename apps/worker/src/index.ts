@@ -86,8 +86,13 @@ const generationWorker = new Worker(
 generationWorker.on("error", () =>
   log("error", "Generation queue connection failed"),
 );
-generationWorker.on("failed", () =>
-  log("error", "Generation processing will be recovered"),
+generationWorker.on("failed", (job, error) =>
+  log("error", "Generation processing failed; recovery remains queued", {
+    jobId: job?.id,
+    attemptsMade: job?.attemptsMade,
+    errorName: error.name,
+    errorMessage: error.message,
+  }),
 );
 let dispatching = false;
 async function dispatch() {
@@ -110,7 +115,17 @@ async function dispatch() {
     await db.generationJob.updateMany({
       where: {
         status: "PROCESSING",
-        updatedAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        OR: [
+          {
+            submittedAt: {
+              lt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+            },
+          },
+          {
+            submittedAt: null,
+            updatedAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+          },
+        ],
       },
       data: {
         status: "MANUAL_REVIEW",
@@ -119,8 +134,20 @@ async function dispatch() {
           "Image could not be stored. Credits remain reserved for review.",
       },
     });
+    const retryBefore = new Date(Date.now() - 60 * 1000);
     const jobs = await db.generationJob.findMany({
-      where: { status: { in: ["QUEUED", "PROCESSING"] } },
+      where: {
+        OR: [
+          { status: "QUEUED" },
+          {
+            status: "PROCESSING",
+            OR: [
+              { errorCode: null },
+              { errorCode: { not: null }, updatedAt: { lt: retryBefore } },
+            ],
+          },
+        ],
+      },
       select: { id: true },
       orderBy: { createdAt: "asc" },
       take: 100,

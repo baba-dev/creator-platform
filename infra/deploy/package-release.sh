@@ -24,6 +24,7 @@ cd "$repository_root"
 test -f apps/web/.next/standalone/apps/web/server.js
 test -d apps/web/.next/static
 test -f apps/worker/dist/index.cjs
+test -f apps/worker/dist/byteplus-smoke.cjs
 test -f packages/db/prisma/schema.prisma
 test -d packages/db/prisma/migrations
 test -f packages/db/prisma/promote-owner.ts
@@ -45,6 +46,7 @@ if [[ -d apps/web/public ]]; then
 fi
 
 cp -a apps/worker/dist "$release_root/apps/worker/dist"
+test -f "$release_root/apps/worker/dist/byteplus-smoke.cjs"
 
 # Build a portable Prisma/operations package in CI. It has its own node_modules
 # and can be executed on the server without pnpm touching the web runtime.

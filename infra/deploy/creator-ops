@@ -16,6 +16,7 @@ usage() {
   cat >&2 <<'USAGE'
 Usage:
   creator-ops promote-owner <email>
+  creator-ops byteplus-smoke
 USAGE
   exit 64
 }
@@ -33,6 +34,9 @@ case "$command_name" in
     [[ "$email" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]] \
       || fail "a valid email address is required"
     ;;
+  byteplus-smoke)
+    [[ $# -eq 0 ]] || usage
+    ;;
   *)
     usage
     ;;
@@ -40,17 +44,30 @@ esac
 
 release_dir="$(readlink -f "$current_link" 2>/dev/null || true)"
 [[ -n "$release_dir" && -d "$release_dir" ]] || fail "active release is unavailable"
-[[ -x "$release_dir/ops/db/node_modules/.bin/tsx" ]] \
-  || fail "active release does not contain operations tooling"
-[[ -f "$release_dir/ops/db/prisma/promote-owner.ts" ]] \
-  || fail "owner promotion command is unavailable"
+case "$command_name" in
+  promote-owner)
+    [[ -x "$release_dir/ops/db/node_modules/.bin/tsx" ]] \
+      || fail "active release does not contain operations tooling"
+    [[ -f "$release_dir/ops/db/prisma/promote-owner.ts" ]] \
+      || fail "owner promotion command is unavailable"
+    ;;
+  byteplus-smoke)
+    [[ -f "$release_dir/apps/worker/dist/byteplus-smoke.cjs" ]] \
+      || fail "BytePlus smoke command is unavailable"
+    ;;
+esac
 
 runuser --preserve-environment -u "$runtime_user" -- \
-  /bin/bash -s -- "$release_dir" "$environment_file" "$email" <<'OPERATIONS'
+  /bin/bash -s -- \
+  "$release_dir" \
+  "$environment_file" \
+  "$command_name" \
+  "${email:-}" <<'OPERATIONS'
 set -Eeuo pipefail
 release_dir="$1"
 environment_file="$2"
-email="$3"
+command_name="$3"
+argument="$4"
 
 while IFS= read -r line || [[ -n "$line" ]]; do
   line="${line%$'\r'}"
@@ -69,6 +86,19 @@ export XDG_CACHE_HOME=/var/www/creator-platform/.cache
 export XDG_CONFIG_HOME=/var/www/creator-platform/.config
 export XDG_STATE_HOME=/var/www/creator-platform/.local/state
 
-cd "$release_dir/ops/db"
-exec ./node_modules/.bin/tsx prisma/promote-owner.ts "$email"
+case "$command_name" in
+  promote-owner)
+    cd "$release_dir/ops/db"
+    exec ./node_modules/.bin/tsx prisma/promote-owner.ts "$argument"
+    ;;
+  byteplus-smoke)
+    export BYTEPLUS_SMOKE_OUTPUT_DIR=/var/www/creator-platform/shared/byteplus-smoke
+    mkdir -p "$BYTEPLUS_SMOKE_OUTPUT_DIR"
+    cd "$release_dir"
+    exec /usr/bin/node apps/worker/dist/byteplus-smoke.cjs
+    ;;
+  *)
+    exit 64
+    ;;
+esac
 OPERATIONS

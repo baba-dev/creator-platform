@@ -352,6 +352,17 @@ key, prompt, or temporary provider output URL. Seed Speech uses a separate
 `BYTEPLUS_SPEECH_API_KEY`; the legacy App ID/access-token pair remains available
 only for accounts that have not migrated.
 
+On a deployed server, the equivalent root-controlled operation loads the
+persistent service environment and stores the image outside immutable releases:
+
+```bash
+sudo creator-ops byteplus-smoke
+```
+
+Successful output is written under
+`/var/www/creator-platform/shared/byteplus-smoke/` with owner-only file
+permissions.
+
 ## Staging
 
 The staging environment is hosted at:

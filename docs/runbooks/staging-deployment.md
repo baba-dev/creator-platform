@@ -106,6 +106,17 @@ sudo creator-ops promote-owner owner@example.com
 The command uses the isolated tooling from the active release, performs an
 idempotent role update, and writes an audit event. It does not invoke pnpm.
 
+Run one explicitly acknowledged, billable BytePlus image smoke test using the
+credentials in `/etc/aiwa-creators/creator.env`:
+
+```bash
+sudo creator-ops byteplus-smoke
+```
+
+The generated PNG is stored persistently under
+`/var/www/creator-platform/shared/byteplus-smoke/` and the command never prints
+the API key, prompt, or temporary provider output URL.
+
 ## TLS activation
 
 Point the Cloudflare DNS record to `129.151.137.222` and temporarily use

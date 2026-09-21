@@ -42,7 +42,7 @@ describe("private image storage", () => {
     "https://user:pass@cdn.bytepluscdn.com/a.png",
     "https://cdn.bytepluscdn.com:8443/a.png",
   ])("rejects unsafe output URL %s", async (url) => {
-    await expect(downloadImage(url)).rejects.toThrow("Untrusted image host");
+    await expect(downloadImage(url)).rejects.toThrow("untrusted image host");
   });
   it("writes a durable object and checksum that can be read after success", async () => {
     const root = await mkdtemp(join(tmpdir(), "creator-storage-"));

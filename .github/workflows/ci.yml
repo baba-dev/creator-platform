@@ -74,7 +74,10 @@ jobs:
           bash -n infra/deploy/package-release.sh
 
       - name: Check formatting
-        run: pnpm format:check
+        run: |
+          pnpm format
+          git diff -- apps/web/src/app/api/admin/models/sync/route.ts apps/web/src/components/studio/generation-studio.tsx packages/generation/src/index.ts
+          exit 1
 
       - name: Lint
         run: pnpm lint

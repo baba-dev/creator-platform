@@ -1,5 +1,5 @@
-import { hasOrganizationPermission } from "@aiwa/authz";
 import { db, type Prisma } from "@aiwa/db";
+import { requireMembership } from "@aiwa/generation";
 import { ProviderRequestError, type ReasoningProvider } from "@aiwa/providers";
 import { type Job } from "bullmq";
 
@@ -59,23 +59,12 @@ async function ensureCurrentAccess(
   organizationId: string,
   userId: string,
 ): Promise<boolean> {
-  const membership = await db.membership.findUnique({
-    where: {
-      organizationId_userId: { organizationId, userId },
-    },
-    select: {
-      role: true,
-      organization: { select: { status: true } },
-      user: { select: { disabledAt: true } },
-    },
-  });
-
-  return Boolean(
-    membership &&
-      !membership.user.disabledAt &&
-      membership.organization.status === "ACTIVE" &&
-      hasOrganizationPermission(membership.role, "generation:create"),
-  );
+  try {
+    await requireMembership(db, organizationId, userId, true);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function failReasoningJob(

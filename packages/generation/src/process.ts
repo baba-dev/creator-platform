@@ -39,9 +39,7 @@ export async function failJob(id: string, message: string) {
 
 async function recordStorageFailure(id: string, error: unknown) {
   const code =
-    error instanceof ImageStorageError
-      ? error.code
-      : "STORAGE_RECOVERY_FAILED";
+    error instanceof ImageStorageError ? error.code : "STORAGE_RECOVERY_FAILED";
   const message =
     error instanceof ImageStorageError
       ? `${error.message} Credits remain reserved while storage recovery retries.`

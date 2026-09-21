@@ -64,7 +64,12 @@ export function GenerationStudio({
   const [resolution, setResolution] = useState("2K");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isEnhancing, setIsEnhancing] = useState(false);
   const attempt = useRef<{ fingerprint: string; key: string } | null>(null);
+  const enhancementAttempt = useRef<{
+    fingerprint: string;
+    key: string;
+  } | null>(null);
   const model = data?.models.find((m) => m.id === modelId) ?? data?.models[0];
 
   const availableRatios = useMemo(
@@ -109,7 +114,7 @@ export function GenerationStudio({
     };
   }, [refresh]);
   async function generate() {
-    if (!model || busy) return;
+    if (!model || busy || isEnhancing) return;
     setBusy(true);
     setError(null);
     const input = {
@@ -144,6 +149,72 @@ export function GenerationStudio({
       setBusy(false);
     }
   }
+
+  async function enhancePrompt() {
+    const sourcePrompt = prompt.trim();
+    if (!sourcePrompt || isEnhancing || busy || !canGenerate) return;
+
+    const fingerprint = JSON.stringify({ organizationId, sourcePrompt });
+    if (enhancementAttempt.current?.fingerprint !== fingerprint)
+      enhancementAttempt.current = {
+        fingerprint,
+        key: crypto.randomUUID(),
+      };
+
+    setIsEnhancing(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/reasoning/dispatch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          organizationId,
+          userPrompt: sourcePrompt,
+          idempotencyKey: enhancementAttempt.current.key,
+        }),
+      });
+      const body = await response.json();
+      if (!response.ok)
+        throw new Error(
+          body.error ?? "Prompt enhancement could not be queued.",
+        );
+
+      const jobId = body.jobId as string;
+      for (let attemptNumber = 0; attemptNumber < 45; attemptNumber += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        const pollResponse = await fetch(`/api/reasoning/${jobId}`, {
+          cache: "no-store",
+        });
+        const job = await pollResponse.json();
+        if (!pollResponse.ok)
+          throw new Error(
+            job.error ?? "Prompt enhancement status unavailable.",
+          );
+
+        if (job.status === "SUCCEEDED") {
+          const enhancedPrompt = job.outputPayload?.enhancedPrompt;
+          if (typeof enhancedPrompt !== "string" || !enhancedPrompt.trim())
+            throw new Error("Prompt enhancement returned an invalid result.");
+          setPrompt(enhancedPrompt);
+          enhancementAttempt.current = null;
+          return;
+        }
+        if (job.status === "FAILED")
+          throw new Error(job.errorMessage ?? "Prompt enhancement failed.");
+      }
+
+      throw new Error("Prompt enhancement timed out. Retry the same request.");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Prompt enhancement could not be completed.",
+      );
+    } finally {
+      setIsEnhancing(false);
+    }
+  }
+
   return (
     <section
       id="create"
@@ -191,15 +262,35 @@ export function GenerationStudio({
           >
             Describe your visual
           </label>
-          <textarea
-            id="creation-prompt"
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            maxLength={2000}
-            disabled={busy}
-            placeholder="A cinematic product photograph in warm Omani desert light…"
-            className="min-h-44 w-full rounded-2xl border border-input bg-card p-4 text-foreground placeholder:text-muted-foreground"
-          />
+          <div className="relative">
+            <textarea
+              id="creation-prompt"
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              maxLength={2000}
+              disabled={busy || isEnhancing}
+              placeholder="A cinematic product photograph in warm Omani desert light…"
+              className="min-h-44 w-full rounded-2xl border border-input bg-card p-4 pb-14 text-foreground placeholder:text-muted-foreground"
+            />
+            <button
+              type="button"
+              onClick={() => void enhancePrompt()}
+              disabled={busy || isEnhancing || !canGenerate || !prompt.trim()}
+              className="absolute bottom-3 right-3 flex items-center gap-1.5 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition hover:bg-primary/20 disabled:opacity-50"
+            >
+              {isEnhancing ? (
+                <>
+                  <span
+                    aria-hidden="true"
+                    className="size-3 animate-spin rounded-full border-2 border-primary border-t-transparent"
+                  />
+                  Enhancing…
+                </>
+              ) : (
+                <>✨ Enhance prompt</>
+              )}
+            </button>
+          </div>
           <label
             htmlFor="image-ratio"
             className="block text-sm font-semibold text-foreground"

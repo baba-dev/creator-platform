@@ -76,20 +76,12 @@ export function GenerationStudio({
     [model?.capabilities],
   );
 
-  useEffect(() => {
-    if (availableRatios.length && !availableRatios.includes(ratio)) {
-      setRatio(availableRatios[0]);
-    }
-  }, [availableRatios, ratio]);
-
-  useEffect(() => {
-    if (
-      availableResolutions.length &&
-      !availableResolutions.includes(resolution)
-    ) {
-      setResolution(availableResolutions[0]);
-    }
-  }, [availableResolutions, resolution]);
+  const selectedRatio = availableRatios.includes(ratio)
+    ? ratio
+    : (availableRatios[0] ?? "");
+  const selectedResolution = availableResolutions.includes(resolution)
+    ? resolution
+    : (availableResolutions[0] ?? "");
 
   const refresh = useCallback(async () => {
     const response = await fetch(
@@ -125,8 +117,8 @@ export function GenerationStudio({
       modelId: model.id,
       priceVersionId: model.priceVersionId,
       prompt,
-      aspectRatio: ratio,
-      resolution,
+      aspectRatio: selectedRatio,
+      resolution: selectedResolution,
     };
     const fingerprint = JSON.stringify(input);
     if (attempt.current?.fingerprint !== fingerprint)
@@ -216,7 +208,7 @@ export function GenerationStudio({
           </label>
           <select
             id="image-ratio"
-            value={ratio}
+            value={selectedRatio}
             onChange={(e) => setRatio(e.target.value)}
             disabled={busy || availableRatios.length === 0}
             className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
@@ -239,7 +231,7 @@ export function GenerationStudio({
           </label>
           <select
             id="image-resolution"
-            value={resolution}
+            value={selectedResolution}
             onChange={(e) => setResolution(e.target.value)}
             disabled={busy || availableResolutions.length === 0}
             className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
@@ -267,8 +259,8 @@ export function GenerationStudio({
               !data?.configured ||
               !model ||
               !prompt.trim() ||
-              !availableRatios.includes(ratio) ||
-              !availableResolutions.includes(resolution) ||
+              !selectedRatio ||
+              !selectedResolution ||
               BigInt(data?.balance ?? "0") < BigInt(model?.credits ?? "0")
             }
           >

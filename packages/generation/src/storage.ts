@@ -10,16 +10,22 @@ const MAX_REDIRECTS = 3;
 const DOWNLOAD_TIMEOUT_MS = 120_000;
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 
-const trustedImageHosts = [
+const trustedImageDomainSuffixes = [
   "bytepluscdn.com",
   "byteimg.com",
   "ibytedtos.com",
   "tos-ap-southeast-1.bytepluses.com",
   "tos-eu-west-1.bytepluses.com",
-  // BytePlus ModelArk image generation currently returns signed Volcengine TOS
-  // URLs from this service domain in AP Southeast.
-  "tos-ap-southeast-1.volces.com",
 ] as const;
+
+const trustedExactImageHosts = new Set([
+  // BytePlus documents these AP Southeast object-storage origins for generated
+  // Seedream and Seedance media. Keep this list exact rather than trusting the
+  // entire volces.com TOS namespace.
+  "ark-acg-ap-southeast-1.tos-ap-southeast-1.volces.com",
+  "ark-content-generation-ap-southeast-1.tos-ap-southeast-1.volces.com",
+  "ark-content-generation-v2-ap-southeast-1.tos-ap-southeast-1.volces.com",
+]);
 
 const allowedContentTypes = new Set([
   "image/png",
@@ -69,9 +75,12 @@ export class ImageStorageError extends Error {
 
 export function isTrustedImageHostname(hostname: string): boolean {
   const normalized = hostname.toLowerCase().replace(/\.$/, "");
-  return trustedImageHosts.some(
-    (trusted) =>
-      normalized === trusted || normalized.endsWith(`.${trusted}`),
+  return (
+    trustedExactImageHosts.has(normalized) ||
+    trustedImageDomainSuffixes.some(
+      (trusted) =>
+        normalized === trusted || normalized.endsWith(`.${trusted}`),
+    )
   );
 }
 
@@ -105,7 +114,7 @@ function parseTrustedImageUrl(urlString: string): URL {
 }
 
 async function resolvePublicIpv4(hostname: string): Promise<string> {
-  let addresses: Awaited<ReturnType<typeof lookup>>;
+  let addresses: { address: string; family: number }[];
   try {
     addresses = await lookup(hostname, { all: true, family: 4 });
   } catch (error) {

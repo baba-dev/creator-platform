@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Eyebrow } from "@/components/ui/creative";
 import { StatusDot, Tape } from "@/components/ui/sketch";
@@ -297,7 +291,8 @@ export function GenerationStudio({
             </p>
           ) : null}
           {model &&
-          (availableRatios.length === 0 || availableResolutions.length === 0) ? (
+          (availableRatios.length === 0 ||
+            availableResolutions.length === 0) ? (
             <p className="text-sm text-destructive">
               This model is missing generation capabilities. Ask an admin to
               sync provider models before generating.

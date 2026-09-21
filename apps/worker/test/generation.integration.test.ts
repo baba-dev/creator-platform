@@ -116,6 +116,7 @@ describe.skipIf(!enabled)("generation with MariaDB and Redis", () => {
         description: "Test Video",
         capabilities: {
           "aspectRatio:16:9": true,
+          "resolution:1080p": true,
           "durationSeconds:5": true,
         },
         enabled: true,
@@ -241,6 +242,8 @@ describe.skipIf(!enabled)("generation with MariaDB and Redis", () => {
       modelId: videoModelId,
       priceVersionId: videoPriceId,
       prompt: "Video test prompt",
+      aspectRatio: "16:9",
+      resolution: "1080p",
       durationSeconds: 5,
     };
 

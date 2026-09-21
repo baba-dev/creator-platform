@@ -74,10 +74,7 @@ jobs:
           bash -n infra/deploy/package-release.sh
 
       - name: Check formatting
-        run: |
-          pnpm exec prettier --write apps/web/src/app/api/reasoning/dispatch/route.ts docs/prompt-enhancement.md
-          git diff --no-ext-diff -- apps/web/src/app/api/reasoning/dispatch/route.ts docs/prompt-enhancement.md
-          exit 1
+        run: pnpm format:check
 
       - name: Lint
         run: pnpm lint

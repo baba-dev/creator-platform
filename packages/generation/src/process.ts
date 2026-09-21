@@ -5,11 +5,7 @@ import {
   type MediaGenerationProvider,
 } from "@aiwa/providers";
 import { requireMembership } from "./index";
-import {
-  downloadImage,
-  ImageStorageError,
-  storeImage,
-} from "./storage";
+import { downloadImage, ImageStorageError, storeImage } from "./storage";
 
 export async function failJob(id: string, message: string) {
   await db.$transaction(async (tx) => {

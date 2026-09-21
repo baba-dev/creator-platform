@@ -22,6 +22,7 @@ CREATE TABLE `ReasoningJob` (
   UNIQUE INDEX `ReasoningJob_idempotencyKey_key`(`idempotencyKey`),
   INDEX `ReasoningJob_organizationId_status_createdAt_idx`(`organizationId`, `status`, `createdAt`),
   INDEX `ReasoningJob_createdById_organizationId_status_createdAt_idx`(`createdById`, `organizationId`, `status`, `createdAt`),
+  INDEX `ReasoningJob_createdById_organizationId_createdAt_idx`(`createdById`, `organizationId`, `createdAt`),
   INDEX `ReasoningJob_status_updatedAt_idx`(`status`, `updatedAt`),
   INDEX `ReasoningJob_providerRequestId_idx`(`providerRequestId`),
   PRIMARY KEY (`id`)

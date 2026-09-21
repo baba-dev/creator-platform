@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@aiwa/authz": "workspace:*",
     "@aiwa/config": "workspace:*",
     "@aiwa/core": "workspace:*",
     "@aiwa/providers": "workspace:*",

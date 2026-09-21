@@ -18,7 +18,12 @@ describe("private image storage", () => {
         "ark-acg-ap-southeast-1.tos-ap-southeast-1.volces.com",
       ),
     ).toBe(true);
-    expect(isTrustedImageHostname("tos-ap-southeast-1.volces.com")).toBe(true);
+    expect(
+      isTrustedImageHostname(
+        "ark-content-generation-v2-ap-southeast-1.tos-ap-southeast-1.volces.com",
+      ),
+    ).toBe(true);
+    expect(isTrustedImageHostname("tos-ap-southeast-1.volces.com")).toBe(false);
     expect(isTrustedImageHostname("cdn.bytepluscdn.com")).toBe(true);
     expect(isTrustedImageHostname("volces.com")).toBe(false);
     expect(

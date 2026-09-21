@@ -274,12 +274,14 @@ export function GenerationStudio({
               placeholder="A cinematic product photograph in warm Omani desert light…"
               className="min-h-44 w-full rounded-2xl border border-input bg-card p-4 pb-14 text-foreground placeholder:text-muted-foreground"
             />
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="sm"
               onClick={() => void enhancePrompt()}
               disabled={busy || isEnhancing || !canGenerate || !prompt.trim()}
               aria-busy={isEnhancing}
-              className="absolute bottom-3 right-3 flex items-center gap-1.5 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition hover:bg-primary/20 disabled:opacity-50"
+              className="absolute bottom-3 right-3"
             >
               {isEnhancing ? (
                 <>
@@ -292,7 +294,7 @@ export function GenerationStudio({
               ) : (
                 <>✨ Enhance prompt</>
               )}
-            </button>
+            </Button>
           </div>
           <label
             htmlFor="image-ratio"

@@ -1,9 +1,10 @@
-# Image and video generation
+# Image, video, and voice generation
 
 Studio submits PNG images and asynchronous MP4 video tasks through the verified
-BytePlus adapter. Prompt enhancement can target either medium. Voice and
-reference-media inputs are not enabled in this Studio flow. The generation
-integration is exercised in CI with real MariaDB and Redis services.
+BytePlus adapter and synthesizes MP3 speech through the separately credentialed
+Seed Speech v3 API. Prompt enhancement targets image and video; it is not shown
+for literal voice scripts. Reference-media inputs are not enabled. The
+generation integration is exercised in CI with real MariaDB and Redis services.
 
 ## Deployment
 
@@ -12,6 +13,8 @@ onto `seedream-5-0-260128` and `seedream-4-5-251128`, preserving IDs, prices,
 enabled flags and history. A fresh database still requires `pnpm db:seed`.
 
 Both services read the existing `BYTEPLUS_API_KEY`, region and ModelArk URL.
+Voice additionally requires `BYTEPLUS_SPEECH_API_KEY`; ModelArk and legacy App
+ID/access-token credentials are not interchangeable with that key.
 `ASSET_STORAGE_ROOT` defaults to `/var/www/creator-platform/shared/assets`. The
 directory must be writable by `aiwa-creator`, live outside immutable releases,
 and be backed up with the database. The standard bootstrap already creates its
@@ -50,12 +53,12 @@ are retried with queue backoff plus a one-minute redispatch cooldown rather than
 a tight loop. Synchronous provider timeouts and interrupted submissions enter
 MANUAL_REVIEW with credits reserved: BytePlus does not provide a verified
 image-submission idempotency/retrieval guarantee, so retrying could incur
-another provider charge. After 24 hours, unresolved image storage failures
-require review; video tasks enter review after a two-hour recovery window. An
-operator must reconcile the provider outcome before refunding/releasing a
-reservation or restoring PROCESSING for storage recovery; do not requeue
-uncertain submissions. There is no automated manual-review resolution UI in this
-flow.
+another provider charge. After 24 hours, unresolved image or voice storage
+failures require review; video tasks enter review after a two-hour recovery
+window. An operator must reconcile the provider outcome before
+refunding/releasing a reservation or restoring PROCESSING for storage recovery;
+do not requeue uncertain submissions. There is no automated manual-review
+resolution UI in this flow.
 
 ## Verification
 
@@ -65,12 +68,12 @@ insufficient funds, spending caps and access checks. Only the external provider
 response and CDN download are mocked; no credentials or paid calls are required.
 Unit tests cover definite failures, uncertain timeouts and storage retries.
 
-After deployment, use a funded workspace with enabled, priced image and video
-models. Generate one of each, wait for Ready, verify in-browser MP4 seeking, and
-download the PNG/MP4. Confirm one RESERVATION and one CAPTURE per successful job
-and the corresponding wallet decreases. This live Studio acceptance check
-requires the deployed server's provider key; the adapter smoke test alone does
-not prove the complete deployed flow.
+After deployment, use a funded workspace with enabled, priced image, video and
+voice models. Generate one of each, wait for Ready, verify in-browser MP4
+seeking and MP3 playback, and download the PNG/MP4/MP3. Confirm one RESERVATION
+and one CAPTURE per successful job and the corresponding wallet decreases. This
+live Studio acceptance check requires the deployed server's provider key; the
+adapter smoke test alone does not prove the complete deployed flow.
 
 ## Production storage origins
 

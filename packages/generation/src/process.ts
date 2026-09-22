@@ -1,6 +1,7 @@
 import { captureCreditsForJob, releaseOrRefundCredits } from "@aiwa/credits";
 import { db } from "@aiwa/db";
 import {
+  ProviderConfigurationError,
   ProviderRequestError,
   type MediaGenerationProvider,
 } from "@aiwa/providers";
@@ -12,6 +13,7 @@ import {
   storeAudio,
   storeImage,
   storeVideo,
+  storedAssetSize,
 } from "./storage";
 
 export async function failJob(id: string, message: string) {
@@ -359,8 +361,48 @@ export async function processVoiceJob(
 ) {
   const job = await db.generationJob.findUniqueOrThrow({
     where: { id },
-    include: { providerModel: true },
+    include: { providerModel: true, priceVersion: true },
   });
+  if (job.status === "PROCESSING") {
+    const output = job.outputPayload as {
+      stored?: unknown;
+      byteSize?: unknown;
+      sha256?: unknown;
+    } | null;
+    if (
+      output?.stored !== true ||
+      typeof output.byteSize !== "number" ||
+      !Number.isSafeInteger(output.byteSize) ||
+      output.byteSize <= 0 ||
+      typeof output.sha256 !== "string" ||
+      !/^[a-f0-9]{64}$/.test(output.sha256)
+    ) {
+      await db.generationJob.updateMany({
+        where: { id, status: "PROCESSING" },
+        data: {
+          status: "MANUAL_REVIEW",
+          errorCode: "AUDIO_STORAGE_METADATA_INVALID",
+          errorMessage:
+            "Stored audio metadata is unavailable. Credits remain reserved for manual review.",
+        },
+      });
+      return;
+    }
+    try {
+      const byteSize = await storedAssetSize(`${id}.mp3`);
+      if (byteSize !== output.byteSize) {
+        throw new Error("Stored audio size does not match its metadata");
+      }
+    } catch (error) {
+      await recordStorageFailure(id, error, "audio");
+      throw error;
+    }
+    await finalizeVoiceJob(id, job, {
+      byteSize: BigInt(output.byteSize),
+      sha256: output.sha256,
+    });
+    return;
+  }
   if (job.status !== "QUEUED") return;
 
   try {
@@ -384,7 +426,11 @@ export async function processVoiceJob(
       mediaKind: "voice",
       input: job.requestPayload as Record<string, unknown>,
     });
-    if (result.status !== "succeeded" || !result.inlineOutputs?.length) {
+    if (
+      result.status !== "succeeded" ||
+      result.inlineOutputs?.length !== 1 ||
+      result.inlineOutputs[0]?.mediaType !== "audio/mpeg"
+    ) {
       throw new ProviderRequestError(
         "BytePlus returned an unexpected voice result",
         true,
@@ -392,7 +438,10 @@ export async function processVoiceJob(
       );
     }
   } catch (error) {
-    if (error instanceof ProviderRequestError && !error.retryable) {
+    if (
+      error instanceof ProviderConfigurationError ||
+      (error instanceof ProviderRequestError && !error.retryable)
+    ) {
       await failJob(
         id,
         "Provider rejected the voice request. Credits released.",
@@ -427,6 +476,20 @@ export async function processVoiceJob(
   }
 
   const audioBytes = Buffer.from(base64, "base64");
+  const canonicalBase64 = audioBytes.toString("base64").replace(/=+$/u, "");
+  if (canonicalBase64 !== base64.replace(/=+$/u, "")) {
+    await db.generationJob.updateMany({
+      where: { id, status: "SUBMITTED" },
+      data: {
+        status: "MANUAL_REVIEW",
+        providerRequestId: result.providerRequestId,
+        errorCode: "INVALID_PROVIDER_RESPONSE",
+        errorMessage:
+          "Provider returned malformed voice audio. Credits remain reserved for manual review.",
+      },
+    });
+    return;
+  }
   let stored: Awaited<ReturnType<typeof storeAudio>> | null = null;
   let lastStorageError: unknown = null;
 
@@ -460,10 +523,38 @@ export async function processVoiceJob(
     throw lastStorageError;
   }
 
+  const persisted = await db.generationJob.updateMany({
+    where: { id, status: "SUBMITTED" },
+    data: {
+      status: "PROCESSING",
+      providerRequestId: result.providerRequestId,
+      outputPayload: {
+        stored: true,
+        byteSize: Number(stored.byteSize),
+        sha256: stored.sha256,
+      },
+      errorCode: null,
+      errorMessage: null,
+    },
+  });
+  if (!persisted.count) return;
+
+  await finalizeVoiceJob(id, job, stored);
+}
+
+async function finalizeVoiceJob(
+  id: string,
+  job: {
+    organizationId: string;
+    createdById: string;
+    priceVersion: { providerCostMicroUsd: bigint };
+  },
+  stored: { byteSize: bigint; sha256: string },
+) {
   await db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM GenerationJob WHERE id = ${id} FOR UPDATE`;
     const current = await tx.generationJob.findUniqueOrThrow({ where: { id } });
-    if (current.status !== "SUBMITTED") return;
+    if (current.status !== "PROCESSING") return;
     const wallet = await tx.wallet.findUniqueOrThrow({
       where: { organizationId: job.organizationId },
     });
@@ -481,10 +572,18 @@ export async function processVoiceJob(
       where: { id },
       data: {
         status: "SUCCEEDED",
-        providerRequestId: result.providerRequestId,
         actualUnits: current.quotedUnits,
+        actualProviderCostMicroUsd:
+          current.quotedUnits === null
+            ? null
+            : job.priceVersion.providerCostMicroUsd *
+              BigInt(current.quotedUnits),
         completedAt: new Date(),
-        outputPayload: { stored: true, byteSize: Number(stored.byteSize) },
+        outputPayload: {
+          stored: true,
+          byteSize: Number(stored.byteSize),
+          sha256: stored.sha256,
+        },
         errorCode: null,
         errorMessage: null,
       },

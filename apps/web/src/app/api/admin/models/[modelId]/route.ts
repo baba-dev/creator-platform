@@ -118,6 +118,23 @@ export async function PATCH(
     const now = new Date();
 
     const newPriceVersion = await db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM ProviderModel WHERE id = ${model.id} FOR UPDATE`;
+      const currentPrice = await tx.modelPriceVersion.findFirst({
+        where: { providerModelId: model.id, effectiveTo: null },
+        orderBy: { effectiveFrom: "desc" },
+      });
+      const pricingDimension =
+        priceResult.data.pricingDimension ??
+        currentPrice?.pricingDimension ??
+        "REQUEST";
+      const unitQuantity =
+        pricingDimension === "REQUEST"
+          ? 1
+          : (priceResult.data.unitQuantity ??
+            (currentPrice?.pricingDimension === "CHARACTER"
+              ? currentPrice.unitQuantity
+              : 1000));
+
       // Close out existing active price version
       await tx.modelPriceVersion.updateMany({
         where: {
@@ -138,8 +155,8 @@ export async function PATCH(
           fxBaisaNumerator,
           fxBaisaDenominator,
           targetMarginBps,
-          pricingDimension: priceResult.data.pricingDimension,
-          unitQuantity: priceResult.data.unitQuantity,
+          pricingDimension,
+          unitQuantity,
           effectiveFrom: now,
           effectiveTo: null,
           createdById: session.user.id,
@@ -157,8 +174,8 @@ export async function PATCH(
             displayName: model.displayName,
             customerCredits: quote.customerCredits.toString(),
             providerCostMicroUsd: providerCostMicroUsd.toString(),
-            pricingDimension: priceResult.data.pricingDimension,
-            unitQuantity: priceResult.data.unitQuantity?.toString() ?? null,
+            pricingDimension,
+            unitQuantity: unitQuantity.toString(),
             targetMarginBps,
           },
         },

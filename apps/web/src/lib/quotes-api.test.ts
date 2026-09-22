@@ -47,11 +47,11 @@ describe("quotes API logic", () => {
     const validVoiceQuote = quoteRequestSchema.safeParse({
       organizationId: "c12345678901234567890",
       modelId: "seed-tts-2.0",
-      billableQuantity: 2500,
+      text: "A".repeat(2500),
     });
     expect(validVoiceQuote.success).toBe(true);
     if (validVoiceQuote.success) {
-      expect(validVoiceQuote.data.billableQuantity).toBe(2500);
+      expect(validVoiceQuote.data.text).toHaveLength(2500);
       expect(validVoiceQuote.data.units).toBe(1); // default
     }
   });

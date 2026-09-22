@@ -13,7 +13,7 @@ import {
 } from "@aiwa/organizations";
 import { VERIFIED_BYTEPLUS_MODELS } from "@aiwa/providers/byteplus";
 import { z } from "zod";
-import { resolvePresetVoice } from "./voices";
+import { resolvePresetVoice, VoiceResolutionError } from "./voices";
 
 export * from "./voices";
 
@@ -513,13 +513,16 @@ export async function createVideoJob(userId: string, raw: unknown) {
 
 export async function createVoiceJob(userId: string, raw: unknown) {
   const input = voiceRequestSchema.parse(raw);
-  const presetVoice = resolvePresetVoice(input.voiceKey, input.modelId);
-  if (!presetVoice) {
-    throw new GenerationError(
-      "Selected voice is not available for this model.",
-      400,
-    );
-  }
+  const presetVoice = (() => {
+    try {
+      return resolvePresetVoice(input.voiceKey);
+    } catch (error) {
+      if (error instanceof VoiceResolutionError) {
+        throw new GenerationError(error.message, 400);
+      }
+      throw error;
+    }
+  })();
   const billableCharacters = countBillableCharacters(input.text);
   if (billableCharacters <= 0) {
     throw new GenerationError(
@@ -599,6 +602,12 @@ export async function createVoiceJob(userId: string, raw: unknown) {
           "Model or price changed. Refresh the Studio and try again.",
           409,
         );
+      if (!presetVoice.supportedModels.includes(model.providerModelId)) {
+        throw new GenerationError(
+          "Selected voice is not compatible with this model.",
+          400,
+        );
+      }
 
       const unitQuantity = BigInt(price.unitQuantity ?? 1000);
       const units =

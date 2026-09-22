@@ -42,13 +42,13 @@ describe("pricing defaults and model quotes", () => {
     expect(quote.customerPriceBaisa).toBe(240n);
   });
 
-  it("calculates accurate quotes for seed-speech-2 (voice)", () => {
+  it("calculates accurate per-unit quotes for Seed Speech TTS 2.0", () => {
     const quote = calculateModelQuote({
-      providerCostMicroUsd: 10_000n,
+      providerCostMicroUsd: 30_000n,
     });
-    expect(quote.customerCredits).toBe(6n);
-    expect(quote.convertedCostBaisa).toBe(4n);
-    expect(quote.customerPriceBaisa).toBe(6n);
+    expect(quote.customerCredits).toBe(16n);
+    expect(quote.convertedCostBaisa).toBe(12n);
+    expect(quote.customerPriceBaisa).toBe(16n);
   });
 
   it("scales quote correctly with units", () => {

@@ -12,6 +12,8 @@ export function ModelActions({
   currentProviderCostMicroUsd,
   currentCustomerCredits,
   currentTargetMarginBps,
+  currentPricingDimension,
+  currentUnitQuantity,
   canManage,
 }: {
   modelId: string;
@@ -20,6 +22,8 @@ export function ModelActions({
   currentProviderCostMicroUsd?: string;
   currentCustomerCredits?: string;
   currentTargetMarginBps?: number;
+  currentPricingDimension?: "REQUEST" | "CHARACTER";
+  currentUnitQuantity?: number;
   canManage: boolean;
 }) {
   const router = useRouter();
@@ -33,6 +37,12 @@ export function ModelActions({
     : "25";
   const [costMicroUsd, setCostMicroUsd] = useState(defaultCost);
   const [marginPercent, setMarginPercent] = useState(defaultMargin);
+  const [pricingDimension, setPricingDimension] = useState<
+    "REQUEST" | "CHARACTER"
+  >(currentPricingDimension ?? "REQUEST");
+  const [unitQuantity, setUnitQuantity] = useState(
+    String(currentUnitQuantity ?? 1000),
+  );
 
   const dialogTitleId = useId();
 
@@ -92,6 +102,8 @@ export function ModelActions({
         body: JSON.stringify({
           providerCostMicroUsd: costMicroUsd,
           targetMarginBps: marginBps,
+          pricingDimension,
+          unitQuantity: pricingDimension === "CHARACTER" ? unitQuantity : "1",
         }),
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -161,6 +173,49 @@ export function ModelActions({
             <form onSubmit={handlePublishPricing} className="mt-4 space-y-4">
               <div>
                 <label
+                  htmlFor={`dimension-${modelId}`}
+                  className="block text-xs font-semibold text-foreground"
+                >
+                  Pricing basis
+                </label>
+                <select
+                  id={`dimension-${modelId}`}
+                  value={pricingDimension}
+                  onChange={(event) =>
+                    setPricingDimension(
+                      event.target.value as "REQUEST" | "CHARACTER",
+                    )
+                  }
+                  className="mt-1 h-9 w-full rounded-lg border border-border bg-background px-3 text-sm"
+                >
+                  <option value="REQUEST">Per request</option>
+                  <option value="CHARACTER">Per character block</option>
+                </select>
+              </div>
+
+              {pricingDimension === "CHARACTER" ? (
+                <div>
+                  <label
+                    htmlFor={`unit-${modelId}`}
+                    className="block text-xs font-semibold text-foreground"
+                  >
+                    Characters per billing unit
+                  </label>
+                  <input
+                    id={`unit-${modelId}`}
+                    type="number"
+                    min="1"
+                    step="1"
+                    required
+                    value={unitQuantity}
+                    onChange={(event) => setUnitQuantity(event.target.value)}
+                    className="mt-1 h-9 w-full rounded-lg border border-border bg-background px-3 font-mono text-sm"
+                  />
+                </div>
+              ) : null}
+
+              <div>
+                <label
                   htmlFor={`cost-${modelId}`}
                   className="block text-xs font-semibold text-foreground"
                 >
@@ -213,7 +268,11 @@ export function ModelActions({
                   </span>
                   <span className="font-semibold text-foreground">
                     {estimatedCredits
-                      ? `${estimatedCredits} credits`
+                      ? `${estimatedCredits} credits / ${
+                          pricingDimension === "CHARACTER"
+                            ? `${unitQuantity || "—"} characters`
+                            : "request"
+                        }`
                       : "Invalid input"}
                   </span>
                 </div>

@@ -89,7 +89,7 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
       "speechRate:max": 100,
     },
     providerCostMicroUsd: 30_000n,
-    customerCredits: 2n,
+    customerCredits: 16n,
     pricingDimension: "CHARACTER",
     unitQuantity: 1000,
   },

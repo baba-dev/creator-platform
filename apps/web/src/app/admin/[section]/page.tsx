@@ -454,6 +454,8 @@ async function renderSection(
               customerCredits: true,
               providerCostMicroUsd: true,
               targetMarginBps: true,
+              pricingDimension: true,
+              unitQuantity: true,
             },
             orderBy: { effectiveFrom: "desc" },
             take: 1,
@@ -530,6 +532,8 @@ async function renderSection(
                         currentProviderCostMicroUsd={price?.providerCostMicroUsd.toString()}
                         currentCustomerCredits={price?.customerCredits.toString()}
                         currentTargetMarginBps={price?.targetMarginBps}
+                        currentPricingDimension={price?.pricingDimension}
+                        currentUnitQuantity={price?.unitQuantity}
                         canManage={canManage}
                       />
                     </Cell>

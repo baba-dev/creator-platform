@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   downloadVideo: vi.fn(),
   storeVideo: vi.fn(),
   storeAudio: vi.fn(),
+  storedAssetSize: vi.fn(),
   membership: vi.fn(),
 }));
 vi.mock("@aiwa/db", () => ({ db: mocks.db }));
@@ -39,6 +40,7 @@ vi.mock("../src/storage", () => ({
   downloadVideo: mocks.downloadVideo,
   storeVideo: mocks.storeVideo,
   storeAudio: mocks.storeAudio,
+  storedAssetSize: mocks.storedAssetSize,
 }));
 import {
   ProviderRequestError,
@@ -93,6 +95,7 @@ beforeEach(() => {
   mocks.downloadVideo.mockResolvedValue(Buffer.from("mp4"));
   mocks.storeVideo.mockResolvedValue({ byteSize: 200n, sha256: "video-hash" });
   mocks.storeAudio.mockResolvedValue({ byteSize: 300n, sha256: "audio-hash" });
+  mocks.storedAssetSize.mockResolvedValue(300);
 });
 
 describe("video processing", () => {
@@ -298,6 +301,7 @@ describe("voice processing", () => {
       format: "mp3",
     },
     providerModel: { providerModelId: "seed-tts-2.0" },
+    priceVersion: { providerCostMicroUsd: 30_000n },
     quotedUnits: 1,
     reservedCredits: 2n,
   };
@@ -319,7 +323,7 @@ describe("voice processing", () => {
       ...voiceBase,
       status: "QUEUED",
     });
-    const tx = transaction("SUBMITTED", voiceBase);
+    const tx = transaction("PROCESSING", voiceBase);
 
     await processVoiceJob("job1", p);
 
@@ -347,6 +351,14 @@ describe("voice processing", () => {
       expect.objectContaining({
         data: expect.objectContaining({
           status: "SUCCEEDED",
+        }),
+      }),
+    );
+    expect(mocks.db.generationJob.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "job1", status: "SUBMITTED" },
+        data: expect.objectContaining({
+          status: "PROCESSING",
           providerRequestId: "speech-req-1",
         }),
       }),
@@ -456,5 +468,31 @@ describe("voice processing", () => {
 
     expect(p.submit).not.toHaveBeenCalled();
     expect(mocks.capture).not.toHaveBeenCalled();
+  });
+
+  it("finalizes already-stored audio without resubmitting to BytePlus", async () => {
+    const p = provider();
+    const sha256 = "a".repeat(64);
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+      ...voiceBase,
+      status: "PROCESSING",
+      outputPayload: { stored: true, byteSize: 300, sha256 },
+      priceVersion: { providerCostMicroUsd: 30_000n },
+    });
+    const tx = transaction("PROCESSING", voiceBase);
+
+    await processVoiceJob("job1", p);
+
+    expect(p.submit).not.toHaveBeenCalled();
+    expect(mocks.storedAssetSize).toHaveBeenCalledWith("job1.mp3");
+    expect(mocks.capture).toHaveBeenCalled();
+    expect(tx.generationJob.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "SUCCEEDED",
+          actualProviderCostMicroUsd: 30_000n,
+        }),
+      }),
+    );
   });
 });

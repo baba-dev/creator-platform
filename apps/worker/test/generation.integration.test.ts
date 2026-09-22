@@ -7,11 +7,16 @@ import { Queue, QueueEvents, Worker } from "bullmq";
 import Redis from "ioredis";
 import { db } from "@aiwa/db";
 import type * as Storage from "@aiwa/generation/storage";
-import { createImageJob, createVideoJob } from "@aiwa/generation";
+import {
+  createImageJob,
+  createVideoJob,
+  createVoiceJob,
+} from "@aiwa/generation";
 import {
   processImageJob,
   processVideoSubmitJob,
   processVideoPollJob,
+  processVoiceJob,
 } from "@aiwa/generation/process";
 import { createBytePlusProvider } from "@aiwa/providers/byteplus";
 
@@ -288,6 +293,73 @@ describe.skipIf(!enabled)("generation with MariaDB and Redis", () => {
     expect(finishedJob.status).toBe("SUCCEEDED");
     expect(finishedJob.assets[0]?.status).toBe("READY");
     expect(finishedJob.assets[0]?.mimeType).toBe("video/mp4");
+  }, 10000);
+
+  it("quotes voice by character blocks and finalizes stored MP3 audio", async () => {
+    const voiceModel = await db.providerModel.findUniqueOrThrow({
+      where: {
+        provider_providerModelId: {
+          provider: "BYTEPLUS",
+          providerModelId: "seed-tts-2.0",
+        },
+      },
+      include: {
+        priceVersions: {
+          where: { effectiveTo: null },
+          orderBy: { effectiveFrom: "desc" },
+          take: 1,
+        },
+      },
+    });
+    const price = voiceModel.priceVersions[0]!;
+    const voiceJob = await createVoiceJob(userId, {
+      organizationId: orgId,
+      modelId: voiceModel.id,
+      priceVersionId: price.id,
+      idempotencyKey: randomUUID(),
+      text: `  ${"A".repeat(1500)}  `,
+      voiceKey: "jasper",
+      speechRate: 1.2,
+      format: "mp3",
+    });
+    expect(voiceJob.quotedUnits).toBe(2);
+    expect(voiceJob.billableQuantity).toBe(1500);
+
+    const frame = Buffer.concat([
+      Buffer.from([0xff, 0xfb, 0x90, 0x64]),
+      Buffer.alloc(413),
+    ]);
+    const audio = Buffer.concat([frame, frame]);
+    const provider = {
+      name: "byteplus" as const,
+      listModels: vi.fn(),
+      cancel: vi.fn(),
+      getJob: vi.fn(),
+      submit: vi.fn().mockResolvedValue({
+        providerRequestId: "voice-request-1",
+        status: "succeeded" as const,
+        inlineOutputs: [
+          { mediaType: "audio/mpeg", dataBase64: audio.toString("base64") },
+        ],
+      }),
+    };
+
+    await processVoiceJob(voiceJob.id, provider);
+
+    const completed = await db.generationJob.findUniqueOrThrow({
+      where: { id: voiceJob.id },
+      include: { assets: true },
+    });
+    expect(completed.status).toBe("SUCCEEDED");
+    expect(completed.actualUnits).toBe(2);
+    expect(completed.actualProviderCostMicroUsd).toBe(60_000n);
+    expect(completed.assets[0]).toMatchObject({
+      mimeType: "audio/mpeg",
+      status: "READY",
+    });
+    expect(await readFile(join(directory, `${voiceJob.id}.mp3`))).toEqual(
+      audio,
+    );
   }, 10000);
 
   it("rolls back insufficient credit and member-cap requests", async () => {

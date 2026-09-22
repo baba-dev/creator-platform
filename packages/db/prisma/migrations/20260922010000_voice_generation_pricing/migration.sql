@@ -47,5 +47,59 @@ INSERT INTO `ProviderModel` (
   `description` = VALUES(`description`),
   `mediaKind` = VALUES(`mediaKind`),
   `capabilities` = VALUES(`capabilities`),
-  `enabled` = TRUE,
   `updatedAt` = CURRENT_TIMESTAMP(3);
+
+-- Migrations are the production deployment path, so create the system actor
+-- and an active per-1,000-character price without requiring a separate seed.
+INSERT INTO `User` (
+  `id`, `name`, `email`, `emailVerified`, `platformRole`, `createdAt`, `updatedAt`
+) VALUES (
+  'creatorplatformsystemuser',
+  'Aiwa System',
+  'system@aiwamediagroup.com',
+  TRUE,
+  'PLATFORM_OWNER',
+  CURRENT_TIMESTAMP(3),
+  CURRENT_TIMESTAMP(3)
+) ON DUPLICATE KEY UPDATE
+  `updatedAt` = `updatedAt`;
+
+INSERT INTO `ModelPriceVersion` (
+  `id`,
+  `providerModelId`,
+  `providerCostMicroUsd`,
+  `customerCredits`,
+  `fxBaisaNumerator`,
+  `fxBaisaDenominator`,
+  `targetMarginBps`,
+  `pricingDimension`,
+  `unitQuantity`,
+  `effectiveFrom`,
+  `effectiveTo`,
+  `createdById`,
+  `createdAt`
+)
+SELECT
+  'byteplusseedtts20price20260922',
+  model.`id`,
+  30000,
+  16,
+  769,
+  2,
+  2500,
+  'CHARACTER',
+  1000,
+  CURRENT_TIMESTAMP(3),
+  NULL,
+  actor.`id`,
+  CURRENT_TIMESTAMP(3)
+FROM `ProviderModel` model
+JOIN `User` actor ON actor.`email` = 'system@aiwamediagroup.com'
+WHERE model.`provider` = 'BYTEPLUS'
+  AND model.`providerModelId` = 'seed-tts-2.0'
+  AND NOT EXISTS (
+    SELECT 1
+    FROM `ModelPriceVersion` activePrice
+    WHERE activePrice.`providerModelId` = model.`id`
+      AND activePrice.`effectiveTo` IS NULL
+  );

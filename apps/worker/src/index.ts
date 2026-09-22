@@ -64,9 +64,7 @@ const generationQueue = new Queue("generation", {
   prefix: "aiwa",
 });
 const hasBytePlus = Boolean(
-  env.BYTEPLUS_API_KEY ||
-  env.BYTEPLUS_SPEECH_API_KEY ||
-  (env.BYTEPLUS_SPEECH_APP_ID && env.BYTEPLUS_SPEECH_ACCESS_TOKEN),
+  env.BYTEPLUS_API_KEY || env.BYTEPLUS_SPEECH_API_KEY,
 );
 const bytePlusProvider = hasBytePlus
   ? createBytePlusProvider({
@@ -76,8 +74,6 @@ const bytePlusProvider = hasBytePlus
       speechBaseUrl: env.BYTEPLUS_SPEECH_BASE_URL,
       speechApiKey: env.BYTEPLUS_SPEECH_API_KEY,
       speechAppKey: env.BYTEPLUS_SPEECH_APP_KEY,
-      speechAppId: env.BYTEPLUS_SPEECH_APP_ID,
-      speechAccessToken: env.BYTEPLUS_SPEECH_ACCESS_TOKEN,
       requestTimeoutMs: env.BYTEPLUS_REQUEST_TIMEOUT_MS,
     })
   : null;
@@ -163,7 +159,8 @@ async function dispatchGeneration() {
   if (generationDispatching || !bytePlusProvider) return;
   generationDispatching = true;
   try {
-    // Lost responses cannot safely be replayed for synchronous image generation.
+    // Lost responses cannot safely be replayed for synchronous image or voice
+    // generation because the provider may already have accepted and billed it.
     await db.generationJob.updateMany({
       where: {
         status: "SUBMITTED",
@@ -203,23 +200,13 @@ async function dispatchGeneration() {
       where: {
         status: "PROCESSING",
         providerModel: { mediaKind: "VOICE" },
-        OR: [
-          {
-            submittedAt: {
-              lt: new Date(Date.now() - 24 * 60 * 60 * 1000),
-            },
-          },
-          {
-            submittedAt: null,
-            updatedAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
-          },
-        ],
+        updatedAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
       },
       data: {
         status: "MANUAL_REVIEW",
         errorCode: "STORAGE_FAILED",
         errorMessage:
-          "Audio could not be stored. Credits remain reserved for review.",
+          "Audio finalization exceeded the recovery window. Credits remain reserved for review.",
       },
     });
     await db.generationJob.updateMany({

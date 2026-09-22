@@ -12,8 +12,6 @@ const smokeEnvSchema = serverEnvSchema.pick({
   BYTEPLUS_SPEECH_API_KEY: true,
   BYTEPLUS_SPEECH_APP_KEY: true,
   BYTEPLUS_SPEECH_BASE_URL: true,
-  BYTEPLUS_SPEECH_APP_ID: true,
-  BYTEPLUS_SPEECH_ACCESS_TOKEN: true,
   BYTEPLUS_SMOKE_OUTPUT_DIR: true,
   BYTEPLUS_SMOKE_PROMPT: true,
 });
@@ -28,8 +26,7 @@ async function main(): Promise<void> {
   const env = parsed.data;
   if (
     env.BYTEPLUS_LIVE_SMOKE_ACK !== "I_UNDERSTAND_THIS_IS_BILLABLE" ||
-    (!env.BYTEPLUS_SPEECH_API_KEY &&
-      (!env.BYTEPLUS_SPEECH_APP_ID || !env.BYTEPLUS_SPEECH_ACCESS_TOKEN))
+    !env.BYTEPLUS_SPEECH_API_KEY
   ) {
     throw new Error(
       "Live voice smoke execution requires BytePlus speech credentials and billing acknowledgement",
@@ -41,8 +38,6 @@ async function main(): Promise<void> {
     speechApiKey: env.BYTEPLUS_SPEECH_API_KEY,
     speechAppKey: env.BYTEPLUS_SPEECH_APP_KEY,
     speechBaseUrl: env.BYTEPLUS_SPEECH_BASE_URL,
-    speechAppId: env.BYTEPLUS_SPEECH_APP_ID,
-    speechAccessToken: env.BYTEPLUS_SPEECH_ACCESS_TOKEN,
   });
 
   const job = await provider.submit({
@@ -53,10 +48,9 @@ async function main(): Promise<void> {
       text:
         env.BYTEPLUS_SMOKE_PROMPT ??
         "Welcome to Aiwa Creator. Production text to speech generation is operational.",
-      speaker: "en_female_charlotte",
-      speedRatio: 1.0,
-      volumeRatio: 1.0,
-      pitchRatio: 1.0,
+      speaker: "en_female_authoritative-british_uranus_bigtts",
+      format: "mp3",
+      speechRate: 1,
     },
   });
 

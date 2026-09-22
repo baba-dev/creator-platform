@@ -16,7 +16,7 @@ describe("preset voice catalogue", () => {
   });
 
   it("handles case-insensitive and trimmed voice keys", () => {
-    const voice = resolvePresetVoice("  CHARLOTTE  ", "seed-tts-2.0");
+    const voice = resolvePresetVoice("  CHARLOTTE  ");
     expect(voice.key).toBe("charlotte");
     expect(voice.speakerId).toBe(
       "en_female_authoritative-british_uranus_bigtts",

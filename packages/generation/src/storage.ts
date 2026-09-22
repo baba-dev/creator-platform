@@ -620,6 +620,14 @@ export function validateMp3Bytes(bytes: Buffer): { durationMs: number | null } {
     bytes[1] === 0x44 &&
     bytes[2] === 0x33
   ) {
+    if (
+      [bytes[6], bytes[7], bytes[8], bytes[9]].some((value) => value! > 0x7f)
+    ) {
+      throw new ImageStorageError(
+        "AUDIO_OUTPUT_INVALID_MP3",
+        "Generated audio failed MP3 validation.",
+      );
+    }
     const flags = bytes[5]!;
     const hasFooter = (flags & 0x10) !== 0;
     // Synchsafe integer (7 bits per byte)
@@ -629,26 +637,30 @@ export function validateMp3Bytes(bytes: Buffer): { durationMs: number | null } {
       ((bytes[8]! & 0x7f) << 7) |
       (bytes[9]! & 0x7f);
     offset = 10 + tagSize + (hasFooter ? 10 : 0);
-  }
-
-  // Look for MPEG frame sync: 11 bits set (0xFF followed by byte with top 3 bits set)
-  const searchLimit = Math.min(bytes.length - 1, offset + 4096);
-  let foundSync = false;
-
-  for (let i = offset; i < searchLimit; i++) {
-    if (bytes[i] === 0xff && (bytes[i + 1]! & 0xe0) === 0xe0) {
-      const secondByte = bytes[i + 1]!;
-      const versionBits = (secondByte >> 3) & 0x03; // 00=2.5, 01=reserved, 10=2, 11=1
-      const layerBits = (secondByte >> 1) & 0x03; // 00=reserved, 01=Layer III, 10=Layer II, 11=Layer I
-
-      if (versionBits !== 0x01 && layerBits !== 0x00) {
-        foundSync = true;
-        break;
-      }
+    if (offset >= bytes.length) {
+      throw new ImageStorageError(
+        "AUDIO_OUTPUT_INVALID_MP3",
+        "Generated audio failed MP3 validation.",
+      );
     }
   }
 
-  if (!foundSync) {
+  // Require two structurally valid consecutive MPEG Layer III frames. Checking
+  // only the sync bits produces false positives in arbitrary binary data.
+  const searchLimit = Math.min(bytes.length - 1, offset + 4096);
+  let foundFrames = false;
+
+  for (let i = offset; i < searchLimit; i++) {
+    const frameLength = mp3FrameLength(bytes, i);
+    if (frameLength === null) continue;
+    const nextOffset = i + frameLength;
+    if (mp3FrameLength(bytes, nextOffset) !== null) {
+      foundFrames = true;
+      break;
+    }
+  }
+
+  if (!foundFrames) {
     throw new ImageStorageError(
       "AUDIO_OUTPUT_INVALID_MP3",
       "Generated audio failed MP3 validation.",
@@ -665,7 +677,7 @@ export async function storeAudio(key: string, bytes: Buffer) {
 
   try {
     await mkdir(resolve(path, ".."), { recursive: true, mode: 0o750 });
-    await writeFile(temporary, bytes, { mode: 0o640, flag: "wx" });
+    await writeFile(temporary, bytes, { mode: 0o600, flag: "wx" });
     await rename(temporary, path);
   } catch (error) {
     throw new ImageStorageError(
@@ -680,4 +692,44 @@ export async function storeAudio(key: string, bytes: Buffer) {
     byteSize: BigInt(bytes.byteLength),
     sha256: createHash("sha256").update(bytes).digest("hex"),
   };
+}
+
+function mp3FrameLength(bytes: Buffer, offset: number): number | null {
+  if (offset < 0 || offset + 4 > bytes.length) return null;
+  const first = bytes[offset]!;
+  const second = bytes[offset + 1]!;
+  const third = bytes[offset + 2]!;
+  if (first !== 0xff || (second & 0xe0) !== 0xe0) return null;
+
+  const versionBits = (second >> 3) & 0x03;
+  const layerBits = (second >> 1) & 0x03;
+  if (versionBits === 0x01 || layerBits !== 0x01) return null;
+
+  const bitrateIndex = (third >> 4) & 0x0f;
+  const sampleRateIndex = (third >> 2) & 0x03;
+  if (bitrateIndex === 0 || bitrateIndex === 0x0f || sampleRateIndex === 0x03)
+    return null;
+
+  const mpeg1Bitrates = [
+    0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320,
+  ];
+  const mpeg2Bitrates = [
+    0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160,
+  ];
+  const sampleRateBase = [44_100, 48_000, 32_000][sampleRateIndex]!;
+  const isMpeg1 = versionBits === 0x03;
+  const sampleRate =
+    versionBits === 0x00
+      ? sampleRateBase / 4
+      : versionBits === 0x02
+        ? sampleRateBase / 2
+        : sampleRateBase;
+  const bitrateKbps = (isMpeg1 ? mpeg1Bitrates : mpeg2Bitrates)[bitrateIndex]!;
+  const padding = (third >> 1) & 0x01;
+  const frameLength =
+    Math.floor(((isMpeg1 ? 144 : 72) * bitrateKbps * 1000) / sampleRate) +
+    padding;
+  return frameLength >= 4 && offset + frameLength <= bytes.length
+    ? frameLength
+    : null;
 }

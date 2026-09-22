@@ -3,7 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import { ProviderConfigurationError, ProviderRequestError } from "../src/index";
 import {
   createBytePlusProvider,
+  isBytePlusVoiceConfigured,
   mapBytePlusError,
+  speechRateMultiplierToPercentage,
 } from "../src/byteplus/index";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -289,7 +291,7 @@ describe("BytePlus provider adapter", () => {
         text: "Welcome",
         speaker: "speaker-id",
         format: "mp3",
-        speechRate: 10,
+        speechRate: 1.1,
       },
     });
 
@@ -336,6 +338,26 @@ describe("BytePlus provider adapter", () => {
         input: { text: "Welcome", speaker: "speaker-id" },
       }),
     ).rejects.toBeInstanceOf(ProviderConfigurationError);
+  });
+
+  it("maps UI speed multipliers to BytePlus speech-rate percentages", () => {
+    expect(speechRateMultiplierToPercentage(0.5)).toBe(-50);
+    expect(speechRateMultiplierToPercentage(1)).toBe(0);
+    expect(speechRateMultiplierToPercentage(1.5)).toBe(50);
+    expect(speechRateMultiplierToPercentage(2)).toBe(100);
+    expect(() => speechRateMultiplierToPercentage(2.1)).toThrow();
+  });
+
+  it("does not treat legacy credentials as Seed Speech v3 configuration", () => {
+    expect(
+      isBytePlusVoiceConfigured({
+        speechAppId: "legacy-app",
+        speechAccessToken: "legacy-token",
+      }),
+    ).toBe(false);
+    expect(isBytePlusVoiceConfigured({ speechApiKey: "seed-speech-key" })).toBe(
+      true,
+    );
   });
 
   it("keeps provider error messages and prompt content out of errors", () => {

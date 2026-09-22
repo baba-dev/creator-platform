@@ -1,5 +1,9 @@
 import { hasOrganizationPermission } from "@aiwa/authz";
-import { calculateBillableUnits, createCreditQuote } from "@aiwa/credits";
+import {
+  calculateBillableUnits,
+  countBillableCharacters,
+  createCreditQuote,
+} from "@aiwa/credits";
 import { db } from "@aiwa/db";
 import { checkMemberSpendingBudget } from "@aiwa/organizations";
 import { quoteRequestSchema } from "@aiwa/validation";
@@ -21,7 +25,17 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
-  const body = await request.json().catch(() => null);
+  const requestText = await request.text();
+  if (requestText.length > 12_000) {
+    return NextResponse.json({ error: "Request too large." }, { status: 413 });
+  }
+  const body = (() => {
+    try {
+      return JSON.parse(requestText) as unknown;
+    } catch {
+      return null;
+    }
+  })();
   const parsed = quoteRequestSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
@@ -30,7 +44,8 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
-  const { organizationId, modelId, units, billableQuantity } = parsed.data;
+  const { organizationId, modelId, units, billableQuantity, text } =
+    parsed.data;
 
   const membership = await db.membership.findUnique({
     where: {
@@ -103,13 +118,25 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
-  const effectiveUnits =
+  const effectiveBillableQuantity =
+    activePriceVersion.pricingDimension === "CHARACTER" && text !== undefined
+      ? countBillableCharacters(text)
+      : billableQuantity;
+  if (
     activePriceVersion.pricingDimension === "CHARACTER" &&
-    typeof billableQuantity === "number"
+    effectiveBillableQuantity === undefined
+  ) {
+    return NextResponse.json(
+      { error: "Character-priced models require text or billableQuantity." },
+      { status: 400 },
+    );
+  }
+  const effectiveUnits =
+    activePriceVersion.pricingDimension === "CHARACTER"
       ? Number(
           calculateBillableUnits(
-            BigInt(billableQuantity),
-            BigInt(activePriceVersion.unitQuantity ?? 1000),
+            BigInt(effectiveBillableQuantity!),
+            BigInt(activePriceVersion.unitQuantity),
           ),
         )
       : units;
@@ -144,7 +171,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       pricingDimension: activePriceVersion.pricingDimension,
       unitQuantity: activePriceVersion.unitQuantity?.toString() ?? null,
       units: effectiveUnits,
-      billableQuantity: billableQuantity ?? null,
+      billableQuantity: effectiveBillableQuantity ?? null,
       providerCostMicroUsd: quote.providerCostMicroUsd.toString(),
       convertedCostBaisa: quote.convertedCostBaisa.toString(),
       customerPriceBaisa: quote.customerPriceBaisa.toString(),

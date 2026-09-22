@@ -172,6 +172,7 @@ export async function GET(request: Request) {
             ? [
                 {
                   id: m.id,
+                  providerModelId: m.providerModelId,
                   name: m.displayName,
                   mediaKind: m.mediaKind,
                   description: m.description,

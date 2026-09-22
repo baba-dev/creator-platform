@@ -92,11 +92,12 @@ describe("private image storage", () => {
   });
 
   it("validates valid MP3 frames", () => {
-    // MPEG-1 Layer III frame sync (0xFF 0xFB)
-    const validRaw = Buffer.concat([
+    // MPEG-1 Layer III, 128 kbps, 44.1 kHz: 417 bytes per frame.
+    const frame = Buffer.concat([
       Buffer.from([0xff, 0xfb, 0x90, 0x64]),
-      Buffer.alloc(100),
+      Buffer.alloc(413),
     ]);
+    const validRaw = Buffer.concat([frame, frame]);
     expect(() => validateMp3Bytes(validRaw)).not.toThrow();
 
     // ID3v2 tag followed by MPEG sync
@@ -113,12 +114,7 @@ describe("private image storage", () => {
       0x04, // synchsafe size = 4 bytes
     ]);
     const id3Body = Buffer.alloc(4);
-    const validWithId3 = Buffer.concat([
-      id3Header,
-      id3Body,
-      Buffer.from([0xff, 0xfb, 0x90, 0x64]),
-      Buffer.alloc(100),
-    ]);
+    const validWithId3 = Buffer.concat([id3Header, id3Body, frame, frame]);
     expect(() => validateMp3Bytes(validWithId3)).not.toThrow();
   });
 
@@ -136,10 +132,11 @@ describe("private image storage", () => {
     const root = await mkdtemp(join(tmpdir(), "creator-audio-storage-"));
     vi.stubEnv("ASSET_STORAGE_ROOT", root);
     try {
-      const validMp3 = Buffer.concat([
+      const frame = Buffer.concat([
         Buffer.from([0xff, 0xfb, 0x90, 0x64]),
-        Buffer.alloc(200),
+        Buffer.alloc(413),
       ]);
+      const validMp3 = Buffer.concat([frame, frame]);
       const result = await storeAudio("job.mp3", validMp3);
       expect(result.byteSize).toBe(BigInt(validMp3.length));
       expect(result.sha256).toMatch(/^[a-f0-9]{64}$/);

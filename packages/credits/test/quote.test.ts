@@ -71,8 +71,8 @@ describe("credit quote", () => {
         creditsPerBaisa: 1n,
       });
       // 60,000 micro-USD * 769 / 2 / 1,000,000 = 24 baisa converted cost
-      // 24 / (1 - 0.25) = 31 baisa -> 31 credits
-      expect(quote.customerCredits).toBeGreaterThan(0n);
+      // 24 / (1 - 0.25) = 32 baisa -> 32 credits
+      expect(quote.customerCredits).toBe(32n);
     });
   });
 });

@@ -10,13 +10,15 @@ type MediaKind = "IMAGE" | "VIDEO" | "VOICE";
 type PresetVoice = {
   key: string;
   displayName: string;
-  gender: "female" | "male";
+  gender?: "female" | "male";
   locale: string;
-  description: string;
-  languageFamily?: string;
+  language: string;
+  style?: string;
+  supportedModels: string[];
 };
 type Model = {
   id: string;
+  providerModelId: string;
   name: string;
   mediaKind: MediaKind;
   description?: string | null;
@@ -75,64 +77,7 @@ function capabilityValues(
     .map(([key]) => key.slice(marker.length));
 }
 
-const defaultVoices: readonly PresetVoice[] = [
-  {
-    key: "jasper",
-    displayName: "Jasper",
-    gender: "male",
-    locale: "en-US",
-    description: "Friendly English speaker",
-  },
-  {
-    key: "charlotte",
-    displayName: "Charlotte",
-    gender: "female",
-    locale: "en-GB",
-    description: "Professional British narrator",
-  },
-  {
-    key: "kayla",
-    displayName: "Kayla",
-    gender: "female",
-    locale: "en-US",
-    description: "Warm conversational English",
-  },
-  {
-    key: "sunny",
-    displayName: "Sunny",
-    gender: "female",
-    locale: "en-US",
-    description: "Bright expressive English",
-  },
-  {
-    key: "zendaya",
-    displayName: "Zendaya",
-    gender: "female",
-    locale: "en-US",
-    description: "Dynamic youthful English",
-  },
-  {
-    key: "sharron",
-    displayName: "Sharron",
-    gender: "female",
-    locale: "en-US",
-    description: "Calm instructional English",
-  },
-  {
-    key: "vivi",
-    displayName: "Vivi",
-    gender: "female",
-    locale: "zh-CN",
-    description: "Natural Chinese narrator",
-  },
-  {
-    key: "xiaohe",
-    displayName: "Xiaohe",
-    gender: "male",
-    locale: "zh-CN",
-    description: "Authoritative Chinese speaker",
-  },
-];
+const mediaModes = ["IMAGE", "VIDEO", "VOICE"] as const;
 
 export function GenerationStudio({
   canGenerate,
@@ -151,8 +96,11 @@ export function GenerationStudio({
   const [quotedCreditsInfo, setQuotedCreditsInfo] = useState<{
     text: string;
     modelId: string;
+    priceVersionId: string;
     credits: string;
   } | null>(null);
+  const [voiceQuotePending, setVoiceQuotePending] = useState(false);
+  const [voiceQuoteError, setVoiceQuoteError] = useState<string | null>(null);
   const [ratio, setRatio] = useState("1:1");
   const [resolution, setResolution] = useState("2K");
   const [duration, setDuration] = useState("5");
@@ -170,12 +118,21 @@ export function GenerationStudio({
     [data?.models, activeMode],
   );
 
-  const model =
-    modelsForMode.find((m) => m.id === modelId) ??
-    modelsForMode[0] ??
-    data?.models[0];
+  const model = modelsForMode.find((m) => m.id === modelId) ?? modelsForMode[0];
 
-  const availableVoices = data?.voices?.length ? data.voices : defaultVoices;
+  const availableVoices = useMemo(
+    () =>
+      (data?.voices ?? []).filter(
+        (voice) =>
+          !model || voice.supportedModels.includes(model.providerModelId),
+      ),
+    [data?.voices, model],
+  );
+  const selectedVoiceKey = availableVoices.some(
+    (voice) => voice.key === voiceKey,
+  )
+    ? voiceKey
+    : (availableVoices[0]?.key ?? "");
 
   const handleModeChange = useCallback(
     (mode: MediaKind) => {
@@ -189,57 +146,84 @@ export function GenerationStudio({
     [data?.models],
   );
 
-  const billableCharacters = voiceText.trim().length;
+  const billableCharacters = Array.from(voiceText.replace(/\s/gu, "")).length;
   const unitQuantity = Number(model?.unitQuantity ?? 1000);
   const estimatedUnits =
-    billableCharacters > 0 ? Math.ceil(billableCharacters / unitQuantity) : 1;
-  const estimatedCredits = String(estimatedUnits * Number(model?.credits ?? 2));
+    billableCharacters > 0 ? Math.ceil(billableCharacters / unitQuantity) : 0;
+  const activeModelId = model?.id;
+  const activePriceVersionId = model?.priceVersionId;
 
   const quotedCredits =
     quotedCreditsInfo?.text === voiceText &&
-    quotedCreditsInfo?.modelId === model?.id
+    quotedCreditsInfo?.modelId === activeModelId &&
+    quotedCreditsInfo?.priceVersionId === activePriceVersionId
       ? quotedCreditsInfo.credits
       : null;
 
-  // Debounced quote fetch for voice mode
   useEffect(() => {
-    if (activeMode !== "VOICE" || !model || billableCharacters === 0) {
+    if (activeMode !== "VOICE" || !activeModelId || billableCharacters === 0)
       return;
-    }
+    const quoteModelId = activeModelId;
     let cancelled = false;
     const timer = setTimeout(async () => {
+      if (cancelled) return;
+      setQuotedCreditsInfo(null);
+      setVoiceQuotePending(true);
+      setVoiceQuoteError(null);
       try {
         const res = await fetch("/api/quotes", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             organizationId,
-            modelId: model.id,
-            billableQuantity: billableCharacters,
+            modelId: quoteModelId,
+            text: voiceText,
           }),
         });
         if (cancelled) return;
-        const resData = await res.json();
-        if (res.ok && resData.quote?.customerCredits) {
+        const resData = (await res.json()) as {
+          error?: string;
+          quote?: { customerCredits?: string; priceVersionId?: string };
+        };
+        if (
+          res.ok &&
+          resData.quote?.customerCredits !== undefined &&
+          resData.quote.priceVersionId
+        ) {
           setQuotedCreditsInfo({
             text: voiceText,
-            modelId: model.id,
+            modelId: quoteModelId,
+            priceVersionId: resData.quote.priceVersionId,
             credits: String(resData.quote.customerCredits),
           });
+          setVoiceQuoteError(null);
+        } else {
+          setVoiceQuoteError(resData.error ?? "Voice quote is unavailable.");
         }
       } catch {
-        // Leave fallback
+        if (!cancelled) setVoiceQuoteError("Voice quote is unavailable.");
+      } finally {
+        if (!cancelled) setVoiceQuotePending(false);
       }
     }, 300);
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [activeMode, model, billableCharacters, voiceText, organizationId]);
+  }, [
+    activeMode,
+    activeModelId,
+    activePriceVersionId,
+    billableCharacters,
+    voiceText,
+    organizationId,
+  ]);
 
   const activeRequiredCredits =
     activeMode === "VOICE"
-      ? BigInt(quotedCredits ?? estimatedCredits)
+      ? quotedCredits === null
+        ? null
+        : BigInt(quotedCredits)
       : BigInt(model?.credits ?? "0");
 
   const isConfiguredForMode =
@@ -306,7 +290,7 @@ export function GenerationStudio({
         modelId: model.id,
         priceVersionId: model.priceVersionId,
         text: voiceText.trim(),
-        voiceKey,
+        voiceKey: selectedVoiceKey,
         speechRate,
         format: "mp3",
       };
@@ -439,13 +423,39 @@ export function GenerationStudio({
           aria-label="Media format"
           className="inline-flex rounded-xl border border-border bg-card p-1"
         >
-          {(["IMAGE", "VIDEO", "VOICE"] as const).map((mode) => (
+          {mediaModes.map((mode, index) => (
             <button
               key={mode}
+              id={`media-tab-${mode.toLowerCase()}`}
               type="button"
               role="tab"
               aria-selected={activeMode === mode}
+              aria-controls="media-creation-panel"
+              tabIndex={activeMode === mode ? 0 : -1}
               onClick={() => handleModeChange(mode)}
+              onKeyDown={(event) => {
+                if (
+                  !["ArrowLeft", "ArrowRight", "Home", "End"].includes(
+                    event.key,
+                  )
+                )
+                  return;
+                event.preventDefault();
+                const nextIndex =
+                  event.key === "Home"
+                    ? 0
+                    : event.key === "End"
+                      ? mediaModes.length - 1
+                      : (index +
+                          (event.key === "ArrowRight" ? 1 : -1) +
+                          mediaModes.length) %
+                        mediaModes.length;
+                const nextMode = mediaModes[nextIndex]!;
+                handleModeChange(nextMode);
+                document
+                  .getElementById(`media-tab-${nextMode.toLowerCase()}`)
+                  ?.focus();
+              }}
               className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
                 activeMode === mode
                   ? "bg-primary text-primary-foreground shadow-xs"
@@ -461,7 +471,12 @@ export function GenerationStudio({
           ))}
         </div>
       </div>
-      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+      <div
+        id="media-creation-panel"
+        role="tabpanel"
+        aria-labelledby={`media-tab-${activeMode.toLowerCase()}`}
+        className="mt-6 grid gap-6 lg:grid-cols-2"
+      >
         <div className="space-y-4">
           <label
             className="block text-sm font-semibold text-foreground"
@@ -526,15 +541,18 @@ export function GenerationStudio({
               </label>
               <select
                 id="voice-preset"
-                value={voiceKey}
+                value={selectedVoiceKey}
                 onChange={(e) => setVoiceKey(e.target.value)}
-                disabled={busy}
+                disabled={busy || availableVoices.length === 0}
                 className="min-h-11 w-full rounded-xl border border-input bg-card px-3 text-foreground"
               >
+                {availableVoices.length === 0 ? (
+                  <option>No verified voices available</option>
+                ) : null}
                 {availableVoices.map((v) => (
                   <option key={v.key} value={v.key}>
-                    {v.displayName} ({v.gender === "female" ? "Female" : "Male"}{" "}
-                    · {v.locale}) — {v.description}
+                    {v.displayName} ({v.gender ? `${v.gender} · ` : ""}
+                    {v.locale}){v.style ? ` — ${v.style}` : ""}
                   </option>
                 ))}
               </select>
@@ -545,22 +563,28 @@ export function GenerationStudio({
               >
                 Speech rate
               </label>
-              <select
-                id="voice-speech-rate"
-                value={speechRate}
-                onChange={(e) =>
-                  setSpeechRate(Number.parseFloat(e.target.value))
-                }
-                disabled={busy}
-                className="min-h-11 w-full rounded-xl border border-input bg-card px-3 text-foreground"
-              >
-                <option value={0.5}>0.5x (Slowest)</option>
-                <option value={0.8}>0.8x (Slower)</option>
-                <option value={1.0}>1.0x (Normal)</option>
-                <option value={1.2}>1.2x (Faster)</option>
-                <option value={1.5}>1.5x (Fast)</option>
-                <option value={2.0}>2.0x (Fastest)</option>
-              </select>
+              <div className="flex items-center gap-3">
+                <input
+                  id="voice-speech-rate"
+                  type="range"
+                  min="0.5"
+                  max="2"
+                  step="0.1"
+                  value={speechRate}
+                  onChange={(e) =>
+                    setSpeechRate(Number.parseFloat(e.target.value))
+                  }
+                  disabled={busy}
+                  aria-valuetext={`${speechRate.toFixed(1)} times speed`}
+                  className="min-h-11 w-full accent-primary"
+                />
+                <output
+                  htmlFor="voice-speech-rate"
+                  className="min-w-12 text-right text-sm font-semibold tabular-nums text-foreground"
+                >
+                  {speechRate.toFixed(1)}×
+                </output>
+              </div>
             </>
           ) : (
             <>
@@ -691,10 +715,20 @@ export function GenerationStudio({
             Available balance: {data?.balance ?? "…"} credits
             {activeMode === "VOICE" && billableCharacters > 0 ? (
               <span className="ml-2 font-semibold text-foreground">
-                · Quoted: {quotedCredits ?? estimatedCredits} credits
+                ·{" "}
+                {voiceQuotePending
+                  ? "Calculating quote…"
+                  : quotedCredits !== null
+                    ? `Quoted: ${quotedCredits} credits`
+                    : "Quote unavailable"}
               </span>
             ) : null}
           </p>
+          {voiceQuoteError ? (
+            <p role="status" className="text-sm text-destructive">
+              {voiceQuoteError}
+            </p>
+          ) : null}
 
           <Button
             type="button"
@@ -707,10 +741,13 @@ export function GenerationStudio({
               !isConfiguredForMode ||
               !model ||
               (activeMode === "VOICE" ? !voiceText.trim() : !prompt.trim()) ||
+              (activeMode === "VOICE" &&
+                (selectedVoiceKey === "" || activeRequiredCredits === null)) ||
               (activeMode !== "VOICE" &&
                 (!selectedRatio || !selectedResolution)) ||
               (model.mediaKind === "VIDEO" && !selectedDuration) ||
-              BigInt(data?.balance ?? "0") < activeRequiredCredits
+              (activeRequiredCredits !== null &&
+                BigInt(data?.balance ?? "0") < activeRequiredCredits)
             }
           >
             {busy
@@ -725,7 +762,7 @@ export function GenerationStudio({
                       : "image"
                 } · ${
                   activeMode === "VOICE"
-                    ? (quotedCredits ?? estimatedCredits)
+                    ? (quotedCredits ?? "—")
                     : (model?.credits ?? "—")
                 } credits`}
           </Button>

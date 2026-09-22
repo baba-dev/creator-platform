@@ -134,7 +134,7 @@ export class VoiceResolutionError extends Error {
  */
 export function resolvePresetVoice(
   voiceKey: string,
-  modelId: string,
+  modelId?: string,
 ): PresetVoice {
   const normalizedKey = voiceKey.trim().toLowerCase();
   const voice = VERIFIED_PRESET_VOICES.find(
@@ -148,7 +148,7 @@ export function resolvePresetVoice(
     );
   }
 
-  if (!voice.supportedModels.includes(modelId)) {
+  if (modelId && !voice.supportedModels.includes(modelId)) {
     throw new VoiceResolutionError(
       "Selected voice is not compatible with this model.",
       "INCOMPATIBLE_VOICE",

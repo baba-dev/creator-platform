@@ -9,6 +9,7 @@ import {
   downloadImage,
   downloadVideo,
   ImageStorageError,
+  storeAudio,
   storeImage,
   storeVideo,
 } from "./storage";
@@ -336,6 +337,154 @@ export async function processImageJob(
         status: "SUCCEEDED",
         completedAt: new Date(),
         outputPayload: { stored: true },
+        errorCode: null,
+        errorMessage: null,
+      },
+    });
+    await tx.auditEvent.create({
+      data: {
+        organizationId: job.organizationId,
+        actorUserId: job.createdById,
+        action: "generation.succeeded",
+        targetType: "GenerationJob",
+        targetId: id,
+      },
+    });
+  });
+}
+
+export async function processVoiceJob(
+  id: string,
+  provider: MediaGenerationProvider,
+) {
+  const job = await db.generationJob.findUniqueOrThrow({
+    where: { id },
+    include: { providerModel: true },
+  });
+  if (job.status !== "QUEUED") return;
+
+  try {
+    await requireMembership(db, job.organizationId, job.createdById, true);
+  } catch {
+    await failJob(id, "Workspace access changed before generation.");
+    return;
+  }
+
+  const claimed = await db.generationJob.updateMany({
+    where: { id, status: "QUEUED" },
+    data: { status: "SUBMITTED", submittedAt: new Date() },
+  });
+  if (!claimed.count) return;
+
+  let result;
+  try {
+    result = await provider.submit({
+      idempotencyKey: job.idempotencyKey,
+      modelId: job.providerModel.providerModelId,
+      mediaKind: "voice",
+      input: job.requestPayload as Record<string, unknown>,
+    });
+    if (result.status !== "succeeded" || !result.inlineOutputs?.length) {
+      throw new ProviderRequestError(
+        "BytePlus returned an unexpected voice result",
+        true,
+        { code: "INVALID_PROVIDER_RESPONSE" },
+      );
+    }
+  } catch (error) {
+    if (error instanceof ProviderRequestError && !error.retryable) {
+      await failJob(
+        id,
+        "Provider rejected the voice request. Credits released.",
+      );
+      return;
+    }
+    await db.generationJob.updateMany({
+      where: { id, status: "SUBMITTED" },
+      data: {
+        status: "MANUAL_REVIEW",
+        errorCode: "PROVIDER_OUTCOME_UNKNOWN",
+        errorMessage:
+          "Provider outcome needs review. Credits remain reserved; no automatic resubmission.",
+      },
+    });
+    return;
+  }
+
+  const base64 = result.inlineOutputs[0]?.dataBase64;
+  if (!base64) {
+    await db.generationJob.updateMany({
+      where: { id, status: "SUBMITTED" },
+      data: {
+        status: "MANUAL_REVIEW",
+        providerRequestId: result.providerRequestId,
+        errorCode: "INVALID_PROVIDER_RESPONSE",
+        errorMessage:
+          "Provider returned empty voice audio. Credits remain reserved for manual review.",
+      },
+    });
+    return;
+  }
+
+  const audioBytes = Buffer.from(base64, "base64");
+  let stored: Awaited<ReturnType<typeof storeAudio>> | null = null;
+  let lastStorageError: unknown = null;
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      stored = await storeAudio(`${id}.mp3`, audioBytes);
+      break;
+    } catch (error) {
+      lastStorageError = error;
+      if (attempt < 3) {
+        await new Promise((resolve) => setTimeout(resolve, 200 * attempt));
+      }
+    }
+  }
+
+  if (!stored) {
+    const code =
+      lastStorageError instanceof ImageStorageError
+        ? lastStorageError.code
+        : "STORAGE_WRITE_FAILED";
+    await db.generationJob.updateMany({
+      where: { id, status: "SUBMITTED" },
+      data: {
+        status: "MANUAL_REVIEW",
+        providerRequestId: result.providerRequestId,
+        errorCode: code,
+        errorMessage:
+          "Generated audio could not be written to persistent storage. Credits remain reserved for manual review.",
+      },
+    });
+    throw lastStorageError;
+  }
+
+  await db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM GenerationJob WHERE id = ${id} FOR UPDATE`;
+    const current = await tx.generationJob.findUniqueOrThrow({ where: { id } });
+    if (current.status !== "SUBMITTED") return;
+    const wallet = await tx.wallet.findUniqueOrThrow({
+      where: { organizationId: job.organizationId },
+    });
+    await captureCreditsForJob(tx, {
+      walletId: wallet.id,
+      jobId: id,
+      amountCredits: current.reservedCredits,
+      idempotencyKey: `generation-capture-${id}`,
+    });
+    await tx.asset.update({
+      where: { objectKey: `${id}.mp3` },
+      data: { ...stored, status: "READY" },
+    });
+    await tx.generationJob.update({
+      where: { id },
+      data: {
+        status: "SUCCEEDED",
+        providerRequestId: result.providerRequestId,
+        actualUnits: current.quotedUnits,
+        completedAt: new Date(),
+        outputPayload: { stored: true, byteSize: Number(stored.byteSize) },
         errorCode: null,
         errorMessage: null,
       },

@@ -10,6 +10,8 @@ interface SeedModel {
   capabilities: Prisma.InputJsonValue;
   providerCostMicroUsd: bigint;
   customerCredits: bigint;
+  pricingDimension?: "REQUEST" | "CHARACTER";
+  unitQuantity?: number;
 }
 
 const verifiedBytePlusModels: readonly SeedModel[] = [
@@ -29,6 +31,8 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
     },
     providerCostMicroUsd: 54_000n,
     customerCredits: 28n,
+    pricingDimension: "REQUEST",
+    unitQuantity: 1,
   },
   {
     providerModelId: "seedream-4-5-251128",
@@ -46,6 +50,8 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
     },
     providerCostMicroUsd: 41_000n,
     customerCredits: 22n,
+    pricingDimension: "REQUEST",
+    unitQuantity: 1,
   },
   {
     providerModelId: "dreamina-seedance-2-5-260628",
@@ -64,20 +70,28 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
     },
     providerCostMicroUsd: 468_000n,
     customerCredits: 240n,
+    pricingDimension: "REQUEST",
+    unitQuantity: 1,
   },
   {
-    providerModelId: "seed-speech-2",
+    providerModelId: "seed-tts-2.0",
     mediaKind: "VOICE",
     displayName: "Seed Speech TTS 2.0",
     description:
-      "Expressive, context-aware narration with natural rhythm and pauses.",
+      "Expressive, context-aware narration returned as synthesized audio bytes.",
     capabilities: {
-      "language:en": true,
-      "language:ar": true,
-      "language:hi": true,
+      streaming: true,
+      "format:mp3": true,
+      "format:ogg_opus": true,
+      "format:pcm": true,
+      "sampleRate:24000": true,
+      "speechRate:min": -50,
+      "speechRate:max": 100,
     },
-    providerCostMicroUsd: 10_000n,
-    customerCredits: 6n,
+    providerCostMicroUsd: 30_000n,
+    customerCredits: 2n,
+    pricingDimension: "CHARACTER",
+    unitQuantity: 1000,
   },
 ];
 
@@ -135,6 +149,8 @@ async function main(): Promise<void> {
           fxBaisaNumerator: 769n,
           fxBaisaDenominator: 2n,
           targetMarginBps: 2500,
+          pricingDimension: model.pricingDimension ?? "REQUEST",
+          unitQuantity: model.unitQuantity ?? 1,
           effectiveFrom: new Date("2026-01-01T00:00:00Z"),
           effectiveTo: null,
           createdById: systemUser.id,

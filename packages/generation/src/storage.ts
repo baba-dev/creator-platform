@@ -12,7 +12,7 @@ import {
 import { get } from "node:https";
 import { BlockList, isIP } from "node:net";
 import { isAbsolute, resolve } from "node:path";
-import { MAX_IMAGE_BYTES, MAX_VIDEO_BYTES } from "./index";
+import { MAX_AUDIO_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES } from "./index";
 
 const MAX_REDIRECTS = 3;
 const DOWNLOAD_TIMEOUT_MS = 120_000;
@@ -76,6 +76,9 @@ export type ImageStorageErrorCode =
   | "VIDEO_OUTPUT_TOO_LARGE"
   | "VIDEO_OUTPUT_INVALID_MP4"
   | "VIDEO_OUTPUT_DOWNLOAD_FAILED"
+  | "AUDIO_OUTPUT_INVALID_MP3"
+  | "AUDIO_OUTPUT_TOO_LARGE"
+  | "AUDIO_OUTPUT_EMPTY"
   | "STORAGE_WRITE_FAILED";
 
 export class ImageStorageError extends Error {
@@ -296,7 +299,7 @@ async function downloadTrustedImage(
 }
 
 export function storagePath(key: string) {
-  if (!/^[a-zA-Z0-9_-]+\.(png|mp4)$/.test(key))
+  if (!/^[a-zA-Z0-9_-]+\.(png|mp4|mp3)$/.test(key))
     throw new Error("Invalid storage key");
   const root =
     process.env.ASSET_STORAGE_ROOT ?? "/var/www/creator-platform/shared/assets";
@@ -578,6 +581,96 @@ export async function storeVideo(key: string, bytes: Buffer) {
     throw new ImageStorageError(
       "STORAGE_WRITE_FAILED",
       "Generated video could not be written to persistent storage.",
+      { cause: error },
+    );
+  } finally {
+    await rm(temporary, { force: true }).catch(() => undefined);
+  }
+  return {
+    byteSize: BigInt(bytes.byteLength),
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+  };
+}
+
+export function validateMp3Bytes(bytes: Buffer): { durationMs: number | null } {
+  if (bytes.length === 0) {
+    throw new ImageStorageError(
+      "AUDIO_OUTPUT_EMPTY",
+      "Generated audio was empty.",
+    );
+  }
+  if (bytes.length > MAX_AUDIO_BYTES) {
+    throw new ImageStorageError(
+      "AUDIO_OUTPUT_TOO_LARGE",
+      "Generated audio exceeded the storage size limit.",
+    );
+  }
+  if (bytes.length < 4) {
+    throw new ImageStorageError(
+      "AUDIO_OUTPUT_INVALID_MP3",
+      "Generated audio failed MP3 validation.",
+    );
+  }
+
+  let offset = 0;
+  // Check for ID3v2 header: "ID3" (0x49, 0x44, 0x33)
+  if (
+    bytes.length >= 10 &&
+    bytes[0] === 0x49 &&
+    bytes[1] === 0x44 &&
+    bytes[2] === 0x33
+  ) {
+    const flags = bytes[5]!;
+    const hasFooter = (flags & 0x10) !== 0;
+    // Synchsafe integer (7 bits per byte)
+    const tagSize =
+      ((bytes[6]! & 0x7f) << 21) |
+      ((bytes[7]! & 0x7f) << 14) |
+      ((bytes[8]! & 0x7f) << 7) |
+      (bytes[9]! & 0x7f);
+    offset = 10 + tagSize + (hasFooter ? 10 : 0);
+  }
+
+  // Look for MPEG frame sync: 11 bits set (0xFF followed by byte with top 3 bits set)
+  const searchLimit = Math.min(bytes.length - 1, offset + 4096);
+  let foundSync = false;
+
+  for (let i = offset; i < searchLimit; i++) {
+    if (bytes[i] === 0xff && (bytes[i + 1]! & 0xe0) === 0xe0) {
+      const secondByte = bytes[i + 1]!;
+      const versionBits = (secondByte >> 3) & 0x03; // 00=2.5, 01=reserved, 10=2, 11=1
+      const layerBits = (secondByte >> 1) & 0x03; // 00=reserved, 01=Layer III, 10=Layer II, 11=Layer I
+
+      if (versionBits !== 0x01 && layerBits !== 0x00) {
+        foundSync = true;
+        break;
+      }
+    }
+  }
+
+  if (!foundSync) {
+    throw new ImageStorageError(
+      "AUDIO_OUTPUT_INVALID_MP3",
+      "Generated audio failed MP3 validation.",
+    );
+  }
+
+  return { durationMs: null };
+}
+
+export async function storeAudio(key: string, bytes: Buffer) {
+  validateMp3Bytes(bytes);
+  const path = storagePath(key);
+  const temporary = `${path}.${randomUUID()}.tmp`;
+
+  try {
+    await mkdir(resolve(path, ".."), { recursive: true, mode: 0o750 });
+    await writeFile(temporary, bytes, { mode: 0o640, flag: "wx" });
+    await rename(temporary, path);
+  } catch (error) {
+    throw new ImageStorageError(
+      "STORAGE_WRITE_FAILED",
+      "Generated audio could not be written to persistent storage.",
       { cause: error },
     );
   } finally {

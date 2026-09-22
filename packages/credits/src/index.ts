@@ -107,4 +107,24 @@ export function calculateModelQuote(params: ModelQuoteParams): CreditQuote {
   });
 }
 
+export function countBillableCharacters(text: string): number {
+  if (!text) return 0;
+  return Array.from(text.replace(/\s/gu, "")).length;
+}
+
+export function calculateBillableUnits(
+  billableQuantity: number | bigint,
+  unitQuantity: number | bigint = 1,
+): bigint {
+  const quantity = BigInt(billableQuantity);
+  const unit = BigInt(unitQuantity);
+  if (unit <= 0n) {
+    throw new RangeError("unitQuantity must be greater than zero");
+  }
+  if (quantity <= 0n) {
+    return 0n;
+  }
+  return (quantity + unit - 1n) / unit;
+}
+
 export * from "./ledger";

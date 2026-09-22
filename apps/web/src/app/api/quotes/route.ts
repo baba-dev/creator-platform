@@ -1,5 +1,5 @@
 import { hasOrganizationPermission } from "@aiwa/authz";
-import { createCreditQuote } from "@aiwa/credits";
+import { calculateBillableUnits, createCreditQuote } from "@aiwa/credits";
 import { db } from "@aiwa/db";
 import { checkMemberSpendingBudget } from "@aiwa/organizations";
 import { quoteRequestSchema } from "@aiwa/validation";
@@ -30,7 +30,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
-  const { organizationId, modelId, units } = parsed.data;
+  const { organizationId, modelId, units, billableQuantity } = parsed.data;
 
   const membership = await db.membership.findUnique({
     where: {
@@ -103,8 +103,19 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
+  const effectiveUnits =
+    activePriceVersion.pricingDimension === "CHARACTER" &&
+    typeof billableQuantity === "number"
+      ? Number(
+          calculateBillableUnits(
+            BigInt(billableQuantity),
+            BigInt(activePriceVersion.unitQuantity ?? 1000),
+          ),
+        )
+      : units;
+
   const scaledProviderCostMicroUsd =
-    activePriceVersion.providerCostMicroUsd * BigInt(units);
+    activePriceVersion.providerCostMicroUsd * BigInt(effectiveUnits);
 
   const quote = createCreditQuote({
     providerCostMicroUsd: scaledProviderCostMicroUsd,
@@ -130,7 +141,10 @@ export async function POST(request: Request): Promise<NextResponse> {
       displayName: model.displayName,
       mediaKind: model.mediaKind,
       priceVersionId: activePriceVersion.id,
-      units,
+      pricingDimension: activePriceVersion.pricingDimension,
+      unitQuantity: activePriceVersion.unitQuantity?.toString() ?? null,
+      units: effectiveUnits,
+      billableQuantity: billableQuantity ?? null,
       providerCostMicroUsd: quote.providerCostMicroUsd.toString(),
       convertedCostBaisa: quote.convertedCostBaisa.toString(),
       customerPriceBaisa: quote.customerPriceBaisa.toString(),

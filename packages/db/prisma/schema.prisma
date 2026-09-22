@@ -71,6 +71,11 @@ enum MediaKind {
   REASONING
 }
 
+enum PricingDimension {
+  REQUEST
+  CHARACTER
+}
+
 enum GenerationJobStatus {
   DRAFT
   QUOTED
@@ -313,19 +318,21 @@ model ProviderModel {
 }
 
 model ModelPriceVersion {
-  id                   String          @id @default(cuid())
+  id                   String           @id @default(cuid())
   providerModelId      String
   providerCostMicroUsd BigInt
   customerCredits      BigInt
   fxBaisaNumerator     BigInt
   fxBaisaDenominator   BigInt
   targetMarginBps      Int
+  pricingDimension     PricingDimension @default(REQUEST)
+  unitQuantity         Int              @default(1)
   effectiveFrom        DateTime
   effectiveTo          DateTime?
   createdById          String
-  createdAt            DateTime        @default(now())
-  providerModel        ProviderModel   @relation(fields: [providerModelId], references: [id], onDelete: Restrict)
-  createdBy            User            @relation("PriceVersionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt            DateTime         @default(now())
+  providerModel        ProviderModel    @relation(fields: [providerModelId], references: [id], onDelete: Restrict)
+  createdBy            User             @relation("PriceVersionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   generationJobs       GenerationJob[]
 
   @@index([providerModelId, effectiveFrom])
@@ -347,6 +354,9 @@ model GenerationJob {
   reservedCredits            BigInt              @default(0)
   chargedCredits             BigInt              @default(0)
   actualProviderCostMicroUsd BigInt?
+  quotedUnits                Int?
+  actualUnits                Int?
+  billableQuantity           Int?
   errorCode                  String?
   errorMessage               String?             @db.Text
   quotedAt                   DateTime?

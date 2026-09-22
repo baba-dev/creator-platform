@@ -6,13 +6,23 @@ import { Eyebrow } from "@/components/ui/creative";
 import { StatusDot, Tape } from "@/components/ui/sketch";
 
 type CapabilityValue = boolean | number | string;
-type MediaKind = "IMAGE" | "VIDEO";
+type MediaKind = "IMAGE" | "VIDEO" | "VOICE";
+type PresetVoice = {
+  key: string;
+  displayName: string;
+  gender: "female" | "male";
+  locale: string;
+  description: string;
+  languageFamily?: string;
+};
 type Model = {
   id: string;
   name: string;
   mediaKind: MediaKind;
   description?: string | null;
   priceVersionId: string;
+  pricingDimension?: "REQUEST" | "CHARACTER" | null;
+  unitQuantity?: string | null;
   credits: string;
   capabilities?: Record<string, CapabilityValue> | null;
 };
@@ -27,16 +37,25 @@ type Job = {
 };
 type Studio = {
   configured: boolean;
+  mediaConfigured?: boolean;
+  voiceConfigured?: boolean;
   balance: string;
   models: Model[];
+  voices?: PresetVoice[];
   jobs: Job[];
 };
 function statusLabel(status: string, mediaKind: MediaKind): string {
-  const media = mediaKind === "VIDEO" ? "video" : "image";
+  const media =
+    mediaKind === "VIDEO" ? "video" : mediaKind === "VOICE" ? "voice" : "image";
   const statuses: Record<string, string> = {
     QUEUED: "Queued",
     SUBMITTED: `Submitting ${media}`,
-    PROCESSING: mediaKind === "VIDEO" ? "Rendering video" : "Saving image",
+    PROCESSING:
+      mediaKind === "VIDEO"
+        ? "Rendering video"
+        : mediaKind === "VOICE"
+          ? "Synthesizing voice"
+          : "Saving image",
     SUCCEEDED: "Ready",
     FAILED: "Failed — credits released",
     MANUAL_REVIEW: "Needs review — credits reserved",
@@ -56,6 +75,65 @@ function capabilityValues(
     .map(([key]) => key.slice(marker.length));
 }
 
+const defaultVoices: readonly PresetVoice[] = [
+  {
+    key: "jasper",
+    displayName: "Jasper",
+    gender: "male",
+    locale: "en-US",
+    description: "Friendly English speaker",
+  },
+  {
+    key: "charlotte",
+    displayName: "Charlotte",
+    gender: "female",
+    locale: "en-GB",
+    description: "Professional British narrator",
+  },
+  {
+    key: "kayla",
+    displayName: "Kayla",
+    gender: "female",
+    locale: "en-US",
+    description: "Warm conversational English",
+  },
+  {
+    key: "sunny",
+    displayName: "Sunny",
+    gender: "female",
+    locale: "en-US",
+    description: "Bright expressive English",
+  },
+  {
+    key: "zendaya",
+    displayName: "Zendaya",
+    gender: "female",
+    locale: "en-US",
+    description: "Dynamic youthful English",
+  },
+  {
+    key: "sharron",
+    displayName: "Sharron",
+    gender: "female",
+    locale: "en-US",
+    description: "Calm instructional English",
+  },
+  {
+    key: "vivi",
+    displayName: "Vivi",
+    gender: "female",
+    locale: "zh-CN",
+    description: "Natural Chinese narrator",
+  },
+  {
+    key: "xiaohe",
+    displayName: "Xiaohe",
+    gender: "male",
+    locale: "zh-CN",
+    description: "Authoritative Chinese speaker",
+  },
+];
+
 export function GenerationStudio({
   canGenerate,
   organizationId,
@@ -64,8 +142,17 @@ export function GenerationStudio({
   organizationId: string;
 }) {
   const [data, setData] = useState<Studio | null>(null);
+  const [activeMode, setActiveMode] = useState<MediaKind>("IMAGE");
   const [modelId, setModelId] = useState("");
   const [prompt, setPrompt] = useState("");
+  const [voiceText, setVoiceText] = useState("");
+  const [voiceKey, setVoiceKey] = useState("jasper");
+  const [speechRate, setSpeechRate] = useState(1.0);
+  const [quotedCreditsInfo, setQuotedCreditsInfo] = useState<{
+    text: string;
+    modelId: string;
+    credits: string;
+  } | null>(null);
   const [ratio, setRatio] = useState("1:1");
   const [resolution, setResolution] = useState("2K");
   const [duration, setDuration] = useState("5");
@@ -77,7 +164,88 @@ export function GenerationStudio({
     fingerprint: string;
     key: string;
   } | null>(null);
-  const model = data?.models.find((m) => m.id === modelId) ?? data?.models[0];
+
+  const modelsForMode = useMemo(
+    () => data?.models.filter((m) => m.mediaKind === activeMode) ?? [],
+    [data?.models, activeMode],
+  );
+
+  const model =
+    modelsForMode.find((m) => m.id === modelId) ??
+    modelsForMode[0] ??
+    data?.models[0];
+
+  const availableVoices = data?.voices?.length ? data.voices : defaultVoices;
+
+  const handleModeChange = useCallback(
+    (mode: MediaKind) => {
+      setActiveMode(mode);
+      setError(null);
+      const nextModel = data?.models.find((m) => m.mediaKind === mode);
+      if (nextModel) {
+        setModelId(nextModel.id);
+      }
+    },
+    [data?.models],
+  );
+
+  const billableCharacters = voiceText.trim().length;
+  const unitQuantity = Number(model?.unitQuantity ?? 1000);
+  const estimatedUnits =
+    billableCharacters > 0 ? Math.ceil(billableCharacters / unitQuantity) : 1;
+  const estimatedCredits = String(estimatedUnits * Number(model?.credits ?? 2));
+
+  const quotedCredits =
+    quotedCreditsInfo?.text === voiceText &&
+    quotedCreditsInfo?.modelId === model?.id
+      ? quotedCreditsInfo.credits
+      : null;
+
+  // Debounced quote fetch for voice mode
+  useEffect(() => {
+    if (activeMode !== "VOICE" || !model || billableCharacters === 0) {
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/quotes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            organizationId,
+            modelId: model.id,
+            billableQuantity: billableCharacters,
+          }),
+        });
+        if (cancelled) return;
+        const resData = await res.json();
+        if (res.ok && resData.quote?.customerCredits) {
+          setQuotedCreditsInfo({
+            text: voiceText,
+            modelId: model.id,
+            credits: String(resData.quote.customerCredits),
+          });
+        }
+      } catch {
+        // Leave fallback
+      }
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [activeMode, model, billableCharacters, voiceText, organizationId]);
+
+  const activeRequiredCredits =
+    activeMode === "VOICE"
+      ? BigInt(quotedCredits ?? estimatedCredits)
+      : BigInt(model?.credits ?? "0");
+
+  const isConfiguredForMode =
+    activeMode === "VOICE"
+      ? Boolean(data?.voiceConfigured)
+      : Boolean(data?.mediaConfigured ?? data?.configured);
 
   const availableRatios = useMemo(
     () => capabilityValues(model?.capabilities, "aspectRatio"),
@@ -131,17 +299,30 @@ export function GenerationStudio({
     if (!model || busy || isEnhancing) return;
     setBusy(true);
     setError(null);
-    const input = {
-      organizationId,
-      modelId: model.id,
-      priceVersionId: model.priceVersionId,
-      prompt,
-      aspectRatio: selectedRatio,
-      resolution: selectedResolution,
-      ...(model.mediaKind === "VIDEO" && {
-        durationSeconds: Number.parseInt(selectedDuration, 10),
-      }),
-    };
+    let input: Record<string, unknown>;
+    if (model.mediaKind === "VOICE") {
+      input = {
+        organizationId,
+        modelId: model.id,
+        priceVersionId: model.priceVersionId,
+        text: voiceText.trim(),
+        voiceKey,
+        speechRate,
+        format: "mp3",
+      };
+    } else {
+      input = {
+        organizationId,
+        modelId: model.id,
+        priceVersionId: model.priceVersionId,
+        prompt,
+        aspectRatio: selectedRatio,
+        resolution: selectedResolution,
+        ...(model.mediaKind === "VIDEO" && {
+          durationSeconds: Number.parseInt(selectedDuration, 10),
+        }),
+      };
+    }
     const fingerprint = JSON.stringify(input);
     if (attempt.current?.fingerprint !== fingerprint)
       attempt.current = { fingerprint, key: crypto.randomUUID() };
@@ -250,9 +431,36 @@ export function GenerationStudio({
         Start with a rough idea.
       </h2>
       <p className="mt-2 text-sm text-muted-foreground">
-        Create media with the options advertised by the selected BytePlus model.
-        Voice generation is coming later.
+        Create image, video, and voice media with verified BytePlus models.
       </p>
+      <div className="mt-4">
+        <div
+          role="tablist"
+          aria-label="Media format"
+          className="inline-flex rounded-xl border border-border bg-card p-1"
+        >
+          {(["IMAGE", "VIDEO", "VOICE"] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              role="tab"
+              aria-selected={activeMode === mode}
+              onClick={() => handleModeChange(mode)}
+              className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+                activeMode === mode
+                  ? "bg-primary text-primary-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {mode === "IMAGE"
+                ? "Image"
+                : mode === "VIDEO"
+                  ? "Video"
+                  : "Voice"}
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
         <div className="space-y-4">
           <label
@@ -268,135 +476,226 @@ export function GenerationStudio({
             disabled={busy || isEnhancing}
             className="min-h-11 w-full rounded-xl border border-input bg-card px-3 text-foreground"
           >
-            {!data?.models.length ? (
-              <option>No enabled models with active pricing</option>
+            {!modelsForMode.length ? (
+              <option>
+                No enabled {activeMode.toLowerCase()} models with active pricing
+              </option>
             ) : null}
-            {data?.models.map((m) => (
+            {modelsForMode.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.mediaKind === "VIDEO" ? "Video" : "Image"} · {m.name} ·{" "}
-                {m.credits} credits
+                {m.name} ·{" "}
+                {m.pricingDimension === "CHARACTER"
+                  ? `${m.credits} credits / ${m.unitQuantity ?? 1000} chars`
+                  : `${m.credits} credits`}
               </option>
             ))}
           </select>
           {model?.description ? (
             <p className="text-xs text-muted-foreground">{model.description}</p>
           ) : null}
-          <label
-            htmlFor="creation-prompt"
-            className="block text-sm font-semibold text-foreground"
-          >
-            Describe your {model?.mediaKind === "VIDEO" ? "video" : "image"}
-          </label>
-          <div className="relative">
-            <textarea
-              id="creation-prompt"
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              maxLength={2000}
-              disabled={busy || isEnhancing}
-              placeholder="A cinematic product photograph in warm Omani desert light…"
-              className="min-h-44 w-full rounded-2xl border border-input bg-card p-4 pb-14 text-foreground placeholder:text-muted-foreground"
-            />
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => void enhancePrompt()}
-              disabled={
-                busy || isEnhancing || !canGenerate || !model || !prompt.trim()
-              }
-              aria-busy={isEnhancing}
-              className="absolute bottom-3 right-3"
-            >
-              {isEnhancing ? (
-                <>
-                  <span
-                    aria-hidden="true"
-                    className="size-3 animate-spin rounded-full border-2 border-primary border-t-transparent"
-                  />
-                  Enhancing…
-                </>
-              ) : (
-                <>✨ Enhance prompt</>
-              )}
-            </Button>
-          </div>
-          <label
-            htmlFor="media-ratio"
-            className="block text-sm font-semibold text-foreground"
-          >
-            Aspect ratio
-          </label>
-          <select
-            id="media-ratio"
-            value={selectedRatio}
-            onChange={(e) => setRatio(e.target.value)}
-            disabled={busy || availableRatios.length === 0}
-            className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
-          >
-            {availableRatios.length ? (
-              availableRatios.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))
-            ) : (
-              <option>No supported aspect ratios advertised</option>
-            )}
-          </select>
-          <label
-            htmlFor="media-resolution"
-            className="block text-sm font-semibold text-foreground"
-          >
-            Resolution
-          </label>
-          <select
-            id="media-resolution"
-            value={selectedResolution}
-            onChange={(e) => setResolution(e.target.value)}
-            disabled={busy || availableResolutions.length === 0}
-            className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
-          >
-            {availableResolutions.length ? (
-              availableResolutions.map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))
-            ) : (
-              <option>No supported resolutions advertised</option>
-            )}
-          </select>
-          {model?.mediaKind === "VIDEO" && (
+
+          {activeMode === "VOICE" ? (
             <>
               <label
-                htmlFor="video-duration"
+                htmlFor="voice-text"
                 className="block text-sm font-semibold text-foreground"
               >
-                Duration
+                Speech synthesis text
+              </label>
+              <div className="relative">
+                <textarea
+                  id="voice-text"
+                  value={voiceText}
+                  onChange={(e) => setVoiceText(e.target.value)}
+                  maxLength={4096}
+                  disabled={busy}
+                  placeholder="Enter clear, natural text for speech synthesis…"
+                  className="min-h-44 w-full rounded-2xl border border-input bg-card p-4 pb-10 text-foreground placeholder:text-muted-foreground"
+                />
+                <div className="absolute bottom-3 right-3 text-xs text-muted-foreground">
+                  {voiceText.length} / 4096 chars · {estimatedUnits} block
+                  {estimatedUnits === 1 ? "" : "s"}
+                </div>
+              </div>
+
+              <label
+                htmlFor="voice-preset"
+                className="block text-sm font-semibold text-foreground"
+              >
+                Preset voice
               </label>
               <select
-                id="video-duration"
-                value={selectedDuration}
-                onChange={(e) => setDuration(e.target.value)}
-                disabled={busy || availableDurations.length === 0}
+                id="voice-preset"
+                value={voiceKey}
+                onChange={(e) => setVoiceKey(e.target.value)}
+                disabled={busy}
+                className="min-h-11 w-full rounded-xl border border-input bg-card px-3 text-foreground"
+              >
+                {availableVoices.map((v) => (
+                  <option key={v.key} value={v.key}>
+                    {v.displayName} ({v.gender === "female" ? "Female" : "Male"}{" "}
+                    · {v.locale}) — {v.description}
+                  </option>
+                ))}
+              </select>
+
+              <label
+                htmlFor="voice-speech-rate"
+                className="block text-sm font-semibold text-foreground"
+              >
+                Speech rate
+              </label>
+              <select
+                id="voice-speech-rate"
+                value={speechRate}
+                onChange={(e) =>
+                  setSpeechRate(Number.parseFloat(e.target.value))
+                }
+                disabled={busy}
+                className="min-h-11 w-full rounded-xl border border-input bg-card px-3 text-foreground"
+              >
+                <option value={0.5}>0.5x (Slowest)</option>
+                <option value={0.8}>0.8x (Slower)</option>
+                <option value={1.0}>1.0x (Normal)</option>
+                <option value={1.2}>1.2x (Faster)</option>
+                <option value={1.5}>1.5x (Fast)</option>
+                <option value={2.0}>2.0x (Fastest)</option>
+              </select>
+            </>
+          ) : (
+            <>
+              <label
+                htmlFor="creation-prompt"
+                className="block text-sm font-semibold text-foreground"
+              >
+                Describe your {model?.mediaKind === "VIDEO" ? "video" : "image"}
+              </label>
+              <div className="relative">
+                <textarea
+                  id="creation-prompt"
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  maxLength={2000}
+                  disabled={busy || isEnhancing}
+                  placeholder="A cinematic product photograph in warm Omani desert light…"
+                  className="min-h-44 w-full rounded-2xl border border-input bg-card p-4 pb-14 text-foreground placeholder:text-muted-foreground"
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => void enhancePrompt()}
+                  disabled={
+                    busy ||
+                    isEnhancing ||
+                    !canGenerate ||
+                    !model ||
+                    !prompt.trim()
+                  }
+                  aria-busy={isEnhancing}
+                  className="absolute bottom-3 right-3"
+                >
+                  {isEnhancing ? (
+                    <>
+                      <span
+                        aria-hidden="true"
+                        className="size-3 animate-spin rounded-full border-2 border-primary border-t-transparent"
+                      />
+                      Enhancing…
+                    </>
+                  ) : (
+                    <>✨ Enhance prompt</>
+                  )}
+                </Button>
+              </div>
+
+              <label
+                htmlFor="media-ratio"
+                className="block text-sm font-semibold text-foreground"
+              >
+                Aspect ratio
+              </label>
+              <select
+                id="media-ratio"
+                value={selectedRatio}
+                onChange={(e) => setRatio(e.target.value)}
+                disabled={busy || availableRatios.length === 0}
                 className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
               >
-                {availableDurations.length ? (
-                  availableDurations.map((value) => (
-                    <option key={value} value={value}>
-                      {value} seconds
+                {availableRatios.length ? (
+                  availableRatios.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
                     </option>
                   ))
                 ) : (
-                  <option>No supported durations advertised</option>
+                  <option>No supported aspect ratios advertised</option>
                 )}
               </select>
+
+              <label
+                htmlFor="media-resolution"
+                className="block text-sm font-semibold text-foreground"
+              >
+                Resolution
+              </label>
+              <select
+                id="media-resolution"
+                value={selectedResolution}
+                onChange={(e) => setResolution(e.target.value)}
+                disabled={busy || availableResolutions.length === 0}
+                className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
+              >
+                {availableResolutions.length ? (
+                  availableResolutions.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))
+                ) : (
+                  <option>No supported resolutions advertised</option>
+                )}
+              </select>
+
+              {model?.mediaKind === "VIDEO" && (
+                <>
+                  <label
+                    htmlFor="video-duration"
+                    className="block text-sm font-semibold text-foreground"
+                  >
+                    Duration
+                  </label>
+                  <select
+                    id="video-duration"
+                    value={selectedDuration}
+                    onChange={(e) => setDuration(e.target.value)}
+                    disabled={busy || availableDurations.length === 0}
+                    className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
+                  >
+                    {availableDurations.length ? (
+                      availableDurations.map((value) => (
+                        <option key={value} value={value}>
+                          {value} seconds
+                        </option>
+                      ))
+                    ) : (
+                      <option>No supported durations advertised</option>
+                    )}
+                  </select>
+                </>
+              )}
             </>
           )}
+
           <p className="text-sm tabular-nums text-muted-foreground">
             Available balance: {data?.balance ?? "…"} credits
+            {activeMode === "VOICE" && billableCharacters > 0 ? (
+              <span className="ml-2 font-semibold text-foreground">
+                · Quoted: {quotedCredits ?? estimatedCredits} credits
+              </span>
+            ) : null}
           </p>
+
           <Button
             type="button"
             className="w-full"
@@ -405,18 +704,30 @@ export function GenerationStudio({
             disabled={
               busy ||
               !canGenerate ||
-              !data?.configured ||
+              !isConfiguredForMode ||
               !model ||
-              !prompt.trim() ||
-              !selectedRatio ||
-              !selectedResolution ||
+              (activeMode === "VOICE" ? !voiceText.trim() : !prompt.trim()) ||
+              (activeMode !== "VOICE" &&
+                (!selectedRatio || !selectedResolution)) ||
               (model.mediaKind === "VIDEO" && !selectedDuration) ||
-              BigInt(data?.balance ?? "0") < BigInt(model?.credits ?? "0")
+              BigInt(data?.balance ?? "0") < activeRequiredCredits
             }
           >
             {busy
-              ? "Queuing media…"
-              : `Generate ${model?.mediaKind === "VIDEO" ? "video" : "image"} · ${model?.credits ?? "—"} credits`}
+              ? activeMode === "VOICE"
+                ? "Synthesizing voice…"
+                : "Queuing media…"
+              : `Generate ${
+                  activeMode === "VIDEO"
+                    ? "video"
+                    : activeMode === "VOICE"
+                      ? "speech"
+                      : "image"
+                } · ${
+                  activeMode === "VOICE"
+                    ? (quotedCredits ?? estimatedCredits)
+                    : (model?.credits ?? "—")
+                } credits`}
           </Button>
           <p className="text-xs text-muted-foreground">
             Credits are reserved when queued and charged once the media is
@@ -427,12 +738,15 @@ export function GenerationStudio({
               Member or Owner access is required to generate.
             </p>
           ) : null}
-          {data && !data.configured ? (
+          {data && !isConfiguredForMode ? (
             <p className="text-sm text-muted-foreground">
-              Media generation is not configured yet.
+              {activeMode === "VOICE"
+                ? "Voice generation is not configured yet."
+                : "Media generation is not configured yet."}
             </p>
           ) : null}
           {model &&
+          activeMode !== "VOICE" &&
           (availableRatios.length === 0 ||
             availableResolutions.length === 0 ||
             (model.mediaKind === "VIDEO" &&
@@ -493,6 +807,16 @@ export function GenerationStudio({
                         aria-label={`Generated video from ${job.providerModel.displayName}`}
                         className="max-h-96 w-full rounded-xl bg-muted object-contain"
                       />
+                    ) : asset.mimeType.startsWith("audio/") ? (
+                      <div className="rounded-xl border border-border bg-surface-sunken p-3">
+                        <audio
+                          src={`/api/assets/${asset.id}`}
+                          controls
+                          preload="metadata"
+                          aria-label={`Generated voice from ${job.providerModel.displayName}`}
+                          className="w-full"
+                        />
+                      </div>
                     ) : (
                       /* eslint-disable-next-line @next/next/no-img-element */
                       <img
@@ -506,7 +830,11 @@ export function GenerationStudio({
                       className="mt-2 inline-flex min-h-10 items-center text-sm font-semibold text-primary"
                     >
                       Download{" "}
-                      {asset.mimeType.startsWith("video/") ? "MP4" : "PNG"}
+                      {asset.mimeType.startsWith("video/")
+                        ? "MP4"
+                        : asset.mimeType.startsWith("audio/")
+                          ? "MP3"
+                          : "PNG"}
                     </a>
                   </div>
                 ))}

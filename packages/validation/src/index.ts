@@ -162,6 +162,11 @@ export const publishPriceVersionSchema = z.object({
     z.string().regex(/^\d+$/).transform(BigInt),
   ]),
   targetMarginBps: z.number().int().min(0).max(9999),
+  pricingDimension: z
+    .enum(["REQUEST", "CHARACTER"])
+    .default("REQUEST")
+    .optional(),
+  unitQuantity: z.coerce.number().int().positive().default(1).optional(),
   fxBaisaNumerator: z
     .union([z.bigint().positive(), z.string().regex(/^\d+$/).transform(BigInt)])
     .optional(),
@@ -177,6 +182,7 @@ export const quoteRequestSchema = z.object({
   organizationId: cuidSchema,
   modelId: z.string().trim().min(1).max(128),
   units: z.coerce.number().int().positive().default(1),
+  billableQuantity: z.coerce.number().int().nonnegative().optional(),
 });
 
 export const paymentMethodSchema = z.enum(["CASH", "CHEQUE"]);

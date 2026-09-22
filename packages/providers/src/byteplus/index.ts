@@ -30,7 +30,7 @@ const SPEECH_RESOURCE_ID = "seed-tts-2.0";
 const DEFAULT_SPEECH_APP_KEY = "aGjiRDfUWi";
 
 export interface BytePlusAdapterConfig {
-  readonly apiKey: string;
+  readonly apiKey?: string;
   readonly region: keyof typeof MODELARK_BASE_URLS;
   readonly modelArkBaseUrl?: string;
   readonly speechApiKey?: string;
@@ -42,6 +42,45 @@ export interface BytePlusAdapterConfig {
   readonly fetch?: typeof globalThis.fetch;
 }
 
+export function isBytePlusMediaConfigured(
+  config: {
+    apiKey?: string;
+    BYTEPLUS_API_KEY?: string;
+    [key: string]: unknown;
+  } = process.env,
+): boolean {
+  const key = (config.apiKey ?? config.BYTEPLUS_API_KEY) as string | undefined;
+  return Boolean(key && key.trim().length > 0);
+}
+
+export function isBytePlusVoiceConfigured(
+  config: {
+    speechApiKey?: string;
+    speechAppId?: string;
+    speechAccessToken?: string;
+    BYTEPLUS_SPEECH_API_KEY?: string;
+    BYTEPLUS_SPEECH_APP_ID?: string;
+    BYTEPLUS_SPEECH_ACCESS_TOKEN?: string;
+    [key: string]: unknown;
+  } = process.env,
+): boolean {
+  const speechApiKey = (config.speechApiKey ??
+    config.BYTEPLUS_SPEECH_API_KEY) as string | undefined;
+  const speechAppId = (config.speechAppId ?? config.BYTEPLUS_SPEECH_APP_ID) as
+    string | undefined;
+  const speechAccessToken = (config.speechAccessToken ??
+    config.BYTEPLUS_SPEECH_ACCESS_TOKEN) as string | undefined;
+
+  const hasApiKey = Boolean(speechApiKey && speechApiKey.trim().length > 0);
+  const hasLegacy = Boolean(
+    speechAppId &&
+    speechAppId.trim().length > 0 &&
+    speechAccessToken &&
+    speechAccessToken.trim().length > 0,
+  );
+  return hasApiKey || hasLegacy;
+}
+
 const httpsUrlSchema = z
   .url()
   .refine(
@@ -50,7 +89,7 @@ const httpsUrlSchema = z
   );
 
 const adapterConfigSchema = z.object({
-  apiKey: z.string().trim().min(1),
+  apiKey: z.string().trim().min(1).optional(),
   region: z.enum(["ap-southeast-1", "eu-west-1"]),
   modelArkBaseUrl: httpsUrlSchema.optional(),
   speechApiKey: z.string().trim().min(1).optional(),
@@ -553,6 +592,17 @@ export function createBytePlusProvider(
   }
 
   const validated = parsedConfig.data;
+  const hasMediaConfig = Boolean(validated.apiKey);
+  const hasSpeechConfig = Boolean(
+    validated.speechApiKey ||
+    (validated.speechAppId && validated.speechAccessToken),
+  );
+  if (!hasMediaConfig && !hasSpeechConfig) {
+    throw new ProviderConfigurationError(
+      "BytePlus adapter configuration is invalid: neither ModelArk nor Speech credentials are provided",
+    );
+  }
+
   const fetchClient = config.fetch ?? globalThis.fetch;
   if (!fetchClient) {
     throw new ProviderConfigurationError("A fetch implementation is required");
@@ -569,7 +619,7 @@ export function createBytePlusProvider(
     version: "0.1.0",
   });
   const modelArkHeaders = {
-    authorization: `Bearer ${validated.apiKey}`,
+    authorization: `Bearer ${validated.apiKey ?? ""}`,
     "content-type": "application/json",
   };
 
@@ -589,6 +639,11 @@ export function createBytePlusProvider(
 
       switch (submission.mediaKind) {
         case "image": {
+          if (!validated.apiKey) {
+            throw new ProviderConfigurationError(
+              "BytePlus ModelArk API key is required for image and video generation",
+            );
+          }
           const input = bytePlusImageInputSchema.safeParse(submission.input);
           if (!input.success) {
             throw new ProviderRequestError(
@@ -636,6 +691,11 @@ export function createBytePlusProvider(
         }
 
         case "video": {
+          if (!validated.apiKey) {
+            throw new ProviderConfigurationError(
+              "BytePlus ModelArk API key is required for image and video generation",
+            );
+          }
           const input = bytePlusVideoInputSchema.safeParse(submission.input);
           if (!input.success) {
             throw new ProviderRequestError(
@@ -770,6 +830,11 @@ export function createBytePlusProvider(
     },
 
     async getJob(providerRequestId: string): Promise<ProviderJob> {
+      if (!validated.apiKey) {
+        throw new ProviderConfigurationError(
+          "BytePlus ModelArk API key is required",
+        );
+      }
       const safeProviderRequestId = parseProviderRequestId(providerRequestId);
       logger.debug("Polling BytePlus task status", {
         providerRequestId: safeProviderRequestId,
@@ -814,6 +879,11 @@ export function createBytePlusProvider(
     },
 
     async cancel(providerRequestId: string): Promise<void> {
+      if (!validated.apiKey) {
+        throw new ProviderConfigurationError(
+          "BytePlus ModelArk API key is required",
+        );
+      }
       const safeProviderRequestId = parseProviderRequestId(providerRequestId);
       logger.info("Cancelling BytePlus task", {
         providerRequestId: safeProviderRequestId,

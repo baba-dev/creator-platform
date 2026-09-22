@@ -92,6 +92,39 @@ describe("BytePlus provider adapter", () => {
     });
   });
 
+  it("omits output_format for Seedream 4.5 because the live API rejects it", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        data: [{ url: "https://cdn.example.com/image-45.png" }],
+      }),
+    );
+    const provider = createBytePlusProvider({
+      ...validConfig,
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await provider.submit({
+      idempotencyKey: "image-job-45",
+      modelId: "seedream-4-5-251128",
+      mediaKind: "image",
+      input: {
+        prompt: "A studio product photograph",
+        aspectRatio: "1:1",
+        resolution: "2K",
+        outputFormat: "png",
+      },
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({
+      model: "seedream-4-5-251128",
+      prompt: "A studio product photograph",
+      size: "2048x2048",
+      response_format: "url",
+      watermark: false,
+    });
+  });
+
   it("rejects unsupported model and media-kind combinations", async () => {
     const provider = createBytePlusProvider(validConfig);
     await expect(
@@ -273,6 +306,13 @@ describe("BytePlus provider adapter", () => {
       [
         JSON.stringify({ reqid: "speech-request-1", code: 0, data: first }),
         JSON.stringify({ code: 0, sequence: -1, data: second }),
+        JSON.stringify({
+          code: 0,
+          message: "",
+          data: null,
+          sentence: { phonemes: [], text: "Welcome", words: [] },
+        }),
+        JSON.stringify({ code: 20_000_000, message: "OK", data: null }),
       ].join("\n"),
       { status: 200, headers: { "content-type": "application/x-ndjson" } },
     );
@@ -378,6 +418,28 @@ describe("BytePlus provider adapter", () => {
       "BytePlus request failed with status 400 (InvalidParameter)",
     );
     expect(error.message).not.toContain("secret prompt text");
+  });
+
+  it("extracts safe numeric Seed Speech error codes from header envelopes", () => {
+    const error = mapBytePlusError(
+      403,
+      JSON.stringify({
+        header: {
+          reqid: "request-id",
+          code: 45000030,
+          message: "requested resource not granted",
+        },
+      }),
+    );
+
+    expect(error).toMatchObject({
+      code: "SPEECH_45000030",
+      retryable: false,
+    });
+    expect(error.message).toBe(
+      "BytePlus request failed with status 403 (SPEECH_45000030)",
+    );
+    expect(error.message).not.toContain("requested resource not granted");
   });
 
   it.each([408, 429, 500, 502, 503, 504, 599])(

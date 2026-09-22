@@ -301,4 +301,41 @@ describe("createNvidiaProvider", () => {
     expect(capturedSignal?.aborted).toBe(true);
     expect(streamCancelled).toBe(true);
   });
+
+  it("returns after a timeout even if stream cancellation never settles", async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      cancel: () => new Promise<void>(() => {}),
+    });
+    const response = await safeFetch(
+      vi.fn().mockResolvedValue(new Response(stream)) as typeof fetch,
+      "https://integrate.api.nvidia.com/v1/chat/completions",
+      {},
+      30,
+    );
+    await expect(readResponseText(response, 100)).rejects.toMatchObject({
+      code: "REQUEST_OUTCOME_UNKNOWN",
+    });
+  });
+
+  it("preserves unknown outcome when an HTTP error body stalls", async () => {
+    const provider = createNvidiaProvider({
+      ...validConfig,
+      requestTimeoutMs: 30,
+      fetch: vi
+        .fn()
+        .mockResolvedValue(new Response(new ReadableStream(), { status: 503 })),
+    });
+    await expect(
+      provider.complete({
+        idempotencyKey: "stalled-error-body",
+        modelId: "",
+        systemPrompt: "sys",
+        userPrompt: "usr",
+        responseSchemaName: "schema",
+      }),
+    ).rejects.toMatchObject({
+      code: "REQUEST_OUTCOME_UNKNOWN",
+      retryable: false,
+    });
+  });
 });

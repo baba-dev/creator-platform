@@ -231,12 +231,19 @@ const speechChunkSchema = z.object({
   reqid: providerIdentifierSchema.optional(),
   code: z.coerce.number(),
   sequence: z.number().int().optional(),
-  data: z.base64().optional(),
+  // BytePlus emits terminal NDJSON frames with `data: null`.
+  data: z.base64().nullable().optional(),
 });
 
 const bytePlusErrorSchema = z.object({
   code: providerErrorCodeSchema.optional(),
   error: z.object({ code: providerErrorCodeSchema.optional() }).optional(),
+  // Seed Speech errors use a header envelope with a numeric code.
+  header: z
+    .object({
+      code: z.union([providerErrorCodeSchema, z.number().int()]).optional(),
+    })
+    .optional(),
 });
 
 function trimTrailingSlashes(value: string): string {
@@ -342,7 +349,11 @@ export function mapBytePlusError(
   let code: string | undefined;
   try {
     const parsed = bytePlusErrorSchema.safeParse(JSON.parse(bodyText));
-    if (parsed.success) code = parsed.data.error?.code ?? parsed.data.code;
+    if (parsed.success) {
+      const rawCode =
+        parsed.data.error?.code ?? parsed.data.code ?? parsed.data.header?.code;
+      code = typeof rawCode === "number" ? `SPEECH_${rawCode}` : rawCode;
+    }
   } catch {
     // Error bodies are intentionally not reflected in application errors.
   }
@@ -653,7 +664,9 @@ export function createBytePlusProvider(
                   input.data.aspectRatio,
                   input.data.resolution,
                 ),
-                output_format: input.data.outputFormat,
+                ...(submission.modelId === "seedream-5-0-260128"
+                  ? { output_format: input.data.outputFormat }
+                  : {}),
                 response_format: "url",
                 watermark: input.data.watermark,
               }),

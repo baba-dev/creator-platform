@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { ProviderConfigurationError, ProviderRequestError } from "../src";
-import { createNvidiaProvider, mapNvidiaError } from "../src/nvidia";
+import {
+  createNvidiaProvider,
+  mapNvidiaError,
+  readResponseText,
+  safeFetch,
+} from "../src/nvidia";
 
 describe("mapNvidiaError", () => {
   it("classifies throttling as retryable without reflecting provider messages", () => {
@@ -177,5 +182,123 @@ describe("createNvidiaProvider", () => {
         responseSchemaName: "schema",
       }),
     ).rejects.toThrowError(ProviderRequestError);
+  });
+
+  it("aborts and cancels stream when response body stalls beyond total deadline", async () => {
+    let capturedSignal: AbortSignal | undefined;
+    let streamCancelled = false;
+
+    const stalledStream = new ReadableStream({
+      start() {
+        // Leave open without emitting chunks
+      },
+      cancel() {
+        streamCancelled = true;
+      },
+    });
+
+    const fetchMock = vi.fn().mockImplementation((_url, init) => {
+      capturedSignal = init?.signal;
+      return Promise.resolve(new Response(stalledStream, { status: 200 }));
+    });
+
+    const provider = createNvidiaProvider({
+      ...validConfig,
+      requestTimeoutMs: 50,
+      fetch: fetchMock,
+    });
+
+    const promise = provider.complete({
+      idempotencyKey: "stalled-body-test",
+      modelId: "",
+      systemPrompt: "sys",
+      userPrompt: "usr",
+      responseSchemaName: "schema",
+    });
+
+    await expect(promise).rejects.toMatchObject({
+      message: "NVIDIA network request failed",
+      code: "REQUEST_OUTCOME_UNKNOWN",
+      retryable: false,
+    });
+
+    expect(capturedSignal?.aborted).toBe(true);
+    expect(streamCancelled).toBe(true);
+  });
+
+  it("aborts when response body exceeds idle deadline between chunks", async () => {
+    let streamCancelled = false;
+
+    const stalledStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"choices":'));
+        // Stalls before completing
+      },
+      cancel() {
+        streamCancelled = true;
+      },
+    });
+
+    const fetchMock = vi.fn().mockImplementation(() => {
+      return Promise.resolve(new Response(stalledStream, { status: 200 }));
+    });
+
+    const provider = createNvidiaProvider({
+      ...validConfig,
+      requestTimeoutMs: 5_000,
+      idleTimeoutMs: 40,
+      fetch: fetchMock,
+    });
+
+    const promise = provider.complete({
+      idempotencyKey: "stalled-idle-test",
+      modelId: "",
+      systemPrompt: "sys",
+      userPrompt: "usr",
+      responseSchemaName: "schema",
+    });
+
+    await expect(promise).rejects.toMatchObject({
+      message: "NVIDIA network request failed",
+      code: "REQUEST_OUTCOME_UNKNOWN",
+      retryable: false,
+    });
+
+    expect(streamCancelled).toBe(true);
+  });
+
+  it("triggers abort signal and cancels stream with extracted safeFetch and readResponseText", async () => {
+    let capturedSignal: AbortSignal | undefined;
+    let streamCancelled = false;
+
+    const stalledStream = new ReadableStream({
+      start() {},
+      cancel() {
+        streamCancelled = true;
+      },
+    });
+
+    const fetchMock = vi.fn().mockImplementation((_url, init) => {
+      capturedSignal = init?.signal;
+      return Promise.resolve(new Response(stalledStream, { status: 200 }));
+    });
+
+    const response = await safeFetch(
+      fetchMock,
+      "https://integrate.api.nvidia.com/v1/chat/completions",
+      {},
+      50,
+    );
+
+    const readPromise = readResponseText(response, 1024 * 1024);
+
+    await expect(readPromise).rejects.toMatchObject({
+      message: "NVIDIA network request failed",
+      code: "REQUEST_OUTCOME_UNKNOWN",
+      retryable: false,
+    });
+
+    expect(capturedSignal?.aborted).toBe(true);
+    expect(streamCancelled).toBe(true);
   });
 });

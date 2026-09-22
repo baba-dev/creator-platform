@@ -13,6 +13,11 @@ import {
   type ProviderJobStatus,
   type ProviderModelDescriptor,
 } from "../index";
+import {
+  cancelAbandonedBody,
+  executeSafeFetch,
+  sharedReadResponseText,
+} from "../http";
 
 const MODELARK_BASE_URLS = {
   "ap-southeast-1": "https://ark.ap-southeast.bytepluses.com/api/v3",
@@ -37,6 +42,7 @@ export interface BytePlusAdapterConfig {
   readonly speechAppKey?: string;
   readonly speechBaseUrl?: string;
   readonly requestTimeoutMs?: number;
+  readonly idleTimeoutMs?: number;
   readonly fetch?: typeof globalThis.fetch;
 }
 
@@ -77,7 +83,8 @@ const adapterConfigSchema = z.object({
   speechApiKey: z.string().trim().min(1).optional(),
   speechAppKey: z.string().trim().min(1).optional(),
   speechBaseUrl: httpsUrlSchema.optional(),
-  requestTimeoutMs: z.number().int().min(1_000).max(600_000).optional(),
+  requestTimeoutMs: z.number().int().positive().max(600_000).optional(),
+  idleTimeoutMs: z.number().int().positive().max(600_000).optional(),
 });
 
 const providerIdentifierSchema = z
@@ -374,80 +381,36 @@ export function mapBytePlusError(
   );
 }
 
-async function safeFetch(
+export { cancelAbandonedBody } from "../http";
+
+export async function safeFetch(
   fetchFn: typeof globalThis.fetch,
   url: string,
   options: RequestInit,
   timeoutMs: number,
+  idleTimeoutMs?: number,
 ): Promise<Response> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetchFn(url, { ...options, signal: controller.signal });
-  } catch (error) {
-    throw new ProviderRequestError("BytePlus network request failed", true, {
-      cause: error,
-      code: controller.signal.aborted ? "REQUEST_TIMEOUT" : "NETWORK_ERROR",
-    });
-  } finally {
-    clearTimeout(timeout);
-  }
+  return executeSafeFetch(fetchFn, url, options, {
+    timeoutMs,
+    idleTimeoutMs,
+    defaultIdleTimeoutMs: 30_000,
+    providerName: "BytePlus",
+    onAbortCode: "REQUEST_TIMEOUT",
+    onAbortRetryable: true,
+    onNetworkErrorCode: "NETWORK_ERROR",
+  });
 }
 
-async function readResponseTextUnsafe(
+export async function readResponseText(
   response: Response,
   maximumBytes: number,
 ): Promise<string> {
-  if (!response.body?.getReader) {
-    const value = await response.text();
-    if (new TextEncoder().encode(value).byteLength > maximumBytes) {
-      throw new ProviderRequestError(
-        "BytePlus response exceeded size limit",
-        true,
-        {
-          code: "RESPONSE_TOO_LARGE",
-        },
-      );
-    }
-    return value;
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let byteCount = 0;
-  let value = "";
-  while (true) {
-    const next = await reader.read();
-    if (next.done) break;
-    byteCount += next.value.byteLength;
-    if (byteCount > maximumBytes) {
-      await reader.cancel();
-      throw new ProviderRequestError(
-        "BytePlus response exceeded size limit",
-        true,
-        {
-          code: "RESPONSE_TOO_LARGE",
-        },
-      );
-    }
-    value += decoder.decode(next.value, { stream: true });
-  }
-  return value + decoder.decode();
-}
-
-async function readResponseText(
-  response: Response,
-  maximumBytes: number,
-): Promise<string> {
-  try {
-    return await readResponseTextUnsafe(response, maximumBytes);
-  } catch (error) {
-    if (error instanceof ProviderRequestError) throw error;
-    throw new ProviderRequestError("BytePlus response read failed", true, {
-      cause: error,
-      code: "NETWORK_ERROR",
-    });
-  }
+  return sharedReadResponseText(response, maximumBytes, {
+    providerName: "BytePlus",
+    onAbortCode: "REQUEST_TIMEOUT",
+    onAbortRetryable: true,
+    onNetworkErrorCode: "NETWORK_ERROR",
+  });
 }
 
 async function assertSuccessfulResponse(response: Response): Promise<void> {
@@ -611,6 +574,7 @@ export function createBytePlusProvider(
     validated.speechBaseUrl ?? DEFAULT_SPEECH_BASE_URL,
   );
   const timeoutMs = validated.requestTimeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const idleTimeoutMs = validated.idleTimeoutMs;
   const logger = createLogger({
     service: "byteplus-adapter",
     version: "0.1.0",
@@ -672,6 +636,7 @@ export function createBytePlusProvider(
               }),
             },
             timeoutMs,
+            idleTimeoutMs,
           );
           await assertSuccessfulResponse(response);
           const data = await parseJsonResponse(response, imageResponseSchema);
@@ -725,6 +690,7 @@ export function createBytePlusProvider(
               }),
             },
             timeoutMs,
+            idleTimeoutMs,
           );
           await assertSuccessfulResponse(response);
           const data = await parseJsonResponse(
@@ -786,6 +752,7 @@ export function createBytePlusProvider(
               }),
             },
             timeoutMs,
+            idleTimeoutMs,
           );
           await assertSuccessfulResponse(response);
           const responseBody = await readResponseText(
@@ -839,6 +806,7 @@ export function createBytePlusProvider(
           headers: { authorization: `Bearer ${validated.apiKey}` },
         },
         timeoutMs,
+        idleTimeoutMs,
       );
       await assertSuccessfulResponse(response);
       const data = await parseJsonResponse(response, videoTaskResponseSchema);
@@ -888,8 +856,10 @@ export function createBytePlusProvider(
           headers: { authorization: `Bearer ${validated.apiKey}` },
         },
         timeoutMs,
+        idleTimeoutMs,
       );
       await assertSuccessfulResponse(response);
+      await cancelAbandonedBody(response);
     },
   };
 }

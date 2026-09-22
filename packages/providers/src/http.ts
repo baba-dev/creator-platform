@@ -13,19 +13,48 @@ export interface StreamContext {
 
 export const responseContexts = new WeakMap<Response, StreamContext>();
 
+// Cancellation is advisory: a custom ReadableStream can return a promise that
+// never settles from cancel(). Never hold a worker slot waiting for it.
+function cancelStream(
+  body: ReadableStream<Uint8Array> | null,
+  reader?: ReadableStreamDefaultReader<Uint8Array>,
+): void {
+  try {
+    const cancellation = reader ? reader.cancel() : body?.cancel();
+    void cancellation?.catch(() => {});
+  } catch {
+    // Cancellation must not replace the original request error.
+  }
+}
+
+async function raceWithAbort<T>(
+  promise: Promise<T>,
+  signal: AbortSignal,
+): Promise<T> {
+  if (signal.aborted) throw new Error("Request aborted");
+  let onAbort: (() => void) | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        onAbort = () => reject(new Error("Request aborted"));
+        signal.addEventListener("abort", onAbort, { once: true });
+        if (signal.aborted) onAbort();
+      }),
+    ]);
+  } finally {
+    if (onAbort) signal.removeEventListener("abort", onAbort);
+  }
+}
+
 export async function cancelAbandonedBody(response: Response): Promise<void> {
   const context = responseContexts.get(response);
   if (context) {
     responseContexts.delete(response);
     context.cleanup();
   }
-  if (!context?.bodyConsumed && response.body && !response.bodyUsed) {
-    try {
-      await response.body.cancel?.();
-    } catch {
-      // Ignore cancellation failures on abandoned streams.
-    }
-  }
+  if (!context?.bodyConsumed && response.body && !response.bodyUsed)
+    cancelStream(response.body);
 }
 
 export async function readChunkWithDeadline<T>(
@@ -91,7 +120,10 @@ export async function sharedReadResponseText(
 
   if (!response.body?.getReader) {
     try {
-      const value = await response.text();
+      const read = response.text();
+      const value = context
+        ? await raceWithAbort(read, context.controller.signal)
+        : await read;
       if (new TextEncoder().encode(value).byteLength > maximumBytes) {
         throw new ProviderRequestError(
           `${options.providerName} response exceeded size limit`,
@@ -118,6 +150,7 @@ export async function sharedReadResponseText(
         { cause: error, code: options.onNetworkErrorCode ?? "NETWORK_ERROR" },
       );
     } finally {
+      if (context?.controller.signal.aborted) cancelStream(response.body);
       context?.cleanup();
     }
   }
@@ -137,7 +170,6 @@ export async function sharedReadResponseText(
       }
       byteCount += next.value.byteLength;
       if (byteCount > maximumBytes) {
-        await reader.cancel().catch(() => {});
         throw new ProviderRequestError(
           `${options.providerName} response exceeded size limit`,
           true,
@@ -153,7 +185,7 @@ export async function sharedReadResponseText(
     return value;
   } catch (error) {
     if (!streamFinished) {
-      await reader.cancel().catch(() => {});
+      cancelStream(response.body, reader);
     }
     if (error instanceof ProviderRequestError) throw error;
     if (context?.controller.signal.aborted) {

@@ -352,8 +352,7 @@ export function mapBytePlusError(
     if (parsed.success) {
       const rawCode =
         parsed.data.error?.code ?? parsed.data.code ?? parsed.data.header?.code;
-      code =
-        typeof rawCode === "number" ? `SPEECH_${rawCode}` : rawCode;
+      code = typeof rawCode === "number" ? `SPEECH_${rawCode}` : rawCode;
     }
   } catch {
     // Error bodies are intentionally not reflected in application errors.

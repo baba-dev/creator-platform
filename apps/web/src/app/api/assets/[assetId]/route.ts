@@ -24,9 +24,11 @@ export async function GET(
   }
   try {
     const isVideo = asset.mimeType.startsWith("video/");
-    const ext = isVideo ? "mp4" : "png";
+    const isAudio = asset.mimeType.startsWith("audio/");
+    const isMedia = isVideo || isAudio;
+    const ext = isVideo ? "mp4" : isAudio ? "mp3" : "png";
     const download = new URL(request.url).searchParams.has("download");
-    const range = !download && isVideo ? request.headers.get("range") : null;
+    const range = !download && isMedia ? request.headers.get("range") : null;
     let body: Buffer;
     let status = 200;
     const headers = new Headers({
@@ -36,7 +38,7 @@ export async function GET(
       "Content-Disposition": `${download ? "attachment" : "inline"}; filename="${asset.id}.${ext}"`,
     });
 
-    if (isVideo) headers.set("Accept-Ranges", "bytes");
+    if (isMedia) headers.set("Accept-Ranges", "bytes");
     if (range) {
       const byteSize = await storedAssetSize(asset.objectKey);
       const match = /^bytes=(\d*)-(\d*)$/.exec(range.trim());

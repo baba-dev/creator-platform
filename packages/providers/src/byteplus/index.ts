@@ -30,16 +30,37 @@ const SPEECH_RESOURCE_ID = "seed-tts-2.0";
 const DEFAULT_SPEECH_APP_KEY = "aGjiRDfUWi";
 
 export interface BytePlusAdapterConfig {
-  readonly apiKey: string;
+  readonly apiKey?: string;
   readonly region: keyof typeof MODELARK_BASE_URLS;
   readonly modelArkBaseUrl?: string;
   readonly speechApiKey?: string;
   readonly speechAppKey?: string;
   readonly speechBaseUrl?: string;
-  readonly speechAppId?: string;
-  readonly speechAccessToken?: string;
   readonly requestTimeoutMs?: number;
   readonly fetch?: typeof globalThis.fetch;
+}
+
+export function isBytePlusMediaConfigured(
+  config: {
+    apiKey?: string;
+    BYTEPLUS_API_KEY?: string;
+    [key: string]: unknown;
+  } = process.env,
+): boolean {
+  const key = (config.apiKey ?? config.BYTEPLUS_API_KEY) as string | undefined;
+  return Boolean(key && key.trim().length > 0);
+}
+
+export function isBytePlusVoiceConfigured(
+  config: {
+    speechApiKey?: string;
+    BYTEPLUS_SPEECH_API_KEY?: string;
+    [key: string]: unknown;
+  } = process.env,
+): boolean {
+  const speechApiKey = (config.speechApiKey ??
+    config.BYTEPLUS_SPEECH_API_KEY) as string | undefined;
+  return Boolean(speechApiKey && speechApiKey.trim().length > 0);
 }
 
 const httpsUrlSchema = z
@@ -50,14 +71,12 @@ const httpsUrlSchema = z
   );
 
 const adapterConfigSchema = z.object({
-  apiKey: z.string().trim().min(1),
+  apiKey: z.string().trim().min(1).optional(),
   region: z.enum(["ap-southeast-1", "eu-west-1"]),
   modelArkBaseUrl: httpsUrlSchema.optional(),
   speechApiKey: z.string().trim().min(1).optional(),
   speechAppKey: z.string().trim().min(1).optional(),
   speechBaseUrl: httpsUrlSchema.optional(),
-  speechAppId: z.string().trim().min(1).optional(),
-  speechAccessToken: z.string().trim().min(1).optional(),
   requestTimeoutMs: z.number().int().min(1_000).max(600_000).optional(),
 });
 
@@ -110,8 +129,17 @@ export const bytePlusVoiceInputSchema = z.object({
   sampleRate: z
     .union([z.literal(8_000), z.literal(16_000), z.literal(24_000)])
     .default(24_000),
-  speechRate: z.number().int().min(-50).max(100).default(0),
+  // Application-facing multiplier. BytePlus receives an integer percentage.
+  speechRate: z.number().min(0.5).max(2).default(1),
 });
+
+export function speechRateMultiplierToPercentage(multiplier: number): number {
+  const parsed = z.number().min(0.5).max(2).safeParse(multiplier);
+  if (!parsed.success) {
+    throw new RangeError("speechRate multiplier must be between 0.5 and 2");
+  }
+  return Math.round((parsed.data - 1) * 100);
+}
 
 export const VERIFIED_BYTEPLUS_MODELS: readonly ProviderModelDescriptor[] = [
   {
@@ -496,7 +524,7 @@ function parseSpeechChunks(body: string): z.infer<typeof speechChunkSchema>[] {
 function decodeSpeechAudio(
   chunks: readonly z.infer<typeof speechChunkSchema>[],
 ): Buffer {
-  const successfulCodes = new Set([0, 3_000, 20_000_000]);
+  const successfulCodes = new Set([0, 20_000_000]);
   const audioParts: Buffer[] = [];
   let totalBytes = 0;
   for (const chunk of chunks) {
@@ -553,6 +581,14 @@ export function createBytePlusProvider(
   }
 
   const validated = parsedConfig.data;
+  const hasMediaConfig = Boolean(validated.apiKey);
+  const hasSpeechConfig = Boolean(validated.speechApiKey);
+  if (!hasMediaConfig && !hasSpeechConfig) {
+    throw new ProviderConfigurationError(
+      "BytePlus adapter configuration is invalid: neither ModelArk nor Speech credentials are provided",
+    );
+  }
+
   const fetchClient = config.fetch ?? globalThis.fetch;
   if (!fetchClient) {
     throw new ProviderConfigurationError("A fetch implementation is required");
@@ -569,7 +605,7 @@ export function createBytePlusProvider(
     version: "0.1.0",
   });
   const modelArkHeaders = {
-    authorization: `Bearer ${validated.apiKey}`,
+    authorization: `Bearer ${validated.apiKey ?? ""}`,
     "content-type": "application/json",
   };
 
@@ -589,6 +625,11 @@ export function createBytePlusProvider(
 
       switch (submission.mediaKind) {
         case "image": {
+          if (!validated.apiKey) {
+            throw new ProviderConfigurationError(
+              "BytePlus ModelArk API key is required for image and video generation",
+            );
+          }
           const input = bytePlusImageInputSchema.safeParse(submission.input);
           if (!input.success) {
             throw new ProviderRequestError(
@@ -636,6 +677,11 @@ export function createBytePlusProvider(
         }
 
         case "video": {
+          if (!validated.apiKey) {
+            throw new ProviderConfigurationError(
+              "BytePlus ModelArk API key is required for image and video generation",
+            );
+          }
           const input = bytePlusVideoInputSchema.safeParse(submission.input);
           if (!input.success) {
             throw new ProviderRequestError(
@@ -690,13 +736,9 @@ export function createBytePlusProvider(
               },
             );
           }
-          const usesApiKey = Boolean(validated.speechApiKey);
-          const usesLegacyCredentials = Boolean(
-            validated.speechAppId && validated.speechAccessToken,
-          );
-          if (!usesApiKey && !usesLegacyCredentials) {
+          if (!validated.speechApiKey) {
             throw new ProviderConfigurationError(
-              "BytePlus speech credentials are not configured",
+              "BytePlus Seed Speech API key is not configured",
             );
           }
 
@@ -705,14 +747,9 @@ export function createBytePlusProvider(
             "x-api-request-id": requestUuid(submission.idempotencyKey),
             "x-api-resource-id": SPEECH_RESOURCE_ID,
           };
-          if (validated.speechApiKey) {
-            speechHeaders["x-api-key"] = validated.speechApiKey;
-            speechHeaders["x-api-app-key"] =
-              validated.speechAppKey ?? DEFAULT_SPEECH_APP_KEY;
-          } else {
-            speechHeaders["x-api-app-key"] = validated.speechAppId!;
-            speechHeaders["x-api-access-key"] = validated.speechAccessToken!;
-          }
+          speechHeaders["x-api-key"] = validated.speechApiKey;
+          speechHeaders["x-api-app-key"] =
+            validated.speechAppKey ?? DEFAULT_SPEECH_APP_KEY;
 
           const response = await safeFetch(
             fetchClient,
@@ -728,7 +765,9 @@ export function createBytePlusProvider(
                   audio_params: {
                     format: input.data.format,
                     sample_rate: input.data.sampleRate,
-                    speech_rate: input.data.speechRate,
+                    speech_rate: speechRateMultiplierToPercentage(
+                      input.data.speechRate,
+                    ),
                   },
                 },
               }),
@@ -770,6 +809,11 @@ export function createBytePlusProvider(
     },
 
     async getJob(providerRequestId: string): Promise<ProviderJob> {
+      if (!validated.apiKey) {
+        throw new ProviderConfigurationError(
+          "BytePlus ModelArk API key is required",
+        );
+      }
       const safeProviderRequestId = parseProviderRequestId(providerRequestId);
       logger.debug("Polling BytePlus task status", {
         providerRequestId: safeProviderRequestId,
@@ -814,6 +858,11 @@ export function createBytePlusProvider(
     },
 
     async cancel(providerRequestId: string): Promise<void> {
+      if (!validated.apiKey) {
+        throw new ProviderConfigurationError(
+          "BytePlus ModelArk API key is required",
+        );
+      }
       const safeProviderRequestId = parseProviderRequestId(providerRequestId);
       logger.info("Cancelling BytePlus task", {
         providerRequestId: safeProviderRequestId,

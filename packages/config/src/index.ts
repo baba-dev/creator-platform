@@ -57,8 +57,6 @@ export const serverEnvSchema = z.object({
   BYTEPLUS_SPEECH_API_KEY: optionalString,
   BYTEPLUS_SPEECH_APP_KEY: optionalString,
   BYTEPLUS_SPEECH_BASE_URL: optionalHttpsUrl,
-  BYTEPLUS_SPEECH_APP_ID: optionalString,
-  BYTEPLUS_SPEECH_ACCESS_TOKEN: optionalString,
   BYTEPLUS_REQUEST_TIMEOUT_MS: optionalPositiveInteger,
   BYTEPLUS_LIVE_SMOKE_ACK: optionalSmokeAcknowledgement,
   BYTEPLUS_SMOKE_OUTPUT_DIR: optionalAbsolutePath,

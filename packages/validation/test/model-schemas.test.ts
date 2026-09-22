@@ -29,7 +29,17 @@ describe("model validation schemas", () => {
     if (valid.success) {
       expect(valid.data.providerCostMicroUsd).toBe(54_000n);
       expect(valid.data.targetMarginBps).toBe(2500);
+      expect(valid.data.pricingDimension).toBeUndefined();
+      expect(valid.data.unitQuantity).toBeUndefined();
     }
+
+    const characterPrice = publishPriceVersionSchema.safeParse({
+      providerCostMicroUsd: "30000",
+      targetMarginBps: 2500,
+      pricingDimension: "CHARACTER",
+      unitQuantity: 1000,
+    });
+    expect(characterPrice.success).toBe(true);
 
     const withDefaults = publishPriceVersionSchema.safeParse({
       providerCostMicroUsd: "10000",

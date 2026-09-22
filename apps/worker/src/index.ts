@@ -4,6 +4,7 @@ import {
   processImageJob,
   processVideoPollJob,
   processVideoSubmitJob,
+  processVoiceJob,
 } from "@aiwa/generation/process";
 import { createBytePlusProvider } from "@aiwa/providers/byteplus";
 import { createNvidiaProvider } from "@aiwa/providers/nvidia";
@@ -62,11 +63,17 @@ const generationQueue = new Queue("generation", {
   connection: redis,
   prefix: "aiwa",
 });
-const bytePlusProvider = env.BYTEPLUS_API_KEY
+const hasBytePlus = Boolean(
+  env.BYTEPLUS_API_KEY || env.BYTEPLUS_SPEECH_API_KEY,
+);
+const bytePlusProvider = hasBytePlus
   ? createBytePlusProvider({
       apiKey: env.BYTEPLUS_API_KEY,
       region: env.BYTEPLUS_REGION,
       modelArkBaseUrl: env.BYTEPLUS_MODELARK_BASE_URL,
+      speechBaseUrl: env.BYTEPLUS_SPEECH_BASE_URL,
+      speechApiKey: env.BYTEPLUS_SPEECH_API_KEY,
+      speechAppKey: env.BYTEPLUS_SPEECH_APP_KEY,
       requestTimeoutMs: env.BYTEPLUS_REQUEST_TIMEOUT_MS,
     })
   : null;
@@ -87,6 +94,9 @@ const generationWorker = new Worker(
         return;
       case "video-poll":
         await processVideoPollJob(job.data.jobId, bytePlusProvider);
+        return;
+      case "voice":
+        await processVoiceJob(job.data.jobId, bytePlusProvider);
         return;
       default:
         throw new Error("Unknown generation queue job");
@@ -149,7 +159,8 @@ async function dispatchGeneration() {
   if (generationDispatching || !bytePlusProvider) return;
   generationDispatching = true;
   try {
-    // Lost responses cannot safely be replayed for synchronous image generation.
+    // Lost responses cannot safely be replayed for synchronous image or voice
+    // generation because the provider may already have accepted and billed it.
     await db.generationJob.updateMany({
       where: {
         status: "SUBMITTED",
@@ -183,6 +194,19 @@ async function dispatchGeneration() {
         errorCode: "STORAGE_FAILED",
         errorMessage:
           "Image could not be stored. Credits remain reserved for review.",
+      },
+    });
+    await db.generationJob.updateMany({
+      where: {
+        status: "PROCESSING",
+        providerModel: { mediaKind: "VOICE" },
+        updatedAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+      },
+      data: {
+        status: "MANUAL_REVIEW",
+        errorCode: "STORAGE_FAILED",
+        errorMessage:
+          "Audio finalization exceeded the recovery window. Credits remain reserved for review.",
       },
     });
     await db.generationJob.updateMany({
@@ -229,18 +253,21 @@ async function dispatchGeneration() {
         if (["failed", "completed"].includes(state)) await queued.remove();
         else continue;
       }
-      const isVideo = job.providerModel.mediaKind === "VIDEO";
-      const jobName = isVideo
-        ? job.status === "QUEUED"
-          ? "video-submit"
-          : "video-poll"
-        : "image";
+      const mediaKind = job.providerModel.mediaKind;
+      let jobName: string;
+      if (mediaKind === "VIDEO") {
+        jobName = job.status === "QUEUED" ? "video-submit" : "video-poll";
+      } else if (mediaKind === "VOICE") {
+        jobName = "voice";
+      } else {
+        jobName = "image";
+      }
       await generationQueue.add(
         jobName,
         { jobId: job.id },
         {
           jobId: job.id,
-          attempts: isVideo ? 1 : 3,
+          attempts: mediaKind === "VIDEO" || mediaKind === "VOICE" ? 1 : 3,
           backoff: { type: "exponential", delay: 10_000 },
           removeOnComplete: true,
           removeOnFail: 100,

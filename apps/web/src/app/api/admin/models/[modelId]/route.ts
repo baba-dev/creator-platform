@@ -118,6 +118,23 @@ export async function PATCH(
     const now = new Date();
 
     const newPriceVersion = await db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM ProviderModel WHERE id = ${model.id} FOR UPDATE`;
+      const currentPrice = await tx.modelPriceVersion.findFirst({
+        where: { providerModelId: model.id, effectiveTo: null },
+        orderBy: { effectiveFrom: "desc" },
+      });
+      const pricingDimension =
+        priceResult.data.pricingDimension ??
+        currentPrice?.pricingDimension ??
+        "REQUEST";
+      const unitQuantity =
+        pricingDimension === "REQUEST"
+          ? 1
+          : (priceResult.data.unitQuantity ??
+            (currentPrice?.pricingDimension === "CHARACTER"
+              ? currentPrice.unitQuantity
+              : 1000));
+
       // Close out existing active price version
       await tx.modelPriceVersion.updateMany({
         where: {
@@ -138,6 +155,8 @@ export async function PATCH(
           fxBaisaNumerator,
           fxBaisaDenominator,
           targetMarginBps,
+          pricingDimension,
+          unitQuantity,
           effectiveFrom: now,
           effectiveTo: null,
           createdById: session.user.id,
@@ -155,6 +174,8 @@ export async function PATCH(
             displayName: model.displayName,
             customerCredits: quote.customerCredits.toString(),
             providerCostMicroUsd: providerCostMicroUsd.toString(),
+            pricingDimension,
+            unitQuantity: unitQuantity.toString(),
             targetMarginBps,
           },
         },
@@ -172,6 +193,8 @@ export async function PATCH(
         id: newPriceVersion.id,
         customerCredits: newPriceVersion.customerCredits.toString(),
         providerCostMicroUsd: newPriceVersion.providerCostMicroUsd.toString(),
+        pricingDimension: newPriceVersion.pricingDimension,
+        unitQuantity: newPriceVersion.unitQuantity?.toString() ?? null,
         targetMarginBps: newPriceVersion.targetMarginBps,
         effectiveFrom: newPriceVersion.effectiveFrom.toISOString(),
       },

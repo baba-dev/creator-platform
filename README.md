@@ -311,8 +311,6 @@ BYTEPLUS_MODELARK_BASE_URL=
 BYTEPLUS_SPEECH_API_KEY=
 BYTEPLUS_SPEECH_APP_KEY=aGjiRDfUWi
 BYTEPLUS_SPEECH_BASE_URL=
-BYTEPLUS_SPEECH_APP_ID=
-BYTEPLUS_SPEECH_ACCESS_TOKEN=
 BYTEPLUS_REQUEST_TIMEOUT_MS=180000
 
 NVIDIA_API_KEY=
@@ -348,9 +346,16 @@ pnpm --filter @aiwa/worker smoke:byteplus
 
 The command generates one 2K PNG, validates the download, and writes it with
 owner-only permissions under `.data/byteplus-smoke/`. It never logs the API
-key, prompt, or temporary provider output URL. Seed Speech uses a separate
-`BYTEPLUS_SPEECH_API_KEY`; the legacy App ID/access-token pair remains available
-only for accounts that have not migrated.
+key, prompt, or temporary provider output URL. Seed Speech v3 uses a separate
+`BYTEPLUS_SPEECH_API_KEY`; a ModelArk key or legacy App ID/access-token pair is
+not accepted by this integration.
+
+Run the separately billable voice smoke test only after setting the Seed Speech
+key and the same billing acknowledgement:
+
+```bash
+pnpm --filter @aiwa/worker smoke:byteplus:voice
+```
 
 On a deployed server, the equivalent root-controlled operation loads the
 persistent service environment and stores the image outside immutable releases:

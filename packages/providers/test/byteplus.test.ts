@@ -662,4 +662,71 @@ describe("BytePlus provider adapter", () => {
     expect(capturedSignal?.aborted).toBe(true);
     expect(streamCancelled).toBe(true);
   });
+
+  it("returns after a timeout even if stream cancellation never settles", async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      cancel: () => new Promise<void>(() => {}),
+    });
+    const response = await safeFetch(
+      vi.fn().mockResolvedValue(new Response(stream)) as typeof fetch,
+      "https://ark.ap-southeast.bytepluses.com/api/v3/images/generations",
+      {},
+      30,
+    );
+    await expect(readResponseText(response, 100)).rejects.toMatchObject({
+      code: "REQUEST_TIMEOUT",
+    });
+  });
+
+  it("returns the size error even if cancellation never settles", async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(101));
+      },
+      cancel: () => new Promise<void>(() => {}),
+    });
+    const response = await safeFetch(
+      vi.fn().mockResolvedValue(new Response(stream)) as typeof fetch,
+      "https://ark.ap-southeast.bytepluses.com/api/v3/images/generations",
+      {},
+      100,
+    );
+    await expect(readResponseText(response, 100)).rejects.toMatchObject({
+      code: "RESPONSE_TOO_LARGE",
+    });
+  });
+
+  it("preserves timeout classification when an HTTP error body stalls", async () => {
+    const provider = createBytePlusProvider({
+      ...validConfig,
+      requestTimeoutMs: 30,
+      fetch: vi
+        .fn()
+        .mockResolvedValue(new Response(new ReadableStream(), { status: 503 })),
+    });
+    await expect(
+      provider.submit({
+        idempotencyKey: "stalled-error-body",
+        modelId: "seedream-5-0-260128",
+        mediaKind: "image",
+        input: { prompt: "test" },
+      }),
+    ).rejects.toMatchObject({ code: "REQUEST_TIMEOUT" });
+  });
+
+  it("bounds text fallback when the response offers no stream reader", async () => {
+    const fallback = {
+      body: null,
+      text: () => new Promise<string>(() => {}),
+    } as Response;
+    const response = await safeFetch(
+      vi.fn().mockResolvedValue(fallback) as typeof fetch,
+      "https://ark.ap-southeast.bytepluses.com/api/v3/images/generations",
+      {},
+      30,
+    );
+    await expect(readResponseText(response, 100)).rejects.toMatchObject({
+      code: "REQUEST_TIMEOUT",
+    });
+  });
 });

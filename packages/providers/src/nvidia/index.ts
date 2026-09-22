@@ -7,10 +7,7 @@ import {
   type ReasoningRequest,
   type ReasoningResult,
 } from "../index";
-import {
-  executeSafeFetch,
-  sharedReadResponseText,
-} from "../http";
+import { executeSafeFetch, sharedReadResponseText } from "../http";
 
 export interface NvidiaAdapterConfig {
   readonly apiKey: string;
@@ -142,7 +139,14 @@ export async function readResponseText(
 async function assertSuccessfulResponse(response: Response): Promise<void> {
   if (response.ok) return;
   const body = await readResponseText(response, MAX_ERROR_BODY_BYTES).catch(
-    () => "",
+    (error: unknown) => {
+      if (
+        error instanceof ProviderRequestError &&
+        error.code === "REQUEST_OUTCOME_UNKNOWN"
+      )
+        throw error;
+      return "";
+    },
   );
   throw mapNvidiaError(response.status, body);
 }

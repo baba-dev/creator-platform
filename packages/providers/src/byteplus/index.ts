@@ -416,7 +416,14 @@ export async function readResponseText(
 async function assertSuccessfulResponse(response: Response): Promise<void> {
   if (response.ok) return;
   const body = await readResponseText(response, MAX_ERROR_BODY_BYTES).catch(
-    () => "",
+    (error: unknown) => {
+      if (
+        error instanceof ProviderRequestError &&
+        error.code === "REQUEST_TIMEOUT"
+      )
+        throw error;
+      return "";
+    },
   );
   throw mapBytePlusError(response.status, body);
 }

@@ -98,6 +98,7 @@ export function GenerationStudio({
     modelId: string;
     priceVersionId: string;
     credits: string;
+    generateAudio: boolean;
   } | null>(null);
   const [voiceQuotePending, setVoiceQuotePending] = useState(false);
   const [voiceQuoteError, setVoiceQuoteError] = useState<string | null>(null);
@@ -113,6 +114,7 @@ export function GenerationStudio({
   const [ratio, setRatio] = useState("1:1");
   const [resolution, setResolution] = useState("2K");
   const [duration, setDuration] = useState("5");
+  const [generateAudio, setGenerateAudio] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEnhancing, setIsEnhancing] = useState(false);
@@ -196,7 +198,8 @@ export function GenerationStudio({
     videoQuotedCreditsInfo?.duration === selectedDuration &&
     videoQuotedCreditsInfo?.resolution === selectedResolution &&
     videoQuotedCreditsInfo?.modelId === activeModelId &&
-    videoQuotedCreditsInfo?.priceVersionId === activePriceVersionId
+    videoQuotedCreditsInfo?.priceVersionId === activePriceVersionId &&
+    videoQuotedCreditsInfo?.generateAudio === generateAudio
       ? videoQuotedCreditsInfo.credits
       : null;
 
@@ -235,6 +238,7 @@ export function GenerationStudio({
             modelId: quoteModelId,
             priceVersionId: resData.quote.priceVersionId,
             credits: String(resData.quote.customerCredits),
+            generateAudio,
           });
           setVoiceQuoteError(null);
         } else {
@@ -277,6 +281,7 @@ export function GenerationStudio({
             modelId: quoteModelId,
             durationSeconds: Number.parseInt(selectedDuration, 10),
             resolution: selectedResolution,
+            generateAudio,
           }),
         });
         if (cancelled) return;
@@ -316,6 +321,7 @@ export function GenerationStudio({
     activePriceVersionId,
     selectedDuration,
     selectedResolution,
+    generateAudio,
     organizationId,
   ]);
 
@@ -387,6 +393,7 @@ export function GenerationStudio({
         resolution: selectedResolution,
         ...(model.mediaKind === "VIDEO" && {
           durationSeconds: Number.parseInt(selectedDuration, 10),
+          generateAudio,
         }),
       };
     }
@@ -791,6 +798,19 @@ export function GenerationStudio({
                       <option>No supported durations advertised</option>
                     )}
                   </select>
+
+                  {model.capabilities?.generateAudio === true ? (
+                    <label className="flex items-center gap-3 rounded-xl border border-border bg-card px-3 py-3 text-sm font-medium text-foreground">
+                      <input
+                        type="checkbox"
+                        checked={generateAudio}
+                        onChange={(event) => setGenerateAudio(event.target.checked)}
+                        disabled={busy}
+                        className="size-4 accent-primary"
+                      />
+                      Generate synchronized audio
+                    </label>
+                  ) : null}
                 </>
               )}
             </>

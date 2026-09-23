@@ -145,6 +145,17 @@ export async function POST(request: Request): Promise<NextResponse> {
         { status: 409 },
       );
     }
+    if (
+      generateAudio === true &&
+      (!(model.capabilities && typeof model.capabilities === "object") ||
+        Array.isArray(model.capabilities) ||
+        (model.capabilities as Record<string, unknown>).generateAudio !== true)
+    ) {
+      return NextResponse.json(
+        { error: "Audio generation is not supported by this model." },
+        { status: 400 },
+      );
+    }
     const duration =
       durationSeconds ??
       (activePriceVersion.pricingDimension === "SECOND"

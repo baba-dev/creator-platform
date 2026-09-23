@@ -193,6 +193,7 @@ export const VERIFIED_BYTEPLUS_MODELS: readonly ProviderModelDescriptor[] = [
       "resolution:1080p": true,
       "durationSeconds:5": true,
       "durationSeconds:10": true,
+      generateAudio: true,
       minimumDurationSeconds: 4,
       maximumDurationSeconds: 30,
       fps: 24,

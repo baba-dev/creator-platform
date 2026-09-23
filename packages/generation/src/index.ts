@@ -425,6 +425,9 @@ export async function createVideoJob(userId: string, raw: unknown) {
       ) {
         throw new GenerationError("Resolution is not supported by this model.");
       }
+      if (input.generateAudio && !hasModelCapability(model.capabilities, "generateAudio")) {
+        throw new GenerationError("Audio generation is not supported by this model.");
+      }
 
       if (
         price.pricingDimension !== "SECOND" &&

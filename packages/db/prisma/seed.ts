@@ -67,6 +67,7 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
       "resolution:1080p": true,
       "durationSeconds:5": true,
       "durationSeconds:10": true,
+      generateAudio: true,
     },
     providerCostMicroUsd: 468_000n,
     customerCredits: 240n,

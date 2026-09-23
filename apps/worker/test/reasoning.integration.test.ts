@@ -18,7 +18,7 @@ describe.skipIf(!enabled)("reasoning job processing", () => {
       data: {
         id: userId,
         email: `${id}@example.invalid`,
-        name: "Reasoning Test",,
+        name: "Reasoning Test",
         emailVerified: true,
       },
     });

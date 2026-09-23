@@ -250,6 +250,7 @@ export async function getJobReconciliationDetails(jobId: string) {
           targetMarginBps: true,
           pricingDimension: true,
           unitQuantity: true,
+          creditsPerBaisa: true,
         },
       },
       assets: {

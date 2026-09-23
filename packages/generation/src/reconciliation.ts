@@ -1,13 +1,17 @@
+import { createHash } from "node:crypto";
 import { captureCreditsForJob, releaseOrRefundCredits } from "@aiwa/credits";
 import { db, type Prisma } from "@aiwa/db";
 import { parseServerEnv } from "@aiwa/config";
 import { type MediaGenerationProvider } from "@aiwa/providers";
 import { createBytePlusProvider } from "@aiwa/providers/byteplus";
 import {
+  deleteStoredAsset,
   downloadImage,
   downloadVideo,
+  readStoredAsset,
   storeImage,
   storeVideo,
+  validateMp3Bytes,
 } from "./storage";
 
 export class JobReconciliationError extends Error {
@@ -18,6 +22,127 @@ export class JobReconciliationError extends Error {
   ) {
     super(message);
     this.name = "JobReconciliationError";
+  }
+}
+
+type ReconciliationOutcome =
+  | "SUCCEEDED"
+  | "FAILED"
+  | "CANCELLED"
+  | "NOT_SUBMITTED";
+
+function metadataObject(metadata: unknown): Record<string, unknown> {
+  return typeof metadata === "object" &&
+    metadata !== null &&
+    !Array.isArray(metadata)
+    ? (metadata as Record<string, unknown>)
+    : {};
+}
+
+function resolutionHash(value: Record<string, unknown>): string {
+  return createHash("sha256")
+    .update(
+      JSON.stringify(value, (_key, item) =>
+        typeof item === "bigint" ? item.toString() : item,
+      ),
+    )
+    .digest("hex");
+}
+
+async function findResolutionAudit(
+  tx: Prisma.TransactionClient,
+  jobId: string,
+  idempotencyKey: string,
+) {
+  const events = await tx.auditEvent.findMany({
+    where: {
+      targetType: "GenerationJob",
+      targetId: jobId,
+      action: { startsWith: "generation." },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  return (
+    events.find(
+      (event) =>
+        metadataObject(event.metadata).idempotencyKey === idempotencyKey,
+    ) ?? null
+  );
+}
+
+function replayResult(
+  existing: Awaited<ReturnType<typeof findResolutionAudit>>,
+  expectedAction: string,
+  expectedHash: string,
+  message: string,
+) {
+  if (!existing) return null;
+  const metadata = metadataObject(existing.metadata);
+  if (
+    existing.action !== expectedAction ||
+    metadata.requestHash !== expectedHash
+  ) {
+    throw new JobReconciliationError(
+      "IDEMPOTENCY_CONFLICT",
+      "This idempotency key was already used for a different administrative resolution.",
+      409,
+    );
+  }
+  return { success: true, message };
+}
+
+async function latestReconciledOutcome(
+  tx: Prisma.TransactionClient,
+  jobId: string,
+): Promise<ReconciliationOutcome | null> {
+  const events = await tx.auditEvent.findMany({
+    where: {
+      targetType: "GenerationJob",
+      targetId: jobId,
+      action: "generation.reconciled",
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  for (const event of events) {
+    const outcome = metadataObject(event.metadata).outcome;
+    if (
+      outcome === "SUCCEEDED" ||
+      outcome === "FAILED" ||
+      outcome === "CANCELLED" ||
+      outcome === "NOT_SUBMITTED"
+    ) {
+      return outcome;
+    }
+  }
+  return null;
+}
+
+function latestOutcomeFromAudits(
+  events: Array<{ action: string; metadata: unknown }>,
+): ReconciliationOutcome | null {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]!;
+    if (event.action !== "generation.reconciled") continue;
+    const outcome = metadataObject(event.metadata).outcome;
+    if (
+      outcome === "SUCCEEDED" ||
+      outcome === "FAILED" ||
+      outcome === "CANCELLED" ||
+      outcome === "NOT_SUBMITTED"
+    ) {
+      return outcome;
+    }
+  }
+  return null;
+}
+
+function assertManualReview(jobStatus: string) {
+  if (jobStatus !== "MANUAL_REVIEW") {
+    throw new JobReconciliationError(
+      "INVALID_STATE",
+      "Administrative reconciliation is only permitted for jobs in MANUAL_REVIEW.",
+      409,
+    );
   }
 }
 
@@ -35,7 +160,7 @@ export interface JobPermittedActions {
 export interface ReconcileProviderOutcomeParams {
   jobId: string;
   actorUserId: string;
-  outcome: "SUCCEEDED" | "FAILED" | "NOT_SUBMITTED";
+  outcome: ReconciliationOutcome;
   evidence: string;
   providerRequestId?: string;
   actualProviderCostMicroUsd?: bigint;
@@ -181,21 +306,29 @@ export async function getJobReconciliationDetails(jobId: string) {
   const captureEntry = ledgerEntries.find((e) => e.type === "CAPTURE");
   const refundEntry = ledgerEntries.find((e) => e.type === "REFUND");
   const releaseEntry = ledgerEntries.find((e) => e.type === "RELEASE");
+  const reconciliationOutcome = latestOutcomeFromAudits(auditEvents);
 
   // Calculate permitted actions
   const permittedActions: JobPermittedActions = {
-    canReconcile: true,
+    canReconcile: job.status === "MANUAL_REVIEW",
     canRecover: false,
     canRelease: false,
     canRefund: false,
   };
 
-  // Reconcile is always permitted for operators to record evidence
   permittedActions.reconcileReason =
-    "Record provider investigation and evidence.";
+    job.status === "MANUAL_REVIEW"
+      ? "Record a verified provider outcome before resolving held credits or resuming recovery."
+      : "Provider reconciliation is reserved for jobs in MANUAL_REVIEW.";
 
-  // Release reservation permitted if reservedCredits > 0 and no capture/settlement
+  const releaseOutcomeVerified =
+    reconciliationOutcome === "FAILED" ||
+    reconciliationOutcome === "CANCELLED" ||
+    reconciliationOutcome === "NOT_SUBMITTED";
+
   if (
+    job.status === "MANUAL_REVIEW" &&
+    releaseOutcomeVerified &&
     job.reservedCredits > 0n &&
     job.chargedCredits === 0n &&
     !captureEntry &&
@@ -203,38 +336,44 @@ export async function getJobReconciliationDetails(jobId: string) {
   ) {
     permittedActions.canRelease = true;
     permittedActions.releaseReason =
-      "Held reservation can be released back to customer wallet once verified no provider charge occurred.";
-  } else if (job.chargedCredits > 0n || captureEntry) {
-    permittedActions.canRelease = false;
+      "Provider reconciliation confirms no successful billable output; the held reservation can be released.";
+  } else if (job.status !== "MANUAL_REVIEW") {
     permittedActions.releaseReason =
-      "Credits for this job have already been captured/settled. Use Refund instead.";
+      "Reservation release is only available while a job is in MANUAL_REVIEW.";
+  } else if (!releaseOutcomeVerified) {
+    permittedActions.releaseReason =
+      "Reconcile the provider outcome as FAILED, CANCELLED, or NOT_SUBMITTED before releasing credits.";
+  } else if (job.chargedCredits > 0n || captureEntry) {
+    permittedActions.releaseReason =
+      "Credits have already been captured. Use Refund instead.";
   } else if (releaseEntry) {
-    permittedActions.canRelease = false;
     permittedActions.releaseReason = "Reservation has already been released.";
   } else {
-    permittedActions.canRelease = false;
-    permittedActions.releaseReason =
-      "No active credit reservation on this job.";
+    permittedActions.releaseReason = "No active credit reservation remains.";
   }
 
-  // Recover output permitted if job is in MANUAL_REVIEW or PROCESSING, or has output URL without ready asset
-  const hasUnpersistedOutput =
-    job.status === "MANUAL_REVIEW" ||
-    (job.status === "PROCESSING" &&
-      job.assets.some((a) => a.status === "PENDING"));
+  const processingRecovery =
+    job.status === "PROCESSING" &&
+    job.assets.some((asset) => asset.status === "PENDING");
+  const manualRecovery =
+    job.status === "MANUAL_REVIEW" &&
+    reconciliationOutcome === "SUCCEEDED";
 
-  if (hasUnpersistedOutput) {
+  if (processingRecovery || manualRecovery) {
     permittedActions.canRecover = true;
     permittedActions.recoverReason =
-      "Output can be recovered and finalized without submitting a new generation request.";
+      job.providerModel.mediaKind === "VOICE"
+        ? "Provider success is verified. Recovery only finalizes an already-stored valid MP3 and never resubmits synthesis."
+        : "Existing generated output can be finalized without a new provider submission.";
+  } else if (job.status === "MANUAL_REVIEW") {
+    permittedActions.recoverReason =
+      "Reconcile the provider outcome as SUCCEEDED before recovering output.";
   } else if (job.status === "SUCCEEDED") {
-    permittedActions.canRecover = false;
     permittedActions.recoverReason =
       "Job output has already been successfully stored.";
   } else {
-    permittedActions.canRecover = false;
     permittedActions.recoverReason =
-      "Recovery is only available for jobs with unfinalized media in MANUAL_REVIEW or PROCESSING.";
+      "Recovery is available only for verified MANUAL_REVIEW jobs or PROCESSING storage recovery.";
   }
 
   // Refund permitted if job is settled (chargedCredits > 0) and unrefunded
@@ -268,6 +407,16 @@ export async function getJobReconciliationDetails(jobId: string) {
 export async function reconcileProviderOutcome(
   params: ReconcileProviderOutcomeParams,
 ) {
+  const requestHash = resolutionHash({
+    action: "reconcile",
+    outcome: params.outcome,
+    evidence: params.evidence,
+    providerRequestId: params.providerRequestId ?? null,
+    actualProviderCostMicroUsd:
+      params.actualProviderCostMicroUsd?.toString() ?? null,
+    notes: params.notes ?? null,
+  });
+
   return db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM GenerationJob WHERE id = ${params.jobId} FOR UPDATE`;
     const job = await tx.generationJob.findUnique({
@@ -300,7 +449,29 @@ export async function reconcileProviderOutcome(
     );
 
     if (existingAudit) {
+      const metadata = metadataObject(existingAudit.metadata);
+      if (metadata.requestHash !== requestHash) {
+        throw new JobReconciliationError(
+          "IDEMPOTENCY_CONFLICT",
+          "This idempotency key was already used with different reconciliation evidence.",
+          409,
+        );
+      }
       return { success: true, message: "Reconciliation already recorded." };
+    }
+
+    assertManualReview(job.status);
+
+    if (
+      params.providerRequestId &&
+      job.providerRequestId &&
+      params.providerRequestId !== job.providerRequestId
+    ) {
+      throw new JobReconciliationError(
+        "PROVIDER_REQUEST_ID_CONFLICT",
+        "The supplied provider request ID conflicts with the request ID already recorded for this job.",
+        409,
+      );
     }
 
     const updateData: Prisma.GenerationJobUpdateInput = {};
@@ -312,12 +483,16 @@ export async function reconcileProviderOutcome(
     }
     if (
       job.status === "MANUAL_REVIEW" &&
-      (params.outcome === "FAILED" || params.outcome === "NOT_SUBMITTED")
+      (params.outcome === "FAILED" ||
+        params.outcome === "CANCELLED" ||
+        params.outcome === "NOT_SUBMITTED")
     ) {
       updateData.errorCode =
         params.outcome === "FAILED"
           ? "PROVIDER_CONFIRMED_FAILED"
-          : "PROVIDER_NOT_SUBMITTED";
+          : params.outcome === "CANCELLED"
+            ? "PROVIDER_CONFIRMED_CANCELLED"
+            : "PROVIDER_NOT_SUBMITTED";
       updateData.errorMessage = params.evidence;
     }
 
@@ -343,6 +518,7 @@ export async function reconcileProviderOutcome(
             params.actualProviderCostMicroUsd?.toString(),
           notes: params.notes,
           idempotencyKey: params.idempotencyKey,
+          requestHash,
         },
       },
     });

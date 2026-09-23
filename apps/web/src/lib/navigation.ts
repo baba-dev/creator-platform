@@ -36,12 +36,13 @@ export function safeInvitationRoute(
     return fallback;
   }
 
-  if (route === "/app" || route.startsWith("/app/")) {
+  const pathname = route.split("?")[0]?.split("#")[0] ?? "";
+
+  if (pathname === "/app" || pathname.startsWith("/app/")) {
     return route;
   }
 
-  if (route.startsWith("/invite/")) {
-    const pathname = route.split("?")[0]?.split("#")[0] ?? "";
+  if (pathname.startsWith("/invite/")) {
     const token = pathname.slice("/invite/".length);
     if (token && /^[a-zA-Z0-9_-]+$/.test(token)) {
       return route;

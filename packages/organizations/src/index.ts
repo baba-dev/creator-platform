@@ -81,10 +81,9 @@ export class StorageQuotaExceededError extends OrganizationDomainError {
     public readonly scope: "member" | "organization",
     public readonly usedBytes?: bigint,
     public readonly proposedBytes?: bigint,
-    public readonly quotaBytes: bigint =
-      scope === "member"
-        ? MEMBER_STORAGE_QUOTA_BYTES
-        : ORGANIZATION_STORAGE_QUOTA_BYTES,
+    public readonly quotaBytes: bigint = scope === "member"
+      ? MEMBER_STORAGE_QUOTA_BYTES
+      : ORGANIZATION_STORAGE_QUOTA_BYTES,
   ) {
     super(
       "STORAGE_QUOTA_EXCEEDED",

@@ -60,7 +60,9 @@ describe("admitReasoningJob atomic admission limits", () => {
   it("rejects if membership disappears before the admission lock is acquired", async () => {
     fakeTx.$queryRaw.mockResolvedValue([]);
 
-    await expect(admitReasoningJob(sampleInput, txClient)).rejects.toMatchObject({
+    await expect(
+      admitReasoningJob(sampleInput, txClient),
+    ).rejects.toMatchObject({
       status: 403,
       message: "Access denied.",
     });

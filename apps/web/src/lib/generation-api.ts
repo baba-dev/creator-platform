@@ -38,7 +38,9 @@ export function mapGenerationError(error: unknown): {
           : quotaBytes - usedBytes;
     return {
       body: {
-        error: `${error.message} Limit: ${formatBytes(quotaBytes)}. ${remediation}`,
+        error: `${error.message} Limit: ${formatBytes(
+          quotaBytes,
+        )}. ${remediation}`,
         code: error.code,
         scope: error.scope,
         remediation,

@@ -19,11 +19,7 @@ export class ReasoningAdmissionError extends Error {
 }
 
 export class ReasoningAdmissionLimitError extends ReasoningAdmissionError {
-  constructor(
-    message: string,
-    status: number,
-    retryAfterSeconds: number,
-  ) {
+  constructor(message: string, status: number, retryAfterSeconds: number) {
     super(message, status, retryAfterSeconds);
     this.name = "ReasoningAdmissionLimitError";
   }

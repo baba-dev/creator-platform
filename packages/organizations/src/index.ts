@@ -77,7 +77,15 @@ export class InvalidOwnershipTransferError extends OrganizationDomainError {
   }
 }
 export class StorageQuotaExceededError extends OrganizationDomainError {
-  constructor(public readonly scope: "member" | "organization") {
+  constructor(
+    public readonly scope: "member" | "organization",
+    public readonly usedBytes?: bigint,
+    public readonly proposedBytes?: bigint,
+    public readonly quotaBytes: bigint =
+      scope === "member"
+        ? MEMBER_STORAGE_QUOTA_BYTES
+        : ORGANIZATION_STORAGE_QUOTA_BYTES,
+  ) {
     super(
       "STORAGE_QUOTA_EXCEEDED",
       `${scope === "member" ? "Member" : "Organization"} storage quota exceeded.`,
@@ -186,9 +194,19 @@ export function assertStorageAllocationFits(
   if (proposed < 0n)
     throw new RangeError("Proposed allocation cannot be negative.");
   if (memberUsed + proposed > MEMBER_STORAGE_QUOTA_BYTES)
-    throw new StorageQuotaExceededError("member");
+    throw new StorageQuotaExceededError(
+      "member",
+      memberUsed,
+      proposed,
+      MEMBER_STORAGE_QUOTA_BYTES,
+    );
   if (organizationUsed + proposed > ORGANIZATION_STORAGE_QUOTA_BYTES)
-    throw new StorageQuotaExceededError("organization");
+    throw new StorageQuotaExceededError(
+      "organization",
+      organizationUsed,
+      proposed,
+      ORGANIZATION_STORAGE_QUOTA_BYTES,
+    );
 }
 export function muscatCalendarMonth(date = new Date()): {
   start: Date;

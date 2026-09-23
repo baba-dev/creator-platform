@@ -10,7 +10,11 @@ import { mapGenerationError, generationError } from "./generation-api";
 
 describe("generation-api error mapper", () => {
   it("maps member StorageQuotaExceededError to HTTP 409 with specific domain error and remediation", () => {
-    const error = new StorageQuotaExceededError("member");
+    const error = new StorageQuotaExceededError(
+      "member",
+      1_000_000_000n,
+      100_000_000n,
+    );
     const result = mapGenerationError(error);
 
     expect(result.status).toBe(409);
@@ -19,6 +23,11 @@ describe("generation-api error mapper", () => {
     expect(result.body.remediation).toContain(
       "Delete existing member assets or request a storage quota increase from an organization owner.",
     );
+    expect(result.body.quotaBytes).toBe("1073741824");
+    expect(result.body.quotaLabel).toBe("1.00 GiB");
+    expect(result.body.usedBytes).toBe("1000000000");
+    expect(result.body.proposedBytes).toBe("100000000");
+    expect(result.body.availableBytes).toBe("73741824");
     expect(result.body.error).toContain("Member storage quota exceeded.");
     expect(result.body.error).toContain("Delete existing member assets");
 
@@ -27,7 +36,11 @@ describe("generation-api error mapper", () => {
   });
 
   it("maps organization StorageQuotaExceededError to HTTP 409 with specific domain error and remediation", () => {
-    const error = new StorageQuotaExceededError("organization");
+    const error = new StorageQuotaExceededError(
+      "organization",
+      10_700_000_000n,
+      100_000_000n,
+    );
     const result = mapGenerationError(error);
 
     expect(result.status).toBe(409);
@@ -36,6 +49,11 @@ describe("generation-api error mapper", () => {
     expect(result.body.remediation).toContain(
       "Delete unused workspace assets or contact an administrator to increase organization storage quota.",
     );
+    expect(result.body.quotaBytes).toBe("10737418240");
+    expect(result.body.quotaLabel).toBe("10 GiB");
+    expect(result.body.usedBytes).toBe("10700000000");
+    expect(result.body.proposedBytes).toBe("100000000");
+    expect(result.body.availableBytes).toBe("37418240");
     expect(result.body.error).toContain("Organization storage quota exceeded.");
     expect(result.body.error).toContain("Delete unused workspace assets");
 

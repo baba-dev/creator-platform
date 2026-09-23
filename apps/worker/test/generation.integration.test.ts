@@ -105,10 +105,11 @@ describe.skipIf(!enabled)("generation with MariaDB and Redis", () => {
         id: priceId,
         providerModelId: modelId,
         providerCostMicroUsd: 54000n,
-        customerCredits: 28n,
+        customerCredits: 84n,
         fxBaisaNumerator: 769n,
         fxBaisaDenominator: 2n,
         targetMarginBps: 2500,
+        creditsPerBaisa: 3n,
         effectiveFrom: new Date(0),
         createdById: userId,
       },
@@ -139,6 +140,7 @@ describe.skipIf(!enabled)("generation with MariaDB and Redis", () => {
         fxBaisaNumerator: 769n,
         fxBaisaDenominator: 2n,
         targetMarginBps: 2500,
+        creditsPerBaisa: 1n,
         effectiveFrom: new Date(0),
         createdById: userId,
       },
@@ -183,6 +185,8 @@ describe.skipIf(!enabled)("generation with MariaDB and Redis", () => {
     });
     expect(reserved).toHaveLength(1);
     expect(reserved[0]?.type).toBe("RESERVATION");
+    expect(reserved[0]?.amountCredits).toBe(84n);
+    expect(a.reservedCredits).toBe(84n);
     await expect(
       createImageJob(userId, { ...input, prompt: "Changed" }),
     ).rejects.toThrow("different inputs");
@@ -221,6 +225,7 @@ describe.skipIf(!enabled)("generation with MariaDB and Redis", () => {
         include: { assets: true },
       });
       expect(job.status).toBe("SUCCEEDED");
+      expect(job.chargedCredits).toBe(84n);
       expect(job.chargedCredits).toBe(a.reservedCredits);
       expect(job.assets[0]?.status).toBe("READY");
       expect(await readFile(join(directory, `${a.id}.png`), "utf8")).toBe(

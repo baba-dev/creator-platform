@@ -153,9 +153,11 @@ export function UserAccessActions({
   async function mutateEmailVerification(verified: boolean) {
     setFeedback(null);
     const reason = verified
-      ? window.prompt(
-          "Administrative verification bypasses normal mailbox proof. Enter an audit reason (minimum 8 characters):",
-        )?.trim()
+      ? window
+          .prompt(
+            "Administrative verification bypasses normal mailbox proof. Enter an audit reason (minimum 8 characters):",
+          )
+          ?.trim()
       : undefined;
     if (verified && (!reason || reason.length < 8)) return;
     try {

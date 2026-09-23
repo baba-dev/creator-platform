@@ -26,10 +26,7 @@ export class JobReconciliationError extends Error {
 }
 
 type ReconciliationOutcome =
-  | "SUCCEEDED"
-  | "FAILED"
-  | "CANCELLED"
-  | "NOT_SUBMITTED";
+  "SUCCEEDED" | "FAILED" | "CANCELLED" | "NOT_SUBMITTED";
 
 function metadataObject(metadata: unknown): Record<string, unknown> {
   return typeof metadata === "object" &&
@@ -356,8 +353,7 @@ export async function getJobReconciliationDetails(jobId: string) {
     job.status === "PROCESSING" &&
     job.assets.some((asset) => asset.status === "PENDING");
   const manualRecovery =
-    job.status === "MANUAL_REVIEW" &&
-    reconciliationOutcome === "SUCCEEDED";
+    job.status === "MANUAL_REVIEW" && reconciliationOutcome === "SUCCEEDED";
 
   if (processingRecovery || manualRecovery) {
     permittedActions.canRecover = true;

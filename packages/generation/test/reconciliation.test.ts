@@ -143,7 +143,10 @@ describe("Generation Job Reconciliation", () => {
     mocks.db.auditEvent.create.mockResolvedValue({ id: "audit-1" });
     mocks.downloadImage.mockResolvedValue(Buffer.from("fake-png"));
     mocks.storeImage.mockResolvedValue({ byteSize: 5000n, sha256: "hash123" });
-    mocks.storeVideo.mockResolvedValue({ byteSize: 7000n, sha256: "videohash" });
+    mocks.storeVideo.mockResolvedValue({
+      byteSize: 7000n,
+      sha256: "videohash",
+    });
     mocks.readStoredAsset.mockResolvedValue(Buffer.from("valid-mp3"));
     mocks.validateMp3Bytes.mockReturnValue({ durationMs: null });
     mocks.capture.mockResolvedValue({ id: "entry-capture", type: "CAPTURE" });

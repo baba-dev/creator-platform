@@ -193,7 +193,9 @@ export function JobResolutionActions({
               <span className="text-sm font-bold text-foreground">
                 1. Reconcile Provider Outcome
               </span>
-              <StatusBadge tone={permittedActions.canReconcile ? "info" : "neutral"}>
+              <StatusBadge
+                tone={permittedActions.canReconcile ? "info" : "neutral"}
+              >
                 {permittedActions.canReconcile ? "Available" : "Unavailable"}
               </StatusBadge>
             </div>

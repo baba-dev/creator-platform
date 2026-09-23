@@ -41,12 +41,23 @@ export default async function Page({
               <th className="p-4 text-right">Reserved</th>
               <th className="p-4 text-right">Charged</th>
               <th className="p-4">Created</th>
+              <th className="p-4 text-right">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {rows.map((row) => (
               <tr key={row.id}>
-                <td className="p-4">{row.providerModel.displayName}</td>
+                <td className="p-4">
+                  <Link
+                    href={`/admin/jobs/${row.id}`}
+                    className="font-medium text-foreground hover:text-primary hover:underline"
+                  >
+                    {row.providerModel.displayName}
+                  </Link>
+                  <div className="font-mono text-xs text-muted-foreground">
+                    {row.id.slice(0, 10)}...
+                  </div>
+                </td>
                 <td className="p-4">
                   {row.createdBy.name}
                   <div className="text-xs text-muted-foreground">
@@ -61,6 +72,14 @@ export default async function Page({
                   {row.chargedCredits.toLocaleString()}
                 </td>
                 <td className="p-4">{row.createdAt.toLocaleString("en-OM")}</td>
+                <td className="p-4 text-right">
+                  <Link
+                    href={`/admin/jobs/${row.id}`}
+                    className="inline-flex min-h-8 items-center text-xs font-semibold text-primary hover:underline"
+                  >
+                    {row.status === "MANUAL_REVIEW" ? "Reconcile →" : "View →"}
+                  </Link>
+                </td>
               </tr>
             ))}
           </tbody>

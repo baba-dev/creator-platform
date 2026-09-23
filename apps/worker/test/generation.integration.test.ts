@@ -11,6 +11,9 @@ import {
   createImageJob,
   createVideoJob,
   createVoiceJob,
+  reconcileProviderOutcome,
+  recoverGeneratedOutput,
+  releaseJobReservation,
 } from "@aiwa/generation";
 import {
   processImageJob,
@@ -360,6 +363,153 @@ describe.skipIf(!enabled)("generation with MariaDB and Redis", () => {
     expect(await readFile(join(directory, `${voiceJob.id}.mp3`))).toEqual(
       audio,
     );
+  }, 10000);
+
+  it("requires reconciliation before release and clears the real reservation projection", async () => {
+    await db.organization.update({
+      where: { id: orgId },
+      data: { status: "ACTIVE" },
+    });
+    await db.membership.update({
+      where: { organizationId_userId: { organizationId: orgId, userId } },
+      data: {
+        role: "ORGANIZATION_OWNER",
+        monthlySpendingCapCredits: null,
+      },
+    });
+    await db.wallet.update({
+      where: { organizationId: orgId },
+      data: { balanceCache: 1000n },
+    });
+
+    const held = await createImageJob(userId, request());
+    await db.generationJob.update({
+      where: { id: held.id },
+      data: {
+        status: "MANUAL_REVIEW",
+        errorCode: "PROVIDER_OUTCOME_UNKNOWN",
+        errorMessage: "Integration fixture requires reconciliation.",
+      },
+    });
+
+    await expect(
+      releaseJobReservation({
+        jobId: held.id,
+        actorUserId: userId,
+        reason: "No provider charge occurred.",
+        evidence: "No reconciliation has been recorded yet.",
+        idempotencyKey: randomUUID(),
+      }),
+    ).rejects.toThrow("Reconcile the provider outcome");
+
+    await reconcileProviderOutcome({
+      jobId: held.id,
+      actorUserId: userId,
+      outcome: "NOT_SUBMITTED",
+      evidence: "Provider console confirms the request was never accepted.",
+      idempotencyKey: randomUUID(),
+    });
+
+    const releaseKey = randomUUID();
+    const first = await releaseJobReservation({
+      jobId: held.id,
+      actorUserId: userId,
+      reason: "Provider confirms no billable submission.",
+      evidence: "Provider console shows no task and no charge.",
+      idempotencyKey: releaseKey,
+    });
+    const replay = await releaseJobReservation({
+      jobId: held.id,
+      actorUserId: userId,
+      reason: "Provider confirms no billable submission.",
+      evidence: "Provider console shows no task and no charge.",
+      idempotencyKey: releaseKey,
+    });
+
+    expect(first.success).toBe(true);
+    expect(replay.success).toBe(true);
+
+    const resolved = await db.generationJob.findUniqueOrThrow({
+      where: { id: held.id },
+      include: { assets: true },
+    });
+    expect(resolved.status).toBe("FAILED");
+    expect(resolved.reservedCredits).toBe(0n);
+    expect(resolved.chargedCredits).toBe(0n);
+    expect(resolved.assets[0]).toMatchObject({
+      status: "DELETED",
+      byteSize: 0n,
+    });
+
+    const wallet = await db.wallet.findUniqueOrThrow({
+      where: { organizationId: orgId },
+    });
+    expect(wallet.balanceCache).toBe(1000n);
+    expect(
+      await db.ledgerEntry.count({
+        where: { referenceId: held.id, type: "RELEASE" },
+      }),
+    ).toBe(1);
+  }, 10000);
+
+  it("recovers verified output once and captures the real reservation once", async () => {
+    await db.wallet.update({
+      where: { organizationId: orgId },
+      data: { balanceCache: 1000n },
+    });
+
+    const held = await createImageJob(userId, request());
+    await db.generationJob.update({
+      where: { id: held.id },
+      data: {
+        status: "MANUAL_REVIEW",
+        outputPayload: {
+          url: "https://fixture.bytepluscdn.com/recovered.png",
+        },
+        errorCode: "STORAGE_FAILED",
+        errorMessage: "Generated output requires administrative recovery.",
+      },
+    });
+
+    await reconcileProviderOutcome({
+      jobId: held.id,
+      actorUserId: userId,
+      outcome: "SUCCEEDED",
+      evidence: "Provider console confirms generation succeeded.",
+      idempotencyKey: randomUUID(),
+    });
+
+    const recoverKey = randomUUID();
+    const first = await recoverGeneratedOutput({
+      jobId: held.id,
+      actorUserId: userId,
+      reason: "Finalize the provider output already generated.",
+      mode: "immediate",
+      idempotencyKey: recoverKey,
+    });
+    const replay = await recoverGeneratedOutput({
+      jobId: held.id,
+      actorUserId: userId,
+      reason: "Finalize the provider output already generated.",
+      mode: "immediate",
+      idempotencyKey: recoverKey,
+    });
+
+    expect(first.success).toBe(true);
+    expect(replay.success).toBe(true);
+
+    const resolved = await db.generationJob.findUniqueOrThrow({
+      where: { id: held.id },
+      include: { assets: true },
+    });
+    expect(resolved.status).toBe("SUCCEEDED");
+    expect(resolved.chargedCredits).toBe(held.reservedCredits);
+    expect(resolved.assets[0]?.status).toBe("READY");
+    expect(
+      await db.ledgerEntry.count({
+        where: { referenceId: held.id, type: "CAPTURE" },
+      }),
+    ).toBe(1);
   }, 10000);
 
   it("rolls back insufficient credit and member-cap requests", async () => {

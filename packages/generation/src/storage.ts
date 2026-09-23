@@ -312,6 +312,10 @@ export async function readStoredAsset(key: string) {
   return readFile(/* turbopackIgnore: true */ storagePath(key));
 }
 
+export async function deleteStoredAsset(key: string) {
+  await rm(/* turbopackIgnore: true */ storagePath(key), { force: true });
+}
+
 export async function storedAssetSize(key: string): Promise<number> {
   const result = await stat(/* turbopackIgnore: true */ storagePath(key));
   return result.size;

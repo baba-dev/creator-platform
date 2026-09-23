@@ -20,15 +20,9 @@ CREATE TABLE `TwoFactor` (
 -- AddForeignKey
 ALTER TABLE `TwoFactor` ADD CONSTRAINT `TwoFactor_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `User`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
--- Controlled migration: Backfill email verification only for established, trusted accounts
--- prior to enforcing email verification for workspace access and invitations.
--- Accounts with platform administrative roles, organization ownership, or existing active memberships
--- are marked verified, while unattached or unvetted accounts remain unverified.
+-- Existing membership or administrative role is not proof of mailbox ownership.
+-- Only the non-human seeded system identity is grandfathered.
 UPDATE `User`
 SET `emailVerified` = true
 WHERE `emailVerified` = false
-  AND (
-    `platformRole` <> 'USER'
-    OR `id` IN (SELECT `ownerUserId` FROM `Organization`)
-    OR `id` IN (SELECT `userId` FROM `Membership`)
-  );
+  AND `email` = 'system@aiwamediagroup.com';

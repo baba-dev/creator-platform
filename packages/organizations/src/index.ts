@@ -308,8 +308,7 @@ export async function addMember(input: {
             })
           : null;
       if (!user || user.disabledAt) throw new UserUnavailableError();
-      if (input.email && !user.emailVerified)
-        throw new UserEmailUnverifiedError();
+      if (!user.emailVerified) throw new UserEmailUnverifiedError();
       if (
         await tx.membership.findUnique({
           where: {
@@ -945,8 +944,8 @@ export async function acceptOrganizationInvitation(input: {
         throw new InvitationEmailMismatchError(invitation.email);
       }
 
-      if (invitation.email && !user.emailVerified) {
-        throw new InvitationEmailUnverifiedError(invitation.email);
+      if (!user.emailVerified) {
+        throw new InvitationEmailUnverifiedError(invitation.email ?? undefined);
       }
 
       await lockedOrganization(tx, invitation.organizationId);

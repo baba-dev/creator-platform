@@ -20,8 +20,13 @@ export type RequestSession = AuthSession & {
   };
 };
 
+type RequestSessionOptions = {
+  allowAdminWithoutMfa?: boolean;
+};
+
 export async function getRequestSession(
   requestHeaders?: Headers,
+  options: RequestSessionOptions = {},
 ): Promise<RequestSession | null> {
   const session = await auth.api.getSession({
     headers: requestHeaders ?? (await headers()),
@@ -31,7 +36,11 @@ export async function getRequestSession(
     !session ||
     session.user.disabledAt ||
     !session.user.platformRole ||
-    !platformRoles.includes(session.user.platformRole)
+    !platformRoles.includes(session.user.platformRole) ||
+    session.user.emailVerified !== true ||
+    (session.user.platformRole !== "USER" &&
+      !session.user.twoFactorEnabled &&
+      !options.allowAdminWithoutMfa)
   ) {
     return null;
   }
@@ -41,8 +50,9 @@ export async function getRequestSession(
 
 export async function requireRequestSession(
   returnTo = "/app",
+  options: RequestSessionOptions = {},
 ): Promise<RequestSession> {
-  const session = await getRequestSession();
+  const session = await getRequestSession(undefined, options);
 
   if (!session) {
     redirect(`/sign-in?returnTo=${encodeURIComponent(returnTo)}`);
@@ -53,8 +63,9 @@ export async function requireRequestSession(
 
 export async function requirePlatformPermission(
   permission: PlatformPermission,
+  options: RequestSessionOptions = {},
 ): Promise<RequestSession> {
-  const session = await requireRequestSession("/admin");
+  const session = await requireRequestSession("/admin", options);
 
   if (!hasPlatformPermission(session.user.platformRole, permission)) {
     notFound();

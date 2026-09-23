@@ -804,7 +804,9 @@ export function GenerationStudio({
                       <input
                         type="checkbox"
                         checked={generateAudio}
-                        onChange={(event) => setGenerateAudio(event.target.checked)}
+                        onChange={(event) =>
+                          setGenerateAudio(event.target.checked)
+                        }
                         disabled={busy}
                         className="size-4 accent-primary"
                       />

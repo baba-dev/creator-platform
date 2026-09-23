@@ -23,7 +23,9 @@ async function deliverVerificationEmail(input: {
     );
   }
 
-  const headers: Record<string, string> = { "content-type": "application/json" };
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+  };
   if (env.AUTH_EMAIL_WEBHOOK_BEARER_TOKEN) {
     headers.authorization = `Bearer ${env.AUTH_EMAIL_WEBHOOK_BEARER_TOKEN}`;
   }

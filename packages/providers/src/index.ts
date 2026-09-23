@@ -76,7 +76,7 @@ export class ProviderRequestError extends Error {
     readonly retryable: boolean,
     options?: ErrorOptions & {
       readonly code?: string;
-      readonly stage?: SubmissionStage | string;
+      readonly stage?: SubmissionStage;
     },
   ) {
     super(message, options);
@@ -85,5 +85,5 @@ export class ProviderRequestError extends Error {
   }
 
   readonly code?: string;
-  readonly stage?: SubmissionStage | string;
+  readonly stage?: SubmissionStage;
 }

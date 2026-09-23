@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { hasPlatformPermission } from "@aiwa/authz";
 import {
   getJobReconciliationDetails,
@@ -155,8 +156,18 @@ async function handleAction(
       );
     }
 
-    const message =
-      error instanceof Error ? error.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const requestId = randomUUID();
+    console.error("Administrative generation resolution failed", {
+      requestId,
+      jobId,
+      errorName: error instanceof Error ? error.name : "UnknownError",
+    });
+    return NextResponse.json(
+      {
+        error: "Administrative resolution failed unexpectedly.",
+        requestId,
+      },
+      { status: 500 },
+    );
   }
 }

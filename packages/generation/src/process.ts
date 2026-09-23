@@ -16,11 +16,18 @@ import {
   storedAssetSize,
 } from "./storage";
 
-export async function failJob(id: string, message: string) {
+export async function failJob(
+  id: string,
+  message: string,
+  expectedStatus: "QUEUED" | "SUBMITTED" | "PROCESSING",
+) {
   await db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM GenerationJob WHERE id = ${id} FOR UPDATE`;
     const job = await tx.generationJob.findUniqueOrThrow({ where: { id } });
-    if (["SUCCEEDED", "FAILED", "CANCELLED"].includes(job.status)) return;
+    // The worker may have read an earlier state before an operator reconciled
+    // this job. A stale provider result must never override manual review or
+    // release a reservation after evidence of a charge has been recorded.
+    if (job.status !== expectedStatus) return;
     const wallet = await tx.wallet.findUniqueOrThrow({
       where: { organizationId: job.organizationId },
     });
@@ -80,7 +87,7 @@ export async function processVideoSubmitJob(
   try {
     await requireMembership(db, job.organizationId, job.createdById, true);
   } catch {
-    await failJob(id, "Workspace access changed before generation.");
+    await failJob(id, "Workspace access changed before generation.", "QUEUED");
     return;
   }
 
@@ -114,10 +121,16 @@ export async function processVideoSubmitJob(
       },
     });
   } catch (error) {
-    if (error instanceof ProviderRequestError && !error.retryable) {
+    if (
+      error instanceof ProviderConfigurationError ||
+      (error instanceof ProviderRequestError && !error.retryable)
+    ) {
       await failJob(
         id,
-        "Provider rejected the video request. Credits released.",
+        error instanceof ProviderConfigurationError
+          ? "Generation provider is unavailable. Credits released."
+          : "Provider rejected the video request. Credits released.",
+        "SUBMITTED",
       );
       return;
     }
@@ -170,7 +183,11 @@ export async function processVideoPollJob(
   }
 
   if (["failed", "cancelled"].includes(result.status)) {
-    await failJob(id, "Provider did not complete the video. Credits released.");
+    await failJob(
+      id,
+      "Provider did not complete the video. Credits released.",
+      "PROCESSING",
+    );
     return;
   }
 
@@ -246,7 +263,11 @@ export async function processImageJob(
     try {
       await requireMembership(db, job.organizationId, job.createdById, true);
     } catch {
-      await failJob(id, "Workspace access changed before generation.");
+      await failJob(
+        id,
+        "Workspace access changed before generation.",
+        "QUEUED",
+      );
       return;
     }
     const claimed = await db.generationJob.updateMany({
@@ -274,10 +295,16 @@ export async function processImageJob(
         },
       });
     } catch (error) {
-      if (error instanceof ProviderRequestError && !error.retryable) {
+      if (
+        error instanceof ProviderConfigurationError ||
+        (error instanceof ProviderRequestError && !error.retryable)
+      ) {
         await failJob(
           id,
-          "Provider rejected the image request. Credits released.",
+          error instanceof ProviderConfigurationError
+            ? "Generation provider is unavailable. Credits released."
+            : "Provider rejected the image request. Credits released.",
+          "SUBMITTED",
         );
         return;
       }
@@ -408,7 +435,7 @@ export async function processVoiceJob(
   try {
     await requireMembership(db, job.organizationId, job.createdById, true);
   } catch {
-    await failJob(id, "Workspace access changed before generation.");
+    await failJob(id, "Workspace access changed before generation.", "QUEUED");
     return;
   }
 
@@ -444,7 +471,10 @@ export async function processVoiceJob(
     ) {
       await failJob(
         id,
-        "Provider rejected the voice request. Credits released.",
+        error instanceof ProviderConfigurationError
+          ? "Generation provider is unavailable. Credits released."
+          : "Provider rejected the voice request. Credits released.",
+        "SUBMITTED",
       );
       return;
     }

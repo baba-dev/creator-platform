@@ -43,10 +43,12 @@ vi.mock("../src/storage", () => ({
   storedAssetSize: mocks.storedAssetSize,
 }));
 import {
+  ProviderConfigurationError,
   ProviderRequestError,
   type MediaGenerationProvider,
 } from "@aiwa/providers";
 import {
+  failJob,
   processImageJob,
   processVideoPollJob,
   processVideoSubmitJob,
@@ -99,6 +101,31 @@ beforeEach(() => {
 });
 
 describe("video processing", () => {
+  it("does not release credits when an operator moved a stale failure into review", async () => {
+    const tx = transaction("MANUAL_REVIEW");
+    await failJob("job1", "Provider rejected the request.", "PROCESSING");
+    expect(mocks.release).not.toHaveBeenCalled();
+    expect(tx.asset.updateMany).not.toHaveBeenCalled();
+    expect(tx.generationJob.update).not.toHaveBeenCalled();
+  });
+
+  it("does not turn a reconciled video into FAILED after a stale poll", async () => {
+    const p = provider();
+    vi.mocked(p.getJob).mockResolvedValue({
+      status: "failed",
+      providerRequestId: "video-request-1",
+    });
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+      ...base,
+      status: "PROCESSING",
+      providerRequestId: "video-request-1",
+    });
+    const tx = transaction("MANUAL_REVIEW");
+    await processVideoPollJob("job1", p);
+    expect(mocks.release).not.toHaveBeenCalled();
+    expect(tx.generationJob.update).not.toHaveBeenCalled();
+  });
+
   it("submits a queued video exactly once and records its provider task", async () => {
     const p = provider();
     vi.mocked(p.submit).mockResolvedValue({
@@ -225,6 +252,19 @@ describe("image processing", () => {
     expect(mocks.release).toHaveBeenCalledTimes(1);
     expect(mocks.capture).not.toHaveBeenCalled();
     expect(tx.asset.updateMany).toHaveBeenCalled();
+  });
+  it("releases the reservation when the worker has no image provider credentials", async () => {
+    const p = provider();
+    vi.mocked(p.submit).mockRejectedValue(
+      new ProviderConfigurationError("Missing credentials"),
+    );
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+      ...base,
+      status: "QUEUED",
+    });
+    transaction("SUBMITTED");
+    await processImageJob("job1", p);
+    expect(mocks.release).toHaveBeenCalledTimes(1);
   });
   it("keeps reservation and avoids replay after timeout", async () => {
     const p = provider();

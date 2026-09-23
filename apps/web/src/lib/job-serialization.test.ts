@@ -32,6 +32,7 @@ describe("serializeJobDetails", () => {
           id: "pv-1",
           providerCostMicroUsd: 15000n,
           customerCredits: 28n,
+          creditsPerBaisa: 1n,
           targetMarginBps: 2000,
           pricingDimension: "REQUEST",
           unitQuantity: 1,
@@ -88,6 +89,7 @@ describe("serializeJobDetails", () => {
     expect(serialized.job.organization.wallet?.balanceCache).toBe("1000");
     expect(serialized.job.priceVersion?.providerCostMicroUsd).toBe("15000");
     expect(serialized.job.priceVersion?.customerCredits).toBe("28");
+    expect(serialized.job.priceVersion?.creditsPerBaisa).toBe("1");
     expect(serialized.job.assets[0]?.byteSize).toBe("26214400");
     expect(serialized.ledgerEntries[0]?.amountCredits).toBe("28");
     expect(serialized.ledgerEntries[0]?.balanceAfter).toBe("972");

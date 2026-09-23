@@ -110,7 +110,8 @@ export interface SharedReadResponseOptions {
   onAbortRetryable?: boolean;
   onNetworkErrorCode?: string;
   onNetworkErrorRetryable?: boolean;
-  stage?: SubmissionStage | string;
+  onResponseTooLargeRetryable?: boolean;
+  stage?: SubmissionStage;
 }
 
 export async function sharedReadResponseText(
@@ -124,6 +125,8 @@ export async function sharedReadResponseText(
     options.providerName === "NVIDIA" ? false : true;
   const networkErrorRetryable =
     options.onNetworkErrorRetryable ?? defaultNetworkRetryable;
+  const responseTooLargeRetryable =
+    options.onResponseTooLargeRetryable ?? true;
 
   if (!response.body?.getReader) {
     try {
@@ -134,7 +137,7 @@ export async function sharedReadResponseText(
       if (new TextEncoder().encode(value).byteLength > maximumBytes) {
         throw new ProviderRequestError(
           `${options.providerName} response exceeded size limit`,
-          false,
+          responseTooLargeRetryable,
           { code: "RESPONSE_TOO_LARGE", stage },
         );
       }
@@ -187,7 +190,7 @@ export async function sharedReadResponseText(
       if (byteCount > maximumBytes) {
         throw new ProviderRequestError(
           `${options.providerName} response exceeded size limit`,
-          false,
+          responseTooLargeRetryable,
           { code: "RESPONSE_TOO_LARGE", stage },
         );
       }
@@ -237,7 +240,7 @@ export interface ExecuteSafeFetchConfig {
   onAbortCode?: string;
   onAbortRetryable?: boolean;
   onNetworkErrorCode?: string;
-  stage?: SubmissionStage | string;
+  stage?: SubmissionStage;
 }
 
 export async function executeSafeFetch(

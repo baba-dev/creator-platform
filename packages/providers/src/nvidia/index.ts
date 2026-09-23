@@ -135,6 +135,7 @@ export async function readResponseText(
     onAbortRetryable: false,
     onNetworkErrorCode: "BODY_READ_OUTCOME_UNKNOWN",
     onNetworkErrorRetryable: false,
+    onResponseTooLargeRetryable: false,
     stage: "response_body",
   });
 }

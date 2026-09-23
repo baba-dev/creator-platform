@@ -693,6 +693,7 @@ describe("BytePlus provider adapter", () => {
     );
     await expect(readResponseText(response, 100)).rejects.toMatchObject({
       code: "RESPONSE_TOO_LARGE",
+      retryable: true,
     });
   });
 

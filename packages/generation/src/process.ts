@@ -93,11 +93,11 @@ export async function processVideoSubmitJob(
   if (!claimed.count) return;
 
   const modelId = job.providerModel.id ?? job.providerModelId;
-  const currentModel = await db.providerModel?.findUnique?.({
+  const currentModel = await db.providerModel.findUnique({
     where: { id: modelId },
     select: { enabled: true },
   });
-  if (currentModel && currentModel.enabled === false) {
+  if (!currentModel || currentModel.enabled === false) {
     await db.generationJob.updateMany({
       where: { id, status: "SUBMITTED" },
       data: { status: "QUEUED", submittedAt: null },
@@ -273,11 +273,11 @@ export async function processImageJob(
     if (!claimed.count) return;
 
     const modelId = job.providerModel.id ?? job.providerModelId;
-    const currentModel = await db.providerModel?.findUnique?.({
+    const currentModel = await db.providerModel.findUnique({
       where: { id: modelId },
       select: { enabled: true },
     });
-    if (currentModel && currentModel.enabled === false) {
+    if (!currentModel || currentModel.enabled === false) {
       await db.generationJob.updateMany({
         where: { id, status: "SUBMITTED" },
         data: { status: "QUEUED", submittedAt: null },
@@ -451,11 +451,11 @@ export async function processVoiceJob(
   if (!claimed.count) return;
 
   const modelId = job.providerModel.id ?? job.providerModelId;
-  const currentModel = await db.providerModel?.findUnique?.({
+  const currentModel = await db.providerModel.findUnique({
     where: { id: modelId },
     select: { enabled: true },
   });
-  if (currentModel && currentModel.enabled === false) {
+  if (!currentModel || currentModel.enabled === false) {
     await db.generationJob.updateMany({
       where: { id, status: "SUBMITTED" },
       data: { status: "QUEUED", submittedAt: null },

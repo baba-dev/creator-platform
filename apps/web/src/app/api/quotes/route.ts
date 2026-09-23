@@ -226,7 +226,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   const canViewCommercialPricing = hasPlatformPermission(
     session.user.platformRole,
-    "models:read",
+    "payments:read",
   );
 
   return NextResponse.json({

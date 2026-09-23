@@ -38,6 +38,34 @@ describe("single active platform owner concurrency protection", () => {
     vi.resetAllMocks();
   });
 
+  it("locks the active owner set before the target row", async () => {
+    mockTx.$queryRaw
+      .mockResolvedValueOnce([{ id: "owner-1" }, { id: "owner-2" }])
+      .mockResolvedValueOnce([{ id: "owner-1" }]);
+    mockTx.user.findUnique.mockResolvedValue({
+      id: "owner-1",
+      platformRole: "PLATFORM_OWNER",
+      disabledAt: null,
+    });
+    mockTx.user.update.mockResolvedValue({
+      id: "owner-1",
+      platformRole: "PLATFORM_ADMIN",
+    });
+    mockTx.auditEvent.create.mockResolvedValue({ id: "audit-1" });
+
+    await setUserPlatformRole({
+      actor: { userId: "owner-2", platformRole: "PLATFORM_OWNER" },
+      targetUserId: "owner-1",
+      role: "PLATFORM_ADMIN",
+    });
+
+    expect(mockTx.$queryRaw).toHaveBeenCalledTimes(2);
+    const firstSql = String(mockTx.$queryRaw.mock.calls[0]?.[0]?.[0] ?? "");
+    const secondSql = String(mockTx.$queryRaw.mock.calls[1]?.[0]?.[0] ?? "");
+    expect(firstSql).toContain("platformRole = 'PLATFORM_OWNER'");
+    expect(secondSql).toContain("WHERE id =");
+  });
+
   it("prevents demoting the sole active platform owner", async () => {
     mockTx.$queryRaw.mockResolvedValue([{ id: "owner-1" }]);
     mockTx.user.findUnique.mockResolvedValue({
@@ -85,18 +113,16 @@ describe("single active platform owner concurrency protection", () => {
     // Simulated lock sequence: each transaction acquires the FOR UPDATE lock,
     // reads the latest active owners, updates the database state if successful, and commits.
     const runDemoteTx = async (targetId: string) => {
-      // Step 1: row lock on target user
+      // Step 1: deterministic owner-set lock, then target-row lock.
+      mockTx.$queryRaw.mockResolvedValueOnce(
+        activeOwners.map((id) => ({ id })),
+      );
       mockTx.$queryRaw.mockResolvedValueOnce([{ id: targetId }]);
       mockTx.user.findUnique.mockResolvedValueOnce({
         id: targetId,
         platformRole: "PLATFORM_OWNER",
         disabledAt: null,
       });
-
-      // Step 2: serialization lock on all active platform owners (FOR UPDATE)
-      mockTx.$queryRaw.mockResolvedValueOnce(
-        activeOwners.map((id) => ({ id })),
-      );
 
       mockTx.user.update.mockImplementationOnce(async ({ where, data }) => {
         if (data.platformRole !== "PLATFORM_OWNER") {
@@ -134,16 +160,15 @@ describe("single active platform owner concurrency protection", () => {
     let activeOwners = ["owner-1", "owner-2"];
 
     const runDisableTx = async (targetId: string) => {
+      mockTx.$queryRaw.mockResolvedValueOnce(
+        activeOwners.map((id) => ({ id })),
+      );
       mockTx.$queryRaw.mockResolvedValueOnce([{ id: targetId }]);
       mockTx.user.findUnique.mockResolvedValueOnce({
         id: targetId,
         platformRole: "PLATFORM_OWNER",
         disabledAt: null,
       });
-
-      mockTx.$queryRaw.mockResolvedValueOnce(
-        activeOwners.map((id) => ({ id })),
-      );
 
       mockTx.user.update.mockImplementationOnce(async ({ where, data }) => {
         if (data.disabledAt) {
@@ -173,17 +198,17 @@ describe("single active platform owner concurrency protection", () => {
   it("serializes mixed concurrent demotion and disable mutations", async () => {
     let activeOwners = ["owner-1", "owner-2"];
 
-    // Tx 1 disables owner-1
+    // Tx 1 locks the owner set, then owner-1.
+    mockTx.$queryRaw.mockResolvedValueOnce([
+      { id: "owner-1" },
+      { id: "owner-2" },
+    ]);
     mockTx.$queryRaw.mockResolvedValueOnce([{ id: "owner-1" }]);
     mockTx.user.findUnique.mockResolvedValueOnce({
       id: "owner-1",
       platformRole: "PLATFORM_OWNER",
       disabledAt: null,
     });
-    mockTx.$queryRaw.mockResolvedValueOnce([
-      { id: "owner-1" },
-      { id: "owner-2" },
-    ]);
     mockTx.user.update.mockImplementationOnce(async ({ where, data }) => {
       activeOwners = activeOwners.filter((id) => id !== where.id);
       return { id: where.id, disabledAt: data.disabledAt };
@@ -198,14 +223,14 @@ describe("single active platform owner concurrency protection", () => {
     ).resolves.toBeDefined();
     expect(activeOwners).toEqual(["owner-2"]);
 
-    // Tx 2 attempts to demote owner-2
+    // Tx 2 observes committed owner state, then locks owner-2.
+    mockTx.$queryRaw.mockResolvedValueOnce(activeOwners.map((id) => ({ id })));
     mockTx.$queryRaw.mockResolvedValueOnce([{ id: "owner-2" }]);
     mockTx.user.findUnique.mockResolvedValueOnce({
       id: "owner-2",
       platformRole: "PLATFORM_OWNER",
       disabledAt: null,
     });
-    mockTx.$queryRaw.mockResolvedValueOnce(activeOwners.map((id) => ({ id })));
 
     await expect(
       setUserPlatformRole({

@@ -36,21 +36,17 @@ export function safeInvitationRoute(
     return fallback;
   }
 
-  if (
-    route.startsWith("/sign-in") ||
-    route.startsWith("/sign-up") ||
-    route.startsWith("/api/")
-  ) {
-    return fallback;
+  if (route === "/app" || route.startsWith("/app/")) {
+    return route;
   }
 
   if (route.startsWith("/invite/")) {
     const pathname = route.split("?")[0]?.split("#")[0] ?? "";
     const token = pathname.slice("/invite/".length);
-    if (!token || !/^[a-zA-Z0-9_-]+$/.test(token)) {
-      return fallback;
+    if (token && /^[a-zA-Z0-9_-]+$/.test(token)) {
+      return route;
     }
   }
 
-  return route;
+  return fallback;
 }

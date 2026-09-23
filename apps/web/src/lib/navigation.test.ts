@@ -40,7 +40,10 @@ describe("safeInvitationRoute", () => {
     "/invite/token/subpath",
     "/sign-in",
     "/sign-up",
+    "/api",
     "/api/generations",
+    "/admin",
+    "/settings",
     "https://evil.com/invite/123",
     "//evil.com/invite/123",
   ])(

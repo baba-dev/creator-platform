@@ -4,13 +4,11 @@ import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
 import type { Route } from "next";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 const inputClassName = "form-control mt-2 text-sm";
 
 export function SignUpForm({ returnTo }: { returnTo?: Route }) {
-  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [verificationEmail, setVerificationEmail] = useState<string | null>(
     null,
@@ -39,6 +37,7 @@ export function SignUpForm({ returnTo }: { returnTo?: Route }) {
       name: String(form.get("name") ?? "").trim(),
       email,
       password,
+      callbackURL: returnTo ?? "/onboarding",
     });
 
     if (result.error) {
@@ -53,10 +52,6 @@ export function SignUpForm({ returnTo }: { returnTo?: Route }) {
 
     setVerificationEmail(email);
     setPending(false);
-    if (!email) {
-      router.push(returnTo ?? "/onboarding");
-      router.refresh();
-    }
   }
 
   if (verificationEmail) {
@@ -72,8 +67,8 @@ export function SignUpForm({ returnTo }: { returnTo?: Route }) {
         </p>
         <p className="text-xs leading-5 text-muted-foreground">
           {isInvite
-            ? "Verify that email address first, then sign in to accept your invitation and join the workspace."
-            : "Verify that email address first, then sign in to create your organization workspace."}
+            ? "Verify that email address first. The verification link will return you to this invitation; the sign-in button below is available as a fallback."
+            : "Verify that email address first. The verification link will continue to onboarding; you can also sign in manually below."}
         </p>
         <Button asChild className="w-full">
           <Link href={signInHref}>Continue to sign in</Link>

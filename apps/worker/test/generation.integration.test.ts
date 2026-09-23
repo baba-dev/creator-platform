@@ -66,7 +66,8 @@ describe.skipIf(!enabled)("generation with MariaDB and Redis", () => {
       data: {
         id: userId,
         email: `${id}@example.invalid`,
-        name: "Integration test",
+        name: "Integration test",,
+        emailVerified: true,
       },
     });
     await db.organization.create({

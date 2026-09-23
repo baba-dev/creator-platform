@@ -112,6 +112,8 @@ export async function processReasoningJob(
 
   if (dbJob.status !== "QUEUED") return;
 
+  if (dbJob.providerModel.enabled === false) return;
+
   if (!(await ensureCurrentAccess(dbJob.organizationId, dbJob.createdById))) {
     await failReasoningJob(
       jobId,
@@ -133,6 +135,19 @@ export async function processReasoningJob(
     },
   });
   if (!claimed.count) return;
+
+  const modelId = dbJob.providerModel.id ?? dbJob.providerModelId;
+  const currentModel = await db.providerModel?.findUnique?.({
+    where: { id: modelId },
+    select: { enabled: true },
+  });
+  if (currentModel && currentModel.enabled === false) {
+    await db.reasoningJob.updateMany({
+      where: { id: jobId, status: "PROCESSING" },
+      data: { status: "QUEUED", processingAt: null },
+    });
+    return;
+  }
 
   try {
     const payload = readPromptEnhancementPayload(dbJob.requestPayload);

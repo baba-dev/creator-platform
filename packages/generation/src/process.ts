@@ -77,6 +77,8 @@ export async function processVideoSubmitJob(
   });
   if (job.status !== "QUEUED") return;
 
+  if (job.providerModel.enabled === false) return;
+
   try {
     await requireMembership(db, job.organizationId, job.createdById, true);
   } catch {
@@ -89,6 +91,19 @@ export async function processVideoSubmitJob(
     data: { status: "SUBMITTED", submittedAt: new Date() },
   });
   if (!claimed.count) return;
+
+  const modelId = job.providerModel.id ?? job.providerModelId;
+  const currentModel = await db.providerModel?.findUnique?.({
+    where: { id: modelId },
+    select: { enabled: true },
+  });
+  if (currentModel && currentModel.enabled === false) {
+    await db.generationJob.updateMany({
+      where: { id, status: "SUBMITTED" },
+      data: { status: "QUEUED", submittedAt: null },
+    });
+    return;
+  }
 
   try {
     const result = await provider.submit({
@@ -243,6 +258,8 @@ export async function processImageJob(
     include: { providerModel: true },
   });
   if (job.status === "QUEUED") {
+    if (job.providerModel.enabled === false) return;
+
     try {
       await requireMembership(db, job.organizationId, job.createdById, true);
     } catch {
@@ -254,6 +271,19 @@ export async function processImageJob(
       data: { status: "SUBMITTED", submittedAt: new Date() },
     });
     if (!claimed.count) return;
+
+    const modelId = job.providerModel.id ?? job.providerModelId;
+    const currentModel = await db.providerModel?.findUnique?.({
+      where: { id: modelId },
+      select: { enabled: true },
+    });
+    if (currentModel && currentModel.enabled === false) {
+      await db.generationJob.updateMany({
+        where: { id, status: "SUBMITTED" },
+        data: { status: "QUEUED", submittedAt: null },
+      });
+      return;
+    }
     try {
       const result = await provider.submit({
         idempotencyKey: job.idempotencyKey,
@@ -405,6 +435,8 @@ export async function processVoiceJob(
   }
   if (job.status !== "QUEUED") return;
 
+  if (job.providerModel.enabled === false) return;
+
   try {
     await requireMembership(db, job.organizationId, job.createdById, true);
   } catch {
@@ -417,6 +449,19 @@ export async function processVoiceJob(
     data: { status: "SUBMITTED", submittedAt: new Date() },
   });
   if (!claimed.count) return;
+
+  const modelId = job.providerModel.id ?? job.providerModelId;
+  const currentModel = await db.providerModel?.findUnique?.({
+    where: { id: modelId },
+    select: { enabled: true },
+  });
+  if (currentModel && currentModel.enabled === false) {
+    await db.generationJob.updateMany({
+      where: { id, status: "SUBMITTED" },
+      data: { status: "QUEUED", submittedAt: null },
+    });
+    return;
+  }
 
   let result;
   try {

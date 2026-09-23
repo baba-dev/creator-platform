@@ -157,9 +157,10 @@ reasoningWorker.on("failed", (job, error) =>
   }),
 );
 
+let isShuttingDown = false;
 let generationDispatching = false;
 async function dispatchGeneration() {
-  if (generationDispatching || !bytePlusProvider) return;
+  if (isShuttingDown || generationDispatching || !bytePlusProvider) return;
   generationDispatching = true;
   try {
     await reapExpiredRecoveryJobs();
@@ -168,7 +169,7 @@ async function dispatchGeneration() {
     const jobs = await db.generationJob.findMany({
       where: {
         OR: [
-          { status: "QUEUED" },
+          { status: "QUEUED", providerModel: { enabled: true } },
           {
             status: "PROCESSING",
             OR: [
@@ -188,6 +189,7 @@ async function dispatchGeneration() {
     });
 
     for (const job of jobs) {
+      if (isShuttingDown) break;
       const queued = await generationQueue.getJob(job.id);
       if (queued) {
         const state = await queued.getState();
@@ -226,7 +228,7 @@ async function dispatchGeneration() {
 
 let reasoningDispatching = false;
 async function dispatchReasoning() {
-  if (reasoningDispatching || !nvidiaProvider) return;
+  if (isShuttingDown || reasoningDispatching || !nvidiaProvider) return;
   reasoningDispatching = true;
   try {
     // A PROCESSING row left behind by a worker crash has an unknown provider
@@ -247,13 +249,14 @@ async function dispatchReasoning() {
     });
 
     const jobs = await db.reasoningJob.findMany({
-      where: { status: "QUEUED" },
+      where: { status: "QUEUED", providerModel: { enabled: true } },
       select: { id: true },
       orderBy: { createdAt: "asc" },
       take: 100,
     });
 
     for (const job of jobs) {
+      if (isShuttingDown) break;
       const queued = await reasoningQueue.getJob(job.id);
       if (queued) {
         const state = await queued.getState();
@@ -295,16 +298,52 @@ void dispatchReasoning();
 
 async function shutdown(signal: NodeJS.Signals): Promise<void> {
   log("info", "worker shutting down", { signal });
+  isShuttingDown = true;
   clearInterval(generationDispatchTimer);
   clearInterval(reasoningDispatchTimer);
-  await Promise.all([
+
+  // Stop accepting new jobs from Redis queues immediately
+  await Promise.allSettled([
+    generationWorker.pause(true),
+    reasoningWorker.pause(true),
+  ]);
+
+  // Allow in-flight jobs bounded time to finish (330s aligned with max provider & storage timeouts)
+  const drainTimeoutMs = 330_000;
+  const drainPromise = Promise.all([
     generationWorker.close(),
     reasoningWorker.close(),
     generationQueue.close(),
     reasoningQueue.close(),
+    maintenanceWorker.close(),
   ]);
+
+  let timeoutHandle: NodeJS.Timeout | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutHandle = setTimeout(
+      () =>
+        reject(
+          new Error(
+            `Worker drain exceeded bounded deadline of ${drainTimeoutMs}ms`,
+          ),
+        ),
+      drainTimeoutMs,
+    );
+  });
+
+  try {
+    await Promise.race([drainPromise, timeoutPromise]);
+    log("info", "all worker jobs drained successfully");
+  } catch (error) {
+    log("error", "worker drain timed out or failed; forcing closure", {
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      errorMessage: error instanceof Error ? error.message : "Unknown",
+    });
+  } finally {
+    if (timeoutHandle) clearTimeout(timeoutHandle);
+  }
+
   await db.$disconnect();
-  await maintenanceWorker.close();
   await redis.quit();
 }
 

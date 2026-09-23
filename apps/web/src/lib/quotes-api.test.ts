@@ -131,4 +131,18 @@ describe("quotes API logic", () => {
     expect(full10s.durationUnits).toBe(2n);
     expect(full10s.quote.customerCredits).toBe(864n);
   });
+
+  it("restricts commercial pricing internals (provider cost and margin) to platform operators and admins", async () => {
+    const { hasPlatformPermission } = await import("@aiwa/authz");
+
+    // Standard workspace users and support/finance must NOT see commercial internals
+    expect(hasPlatformPermission("USER", "models:read")).toBe(false);
+    expect(hasPlatformPermission("SUPPORT", "models:read")).toBe(false);
+    expect(hasPlatformPermission("FINANCE_ADMIN", "models:read")).toBe(false);
+
+    // Platform operators, platform admins, and platform owners CAN see commercial internals
+    expect(hasPlatformPermission("OPERATOR", "models:read")).toBe(true);
+    expect(hasPlatformPermission("PLATFORM_ADMIN", "models:read")).toBe(true);
+    expect(hasPlatformPermission("PLATFORM_OWNER", "models:read")).toBe(true);
+  });
 });

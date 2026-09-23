@@ -1,4 +1,4 @@
-import { hasOrganizationPermission } from "@aiwa/authz";
+import { hasOrganizationPermission, hasPlatformPermission } from "@aiwa/authz";
 import {
   calculateBillableUnits,
   calculateVideoPricing,
@@ -224,6 +224,11 @@ export async function POST(request: Request): Promise<NextResponse> {
     date: now,
   });
 
+  const canViewCommercialPricing = hasPlatformPermission(
+    session.user.platformRole,
+    "models:read",
+  );
+
   return NextResponse.json({
     quote: {
       modelId: model.id,
@@ -235,12 +240,16 @@ export async function POST(request: Request): Promise<NextResponse> {
       unitQuantity: activePriceVersion.unitQuantity?.toString() ?? null,
       units: effectiveUnits,
       billableQuantity: effectiveBillableQuantity ?? null,
-      providerCostMicroUsd: quote.providerCostMicroUsd.toString(),
-      convertedCostBaisa: quote.convertedCostBaisa.toString(),
       customerPriceBaisa: quote.customerPriceBaisa.toString(),
       customerCredits: quote.customerCredits.toString(),
       creditsPerBaisa: activePriceVersion.creditsPerBaisa.toString(),
-      targetGrossMarginBps: quote.targetGrossMarginBps,
+      ...(canViewCommercialPricing
+        ? {
+            providerCostMicroUsd: quote.providerCostMicroUsd.toString(),
+            convertedCostBaisa: quote.convertedCostBaisa.toString(),
+            targetGrossMarginBps: quote.targetGrossMarginBps,
+          }
+        : {}),
     },
     budget: {
       monthlyCapCredits: budget.monthlyCapCredits?.toString() ?? null,

@@ -313,7 +313,7 @@ export const ledgerExportQuerySchema = exportDateRangeSchema.and(
 );
 
 export const reconcileJobOutcomeSchema = z.object({
-  outcome: z.enum(["SUCCEEDED", "FAILED", "NOT_SUBMITTED"]),
+  outcome: z.enum(["SUCCEEDED", "FAILED", "CANCELLED", "NOT_SUBMITTED"]),
   evidence: z.string().trim().min(5).max(1000),
   providerRequestId: z.string().trim().max(128).optional(),
   actualProviderCostMicroUsd: positiveDatabaseBigIntSchema.optional(),

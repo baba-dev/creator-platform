@@ -308,8 +308,15 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
     reasoningWorker.pause(true),
   ]);
 
-  // Allow in-flight jobs bounded time to finish (330s aligned with max provider & storage timeouts)
-  const drainTimeoutMs = 330_000;
+  // Cover the configured provider request deadline, a worst-case 120s media
+  // transfer, and 30s for persistence/queue cleanup. Server env validation caps
+  // provider request timeouts at 600s, so systemd's stop deadline can cover the
+  // maximum valid configuration as well as today's defaults.
+  const providerDeadlineMs = Math.max(
+    env.BYTEPLUS_REQUEST_TIMEOUT_MS ?? 180_000,
+    env.NVIDIA_REQUEST_TIMEOUT_MS ?? 60_000,
+  );
+  const drainTimeoutMs = providerDeadlineMs + 120_000 + 30_000;
   const drainPromise = Promise.all([
     generationWorker.close(),
     reasoningWorker.close(),

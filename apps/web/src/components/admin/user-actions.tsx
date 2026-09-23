@@ -109,12 +109,14 @@ export function UserAccessActions({
   userId,
   userName,
   isDisabled,
+  isEmailVerified = false,
   isSelf,
   canManage,
 }: {
   userId: string;
   userName: string;
   isDisabled: boolean;
+  isEmailVerified?: boolean;
   isSelf: boolean;
   canManage: boolean;
 }) {
@@ -146,6 +148,35 @@ export function UserAccessActions({
     }
   }
 
+  async function mutateEmailVerification(verified: boolean) {
+    setFeedback(null);
+    try {
+      const res = await fetch(`/api/admin/users/${userId}/verify-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ verified }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok)
+        throw new Error(data.error ?? "Failed to update email verification.");
+      setFeedback({
+        tone: "success",
+        message: verified
+          ? "User email marked as verified."
+          : "User email marked as unverified.",
+      });
+      startTransition(() => router.refresh());
+    } catch (err: unknown) {
+      setFeedback({
+        tone: "error",
+        message:
+          err instanceof Error
+            ? err.message
+            : "Failed to update email verification.",
+      });
+    }
+  }
+
   async function revokeSessions() {
     setFeedback(null);
     try {
@@ -169,9 +200,11 @@ export function UserAccessActions({
 
   return (
     <div className="rounded-2xl border border-border bg-card p-5">
-      <h3 className="font-display text-lg font-semibold">Access & sessions</h3>
+      <h3 className="font-display text-lg font-semibold">
+        Access & verification
+      </h3>
       <p className="mt-1 text-xs text-muted-foreground">
-        Disable login capability or revoke active device sessions for this user.
+        Manage email verification, login capability, or revoke active sessions.
       </p>
 
       {feedback ? (
@@ -188,6 +221,29 @@ export function UserAccessActions({
       ) : null}
 
       <div className="mt-4 flex flex-wrap gap-3">
+        {canManage ? (
+          isEmailVerified ? (
+            <ConfirmDialog
+              triggerLabel="Mark email unverified"
+              title={`Mark ${userName}'s email as unverified?`}
+              description="The user will be required to re-verify their email before accepting new workspace invitations."
+              confirmLabel="Mark unverified"
+              disabled={pending}
+              onConfirm={() => mutateEmailVerification(false)}
+            />
+          ) : (
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={pending}
+              onClick={() => mutateEmailVerification(true)}
+              className="min-h-10"
+            >
+              {pending ? "Working…" : "Verify email"}
+            </Button>
+          )
+        ) : null}
+
         {canManage ? (
           isDisabled ? (
             <Button

@@ -99,11 +99,12 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
 async function main(): Promise<void> {
   const systemUser = await db.user.upsert({
     where: { email: "system@aiwamediagroup.com" },
-    update: { platformRole: "PLATFORM_OWNER" },
+    update: { platformRole: "PLATFORM_OWNER", emailVerified: true },
     create: {
       name: "Aiwa System",
       email: "system@aiwamediagroup.com",
       platformRole: "PLATFORM_OWNER",
+      emailVerified: true,
     },
   });
 

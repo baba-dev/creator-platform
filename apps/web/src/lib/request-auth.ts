@@ -13,7 +13,11 @@ import { notFound, redirect } from "next/navigation";
 import { auth, type AuthSession } from "./auth";
 
 export type RequestSession = AuthSession & {
-  user: AuthSession["user"] & { platformRole: PlatformRole };
+  user: AuthSession["user"] & {
+    platformRole: PlatformRole;
+    twoFactorEnabled?: boolean;
+    emailVerified?: boolean;
+  };
 };
 
 export async function getRequestSession(

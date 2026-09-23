@@ -121,6 +121,8 @@ model User {
   auditEvents           AuditEvent[]        @relation("AuditActor")
   createdInvitations    OrganizationInvitation[] @relation("InvitationCreatedBy")
   acceptedInvitations   OrganizationInvitation[] @relation("InvitationAcceptedBy")
+  twoFactorEnabled      Boolean             @default(false)
+  twoFactors            TwoFactor[]
 
   @@index([platformRole, disabledAt])
 }
@@ -173,6 +175,21 @@ model Verification {
 
   @@index([identifier])
   @@index([expiresAt])
+}
+
+model TwoFactor {
+  id                      String    @id @default(cuid())
+  secret                  String    @db.Text
+  backupCodes             String    @db.Text
+  userId                  String
+  user                    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  verified                Boolean   @default(true)
+  failedVerificationCount Int       @default(0)
+  lockedUntil             DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  @@index([userId])
 }
 
 model Organization {

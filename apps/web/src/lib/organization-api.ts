@@ -27,6 +27,8 @@ export function organizationError(error: unknown) {
     INVITATION_REVOKED: 410,
     INVITATION_ALREADY_ACCEPTED: 409,
     INVITATION_EMAIL_MISMATCH: 403,
+    USER_EMAIL_UNVERIFIED: 403,
+    INVITATION_EMAIL_UNVERIFIED: 403,
   };
   return NextResponse.json(
     { error: error.message, code: error.code },

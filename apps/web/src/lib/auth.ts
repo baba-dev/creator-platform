@@ -3,6 +3,7 @@ import { parseServerEnv } from "@aiwa/config";
 import { db } from "@aiwa/db";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
+import { twoFactor } from "better-auth/plugins";
 
 const env = parseServerEnv();
 
@@ -14,6 +15,22 @@ export const auth = betterAuth({
     provider: "mysql",
     transaction: true,
   }),
+  plugins: [
+    twoFactor({
+      issuer: "Aiwa Creators",
+    }),
+  ],
+  emailVerification: {
+    sendOnSignUp: false,
+    autoSignInAfterVerification: true,
+    sendVerificationEmail: async ({ user, url }) => {
+      if (process.env.NODE_ENV !== "production") {
+        console.info(
+          `[EmailVerification] Verification link for ${user.email}: ${url}`,
+        );
+      }
+    },
+  },
   emailAndPassword: {
     enabled: true,
     disableSignUp: !env.SIGNUPS_ENABLED,

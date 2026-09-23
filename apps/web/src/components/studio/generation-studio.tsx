@@ -409,8 +409,17 @@ export function GenerationStudio({
       const body = await response.json();
       if (!response.ok)
         throw new Error(body.error ?? "Generation could not be queued.");
-      attempt.current = null;
-      await refresh();
+      // A successful 202 means the durable job exists. Keep the key if the
+      // history refresh fails so a retry returns the same job without a
+      // second charge or provider submission.
+      try {
+        await refresh();
+        attempt.current = null;
+      } catch {
+        setError(
+          "Creation queued. History is temporarily unavailable; retrying this request will return the same job.",
+        );
+      }
     } catch (err) {
       setError(
         err instanceof Error
@@ -1004,6 +1013,14 @@ export function GenerationStudio({
                 {job.errorMessage ? (
                   <p className="mt-2 text-sm text-muted-foreground">
                     {job.errorMessage}
+                  </p>
+                ) : null}
+                {job.status === "MANUAL_REVIEW" ? (
+                  <p className="mt-2 rounded-xl border border-warning/40 bg-warning/10 p-3 text-sm text-foreground">
+                    This creation needs an operator to check the provider
+                    result. Your credits remain reserved. Keep this job in your
+                    history and ask support to review it before starting another
+                    attempt.
                   </p>
                 ) : null}
                 <p className="mt-2 text-xs tabular-nums text-muted-foreground">

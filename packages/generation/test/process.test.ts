@@ -93,6 +93,7 @@ function transaction(
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.db.generationJob.updateMany.mockResolvedValue({ count: 1 });
+  mocks.db.providerModel.findUnique.mockResolvedValue({ enabled: true });
   mocks.store.mockResolvedValue({ byteSize: 100n, sha256: "hash" });
   mocks.download.mockResolvedValue(Buffer.from("png"));
   mocks.downloadVideo.mockResolvedValue(Buffer.from("mp4"));
@@ -551,6 +552,28 @@ describe("model disabling emergency stop and pause semantics", () => {
     expect(p.submit).not.toHaveBeenCalled();
     expect(mocks.db.generationJob.updateMany).not.toHaveBeenCalled();
     expect(mocks.release).not.toHaveBeenCalled();
+  });
+
+  it("fails closed and requeues if the model disappears before submission", async () => {
+    const p = provider();
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+      ...base,
+      status: "QUEUED",
+      providerModel: {
+        id: "m1",
+        providerModelId: "seedream-5-0",
+        enabled: true,
+      },
+    });
+    mocks.db.providerModel.findUnique.mockResolvedValue(null);
+
+    await processImageJob("job1", p);
+
+    expect(p.submit).not.toHaveBeenCalled();
+    expect(mocks.db.generationJob.updateMany).toHaveBeenCalledWith({
+      where: { id: "job1", status: "SUBMITTED" },
+      data: { status: "QUEUED", submittedAt: null },
+    });
   });
 
   it("rolls back image submission to QUEUED if model is disabled immediately before submission", async () => {

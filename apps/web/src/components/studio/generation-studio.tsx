@@ -98,7 +98,6 @@ export function GenerationStudio({
     modelId: string;
     priceVersionId: string;
     credits: string;
-    generateAudio: boolean;
   } | null>(null);
   const [voiceQuotePending, setVoiceQuotePending] = useState(false);
   const [voiceQuoteError, setVoiceQuoteError] = useState<string | null>(null);
@@ -108,6 +107,7 @@ export function GenerationStudio({
     modelId: string;
     priceVersionId: string;
     credits: string;
+    generateAudio: boolean;
   } | null>(null);
   const [videoQuotePending, setVideoQuotePending] = useState(false);
   const [videoQuoteError, setVideoQuoteError] = useState<string | null>(null);
@@ -238,7 +238,6 @@ export function GenerationStudio({
             modelId: quoteModelId,
             priceVersionId: resData.quote.priceVersionId,
             credits: String(resData.quote.customerCredits),
-            generateAudio,
           });
           setVoiceQuoteError(null);
         } else {
@@ -300,6 +299,7 @@ export function GenerationStudio({
             modelId: quoteModelId,
             priceVersionId: resData.quote.priceVersionId,
             credits: String(resData.quote.customerCredits),
+            generateAudio,
           });
           setVideoQuoteError(null);
         } else {

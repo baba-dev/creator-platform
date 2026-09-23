@@ -426,6 +426,16 @@ export async function createVideoJob(userId: string, raw: unknown) {
         throw new GenerationError("Resolution is not supported by this model.");
       }
 
+      if (
+        price.pricingDimension !== "SECOND" &&
+        price.pricingDimension !== "REQUEST"
+      ) {
+        throw new GenerationError(
+          "Video model has an incompatible pricing configuration. Ask an administrator to publish a valid video price.",
+          409,
+        );
+      }
+
       const pricing = calculateVideoPricing({
         providerCostMicroUsd: price.providerCostMicroUsd,
         durationSeconds: input.durationSeconds,

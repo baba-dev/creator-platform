@@ -10,7 +10,7 @@ interface SeedModel {
   capabilities: Prisma.InputJsonValue;
   providerCostMicroUsd: bigint;
   customerCredits: bigint;
-  pricingDimension?: "REQUEST" | "CHARACTER";
+  pricingDimension?: "REQUEST" | "CHARACTER" | "SECOND";
   unitQuantity?: number;
 }
 

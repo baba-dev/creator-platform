@@ -82,6 +82,11 @@ export function calculateVideoPricing(
   }
 
   const pricingDimension = params.pricingDimension ?? "SECOND";
+  if (pricingDimension !== "SECOND" && pricingDimension !== "REQUEST") {
+    throw new RangeError(
+      `Unsupported video pricing dimension: ${pricingDimension}. Expected SECOND or REQUEST.`,
+    );
+  }
   const unitQuantity = params.unitQuantity ? BigInt(params.unitQuantity) : 5n;
   if (unitQuantity <= 0n) {
     throw new RangeError("unitQuantity must be greater than zero");

@@ -108,6 +108,18 @@ describe("video pricing policy", () => {
     expect(result.quote.customerCredits).toBe(864n);
   });
 
+  it("rejects incompatible pricing dimensions instead of silently treating them as flat requests", () => {
+    expect(() =>
+      calculateVideoPricing({
+        providerCostMicroUsd: 468_000n,
+        durationSeconds: 10,
+        resolution: "1080p",
+        pricingDimension: "CHARACTER",
+        unitQuantity: 1000,
+      }),
+    ).toThrow(/Unsupported video pricing dimension/);
+  });
+
   it("handles flat REQUEST dimension for backward compatibility", () => {
     const result = calculateVideoPricing({
       providerCostMicroUsd: 468_000n,

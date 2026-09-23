@@ -135,6 +135,16 @@ export async function POST(request: Request): Promise<NextResponse> {
     model.mediaKind === "VIDEO" ||
     activePriceVersion.pricingDimension === "SECOND"
   ) {
+    if (
+      model.mediaKind !== "VIDEO" ||
+      (activePriceVersion.pricingDimension !== "SECOND" &&
+        activePriceVersion.pricingDimension !== "REQUEST")
+    ) {
+      return NextResponse.json(
+        { error: "Model has an incompatible video pricing configuration." },
+        { status: 409 },
+      );
+    }
     const duration =
       durationSeconds ??
       (activePriceVersion.pricingDimension === "SECOND"

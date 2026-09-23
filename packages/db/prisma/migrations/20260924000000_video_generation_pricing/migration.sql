@@ -10,4 +10,7 @@ SET price.`pricingDimension` = 'SECOND',
 WHERE model.`provider` = 'BYTEPLUS'
   AND model.`providerModelId` = 'dreamina-seedance-2-5-260628'
   AND price.`effectiveTo` IS NULL
-  AND price.`pricingDimension` = 'REQUEST';
+  AND price.`pricingDimension` = 'REQUEST'
+  AND price.`providerCostMicroUsd` = 468000
+  AND price.`customerCredits` = 240
+  AND price.`unitQuantity` = 1;

@@ -13,7 +13,11 @@ const mocks = vi.hoisted(() => ({
       findFirst: vi.fn(),
     },
     asset: {
+      update: vi.fn(),
       updateMany: vi.fn(),
+    },
+    wallet: {
+      findUnique: vi.fn(),
     },
     auditEvent: {
       findMany: vi.fn(),
@@ -28,6 +32,9 @@ const mocks = vi.hoisted(() => ({
   storeImage: vi.fn(),
   downloadVideo: vi.fn(),
   storeVideo: vi.fn(),
+  readStoredAsset: vi.fn(),
+  validateMp3Bytes: vi.fn(),
+  deleteStoredAsset: vi.fn(),
 }));
 
 vi.mock("@aiwa/db", () => ({ db: mocks.db }));
@@ -40,6 +47,9 @@ vi.mock("../src/storage", () => ({
   storeImage: mocks.storeImage,
   downloadVideo: mocks.downloadVideo,
   storeVideo: mocks.storeVideo,
+  readStoredAsset: mocks.readStoredAsset,
+  validateMp3Bytes: mocks.validateMp3Bytes,
+  deleteStoredAsset: mocks.deleteStoredAsset,
 }));
 
 import {
@@ -108,13 +118,34 @@ describe("Generation Job Reconciliation", () => {
     mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue(baseJob);
     mocks.db.generationJob.update.mockResolvedValue(baseJob);
     mocks.db.generationJob.updateMany.mockResolvedValue({ count: 1 });
+    mocks.db.asset.update.mockResolvedValue({ id: "asset-1" });
     mocks.db.asset.updateMany.mockResolvedValue({ count: 1 });
+    mocks.db.wallet.findUnique.mockResolvedValue({
+      id: "wallet-1",
+      balanceCache: 100n,
+    });
     mocks.db.ledgerEntry.findMany.mockResolvedValue([]);
-    mocks.db.auditEvent.findMany.mockResolvedValue([]);
+    mocks.db.auditEvent.findMany.mockImplementation(
+      ({ where }: { where?: { action?: string } } = {}) => {
+        if (where?.action === "generation.reconciled") {
+          return Promise.resolve([
+            {
+              id: "audit-reconcile-success",
+              action: "generation.reconciled",
+              metadata: { outcome: "SUCCEEDED" },
+            },
+          ]);
+        }
+        return Promise.resolve([]);
+      },
+    );
     mocks.db.auditEvent.findFirst.mockResolvedValue(null);
     mocks.db.auditEvent.create.mockResolvedValue({ id: "audit-1" });
     mocks.downloadImage.mockResolvedValue(Buffer.from("fake-png"));
     mocks.storeImage.mockResolvedValue({ byteSize: 5000n, sha256: "hash123" });
+    mocks.storeVideo.mockResolvedValue({ byteSize: 7000n, sha256: "videohash" });
+    mocks.readStoredAsset.mockResolvedValue(Buffer.from("valid-mp3"));
+    mocks.validateMp3Bytes.mockReturnValue({ durationMs: null });
     mocks.capture.mockResolvedValue({ id: "entry-capture", type: "CAPTURE" });
     mocks.releaseOrRefund.mockResolvedValue({
       id: "entry-release",
@@ -126,6 +157,7 @@ describe("Generation Job Reconciliation", () => {
         generationJob: mocks.db.generationJob,
         ledgerEntry: mocks.db.ledgerEntry,
         asset: mocks.db.asset,
+        wallet: mocks.db.wallet,
         auditEvent: mocks.db.auditEvent,
       };
       return fn(tx);
@@ -146,11 +178,12 @@ describe("Generation Job Reconciliation", () => {
       const result = await getJobReconciliationDetails("job-123");
       expect(result).not.toBeNull();
       expect(result?.permittedActions.canReconcile).toBe(true);
-      expect(result?.permittedActions.canRelease).toBe(true);
-      expect(result?.permittedActions.canRecover).toBe(true);
+      expect(result?.permittedActions.canRelease).toBe(false);
+      expect(result?.permittedActions.canRecover).toBe(false);
       expect(result?.permittedActions.canRefund).toBe(false);
+      expect(result?.permittedActions.releaseReason).toContain("Reconcile");
       expect(result?.permittedActions.refundReason).toContain(
-        "has not charged any credits",
+        "no captured credits",
       );
     });
 
@@ -248,9 +281,9 @@ describe("Generation Job Reconciliation", () => {
           amountCredits: 28n,
         }),
       );
-      expect(mocks.db.asset.updateMany).toHaveBeenCalledWith(
+      expect(mocks.db.asset.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { generationJobId: "job-123", objectKey: "job-123.png" },
+          where: { objectKey: "job-123.png" },
           data: expect.objectContaining({ status: "READY" }),
         }),
       );
@@ -299,7 +332,22 @@ describe("Generation Job Reconciliation", () => {
   });
 
   describe("releaseJobReservation", () => {
-    it("releases credits via ledger, deletes pending storage asset, and marks job FAILED", async () => {
+    it("releases credits only after a reconciled non-success outcome", async () => {
+      mocks.db.auditEvent.findMany.mockImplementation(
+        ({ where }: { where?: { action?: string } } = {}) => {
+          if (where?.action === "generation.reconciled") {
+            return Promise.resolve([
+              {
+                id: "audit-reconcile-failed",
+                action: "generation.reconciled",
+                metadata: { outcome: "FAILED" },
+              },
+            ]);
+          }
+          return Promise.resolve([]);
+        },
+      );
+
       const result = await releaseJobReservation({
         jobId: "job-123",
         actorUserId: "operator-1",
@@ -330,6 +378,7 @@ describe("Generation Job Reconciliation", () => {
           where: { id: "job-123" },
           data: expect.objectContaining({
             status: "FAILED",
+            reservedCredits: 0n,
             errorCode: "ADMIN_RELEASED",
           }),
         }),
@@ -343,23 +392,59 @@ describe("Generation Job Reconciliation", () => {
       );
     });
 
-    it("refuses to release reservation if job was already settled", async () => {
-      mocks.db.generationJob.findUnique.mockResolvedValue({
-        ...baseJob,
-        status: "SUCCEEDED",
-        chargedCredits: 28n,
-      });
+    it("refuses to release a MANUAL_REVIEW reservation before reconciliation", async () => {
+      mocks.db.auditEvent.findMany.mockResolvedValue([]);
 
       await expect(
         releaseJobReservation({
           jobId: "job-123",
           actorUserId: "operator-1",
-          reason: "Attempt release on settled job",
-          evidence: "None",
+          reason: "Attempt release without reconciliation",
+          evidence: "Provider outcome is still unknown",
           idempotencyKey: "key-error",
         }),
-      ).rejects.toThrow("Cannot release reservation on a settled job");
+      ).rejects.toThrow("Reconcile the provider outcome");
+      expect(mocks.releaseOrRefund).not.toHaveBeenCalled();
     });
+  });
+
+  it("finalizes an already-stored voice output without resubmitting synthesis", async () => {
+    mocks.db.generationJob.findUnique.mockResolvedValue({
+      ...baseJob,
+      providerModel: { ...baseJob.providerModel, mediaKind: "VOICE" },
+      outputPayload: { stored: true },
+      assets: [
+        {
+          ...baseJob.assets[0],
+          objectKey: "job-123.mp3",
+          mimeType: "audio/mpeg",
+        },
+      ],
+    });
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+      ...baseJob,
+      providerModel: { ...baseJob.providerModel, mediaKind: "VOICE" },
+    });
+
+    const result = await recoverGeneratedOutput({
+      jobId: "job-123",
+      actorUserId: "operator-1",
+      reason: "Finalize MP3 already persisted by original synthesis",
+      mode: "immediate",
+      idempotencyKey: "recover-voice-key",
+    });
+
+    expect(result.success).toBe(true);
+    expect(mocks.readStoredAsset).toHaveBeenCalledWith("job-123.mp3");
+    expect(mocks.validateMp3Bytes).toHaveBeenCalled();
+    expect(mocks.downloadImage).not.toHaveBeenCalled();
+    expect(mocks.downloadVideo).not.toHaveBeenCalled();
+    expect(mocks.db.asset.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { objectKey: "job-123.mp3" },
+        data: expect.objectContaining({ status: "READY" }),
+      }),
+    );
   });
 
   describe("refundSettledJob", () => {

@@ -75,7 +75,11 @@ The administrative interface provides a purpose-built resolution workflow at
   mandatory documented reason.
 
 Every action requires explicit operator evidence/reason, an idempotency key, and
-emits an immutable AuditEvent. Generic blind resubmission is prohibited.
+emits an immutable AuditEvent. MANUAL_REVIEW is enforced as a controlled state
+machine: release requires a prior FAILED, CANCELLED, or NOT_SUBMITTED
+reconciliation; recovery/resume requires a prior SUCCEEDED reconciliation.
+Voice recovery can only finalize an already-stored, validated MP3 and never
+re-synthesizes an uncertain request. Generic blind resubmission is prohibited.
 
 ## Verification
 

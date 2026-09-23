@@ -75,6 +75,7 @@ const bytePlusProvider = hasBytePlus
       speechApiKey: env.BYTEPLUS_SPEECH_API_KEY,
       speechAppKey: env.BYTEPLUS_SPEECH_APP_KEY,
       requestTimeoutMs: env.BYTEPLUS_REQUEST_TIMEOUT_MS,
+      idleTimeoutMs: env.BYTEPLUS_IDLE_TIMEOUT_MS,
     })
   : null;
 
@@ -129,6 +130,7 @@ const nvidiaProvider = env.NVIDIA_API_KEY
         env.NVIDIA_REASONING_MODEL ||
         "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
       requestTimeoutMs: env.NVIDIA_REQUEST_TIMEOUT_MS,
+      idleTimeoutMs: env.NVIDIA_IDLE_TIMEOUT_MS,
     })
   : null;
 

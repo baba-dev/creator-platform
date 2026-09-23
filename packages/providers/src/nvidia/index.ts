@@ -7,12 +7,14 @@ import {
   type ReasoningRequest,
   type ReasoningResult,
 } from "../index";
+import { executeSafeFetch, sharedReadResponseText } from "../http";
 
 export interface NvidiaAdapterConfig {
   readonly apiKey: string;
   readonly baseUrl: string;
   readonly defaultModel: string;
   readonly requestTimeoutMs?: number;
+  readonly idleTimeoutMs?: number;
   readonly fetch?: typeof globalThis.fetch;
 }
 
@@ -102,83 +104,49 @@ export function mapNvidiaError(
   );
 }
 
-async function safeFetch(
+export { cancelAbandonedBody } from "../http";
+
+export async function safeFetch(
   fetchFn: typeof globalThis.fetch,
   url: string,
   options: RequestInit,
   timeoutMs: number,
+  idleTimeoutMs?: number,
 ): Promise<Response> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetchFn(url, { ...options, signal: controller.signal });
-  } catch (error) {
-    // A lost response has an unknown provider outcome. Do not automatically
-    // replay it because the hosted chat API does not expose request
-    // reconciliation by client idempotency key.
-    throw new ProviderRequestError("NVIDIA network request failed", false, {
-      cause: error,
-      code: controller.signal.aborted
-        ? "REQUEST_OUTCOME_UNKNOWN"
-        : "NETWORK_OUTCOME_UNKNOWN",
-    });
-  } finally {
-    clearTimeout(timeout);
-  }
+  return executeSafeFetch(fetchFn, url, options, {
+    timeoutMs,
+    idleTimeoutMs,
+    defaultIdleTimeoutMs: 30_000,
+    providerName: "NVIDIA",
+    onAbortCode: "REQUEST_OUTCOME_UNKNOWN",
+    onAbortRetryable: false,
+    onNetworkErrorCode: "NETWORK_OUTCOME_UNKNOWN",
+  });
 }
 
-async function readResponseText(
+export async function readResponseText(
   response: Response,
   maximumBytes: number,
 ): Promise<string> {
-  if (!response.body) {
-    const value = await response.text();
-    if (new TextEncoder().encode(value).byteLength > maximumBytes)
-      throw new ProviderRequestError(
-        "NVIDIA response exceeded size limit",
-        true,
-        { code: "RESPONSE_TOO_LARGE" },
-      );
-    return value;
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let size = 0;
-  let value = "";
-
-  try {
-    while (true) {
-      const { done, value: chunk } = await reader.read();
-      if (done) break;
-      size += chunk.byteLength;
-      if (size > maximumBytes) {
-        await reader.cancel();
-        throw new ProviderRequestError(
-          "NVIDIA response exceeded size limit",
-          true,
-          { code: "RESPONSE_TOO_LARGE" },
-        );
-      }
-      value += decoder.decode(chunk, { stream: true });
-    }
-    value += decoder.decode();
-    return value;
-  } catch (error) {
-    if (error instanceof ProviderRequestError) throw error;
-    throw new ProviderRequestError("NVIDIA response read failed", true, {
-      cause: error,
-      code: "NETWORK_ERROR",
-    });
-  } finally {
-    reader.releaseLock();
-  }
+  return sharedReadResponseText(response, maximumBytes, {
+    providerName: "NVIDIA",
+    onAbortCode: "REQUEST_OUTCOME_UNKNOWN",
+    onAbortRetryable: false,
+    onNetworkErrorCode: "NETWORK_ERROR",
+  });
 }
 
 async function assertSuccessfulResponse(response: Response): Promise<void> {
   if (response.ok) return;
   const body = await readResponseText(response, MAX_ERROR_BODY_BYTES).catch(
-    () => "",
+    (error: unknown) => {
+      if (
+        error instanceof ProviderRequestError &&
+        error.code === "REQUEST_OUTCOME_UNKNOWN"
+      )
+        throw error;
+      return "";
+    },
   );
   throw mapNvidiaError(response.status, body);
 }
@@ -225,6 +193,7 @@ export function createNvidiaProvider(
 
   const baseUrl = normalizedBaseUrl(config.baseUrl);
   const timeoutMs = config.requestTimeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const idleTimeoutMs = config.idleTimeoutMs;
   const logger = createLogger({
     service: "nvidia-adapter",
     version: "0.1.0",
@@ -260,6 +229,7 @@ export function createNvidiaProvider(
           }),
         },
         timeoutMs,
+        idleTimeoutMs,
       );
 
       await assertSuccessfulResponse(response);

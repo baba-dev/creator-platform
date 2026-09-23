@@ -5,6 +5,8 @@ import {
   createBytePlusProvider,
   isBytePlusVoiceConfigured,
   mapBytePlusError,
+  readResponseText,
+  safeFetch,
   speechRateMultiplierToPercentage,
 } from "../src/byteplus/index";
 
@@ -519,5 +521,212 @@ describe("BytePlus provider adapter", () => {
 
   it("exposes ProviderRequestError type for callers", () => {
     expect(mapBytePlusError(400, "")).toBeInstanceOf(ProviderRequestError);
+  });
+
+  it("aborts and cancels stream when response body stalls beyond total deadline", async () => {
+    let capturedSignal: AbortSignal | undefined;
+    let streamCancelled = false;
+
+    const stalledStream = new ReadableStream({
+      start() {
+        // Leave open without emitting chunks
+      },
+      cancel() {
+        streamCancelled = true;
+      },
+    });
+
+    const fetchMock = vi.fn().mockImplementation((_url, init) => {
+      capturedSignal = init?.signal;
+      return Promise.resolve(new Response(stalledStream, { status: 200 }));
+    });
+
+    const provider = createBytePlusProvider({
+      ...validConfig,
+      requestTimeoutMs: 50,
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const promise = provider.submit({
+      idempotencyKey: "stalled-image-test",
+      modelId: "seedream-5-0-260128",
+      mediaKind: "image",
+      input: { prompt: "test" },
+    });
+
+    await expect(promise).rejects.toMatchObject({
+      message: "BytePlus network request failed",
+      code: "REQUEST_TIMEOUT",
+      retryable: true,
+    });
+
+    expect(capturedSignal?.aborted).toBe(true);
+    expect(streamCancelled).toBe(true);
+  });
+
+  it("aborts when response body exceeds idle deadline between chunks", async () => {
+    let streamCancelled = false;
+
+    const stalledStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"data":'));
+        // Stalls before completing
+      },
+      cancel() {
+        streamCancelled = true;
+      },
+    });
+
+    const fetchMock = vi.fn().mockImplementation(() => {
+      return Promise.resolve(new Response(stalledStream, { status: 200 }));
+    });
+
+    const provider = createBytePlusProvider({
+      ...validConfig,
+      requestTimeoutMs: 5_000,
+      idleTimeoutMs: 40,
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const promise = provider.submit({
+      idempotencyKey: "stalled-idle-test",
+      modelId: "seedream-5-0-260128",
+      mediaKind: "image",
+      input: { prompt: "test" },
+    });
+
+    await expect(promise).rejects.toMatchObject({
+      message: "BytePlus network request failed",
+      code: "REQUEST_TIMEOUT",
+      retryable: true,
+    });
+
+    expect(streamCancelled).toBe(true);
+  });
+
+  it("cancels abandoned response body on successful task cancellation", async () => {
+    let streamCancelled = false;
+
+    const openStream = new ReadableStream({
+      start() {},
+      cancel() {
+        streamCancelled = true;
+      },
+    });
+
+    const fetchMock = vi.fn().mockImplementation(() => {
+      return Promise.resolve(new Response(openStream, { status: 200 }));
+    });
+
+    const provider = createBytePlusProvider({
+      ...validConfig,
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await provider.cancel("task-to-cancel-123");
+
+    expect(streamCancelled).toBe(true);
+  });
+
+  it("triggers abort signal and cancels stream with extracted safeFetch and readResponseText", async () => {
+    let capturedSignal: AbortSignal | undefined;
+    let streamCancelled = false;
+
+    const stalledStream = new ReadableStream({
+      start() {},
+      cancel() {
+        streamCancelled = true;
+      },
+    });
+
+    const fetchMock = vi.fn().mockImplementation((_url, init) => {
+      capturedSignal = init?.signal;
+      return Promise.resolve(new Response(stalledStream, { status: 200 }));
+    });
+
+    const response = await safeFetch(
+      fetchMock as typeof fetch,
+      "https://ark.ap-southeast.bytepluses.com/api/v3/images/generations",
+      {},
+      50,
+    );
+
+    const readPromise = readResponseText(response, 1024 * 1024);
+
+    await expect(readPromise).rejects.toMatchObject({
+      message: "BytePlus network request failed",
+      code: "REQUEST_TIMEOUT",
+      retryable: true,
+    });
+
+    expect(capturedSignal?.aborted).toBe(true);
+    expect(streamCancelled).toBe(true);
+  });
+
+  it("returns after a timeout even if stream cancellation never settles", async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      cancel: () => new Promise<void>(() => {}),
+    });
+    const response = await safeFetch(
+      vi.fn().mockResolvedValue(new Response(stream)) as typeof fetch,
+      "https://ark.ap-southeast.bytepluses.com/api/v3/images/generations",
+      {},
+      30,
+    );
+    await expect(readResponseText(response, 100)).rejects.toMatchObject({
+      code: "REQUEST_TIMEOUT",
+    });
+  });
+
+  it("returns the size error even if cancellation never settles", async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(101));
+      },
+      cancel: () => new Promise<void>(() => {}),
+    });
+    const response = await safeFetch(
+      vi.fn().mockResolvedValue(new Response(stream)) as typeof fetch,
+      "https://ark.ap-southeast.bytepluses.com/api/v3/images/generations",
+      {},
+      100,
+    );
+    await expect(readResponseText(response, 100)).rejects.toMatchObject({
+      code: "RESPONSE_TOO_LARGE",
+    });
+  });
+
+  it("preserves timeout classification when an HTTP error body stalls", async () => {
+    const provider = createBytePlusProvider({
+      ...validConfig,
+      requestTimeoutMs: 30,
+      fetch: vi
+        .fn()
+        .mockResolvedValue(new Response(new ReadableStream(), { status: 503 })),
+    });
+    await expect(
+      provider.submit({
+        idempotencyKey: "stalled-error-body",
+        modelId: "seedream-5-0-260128",
+        mediaKind: "image",
+        input: { prompt: "test" },
+      }),
+    ).rejects.toMatchObject({ code: "REQUEST_TIMEOUT" });
+  });
+
+  it("bounds text fallback when the response offers no stream reader", async () => {
+    const fallback = {
+      body: null,
+      text: () => new Promise<string>(() => {}),
+    } as Response;
+    const response = await safeFetch(
+      vi.fn().mockResolvedValue(fallback) as typeof fetch,
+      "https://ark.ap-southeast.bytepluses.com/api/v3/images/generations",
+      {},
+      30,
+    );
+    await expect(readResponseText(response, 100)).rejects.toMatchObject({
+      code: "REQUEST_TIMEOUT",
+    });
   });
 });

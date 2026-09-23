@@ -554,6 +554,32 @@ export async function recoverGeneratedOutput(
     );
   }
 
+  const priorResolutionAudits = await db.auditEvent.findMany({
+    where: {
+      targetType: "GenerationJob",
+      targetId: params.jobId,
+      action: { startsWith: "generation." },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  const priorResolution =
+    priorResolutionAudits.find(
+      (event) =>
+        metadataObject(event.metadata).idempotencyKey ===
+        params.idempotencyKey,
+    ) ?? null;
+  const preflightReplay = replayResult(
+    priorResolution,
+    mode === "resume_processing"
+      ? "generation.resumed_processing"
+      : "generation.recovered",
+    requestHash,
+    mode === "resume_processing"
+      ? "Storage recovery was already resumed."
+      : "Generated output was already recovered.",
+  );
+  if (preflightReplay) return preflightReplay;
+
   if (mode === "resume_processing") {
     return db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM GenerationJob WHERE id = ${params.jobId} FOR UPDATE`;

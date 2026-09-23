@@ -10,7 +10,7 @@ interface SeedModel {
   capabilities: Prisma.InputJsonValue;
   providerCostMicroUsd: bigint;
   customerCredits: bigint;
-  pricingDimension?: "REQUEST" | "CHARACTER";
+  pricingDimension?: "REQUEST" | "CHARACTER" | "SECOND";
   unitQuantity?: number;
 }
 
@@ -67,11 +67,12 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
       "resolution:1080p": true,
       "durationSeconds:5": true,
       "durationSeconds:10": true,
+      generateAudio: true,
     },
     providerCostMicroUsd: 468_000n,
     customerCredits: 240n,
-    pricingDimension: "REQUEST",
-    unitQuantity: 1,
+    pricingDimension: "SECOND",
+    unitQuantity: 5,
   },
   {
     providerModelId: "seed-tts-2.0",

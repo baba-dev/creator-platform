@@ -74,6 +74,7 @@ enum MediaKind {
 enum PricingDimension {
   REQUEST
   CHARACTER
+  SECOND
 }
 
 enum GenerationJobStatus {

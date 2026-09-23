@@ -1,4 +1,4 @@
-import { calculateModelQuote } from "@aiwa/credits";
+import { calculateModelQuote, calculateVideoPricing } from "@aiwa/credits";
 import { canSpendWithinMonthlyCap } from "@aiwa/organizations";
 import { quoteRequestSchema } from "@aiwa/validation";
 import { describe, expect, it } from "vitest";
@@ -78,5 +78,57 @@ describe("quotes API logic", () => {
       expect(validVoiceQuote.data.text).toHaveLength(2500);
       expect(validVoiceQuote.data.units).toBe(1); // default
     }
+  });
+
+  it("validates quote requests with video parameters (duration, resolution, audio)", () => {
+    const validVideoQuote = quoteRequestSchema.safeParse({
+      organizationId: "c12345678901234567890",
+      modelId: "seedance-2.5",
+      durationSeconds: 10,
+      resolution: "1080p",
+      generateAudio: true,
+    });
+    expect(validVideoQuote.success).toBe(true);
+    if (validVideoQuote.success) {
+      expect(validVideoQuote.data.durationSeconds).toBe(10);
+      expect(validVideoQuote.data.resolution).toBe("1080p");
+      expect(validVideoQuote.data.generateAudio).toBe(true);
+    }
+  });
+
+  it("calculates parameter-sensitive video quotes for 5s vs 10s and resolution", () => {
+    // 5s 720p base Seedance 2.5
+    const base5s = calculateVideoPricing({
+      providerCostMicroUsd: 468_000n,
+      durationSeconds: 5,
+      resolution: "720p",
+      pricingDimension: "SECOND",
+      unitQuantity: 5,
+    });
+    expect(base5s.durationUnits).toBe(1n);
+    expect(base5s.quote.customerCredits).toBe(240n);
+
+    // 10s 720p (2 units duration)
+    const base10s = calculateVideoPricing({
+      providerCostMicroUsd: 468_000n,
+      durationSeconds: 10,
+      resolution: "720p",
+      pricingDimension: "SECOND",
+      unitQuantity: 5,
+    });
+    expect(base10s.durationUnits).toBe(2n);
+    expect(base10s.quote.customerCredits).toBe(480n);
+
+    // 10s 1080p with audio (2 units * 1.5 res * 1.2 audio = 3.6x provider cost)
+    const full10s = calculateVideoPricing({
+      providerCostMicroUsd: 468_000n,
+      durationSeconds: 10,
+      resolution: "1080p",
+      generateAudio: true,
+      pricingDimension: "SECOND",
+      unitQuantity: 5,
+    });
+    expect(full10s.durationUnits).toBe(2n);
+    expect(full10s.quote.customerCredits).toBe(864n);
   });
 });

@@ -1,7 +1,12 @@
 import { hasPlatformPermission } from "@aiwa/authz";
-import { createCreditQuote, DEFAULT_FX_RATE } from "@aiwa/credits";
+import {
+  assertFlatVideoPriceCoversWorstCase,
+  createCreditQuote,
+  DEFAULT_FX_RATE,
+} from "@aiwa/credits";
 import { db } from "@aiwa/db";
 import {
+  assertPricingDimensionMatchesMediaKind,
   cuidSchema,
   publishPriceVersionSchema,
   toggleModelEnabledSchema,
@@ -117,23 +122,68 @@ export async function PATCH(
 
     const now = new Date();
 
+    const currentPrice = await db.modelPriceVersion.findFirst({
+      where: { providerModelId: model.id, effectiveTo: null },
+      orderBy: { effectiveFrom: "desc" },
+    });
+    const pricingDimension =
+      priceResult.data.pricingDimension ??
+      currentPrice?.pricingDimension ??
+      "REQUEST";
+
+    try {
+      assertPricingDimensionMatchesMediaKind(model.mediaKind, pricingDimension);
+    } catch (err) {
+      return NextResponse.json(
+        {
+          error:
+            err instanceof Error
+              ? err.message
+              : "Invalid pricing dimension for model media kind.",
+        },
+        { status: 400 },
+      );
+    }
+
+    if (model.mediaKind === "VIDEO" && pricingDimension === "REQUEST") {
+      const baseUnitCost =
+        currentPrice?.pricingDimension === "SECOND"
+          ? currentPrice.providerCostMicroUsd
+          : providerCostMicroUsd;
+      try {
+        assertFlatVideoPriceCoversWorstCase(
+          providerCostMicroUsd,
+          baseUnitCost,
+          model.capabilities,
+          currentPrice?.unitQuantity ?? 5,
+        );
+      } catch (err) {
+        return NextResponse.json(
+          {
+            error:
+              err instanceof Error
+                ? err.message
+                : "Flat video pricing does not cover worst supported case.",
+          },
+          { status: 400 },
+        );
+      }
+    }
+
     const newPriceVersion = await db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM ProviderModel WHERE id = ${model.id} FOR UPDATE`;
-      const currentPrice = await tx.modelPriceVersion.findFirst({
-        where: { providerModelId: model.id, effectiveTo: null },
-        orderBy: { effectiveFrom: "desc" },
-      });
-      const pricingDimension =
-        priceResult.data.pricingDimension ??
-        currentPrice?.pricingDimension ??
-        "REQUEST";
       const unitQuantity =
         pricingDimension === "REQUEST"
           ? 1
-          : (priceResult.data.unitQuantity ??
-            (currentPrice?.pricingDimension === "CHARACTER"
-              ? currentPrice.unitQuantity
-              : 1000));
+          : pricingDimension === "SECOND"
+            ? (priceResult.data.unitQuantity ??
+              (currentPrice?.pricingDimension === "SECOND"
+                ? currentPrice.unitQuantity
+                : 5))
+            : (priceResult.data.unitQuantity ??
+              (currentPrice?.pricingDimension === "CHARACTER"
+                ? currentPrice.unitQuantity
+                : 1000));
 
       // Close out existing active price version
       await tx.modelPriceVersion.updateMany({

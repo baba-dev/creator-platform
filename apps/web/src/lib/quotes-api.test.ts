@@ -132,17 +132,15 @@ describe("quotes API logic", () => {
     expect(full10s.quote.customerCredits).toBe(864n);
   });
 
-  it("restricts commercial pricing internals (provider cost and margin) to platform operators and admins", async () => {
+  it("restricts commercial pricing internals to finance-capable roles", async () => {
     const { hasPlatformPermission } = await import("@aiwa/authz");
 
-    // Standard workspace users and support/finance must NOT see commercial internals
-    expect(hasPlatformPermission("USER", "models:read")).toBe(false);
-    expect(hasPlatformPermission("SUPPORT", "models:read")).toBe(false);
-    expect(hasPlatformPermission("FINANCE_ADMIN", "models:read")).toBe(false);
+    expect(hasPlatformPermission("USER", "payments:read")).toBe(false);
+    expect(hasPlatformPermission("SUPPORT", "payments:read")).toBe(false);
+    expect(hasPlatformPermission("OPERATOR", "payments:read")).toBe(false);
 
-    // Platform operators, platform admins, and platform owners CAN see commercial internals
-    expect(hasPlatformPermission("OPERATOR", "models:read")).toBe(true);
-    expect(hasPlatformPermission("PLATFORM_ADMIN", "models:read")).toBe(true);
-    expect(hasPlatformPermission("PLATFORM_OWNER", "models:read")).toBe(true);
+    expect(hasPlatformPermission("FINANCE_ADMIN", "payments:read")).toBe(true);
+    expect(hasPlatformPermission("PLATFORM_ADMIN", "payments:read")).toBe(true);
+    expect(hasPlatformPermission("PLATFORM_OWNER", "payments:read")).toBe(true);
   });
 });

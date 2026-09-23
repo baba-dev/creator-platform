@@ -7,9 +7,15 @@ import { organizationError } from "@/lib/organization-api";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
 
-const verifyEmailBodySchema = z.object({
-  verified: z.boolean().default(true),
-});
+const verifyEmailBodySchema = z
+  .object({
+    verified: z.boolean().default(true),
+    reason: z.string().trim().min(8).max(500).optional(),
+  })
+  .refine((value) => !value.verified || Boolean(value.reason), {
+    message: "A reason is required when administratively verifying email.",
+    path: ["reason"],
+  });
 
 export async function POST(
   request: Request,
@@ -60,6 +66,7 @@ export async function POST(
       },
       targetUserId: userId,
       verified: parsed.data.verified,
+      reason: parsed.data.reason,
     });
 
     revalidatePath(`/admin/users/${userId}`);

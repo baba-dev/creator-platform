@@ -112,6 +112,7 @@ export function UserAccessActions({
   isEmailVerified = false,
   isSelf,
   canManage,
+  canVerifyEmail = false,
 }: {
   userId: string;
   userName: string;
@@ -119,6 +120,7 @@ export function UserAccessActions({
   isEmailVerified?: boolean;
   isSelf: boolean;
   canManage: boolean;
+  canVerifyEmail?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -150,11 +152,17 @@ export function UserAccessActions({
 
   async function mutateEmailVerification(verified: boolean) {
     setFeedback(null);
+    const reason = verified
+      ? window.prompt(
+          "Administrative verification bypasses normal mailbox proof. Enter an audit reason (minimum 8 characters):",
+        )?.trim()
+      : undefined;
+    if (verified && (!reason || reason.length < 8)) return;
     try {
       const res = await fetch(`/api/admin/users/${userId}/verify-email`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ verified }),
+        body: JSON.stringify({ verified, reason }),
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok)
@@ -231,7 +239,7 @@ export function UserAccessActions({
               disabled={pending}
               onConfirm={() => mutateEmailVerification(false)}
             />
-          ) : (
+          ) : canVerifyEmail ? (
             <Button
               type="button"
               variant="secondary"
@@ -239,9 +247,9 @@ export function UserAccessActions({
               onClick={() => mutateEmailVerification(true)}
               className="min-h-10"
             >
-              {pending ? "Working…" : "Verify email"}
+              {pending ? "Working…" : "Administratively verify email"}
             </Button>
-          )
+          ) : null
         ) : null}
 
         {canManage ? (

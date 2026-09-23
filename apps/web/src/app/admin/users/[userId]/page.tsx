@@ -211,6 +211,7 @@ export default async function AdminUserDetailPage({
             isEmailVerified={user.emailVerified}
             isSelf={isSelf}
             canManage={canManageUsers}
+            canVerifyEmail={isPlatformOwner}
           />
 
           {/* Active Sessions List */}

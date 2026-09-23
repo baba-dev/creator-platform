@@ -754,9 +754,21 @@ export async function setUserEmailVerified(input: {
   actor: { userId: string; platformRole: PlatformRole };
   targetUserId: string;
   verified: boolean;
+  reason?: string;
 }) {
   if (!hasPlatformPermission(input.actor.platformRole, "users:manage")) {
     throw new PermissionDeniedError();
+  }
+  if (input.verified && input.actor.platformRole !== "PLATFORM_OWNER") {
+    throw new PermissionDeniedError(
+      "Only a Platform Owner may administratively attest email verification.",
+    );
+  }
+  const reason = input.reason?.trim();
+  if (input.verified && (!reason || reason.length < 8)) {
+    throw new PermissionDeniedError(
+      "Administrative email verification requires an audit reason.",
+    );
   }
   return db.$transaction(async (tx) => {
     const targetUser = await tx.user.findUnique({
@@ -782,6 +794,10 @@ export async function setUserEmailVerified(input: {
           email: targetUser.email,
           previousEmailVerified: targetUser.emailVerified,
           newEmailVerified: input.verified,
+          reason: reason ?? null,
+          verificationSource: input.verified
+            ? "platform_owner_attestation"
+            : "administrative_revocation",
         },
       },
     });

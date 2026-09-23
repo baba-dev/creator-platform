@@ -596,32 +596,23 @@ export async function withStorageAllocation<T>(input: {
   );
 }
 
-async function assertActivePlatformOwnerInvariant(
+async function lockActivePlatformOwners(
   tx: Prisma.TransactionClient,
-  targetUserId: string,
-): Promise<void> {
-  // Acquire an exclusive serialization lock across all active platform owners.
-  // In MySQL/MariaDB InnoDB, SELECT ... FOR UPDATE on indexed [platformRole, disabledAt]
-  // guarantees concurrent transactions attempting to demote or disable owners
-  // are serialized, preventing the concurrent removal of the last active owner.
-  const lockedRows = await tx.$queryRaw<Array<{ id: string }>>`
-    SELECT id FROM User
+): Promise<Array<{ id: string }>> {
+  return tx.$queryRaw<Array<{ id: string }>>`
+    SELECT id
+    FROM User
     WHERE platformRole = 'PLATFORM_OWNER' AND disabledAt IS NULL
+    ORDER BY id
     FOR UPDATE
   `;
+}
 
-  const otherActiveCount =
-    Array.isArray(lockedRows) && lockedRows.length > 0
-      ? lockedRows.filter((owner) => owner.id !== targetUserId).length
-      : await tx.user.count({
-          where: {
-            platformRole: "PLATFORM_OWNER",
-            disabledAt: null,
-            id: { not: targetUserId },
-          },
-        });
-
-  if (otherActiveCount === 0) {
+function assertActivePlatformOwnerInvariant(
+  lockedOwners: readonly { id: string }[],
+  targetUserId: string,
+): void {
+  if (!lockedOwners.some((owner) => owner.id !== targetUserId)) {
     throw new SolePlatformOwnerError();
   }
 }
@@ -637,6 +628,7 @@ export async function setUserPlatformRole(input: {
     );
   }
   return db.$transaction(async (tx) => {
+    const lockedOwners = await lockActivePlatformOwners(tx);
     await tx.$queryRaw`SELECT id FROM User WHERE id = ${input.targetUserId} FOR UPDATE`;
     const targetUser = await tx.user.findUnique({
       where: { id: input.targetUserId },
@@ -648,7 +640,7 @@ export async function setUserPlatformRole(input: {
       targetUser.platformRole === "PLATFORM_OWNER" &&
       input.role !== "PLATFORM_OWNER"
     ) {
-      await assertActivePlatformOwnerInvariant(tx, targetUser.id);
+      assertActivePlatformOwnerInvariant(lockedOwners, targetUser.id);
     }
 
     const updated = await tx.user.update({
@@ -685,6 +677,7 @@ export async function setUserDisabled(input: {
     throw new CannotDisableSelfError();
   }
   return db.$transaction(async (tx) => {
+    const lockedOwners = await lockActivePlatformOwners(tx);
     await tx.$queryRaw`SELECT id FROM User WHERE id = ${input.targetUserId} FOR UPDATE`;
     const targetUser = await tx.user.findUnique({
       where: { id: input.targetUserId },
@@ -693,7 +686,7 @@ export async function setUserDisabled(input: {
     if (!targetUser) throw new UserNotFoundError();
 
     if (input.disabled && targetUser.platformRole === "PLATFORM_OWNER") {
-      await assertActivePlatformOwnerInvariant(tx, targetUser.id);
+      assertActivePlatformOwnerInvariant(lockedOwners, targetUser.id);
     }
 
     const updated = await tx.user.update({

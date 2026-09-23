@@ -186,7 +186,7 @@ describe("Generation Job Reconciliation", () => {
       expect(result?.permittedActions.canRefund).toBe(false);
       expect(result?.permittedActions.releaseReason).toContain("Reconcile");
       expect(result?.permittedActions.refundReason).toContain(
-        "no captured credits",
+        "credits to refund",
       );
     });
 

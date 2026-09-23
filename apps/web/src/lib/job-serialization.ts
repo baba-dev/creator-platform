@@ -33,6 +33,7 @@ export function serializeJobDetails(data: RawJobDetails | null) {
             providerCostMicroUsd:
               job.priceVersion.providerCostMicroUsd.toString(),
             customerCredits: job.priceVersion.customerCredits.toString(),
+            creditsPerBaisa: job.priceVersion.creditsPerBaisa.toString(),
           }
         : null,
       assets: job.assets.map((asset) => ({

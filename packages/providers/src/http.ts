@@ -125,8 +125,7 @@ export async function sharedReadResponseText(
     options.providerName === "NVIDIA" ? false : true;
   const networkErrorRetryable =
     options.onNetworkErrorRetryable ?? defaultNetworkRetryable;
-  const responseTooLargeRetryable =
-    options.onResponseTooLargeRetryable ?? true;
+  const responseTooLargeRetryable = options.onResponseTooLargeRetryable ?? true;
 
   if (!response.body?.getReader) {
     try {

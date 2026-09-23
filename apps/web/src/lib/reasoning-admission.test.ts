@@ -76,9 +76,9 @@ describe("admitReasoningJob atomic admission limits", () => {
       organization: { status: "ACTIVE" },
     });
 
-    await expect(admitReasoningJob(sampleInput, txClient)).rejects.toBeInstanceOf(
-      ReasoningAdmissionError,
-    );
+    await expect(
+      admitReasoningJob(sampleInput, txClient),
+    ).rejects.toBeInstanceOf(ReasoningAdmissionError);
 
     expect(fakeTx.reasoningJob.count).not.toHaveBeenCalled();
     expect(fakeTx.reasoningJob.create).not.toHaveBeenCalled();

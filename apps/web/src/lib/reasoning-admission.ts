@@ -1,7 +1,4 @@
-import {
-  hasOrganizationPermission,
-  type OrganizationRole,
-} from "@aiwa/authz";
+import { hasOrganizationPermission, type OrganizationRole } from "@aiwa/authz";
 import { db, Prisma } from "@aiwa/db";
 
 export const MAX_ACTIVE_REASONING_JOBS_PER_USER = 3;

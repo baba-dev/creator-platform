@@ -46,9 +46,7 @@ export function mapGenerationError(error: unknown): {
         remediation,
         quotaBytes: quotaBytes.toString(),
         quotaLabel: formatBytes(quotaBytes),
-        ...(usedBytes === undefined
-          ? {}
-          : { usedBytes: usedBytes.toString() }),
+        ...(usedBytes === undefined ? {} : { usedBytes: usedBytes.toString() }),
         ...(proposedBytes === undefined
           ? {}
           : { proposedBytes: proposedBytes.toString() }),

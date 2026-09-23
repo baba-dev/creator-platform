@@ -565,8 +565,7 @@ export async function recoverGeneratedOutput(
   const priorResolution =
     priorResolutionAudits.find(
       (event) =>
-        metadataObject(event.metadata).idempotencyKey ===
-        params.idempotencyKey,
+        metadataObject(event.metadata).idempotencyKey === params.idempotencyKey,
     ) ?? null;
   const preflightReplay = replayResult(
     priorResolution,

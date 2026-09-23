@@ -109,6 +109,7 @@ export function priceCredits(price: {
   fxBaisaNumerator: bigint;
   fxBaisaDenominator: bigint;
   targetMarginBps: number;
+  creditsPerBaisa: bigint;
 }) {
   return createCreditQuote({
     providerCostMicroUsd: price.providerCostMicroUsd,
@@ -117,7 +118,7 @@ export function priceCredits(price: {
       baisaDenominator: price.fxBaisaDenominator,
     },
     targetGrossMarginBps: price.targetMarginBps,
-    creditsPerBaisa: 1n,
+    creditsPerBaisa: price.creditsPerBaisa,
   }).customerCredits;
 }
 export async function requireMembership(

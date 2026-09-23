@@ -151,7 +151,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       baisaDenominator: activePriceVersion.fxBaisaDenominator,
     },
     targetGrossMarginBps: activePriceVersion.targetMarginBps,
-    creditsPerBaisa: 1n,
+    creditsPerBaisa: activePriceVersion.creditsPerBaisa,
   });
 
   const budget = await checkMemberSpendingBudget({
@@ -176,6 +176,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       convertedCostBaisa: quote.convertedCostBaisa.toString(),
       customerPriceBaisa: quote.customerPriceBaisa.toString(),
       customerCredits: quote.customerCredits.toString(),
+      creditsPerBaisa: activePriceVersion.creditsPerBaisa.toString(),
       targetGrossMarginBps: quote.targetGrossMarginBps,
     },
     budget: {

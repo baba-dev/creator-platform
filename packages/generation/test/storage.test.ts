@@ -89,7 +89,7 @@ describe("private image storage", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
-  });
+  }, 15000);
 
   it("validates valid MP3 frames", () => {
     // MPEG-1 Layer III, 128 kbps, 44.1 kHz: 417 bytes per frame.

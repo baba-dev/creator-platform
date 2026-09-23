@@ -327,6 +327,7 @@ model ModelPriceVersion {
   targetMarginBps      Int
   pricingDimension     PricingDimension @default(REQUEST)
   unitQuantity         Int              @default(1)
+  creditsPerBaisa      BigInt           @default(1)
   effectiveFrom        DateTime
   effectiveTo          DateTime?
   createdById          String

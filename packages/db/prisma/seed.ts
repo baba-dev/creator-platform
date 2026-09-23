@@ -151,6 +151,7 @@ async function main(): Promise<void> {
           targetMarginBps: 2500,
           pricingDimension: model.pricingDimension ?? "REQUEST",
           unitQuantity: model.unitQuantity ?? 1,
+          creditsPerBaisa: 1n,
           effectiveFrom: new Date("2026-01-01T00:00:00Z"),
           effectiveTo: null,
           createdById: systemUser.id,

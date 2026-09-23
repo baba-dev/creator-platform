@@ -157,6 +157,7 @@ export async function PATCH(
           targetMarginBps,
           pricingDimension,
           unitQuantity,
+          creditsPerBaisa,
           effectiveFrom: now,
           effectiveTo: null,
           createdById: session.user.id,
@@ -177,6 +178,7 @@ export async function PATCH(
             pricingDimension,
             unitQuantity: unitQuantity.toString(),
             targetMarginBps,
+            creditsPerBaisa: creditsPerBaisa.toString(),
           },
         },
       });
@@ -196,6 +198,7 @@ export async function PATCH(
         pricingDimension: newPriceVersion.pricingDimension,
         unitQuantity: newPriceVersion.unitQuantity?.toString() ?? null,
         targetMarginBps: newPriceVersion.targetMarginBps,
+        creditsPerBaisa: newPriceVersion.creditsPerBaisa.toString(),
         effectiveFrom: newPriceVersion.effectiveFrom.toISOString(),
       },
     });

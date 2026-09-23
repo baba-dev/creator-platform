@@ -160,6 +160,16 @@ export default async function AdminUserDetailPage({
                 </dd>
               </div>
               <div>
+                <dt className="text-xs text-muted-foreground">MFA status</dt>
+                <dd className="mt-0.5">
+                  <StatusBadge
+                    tone={user.twoFactorEnabled ? "success" : "neutral"}
+                  >
+                    {user.twoFactorEnabled ? "Active" : "Not enabled"}
+                  </StatusBadge>
+                </dd>
+              </div>
+              <div>
                 <dt className="text-xs text-muted-foreground">Created at</dt>
                 <dd className="mt-0.5 font-mono text-xs tabular-nums text-muted-foreground">
                   {user.createdAt.toLocaleDateString("en-OM", {
@@ -198,8 +208,10 @@ export default async function AdminUserDetailPage({
             userId={user.id}
             userName={user.name}
             isDisabled={Boolean(user.disabledAt)}
+            isEmailVerified={user.emailVerified}
             isSelf={isSelf}
             canManage={canManageUsers}
+            canVerifyEmail={isPlatformOwner}
           />
 
           {/* Active Sessions List */}

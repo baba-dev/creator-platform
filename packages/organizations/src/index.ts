@@ -138,6 +138,24 @@ export class InvitationEmailMismatchError extends OrganizationDomainError {
     );
   }
 }
+export class UserEmailUnverifiedError extends OrganizationDomainError {
+  constructor() {
+    super(
+      "USER_EMAIL_UNVERIFIED",
+      "That user has not verified their email address.",
+    );
+  }
+}
+export class InvitationEmailUnverifiedError extends OrganizationDomainError {
+  constructor(email?: string) {
+    super(
+      "INVITATION_EMAIL_UNVERIFIED",
+      email
+        ? `You must verify your email address (${email}) before accepting this invitation.`
+        : "You must verify your email address before accepting this invitation.",
+    );
+  }
+}
 
 export function normalizeMemberEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -281,15 +299,16 @@ export async function addMember(input: {
       const user = input.userId
         ? await tx.user.findUnique({
             where: { id: input.userId },
-            select: { id: true, disabledAt: true },
+            select: { id: true, emailVerified: true, disabledAt: true },
           })
         : input.email
           ? await tx.user.findUnique({
               where: { email: normalizeMemberEmail(input.email) },
-              select: { id: true, disabledAt: true },
+              select: { id: true, emailVerified: true, disabledAt: true },
             })
           : null;
       if (!user || user.disabledAt) throw new UserUnavailableError();
+      if (!user.emailVerified) throw new UserEmailUnverifiedError();
       if (
         await tx.membership.findUnique({
           where: {
@@ -731,6 +750,62 @@ export async function revokeUserSessions(input: {
   });
 }
 
+export async function setUserEmailVerified(input: {
+  actor: { userId: string; platformRole: PlatformRole };
+  targetUserId: string;
+  verified: boolean;
+  reason?: string;
+}) {
+  if (!hasPlatformPermission(input.actor.platformRole, "users:manage")) {
+    throw new PermissionDeniedError();
+  }
+  if (input.verified && input.actor.platformRole !== "PLATFORM_OWNER") {
+    throw new PermissionDeniedError(
+      "Only a Platform Owner may administratively attest email verification.",
+    );
+  }
+  const reason = input.reason?.trim();
+  if (input.verified && (!reason || reason.length < 8)) {
+    throw new PermissionDeniedError(
+      "Administrative email verification requires an audit reason.",
+    );
+  }
+  return db.$transaction(async (tx) => {
+    const targetUser = await tx.user.findUnique({
+      where: { id: input.targetUserId },
+      select: { id: true, email: true, emailVerified: true },
+    });
+    if (!targetUser) throw new UserNotFoundError();
+
+    const updated = await tx.user.update({
+      where: { id: targetUser.id },
+      data: { emailVerified: input.verified },
+    });
+
+    await tx.auditEvent.create({
+      data: {
+        actorUserId: input.actor.userId,
+        action: input.verified
+          ? "user.email_verified"
+          : "user.email_unverified",
+        targetType: "User",
+        targetId: targetUser.id,
+        metadata: {
+          email: targetUser.email,
+          previousEmailVerified: targetUser.emailVerified,
+          newEmailVerified: input.verified,
+          reason: reason ?? null,
+          verificationSource: input.verified
+            ? "platform_owner_attestation"
+            : "administrative_revocation",
+        },
+      },
+    });
+
+    return updated;
+  });
+}
+
 export function generateInvitationToken(): string {
   return randomBytes(24).toString("hex");
 }
@@ -842,7 +917,12 @@ export async function acceptOrganizationInvitation(input: {
     async (tx) => {
       const user = await tx.user.findUnique({
         where: { id: input.actorUserId },
-        select: { id: true, email: true, disabledAt: true },
+        select: {
+          id: true,
+          email: true,
+          emailVerified: true,
+          disabledAt: true,
+        },
       });
       if (!user || user.disabledAt) throw new UserUnavailableError();
 
@@ -878,6 +958,10 @@ export async function acceptOrganizationInvitation(input: {
           normalizeMemberEmail(invitation.email)
       ) {
         throw new InvitationEmailMismatchError(invitation.email);
+      }
+
+      if (!user.emailVerified) {
+        throw new InvitationEmailUnverifiedError(invitation.email ?? undefined);
       }
 
       await lockedOrganization(tx, invitation.organizationId);

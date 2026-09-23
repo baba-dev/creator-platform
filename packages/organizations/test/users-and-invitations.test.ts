@@ -6,13 +6,16 @@ import {
   InvitationExpiredError,
   InvitationNotFoundError,
   InvitationRevokedError,
+  InvitationEmailUnverifiedError,
   MAX_ORGANIZATION_NON_OWNER_MEMBERS,
   MAX_ORGANIZATION_SEATS,
   PermissionDeniedError,
   SolePlatformOwnerError,
+  UserEmailUnverifiedError,
   UserNotFoundError,
   generateInvitationToken,
   setUserDisabled,
+  setUserEmailVerified,
   setUserPlatformRole,
 } from "../src/index";
 
@@ -44,6 +47,13 @@ describe("users and invitations domain", () => {
     const mismatch = new InvitationEmailMismatchError("test@example.com");
     expect(mismatch.code).toBe("INVITATION_EMAIL_MISMATCH");
     expect(mismatch.message).toContain("test@example.com");
+    const unverifiedUser = new UserEmailUnverifiedError();
+    expect(unverifiedUser.code).toBe("USER_EMAIL_UNVERIFIED");
+    const unverifiedInvite = new InvitationEmailUnverifiedError(
+      "test@example.com",
+    );
+    expect(unverifiedInvite.code).toBe("INVITATION_EMAIL_UNVERIFIED");
+    expect(unverifiedInvite.message).toContain("test@example.com");
   });
 
   it("restricts setUserPlatformRole to PLATFORM_OWNER actor", async () => {
@@ -72,6 +82,27 @@ describe("users and invitations domain", () => {
         actor: { userId: "support1", platformRole: "SUPPORT" },
         targetUserId: "user2",
         disabled: true,
+      }),
+    ).rejects.toThrow(PermissionDeniedError);
+  });
+
+  it("rejects administrative verification from non-owner actors", async () => {
+    await expect(
+      setUserEmailVerified({
+        actor: { userId: "admin1", platformRole: "PLATFORM_ADMIN" },
+        targetUserId: "user2",
+        verified: true,
+        reason: "Support escalation requested manual verification.",
+      }),
+    ).rejects.toThrow(PermissionDeniedError);
+  });
+
+  it("rejects setUserEmailVerified from actors without users:manage permission", async () => {
+    await expect(
+      setUserEmailVerified({
+        actor: { userId: "user1", platformRole: "USER" },
+        targetUserId: "user2",
+        verified: true,
       }),
     ).rejects.toThrow(PermissionDeniedError);
   });

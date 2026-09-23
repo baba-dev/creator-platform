@@ -3,6 +3,7 @@ import { db } from "@aiwa/db";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { AdminMfaGate } from "@/components/admin/admin-mfa-gate";
 import {
   AdminNavigation,
   type AdminNavigationItem,
@@ -61,7 +62,25 @@ export default async function AdminLayout({
 }: {
   children: ReactNode;
 }) {
-  const session = await requirePlatformPermission("platform:access");
+  const session = await requirePlatformPermission("platform:access", {
+    allowAdminWithoutMfa: true,
+  });
+
+  if (session.user.platformRole !== "USER" && !session.user.twoFactorEnabled) {
+    return (
+      <main className="relative min-h-screen bg-background text-foreground">
+        <header className="flex min-h-[72px] items-center justify-between border-b border-border bg-background/80 px-5 backdrop-blur-xl sm:px-8">
+          <Brand />
+          <div className="flex items-center gap-3">
+            <ThemeToggle />
+            <SignOutButton />
+          </div>
+        </header>
+        <AdminMfaGate session={session} />
+      </main>
+    );
+  }
+
   const canReadPayments = hasPlatformPermission(
     session.user.platformRole,
     "payments:read",

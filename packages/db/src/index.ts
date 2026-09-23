@@ -35,6 +35,7 @@ export type {
   OrganizationInvitation,
   Project,
   ProviderModel,
+  TwoFactor,
   User,
   Wallet,
 } from "@prisma/client";

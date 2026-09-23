@@ -19,6 +19,7 @@ describe.skipIf(!enabled)("reasoning job processing", () => {
         id: userId,
         email: `${id}@example.invalid`,
         name: "Reasoning Test",
+        emailVerified: true,
       },
     });
     await db.organization.create({

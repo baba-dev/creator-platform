@@ -135,6 +135,7 @@ export async function requireMembership(
   if (
     !member ||
     member.user.disabledAt ||
+    member.user.emailVerified !== true ||
     member.organization.status !== "ACTIVE" ||
     !hasOrganizationPermission(
       member.role,

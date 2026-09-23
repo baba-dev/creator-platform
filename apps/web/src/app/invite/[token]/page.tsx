@@ -122,6 +122,9 @@ export default async function InvitePage({
     normalizeMemberEmail(session.user.email) !==
       normalizeMemberEmail(invitation.email);
 
+  const emailUnverified =
+    session && Boolean(invitation.email) && !session.user.emailVerified;
+
   return (
     <InviteShell>
       <div>
@@ -199,6 +202,18 @@ export default async function InvitePage({
                   Sign in with another account
                 </Link>
               </Button>
+            </div>
+          ) : emailUnverified ? (
+            <div className="space-y-3">
+              <p className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+                This invitation is specifically for{" "}
+                <strong>{invitation.email}</strong>. You must verify ownership
+                of this email address before you can accept workspace access.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Please verify your email address to establish ownership before
+                accepting.
+              </p>
             </div>
           ) : isFull ? (
             <p className="rounded-xl border border-warning/30 bg-warning/10 p-3 text-xs text-warning">

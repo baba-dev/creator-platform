@@ -20,6 +20,7 @@ export interface CreditQuote {
   readonly convertedCostBaisa: bigint;
   readonly customerPriceBaisa: bigint;
   readonly customerCredits: bigint;
+  readonly creditsPerBaisa: bigint;
   readonly targetGrossMarginBps: number;
 }
 
@@ -69,6 +70,7 @@ export function createCreditQuote(input: QuoteInput): CreditQuote {
     convertedCostBaisa,
     customerPriceBaisa,
     customerCredits: customerPriceBaisa * creditsPerBaisa,
+    creditsPerBaisa,
     targetGrossMarginBps: input.targetGrossMarginBps,
   };
 }

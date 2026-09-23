@@ -100,7 +100,7 @@ export function mapNvidiaError(
   return new ProviderRequestError(
     `NVIDIA request failed with status ${status}`,
     retryable,
-    { code: safeCode ?? `HTTP_${status}` },
+    { code: safeCode ?? `HTTP_${status}`, stage: "response_headers" },
   );
 }
 
@@ -121,6 +121,7 @@ export async function safeFetch(
     onAbortCode: "REQUEST_OUTCOME_UNKNOWN",
     onAbortRetryable: false,
     onNetworkErrorCode: "NETWORK_OUTCOME_UNKNOWN",
+    stage: "dispatch",
   });
 }
 
@@ -132,7 +133,10 @@ export async function readResponseText(
     providerName: "NVIDIA",
     onAbortCode: "REQUEST_OUTCOME_UNKNOWN",
     onAbortRetryable: false,
-    onNetworkErrorCode: "NETWORK_ERROR",
+    onNetworkErrorCode: "BODY_READ_OUTCOME_UNKNOWN",
+    onNetworkErrorRetryable: false,
+    onResponseTooLargeRetryable: false,
+    stage: "response_body",
   });
 }
 
@@ -173,8 +177,8 @@ function parseStructuredContent(content: string): unknown {
 
   throw new ProviderRequestError(
     "NVIDIA reasoning result was not valid JSON",
-    true,
-    { code: "INVALID_PROVIDER_RESPONSE" },
+    false,
+    { code: "INVALID_PROVIDER_RESPONSE", stage: "parsing" },
   );
 }
 
@@ -242,9 +246,10 @@ export function createNvidiaProvider(
       try {
         data = JSON.parse(responseText);
       } catch (error) {
-        throw new ProviderRequestError("NVIDIA returned invalid JSON", true, {
+        throw new ProviderRequestError("NVIDIA returned invalid JSON", false, {
           cause: error,
           code: "INVALID_PROVIDER_RESPONSE",
+          stage: "parsing",
         });
       }
 
@@ -252,16 +257,16 @@ export function createNvidiaProvider(
       if (!parsed.success)
         throw new ProviderRequestError(
           "NVIDIA returned an invalid response shape",
-          true,
-          { code: "INVALID_PROVIDER_RESPONSE" },
+          false,
+          { code: "INVALID_PROVIDER_RESPONSE", stage: "parsing" },
         );
 
       const messageContent = parsed.data.choices[0]?.message.content;
       if (!messageContent)
         throw new ProviderRequestError(
           "NVIDIA reasoning returned empty content",
-          true,
-          { code: "INVALID_PROVIDER_RESPONSE" },
+          false,
+          { code: "INVALID_PROVIDER_RESPONSE", stage: "parsing" },
         );
 
       const contentJson = parseStructuredContent(messageContent);

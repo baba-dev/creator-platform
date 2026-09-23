@@ -1,3 +1,4 @@
+import type { Route } from "next";
 import { redirect } from "next/navigation";
 
 import { AuthCard } from "@/components/auth/auth-card";
@@ -23,7 +24,11 @@ export default async function SignInPage({
       title="Welcome back"
       description="Sign in to your organization workspace to create media and monitor credits."
       footerText="New to Aiwa Creators?"
-      footerHref="/sign-up"
+      footerHref={
+        returnTo && returnTo !== "/app"
+          ? (`/sign-up?returnTo=${encodeURIComponent(returnTo)}` as Route)
+          : "/sign-up"
+      }
       footerLabel="Create an account"
     >
       <SignInForm returnTo={returnTo} />

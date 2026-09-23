@@ -1,4 +1,4 @@
-import { ProviderRequestError } from "./index";
+import { ProviderRequestError, type SubmissionStage } from "./index";
 
 export interface StreamContext {
   readonly controller: AbortController;
@@ -109,6 +109,9 @@ export interface SharedReadResponseOptions {
   onAbortCode?: string;
   onAbortRetryable?: boolean;
   onNetworkErrorCode?: string;
+  onNetworkErrorRetryable?: boolean;
+  onResponseTooLargeRetryable?: boolean;
+  stage?: SubmissionStage;
 }
 
 export async function sharedReadResponseText(
@@ -117,6 +120,12 @@ export async function sharedReadResponseText(
   options: SharedReadResponseOptions,
 ): Promise<string> {
   const context = responseContexts.get(response);
+  const stage = options.stage ?? "response_body";
+  const defaultNetworkRetryable =
+    options.providerName === "NVIDIA" ? false : true;
+  const networkErrorRetryable =
+    options.onNetworkErrorRetryable ?? defaultNetworkRetryable;
+  const responseTooLargeRetryable = options.onResponseTooLargeRetryable ?? true;
 
   if (!response.body?.getReader) {
     try {
@@ -127,8 +136,8 @@ export async function sharedReadResponseText(
       if (new TextEncoder().encode(value).byteLength > maximumBytes) {
         throw new ProviderRequestError(
           `${options.providerName} response exceeded size limit`,
-          true,
-          { code: "RESPONSE_TOO_LARGE" },
+          responseTooLargeRetryable,
+          { code: "RESPONSE_TOO_LARGE", stage },
         );
       }
       if (context) {
@@ -141,13 +150,21 @@ export async function sharedReadResponseText(
         throw new ProviderRequestError(
           `${options.providerName} network request failed`,
           options.onAbortRetryable ?? true,
-          { cause: error, code: options.onAbortCode ?? "REQUEST_TIMEOUT" },
+          {
+            cause: error,
+            code: options.onAbortCode ?? "REQUEST_TIMEOUT",
+            stage,
+          },
         );
       }
       throw new ProviderRequestError(
         `${options.providerName} response read failed`,
-        true,
-        { cause: error, code: options.onNetworkErrorCode ?? "NETWORK_ERROR" },
+        networkErrorRetryable,
+        {
+          cause: error,
+          code: options.onNetworkErrorCode ?? "NETWORK_ERROR",
+          stage,
+        },
       );
     } finally {
       if (context?.controller.signal.aborted) cancelStream(response.body);
@@ -172,8 +189,8 @@ export async function sharedReadResponseText(
       if (byteCount > maximumBytes) {
         throw new ProviderRequestError(
           `${options.providerName} response exceeded size limit`,
-          true,
-          { code: "RESPONSE_TOO_LARGE" },
+          responseTooLargeRetryable,
+          { code: "RESPONSE_TOO_LARGE", stage },
         );
       }
       value += decoder.decode(next.value, { stream: true });
@@ -192,13 +209,17 @@ export async function sharedReadResponseText(
       throw new ProviderRequestError(
         `${options.providerName} network request failed`,
         options.onAbortRetryable ?? true,
-        { cause: error, code: options.onAbortCode ?? "REQUEST_TIMEOUT" },
+        { cause: error, code: options.onAbortCode ?? "REQUEST_TIMEOUT", stage },
       );
     }
     throw new ProviderRequestError(
       `${options.providerName} response read failed`,
-      true,
-      { cause: error, code: options.onNetworkErrorCode ?? "NETWORK_ERROR" },
+      networkErrorRetryable,
+      {
+        cause: error,
+        code: options.onNetworkErrorCode ?? "NETWORK_ERROR",
+        stage,
+      },
     );
   } finally {
     context?.cleanup();
@@ -218,6 +239,7 @@ export interface ExecuteSafeFetchConfig {
   onAbortCode?: string;
   onAbortRetryable?: boolean;
   onNetworkErrorCode?: string;
+  stage?: SubmissionStage;
 }
 
 export async function executeSafeFetch(
@@ -281,6 +303,7 @@ export async function executeSafeFetch(
         code: controller.signal.aborted
           ? (config.onAbortCode ?? "REQUEST_TIMEOUT")
           : (config.onNetworkErrorCode ?? "NETWORK_ERROR"),
+        stage: config.stage ?? "dispatch",
       },
     );
   }

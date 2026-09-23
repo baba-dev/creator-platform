@@ -11,6 +11,7 @@ import { createNvidiaProvider } from "@aiwa/providers/nvidia";
 import { Queue, Worker } from "bullmq";
 import Redis from "ioredis";
 import { processReasoningJob } from "./reasoning";
+import { reapExpiredRecoveryJobs } from "./reaper";
 
 const env = parseServerEnv();
 const redis = new Redis(env.REDIS_URL, {
@@ -161,69 +162,7 @@ async function dispatchGeneration() {
   if (generationDispatching || !bytePlusProvider) return;
   generationDispatching = true;
   try {
-    // Lost responses cannot safely be replayed for synchronous image or voice
-    // generation because the provider may already have accepted and billed it.
-    await db.generationJob.updateMany({
-      where: {
-        status: "SUBMITTED",
-        submittedAt: { lt: new Date(Date.now() - 15 * 60 * 1000) },
-      },
-      data: {
-        status: "MANUAL_REVIEW",
-        errorCode: "WORKER_INTERRUPTED",
-        errorMessage:
-          "Submission was interrupted. Credits remain reserved for review.",
-      },
-    });
-    await db.generationJob.updateMany({
-      where: {
-        status: "PROCESSING",
-        providerModel: { mediaKind: "IMAGE" },
-        OR: [
-          {
-            submittedAt: {
-              lt: new Date(Date.now() - 24 * 60 * 60 * 1000),
-            },
-          },
-          {
-            submittedAt: null,
-            updatedAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
-          },
-        ],
-      },
-      data: {
-        status: "MANUAL_REVIEW",
-        errorCode: "STORAGE_FAILED",
-        errorMessage:
-          "Image could not be stored. Credits remain reserved for review.",
-      },
-    });
-    await db.generationJob.updateMany({
-      where: {
-        status: "PROCESSING",
-        providerModel: { mediaKind: "VOICE" },
-        updatedAt: { lt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
-      },
-      data: {
-        status: "MANUAL_REVIEW",
-        errorCode: "STORAGE_FAILED",
-        errorMessage:
-          "Audio finalization exceeded the recovery window. Credits remain reserved for review.",
-      },
-    });
-    await db.generationJob.updateMany({
-      where: {
-        status: "PROCESSING",
-        providerModel: { mediaKind: "VIDEO" },
-        submittedAt: { lt: new Date(Date.now() - 2 * 60 * 60 * 1000) },
-      },
-      data: {
-        status: "MANUAL_REVIEW",
-        errorCode: "PROVIDER_TIMEOUT",
-        errorMessage:
-          "Video generation exceeded the recovery window. Credits remain reserved for review.",
-      },
-    });
+    await reapExpiredRecoveryJobs();
 
     const retryBefore = new Date(Date.now() - 60 * 1000);
     const jobs = await db.generationJob.findMany({

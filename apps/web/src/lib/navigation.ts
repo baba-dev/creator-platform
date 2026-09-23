@@ -22,3 +22,32 @@ export function safeInternalRoute(
     return fallback;
   }
 }
+
+export function safeInvitationRoute(
+  value: string | undefined,
+  fallback: Route = "/onboarding",
+): Route {
+  if (!value) {
+    return fallback;
+  }
+
+  const route = safeInternalRoute(value, fallback);
+  if (route === fallback) {
+    return fallback;
+  }
+
+  const pathname = route.split("?")[0]?.split("#")[0] ?? "";
+
+  if (pathname === "/app" || pathname.startsWith("/app/")) {
+    return route;
+  }
+
+  if (pathname.startsWith("/invite/")) {
+    const token = pathname.slice("/invite/".length);
+    if (token && /^[a-zA-Z0-9_-]+$/.test(token)) {
+      return route;
+    }
+  }
+
+  return fallback;
+}

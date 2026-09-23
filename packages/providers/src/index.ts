@@ -65,17 +65,25 @@ export class ProviderConfigurationError extends Error {
   override readonly name = "ProviderConfigurationError";
 }
 
+export type SubmissionStage =
+  "dispatch" | "response_headers" | "response_body" | "parsing";
+
 export class ProviderRequestError extends Error {
   override readonly name = "ProviderRequestError";
 
   constructor(
     message: string,
     readonly retryable: boolean,
-    options?: ErrorOptions & { readonly code?: string },
+    options?: ErrorOptions & {
+      readonly code?: string;
+      readonly stage?: SubmissionStage;
+    },
   ) {
     super(message, options);
     this.code = options?.code;
+    this.stage = options?.stage;
   }
 
   readonly code?: string;
+  readonly stage?: SubmissionStage;
 }

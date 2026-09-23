@@ -471,9 +471,9 @@ export async function releaseOrRefundCredits(
 
     const job = await tx.generationJob.findUnique({
       where: { id: params.jobId },
-      select: { id: true, status: true },
+      select: { id: true },
     });
-    if (job && job.status === "CREDIT_RESERVED") {
+    if (job) {
       await tx.generationJob.update({
         where: { id: params.jobId },
         data: { reservedCredits: 0n },

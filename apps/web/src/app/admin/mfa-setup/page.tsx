@@ -4,7 +4,9 @@ import { Eyebrow } from "@/components/ui/creative";
 import { requirePlatformPermission } from "@/lib/request-auth";
 
 export default async function AdminMfaSetupPage() {
-  const session = await requirePlatformPermission("platform:access");
+  const session = await requirePlatformPermission("platform:access", {
+    allowAdminWithoutMfa: true,
+  });
 
   if (!session.user.twoFactorEnabled) {
     return <AdminMfaGate session={session} />;

@@ -62,7 +62,9 @@ export default async function AdminLayout({
 }: {
   children: ReactNode;
 }) {
-  const session = await requirePlatformPermission("platform:access");
+  const session = await requirePlatformPermission("platform:access", {
+    allowAdminWithoutMfa: true,
+  });
 
   if (session.user.platformRole !== "USER" && !session.user.twoFactorEnabled) {
     return (

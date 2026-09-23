@@ -2,14 +2,15 @@
 
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
-import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 const inputClassName = "form-control mt-2 text-sm";
 
 export function SignUpForm() {
-  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const [verificationEmail, setVerificationEmail] = useState<string | null>(
+    null,
+  );
   const [pending, setPending] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -27,9 +28,10 @@ export function SignUpForm() {
       return;
     }
 
+    const email = String(form.get("email") ?? "").trim();
     const result = await authClient.signUp.email({
       name: String(form.get("name") ?? "").trim(),
-      email: String(form.get("email") ?? "").trim(),
+      email,
       password,
     });
 
@@ -43,8 +45,22 @@ export function SignUpForm() {
       return;
     }
 
-    router.push("/onboarding");
-    router.refresh();
+    setVerificationEmail(email);
+    setPending(false);
+  }
+
+  if (verificationEmail) {
+    return (
+      <div className="space-y-4">
+        <p className="rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-sm text-success">
+          We sent a verification link to <strong>{verificationEmail}</strong>.
+        </p>
+        <p className="text-xs leading-5 text-muted-foreground">
+          Verify that email address first, then sign in to create your
+          organization workspace.
+        </p>
+      </div>
+    );
   }
 
   return (
@@ -119,8 +135,8 @@ export function SignUpForm() {
       </Button>
 
       <p className="text-xs leading-5 text-muted-foreground">
-        By continuing, you are creating an organization workspace with you as
-        its owner. An administrator can assign credits after signup.
+        Workspace creation begins only after you verify ownership of this email
+        address. An administrator can assign credits after signup.
       </p>
     </form>
   );

@@ -32,7 +32,11 @@ export function SignInForm({ returnTo }: SignInFormProps) {
     });
 
     if (result.error) {
-      setError("We could not sign you in with those details.");
+      setError(
+        result.error.status === 403
+          ? "Verify your email address before signing in. A fresh verification link has been sent."
+          : "We could not sign you in with those details.",
+      );
       setPending(false);
       return;
     }

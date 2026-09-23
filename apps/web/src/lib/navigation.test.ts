@@ -55,5 +55,6 @@ describe("safeInvitationRoute", () => {
 
   it("allows safe internal application routes", () => {
     expect(safeInvitationRoute("/app/acme-org")).toBe("/app/acme-org");
+    expect(safeInvitationRoute("/app?tab=usage")).toBe("/app?tab=usage");
   });
 });

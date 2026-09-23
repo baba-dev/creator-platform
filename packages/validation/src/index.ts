@@ -156,12 +156,54 @@ export const toggleModelEnabledSchema = z.object({
   enabled: z.boolean(),
 });
 
+export const pricingDimensionSchema = z.enum([
+  "REQUEST",
+  "CHARACTER",
+  "SECOND",
+]);
+export type PricingDimension = z.infer<typeof pricingDimensionSchema>;
+
+export const mediaKindSchema = z.enum(["IMAGE", "VIDEO", "VOICE", "REASONING"]);
+export type MediaKind = z.infer<typeof mediaKindSchema>;
+
+export const PRICING_DIMENSIONS_BY_MEDIA_KIND: Record<
+  MediaKind,
+  readonly PricingDimension[]
+> = {
+  IMAGE: ["REQUEST"],
+  VIDEO: ["SECOND", "REQUEST"],
+  VOICE: ["CHARACTER", "REQUEST"],
+  REASONING: ["REQUEST"],
+} as const;
+
+export function isPricingDimensionSupportedForMedia(
+  mediaKind: string,
+  pricingDimension: string,
+): boolean {
+  const supported = PRICING_DIMENSIONS_BY_MEDIA_KIND[mediaKind as MediaKind];
+  if (!supported) return false;
+  return supported.includes(pricingDimension as PricingDimension);
+}
+
+export function assertPricingDimensionMatchesMediaKind(
+  mediaKind: string,
+  pricingDimension: string,
+): void {
+  if (!isPricingDimensionSupportedForMedia(mediaKind, pricingDimension)) {
+    const supported = PRICING_DIMENSIONS_BY_MEDIA_KIND[mediaKind as MediaKind];
+    const allowed = supported ? supported.join(", ") : "none";
+    throw new Error(
+      `Pricing dimension '${pricingDimension}' is not supported for ${mediaKind} models. Supported dimensions: ${allowed}.`,
+    );
+  }
+}
+
 export const publishPriceVersionSchema = z.object({
   providerCostMicroUsd: z
     .union([z.bigint(), z.string().regex(/^\d+$/).transform(BigInt)])
     .pipe(z.bigint().positive().max(MAX_SIGNED_BIGINT)),
   targetMarginBps: z.number().int().min(0).max(9999),
-  pricingDimension: z.enum(["REQUEST", "CHARACTER"]).optional(),
+  pricingDimension: pricingDimensionSchema.optional(),
   unitQuantity: z.coerce.number().int().positive().optional(),
   fxBaisaNumerator: z
     .union([z.bigint(), z.string().regex(/^\d+$/).transform(BigInt)])
@@ -188,6 +230,9 @@ export const quoteRequestSchema = z.object({
     .max(1_000_000)
     .optional(),
   text: z.string().max(4096).optional(),
+  durationSeconds: z.coerce.number().int().min(1).max(60).optional(),
+  resolution: z.enum(["480p", "720p", "1080p", "2K", "4K"]).optional(),
+  generateAudio: z.boolean().optional(),
 });
 
 export const paymentMethodSchema = z.enum(["CASH", "CHEQUE"]);

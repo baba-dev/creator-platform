@@ -536,6 +536,7 @@ async function renderSection(
                         currentPricingDimension={price?.pricingDimension}
                         currentUnitQuantity={price?.unitQuantity}
                         canManage={canManage}
+                        mediaKind={row.mediaKind}
                       />
                     </Cell>
                   ) : null}

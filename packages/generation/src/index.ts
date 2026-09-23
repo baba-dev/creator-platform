@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { hasOrganizationPermission } from "@aiwa/authz";
 import {
   calculateBillableUnits,
+  calculateVideoPricing,
   countBillableCharacters,
   createCreditQuote,
   reserveCreditsForJob,
@@ -425,7 +426,21 @@ export async function createVideoJob(userId: string, raw: unknown) {
         throw new GenerationError("Resolution is not supported by this model.");
       }
 
-      const credits = priceCredits(price);
+      const pricing = calculateVideoPricing({
+        providerCostMicroUsd: price.providerCostMicroUsd,
+        durationSeconds: input.durationSeconds,
+        resolution: input.resolution,
+        generateAudio: input.generateAudio,
+        pricingDimension: price.pricingDimension,
+        unitQuantity: price.unitQuantity,
+        exchangeRate: {
+          baisaNumerator: price.fxBaisaNumerator,
+          baisaDenominator: price.fxBaisaDenominator,
+        },
+        targetGrossMarginBps: price.targetMarginBps,
+        creditsPerBaisa: price.creditsPerBaisa,
+      });
+      const credits = pricing.quote.customerCredits;
       const { start, end } = muscatCalendarMonth(now);
       const jobs = await tx.generationJob.findMany({
         where: {
@@ -475,6 +490,8 @@ export async function createVideoJob(userId: string, raw: unknown) {
           requestPayload: payload,
           status: "QUOTED",
           quotedAt: now,
+          billableQuantity: input.durationSeconds,
+          quotedUnits: Number(pricing.durationUnits),
         },
       });
       await reserveCreditsForJob(tx, {

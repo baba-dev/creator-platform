@@ -1,6 +1,7 @@
 import { hasOrganizationPermission } from "@aiwa/authz";
 import {
   calculateBillableUnits,
+  calculateVideoPricing,
   countBillableCharacters,
   createCreditQuote,
 } from "@aiwa/credits";
@@ -44,8 +45,16 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
-  const { organizationId, modelId, units, billableQuantity, text } =
-    parsed.data;
+  const {
+    organizationId,
+    modelId,
+    units,
+    billableQuantity,
+    text,
+    durationSeconds,
+    resolution,
+    generateAudio,
+  } = parsed.data;
 
   const membership = await db.membership.findUnique({
     where: {
@@ -118,41 +127,74 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
-  const effectiveBillableQuantity =
-    activePriceVersion.pricingDimension === "CHARACTER" && text !== undefined
-      ? countBillableCharacters(text)
-      : billableQuantity;
+  let effectiveBillableQuantity: number | undefined;
+  let effectiveUnits: number;
+  let quote: ReturnType<typeof createCreditQuote>;
+
   if (
-    activePriceVersion.pricingDimension === "CHARACTER" &&
-    effectiveBillableQuantity === undefined
+    model.mediaKind === "VIDEO" ||
+    activePriceVersion.pricingDimension === "SECOND"
   ) {
-    return NextResponse.json(
-      { error: "Character-priced models require text or billableQuantity." },
-      { status: 400 },
-    );
+    const duration =
+      durationSeconds ??
+      (activePriceVersion.pricingDimension === "SECOND"
+        ? activePriceVersion.unitQuantity
+        : 5);
+    const videoPricing = calculateVideoPricing({
+      providerCostMicroUsd: activePriceVersion.providerCostMicroUsd,
+      durationSeconds: duration,
+      resolution,
+      generateAudio,
+      pricingDimension: activePriceVersion.pricingDimension as
+        "SECOND" | "REQUEST",
+      unitQuantity: activePriceVersion.unitQuantity,
+      exchangeRate: {
+        baisaNumerator: activePriceVersion.fxBaisaNumerator,
+        baisaDenominator: activePriceVersion.fxBaisaDenominator,
+      },
+      targetGrossMarginBps: activePriceVersion.targetMarginBps,
+      creditsPerBaisa: activePriceVersion.creditsPerBaisa,
+    });
+    effectiveBillableQuantity = duration;
+    effectiveUnits = Number(videoPricing.durationUnits);
+    quote = videoPricing.quote;
+  } else {
+    effectiveBillableQuantity =
+      activePriceVersion.pricingDimension === "CHARACTER" && text !== undefined
+        ? countBillableCharacters(text)
+        : billableQuantity;
+    if (
+      activePriceVersion.pricingDimension === "CHARACTER" &&
+      effectiveBillableQuantity === undefined
+    ) {
+      return NextResponse.json(
+        { error: "Character-priced models require text or billableQuantity." },
+        { status: 400 },
+      );
+    }
+    effectiveUnits =
+      activePriceVersion.pricingDimension === "CHARACTER"
+        ? Number(
+            calculateBillableUnits(
+              BigInt(effectiveBillableQuantity!),
+              BigInt(activePriceVersion.unitQuantity),
+            ),
+          )
+        : units;
+
+    const scaledProviderCostMicroUsd =
+      activePriceVersion.providerCostMicroUsd * BigInt(effectiveUnits);
+
+    quote = createCreditQuote({
+      providerCostMicroUsd: scaledProviderCostMicroUsd,
+      exchangeRate: {
+        baisaNumerator: activePriceVersion.fxBaisaNumerator,
+        baisaDenominator: activePriceVersion.fxBaisaDenominator,
+      },
+      targetGrossMarginBps: activePriceVersion.targetMarginBps,
+      creditsPerBaisa: activePriceVersion.creditsPerBaisa,
+    });
   }
-  const effectiveUnits =
-    activePriceVersion.pricingDimension === "CHARACTER"
-      ? Number(
-          calculateBillableUnits(
-            BigInt(effectiveBillableQuantity!),
-            BigInt(activePriceVersion.unitQuantity),
-          ),
-        )
-      : units;
-
-  const scaledProviderCostMicroUsd =
-    activePriceVersion.providerCostMicroUsd * BigInt(effectiveUnits);
-
-  const quote = createCreditQuote({
-    providerCostMicroUsd: scaledProviderCostMicroUsd,
-    exchangeRate: {
-      baisaNumerator: activePriceVersion.fxBaisaNumerator,
-      baisaDenominator: activePriceVersion.fxBaisaDenominator,
-    },
-    targetGrossMarginBps: activePriceVersion.targetMarginBps,
-    creditsPerBaisa: activePriceVersion.creditsPerBaisa,
-  });
 
   const budget = await checkMemberSpendingBudget({
     organizationId,

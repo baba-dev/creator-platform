@@ -23,7 +23,7 @@ type Model = {
   mediaKind: MediaKind;
   description?: string | null;
   priceVersionId: string;
-  pricingDimension?: "REQUEST" | "CHARACTER" | null;
+  pricingDimension?: "REQUEST" | "CHARACTER" | "SECOND" | null;
   unitQuantity?: string | null;
   credits: string;
   capabilities?: Record<string, CapabilityValue> | null;
@@ -101,6 +101,15 @@ export function GenerationStudio({
   } | null>(null);
   const [voiceQuotePending, setVoiceQuotePending] = useState(false);
   const [voiceQuoteError, setVoiceQuoteError] = useState<string | null>(null);
+  const [videoQuotedCreditsInfo, setVideoQuotedCreditsInfo] = useState<{
+    duration: string;
+    resolution: string;
+    modelId: string;
+    priceVersionId: string;
+    credits: string;
+  } | null>(null);
+  const [videoQuotePending, setVideoQuotePending] = useState(false);
+  const [videoQuoteError, setVideoQuoteError] = useState<string | null>(null);
   const [ratio, setRatio] = useState("1:1");
   const [resolution, setResolution] = useState("2K");
   const [duration, setDuration] = useState("5");
@@ -134,6 +143,29 @@ export function GenerationStudio({
     ? voiceKey
     : (availableVoices[0]?.key ?? "");
 
+  const availableRatios = useMemo(
+    () => capabilityValues(model?.capabilities, "aspectRatio"),
+    [model?.capabilities],
+  );
+  const availableResolutions = useMemo(
+    () => capabilityValues(model?.capabilities, "resolution"),
+    [model?.capabilities],
+  );
+  const availableDurations = useMemo(
+    () => capabilityValues(model?.capabilities, "durationSeconds"),
+    [model?.capabilities],
+  );
+
+  const selectedRatio = availableRatios.includes(ratio)
+    ? ratio
+    : (availableRatios[0] ?? "");
+  const selectedResolution = availableResolutions.includes(resolution)
+    ? resolution
+    : (availableResolutions[0] ?? "");
+  const selectedDuration = availableDurations.includes(duration)
+    ? duration
+    : (availableDurations[0] ?? "5");
+
   const handleModeChange = useCallback(
     (mode: MediaKind) => {
       setActiveMode(mode);
@@ -158,6 +190,14 @@ export function GenerationStudio({
     quotedCreditsInfo?.modelId === activeModelId &&
     quotedCreditsInfo?.priceVersionId === activePriceVersionId
       ? quotedCreditsInfo.credits
+      : null;
+
+  const videoQuotedCredits =
+    videoQuotedCreditsInfo?.duration === selectedDuration &&
+    videoQuotedCreditsInfo?.resolution === selectedResolution &&
+    videoQuotedCreditsInfo?.modelId === activeModelId &&
+    videoQuotedCreditsInfo?.priceVersionId === activePriceVersionId
+      ? videoQuotedCreditsInfo.credits
       : null;
 
   useEffect(() => {
@@ -219,40 +259,83 @@ export function GenerationStudio({
     organizationId,
   ]);
 
+  useEffect(() => {
+    if (activeMode !== "VIDEO" || !activeModelId || !selectedDuration) return;
+    const quoteModelId = activeModelId;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      if (cancelled) return;
+      setVideoQuotedCreditsInfo(null);
+      setVideoQuotePending(true);
+      setVideoQuoteError(null);
+      try {
+        const res = await fetch("/api/quotes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            organizationId,
+            modelId: quoteModelId,
+            durationSeconds: Number.parseInt(selectedDuration, 10),
+            resolution: selectedResolution,
+          }),
+        });
+        if (cancelled) return;
+        const resData = (await res.json()) as {
+          error?: string;
+          quote?: { customerCredits?: string; priceVersionId?: string };
+        };
+        if (
+          res.ok &&
+          resData.quote?.customerCredits !== undefined &&
+          resData.quote.priceVersionId
+        ) {
+          setVideoQuotedCreditsInfo({
+            duration: selectedDuration,
+            resolution: selectedResolution,
+            modelId: quoteModelId,
+            priceVersionId: resData.quote.priceVersionId,
+            credits: String(resData.quote.customerCredits),
+          });
+          setVideoQuoteError(null);
+        } else {
+          setVideoQuoteError(resData.error ?? "Video quote is unavailable.");
+        }
+      } catch {
+        if (!cancelled) setVideoQuoteError("Video quote is unavailable.");
+      } finally {
+        if (!cancelled) setVideoQuotePending(false);
+      }
+    }, 150);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [
+    activeMode,
+    activeModelId,
+    activePriceVersionId,
+    selectedDuration,
+    selectedResolution,
+    organizationId,
+  ]);
+
   const activeRequiredCredits =
     activeMode === "VOICE"
       ? quotedCredits === null
         ? null
         : BigInt(quotedCredits)
-      : BigInt(model?.credits ?? "0");
+      : activeMode === "VIDEO"
+        ? videoQuotedCredits !== null
+          ? BigInt(videoQuotedCredits)
+          : model?.pricingDimension === "SECOND"
+            ? null
+            : BigInt(model?.credits ?? "0")
+        : BigInt(model?.credits ?? "0");
 
   const isConfiguredForMode =
     activeMode === "VOICE"
       ? Boolean(data?.voiceConfigured)
       : Boolean(data?.mediaConfigured ?? data?.configured);
-
-  const availableRatios = useMemo(
-    () => capabilityValues(model?.capabilities, "aspectRatio"),
-    [model?.capabilities],
-  );
-  const availableResolutions = useMemo(
-    () => capabilityValues(model?.capabilities, "resolution"),
-    [model?.capabilities],
-  );
-  const availableDurations = useMemo(
-    () => capabilityValues(model?.capabilities, "durationSeconds"),
-    [model?.capabilities],
-  );
-
-  const selectedRatio = availableRatios.includes(ratio)
-    ? ratio
-    : (availableRatios[0] ?? "");
-  const selectedResolution = availableResolutions.includes(resolution)
-    ? resolution
-    : (availableResolutions[0] ?? "");
-  const selectedDuration = availableDurations.includes(duration)
-    ? duration
-    : (availableDurations[0] ?? "5");
 
   const refresh = useCallback(async () => {
     const response = await fetch(
@@ -501,7 +584,9 @@ export function GenerationStudio({
                 {m.name} ·{" "}
                 {m.pricingDimension === "CHARACTER"
                   ? `${m.credits} credits / ${m.unitQuantity ?? 1000} chars`
-                  : `${m.credits} credits`}
+                  : m.pricingDimension === "SECOND"
+                    ? `${m.credits} credits / ${m.unitQuantity ?? 5}s`
+                    : `${m.credits} credits`}
               </option>
             ))}
           </select>
@@ -723,10 +808,25 @@ export function GenerationStudio({
                     : "Quote unavailable"}
               </span>
             ) : null}
+            {activeMode === "VIDEO" && selectedDuration ? (
+              <span className="ml-2 font-semibold text-foreground">
+                ·{" "}
+                {videoQuotePending
+                  ? "Calculating quote…"
+                  : videoQuotedCredits !== null
+                    ? `Quoted: ${videoQuotedCredits} credits`
+                    : "Quote unavailable"}
+              </span>
+            ) : null}
           </p>
           {voiceQuoteError ? (
             <p role="status" className="text-sm text-destructive">
               {voiceQuoteError}
+            </p>
+          ) : null}
+          {videoQuoteError ? (
+            <p role="status" className="text-sm text-destructive">
+              {videoQuoteError}
             </p>
           ) : null}
 
@@ -745,7 +845,8 @@ export function GenerationStudio({
                 (selectedVoiceKey === "" || activeRequiredCredits === null)) ||
               (activeMode !== "VOICE" &&
                 (!selectedRatio || !selectedResolution)) ||
-              (model.mediaKind === "VIDEO" && !selectedDuration) ||
+              (model.mediaKind === "VIDEO" &&
+                (!selectedDuration || activeRequiredCredits === null)) ||
               (activeRequiredCredits !== null &&
                 BigInt(data?.balance ?? "0") < activeRequiredCredits)
             }
@@ -763,7 +864,10 @@ export function GenerationStudio({
                 } · ${
                   activeMode === "VOICE"
                     ? (quotedCredits ?? "—")
-                    : (model?.credits ?? "—")
+                    : activeMode === "VIDEO" &&
+                        model?.pricingDimension === "SECOND"
+                      ? (videoQuotedCredits ?? "—")
+                      : (model?.credits ?? "—")
                 } credits`}
           </Button>
           <p className="text-xs text-muted-foreground">

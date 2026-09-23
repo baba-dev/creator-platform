@@ -5,8 +5,12 @@ import {
   type CreditQuote,
 } from "@aiwa/credits";
 import { captureCreditsForJob, reserveCreditsForJob } from "@aiwa/credits";
+import {
+  calculateBillableUnits,
+  calculateVideoPricing,
+  countBillableCharacters,
+} from "@aiwa/credits";
 import { priceCredits } from "../src/index";
-import { calculateBillableUnits, countBillableCharacters } from "@aiwa/credits";
 
 interface WalletRecord {
   id: string;
@@ -420,5 +424,124 @@ describe("Publish → Quote → Reserve → Capture Pricing Consistency", () => 
 
     expect(mock.getJob().chargedCredits).toBe(94n);
     expect(mock.getWallet().balanceCache).toBe(500n - 94n);
+  });
+
+  it("strictly enforces parameter-sensitive video pricing across Publish → Quote → Reserve → Capture for 5s vs 10s requests", async () => {
+    // -------------------------------------------------------------------------
+    // STAGE 1: PUBLISH
+    // Seedance 2.5 is published with SECOND pricing dimension (5s base unit)
+    // -------------------------------------------------------------------------
+    const seedancePriceVersion = {
+      id: "price_seedance_25",
+      providerModelId: "model_seedance_25",
+      providerCostMicroUsd: 468_000n, // $0.468 per 5-second unit
+      customerCredits: 240n,
+      fxBaisaNumerator: 769n,
+      fxBaisaDenominator: 2n,
+      targetMarginBps: 2500,
+      creditsPerBaisa: 1n,
+      pricingDimension: "SECOND" as const,
+      unitQuantity: 5,
+    };
+
+    // -------------------------------------------------------------------------
+    // STAGE 2: QUOTE (5s vs 10s vs 10s 1080p + audio)
+    // -------------------------------------------------------------------------
+    // Request 1: 5s, 720p, no audio
+    const quote5s = calculateVideoPricing({
+      providerCostMicroUsd: seedancePriceVersion.providerCostMicroUsd,
+      durationSeconds: 5,
+      resolution: "720p",
+      generateAudio: false,
+      pricingDimension: seedancePriceVersion.pricingDimension,
+      unitQuantity: seedancePriceVersion.unitQuantity,
+      exchangeRate: {
+        baisaNumerator: seedancePriceVersion.fxBaisaNumerator,
+        baisaDenominator: seedancePriceVersion.fxBaisaDenominator,
+      },
+      targetGrossMarginBps: seedancePriceVersion.targetMarginBps,
+      creditsPerBaisa: seedancePriceVersion.creditsPerBaisa,
+    });
+    expect(quote5s.durationUnits).toBe(1n);
+    expect(quote5s.quote.customerCredits).toBe(240n);
+
+    // Request 2: 10s, 720p, no audio (2x duration units)
+    const quote10s = calculateVideoPricing({
+      providerCostMicroUsd: seedancePriceVersion.providerCostMicroUsd,
+      durationSeconds: 10,
+      resolution: "720p",
+      generateAudio: false,
+      pricingDimension: seedancePriceVersion.pricingDimension,
+      unitQuantity: seedancePriceVersion.unitQuantity,
+      exchangeRate: {
+        baisaNumerator: seedancePriceVersion.fxBaisaNumerator,
+        baisaDenominator: seedancePriceVersion.fxBaisaDenominator,
+      },
+      targetGrossMarginBps: seedancePriceVersion.targetMarginBps,
+      creditsPerBaisa: seedancePriceVersion.creditsPerBaisa,
+    });
+    expect(quote10s.durationUnits).toBe(2n);
+    expect(quote10s.quote.customerCredits).toBe(480n);
+    // CRITICAL: 10s request charges exactly 2x 5s request
+    expect(quote10s.quote.customerCredits).toBe(
+      quote5s.quote.customerCredits * 2n,
+    );
+
+    // Request 3: 10s, 1080p (1.5x), with audio (1.2x) -> 3.6x composite
+    const quote10sHdAudio = calculateVideoPricing({
+      providerCostMicroUsd: seedancePriceVersion.providerCostMicroUsd,
+      durationSeconds: 10,
+      resolution: "1080p",
+      generateAudio: true,
+      pricingDimension: seedancePriceVersion.pricingDimension,
+      unitQuantity: seedancePriceVersion.unitQuantity,
+      exchangeRate: {
+        baisaNumerator: seedancePriceVersion.fxBaisaNumerator,
+        baisaDenominator: seedancePriceVersion.fxBaisaDenominator,
+      },
+      targetGrossMarginBps: seedancePriceVersion.targetMarginBps,
+      creditsPerBaisa: seedancePriceVersion.creditsPerBaisa,
+    });
+    expect(quote10sHdAudio.quote.customerCredits).toBe(864n);
+
+    // -------------------------------------------------------------------------
+    // STAGE 3 & 4: RESERVE & CAPTURE FOR 10-SECOND REQUEST
+    // -------------------------------------------------------------------------
+    const mock = createMockLedgerTx({
+      wallet: {
+        id: "wallet_video",
+        organizationId: "org_video",
+        balanceCache: 1000n,
+        version: 1,
+      },
+      job: {
+        id: "job_video_10s",
+        status: "DRAFT",
+        reservedCredits: 0n,
+        chargedCredits: 0n,
+      },
+    });
+
+    // System reserves 480 credits for 10-second request (NOT 240)
+    await reserveCreditsForJob(mock.tx, {
+      walletId: "wallet_video",
+      jobId: "job_video_10s",
+      amountCredits: quote10s.quote.customerCredits,
+      idempotencyKey: "reserve-video-10s",
+    });
+
+    expect(mock.getJob().reservedCredits).toBe(480n);
+    expect(mock.getWallet().balanceCache).toBe(1000n - 480n);
+
+    // Capture upon successful completion:
+    await captureCreditsForJob(mock.tx, {
+      walletId: "wallet_video",
+      jobId: "job_video_10s",
+      amountCredits: mock.getJob().reservedCredits,
+      idempotencyKey: "capture-video-10s",
+    });
+
+    expect(mock.getJob().chargedCredits).toBe(480n);
+    expect(mock.getWallet().balanceCache).toBe(520n);
   });
 });

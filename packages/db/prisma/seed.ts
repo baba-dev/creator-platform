@@ -70,8 +70,8 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
     },
     providerCostMicroUsd: 468_000n,
     customerCredits: 240n,
-    pricingDimension: "REQUEST",
-    unitQuantity: 1,
+    pricingDimension: "SECOND",
+    unitQuantity: 5,
   },
   {
     providerModelId: "seed-tts-2.0",

@@ -15,14 +15,16 @@ export function ModelActions({
   currentPricingDimension,
   currentUnitQuantity,
   canManage,
+  mediaKind,
 }: {
   modelId: string;
   displayName: string;
   enabled: boolean;
+  mediaKind?: "IMAGE" | "VIDEO" | "VOICE" | "REASONING";
   currentProviderCostMicroUsd?: string;
   currentCustomerCredits?: string;
   currentTargetMarginBps?: number;
-  currentPricingDimension?: "REQUEST" | "CHARACTER";
+  currentPricingDimension?: "REQUEST" | "CHARACTER" | "SECOND";
   currentUnitQuantity?: number;
   canManage: boolean;
 }) {
@@ -38,10 +40,10 @@ export function ModelActions({
   const [costMicroUsd, setCostMicroUsd] = useState(defaultCost);
   const [marginPercent, setMarginPercent] = useState(defaultMargin);
   const [pricingDimension, setPricingDimension] = useState<
-    "REQUEST" | "CHARACTER"
-  >(currentPricingDimension ?? "REQUEST");
+    "REQUEST" | "CHARACTER" | "SECOND"
+  >(currentPricingDimension ?? (mediaKind === "VIDEO" ? "SECOND" : "REQUEST"));
   const [unitQuantity, setUnitQuantity] = useState(
-    String(currentUnitQuantity ?? 1000),
+    String(currentUnitQuantity ?? (mediaKind === "VIDEO" ? 5 : 1000)),
   );
 
   const dialogTitleId = useId();
@@ -103,7 +105,7 @@ export function ModelActions({
           providerCostMicroUsd: costMicroUsd,
           targetMarginBps: marginBps,
           pricingDimension,
-          unitQuantity: pricingDimension === "CHARACTER" ? unitQuantity : "1",
+          unitQuantity: pricingDimension === "REQUEST" ? "1" : unitQuantity,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -183,23 +185,39 @@ export function ModelActions({
                   value={pricingDimension}
                   onChange={(event) =>
                     setPricingDimension(
-                      event.target.value as "REQUEST" | "CHARACTER",
+                      event.target.value as "REQUEST" | "CHARACTER" | "SECOND",
                     )
                   }
                   className="mt-1 h-9 w-full rounded-lg border border-border bg-background px-3 text-sm"
                 >
-                  <option value="REQUEST">Per request</option>
-                  <option value="CHARACTER">Per character block</option>
+                  {(!mediaKind ||
+                    mediaKind === "IMAGE" ||
+                    mediaKind === "VIDEO" ||
+                    mediaKind === "VOICE" ||
+                    mediaKind === "REASONING") && (
+                    <option value="REQUEST">
+                      Per request{mediaKind === "VIDEO" ? " (flat)" : ""}
+                    </option>
+                  )}
+                  {(!mediaKind || mediaKind === "VIDEO") && (
+                    <option value="SECOND">Per duration block (seconds)</option>
+                  )}
+                  {(!mediaKind || mediaKind === "VOICE") && (
+                    <option value="CHARACTER">Per character block</option>
+                  )}
                 </select>
               </div>
 
-              {pricingDimension === "CHARACTER" ? (
+              {pricingDimension === "CHARACTER" ||
+              pricingDimension === "SECOND" ? (
                 <div>
                   <label
                     htmlFor={`unit-${modelId}`}
                     className="block text-xs font-semibold text-foreground"
                   >
-                    Characters per billing unit
+                    {pricingDimension === "SECOND"
+                      ? "Seconds per billing unit"
+                      : "Characters per billing unit"}
                   </label>
                   <input
                     id={`unit-${modelId}`}
@@ -271,7 +289,9 @@ export function ModelActions({
                       ? `${estimatedCredits} credits / ${
                           pricingDimension === "CHARACTER"
                             ? `${unitQuantity || "—"} characters`
-                            : "request"
+                            : pricingDimension === "SECOND"
+                              ? `${unitQuantity || "—"}s block`
+                              : "request"
                         }`
                       : "Invalid input"}
                   </span>

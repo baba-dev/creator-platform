@@ -100,5 +100,90 @@ describe("model validation schemas", () => {
         modelId: "seedream-5-lite",
       }).success,
     ).toBe(false);
+
+    // Validates video quote parameters
+    const videoQuote = quoteRequestSchema.safeParse({
+      organizationId: "c12345678901234567890",
+      modelId: "dreamina-seedance-2-5-260628",
+      durationSeconds: 10,
+      resolution: "1080p",
+      generateAudio: true,
+    });
+    expect(videoQuote.success).toBe(true);
+    if (videoQuote.success) {
+      expect(videoQuote.data.durationSeconds).toBe(10);
+      expect(videoQuote.data.resolution).toBe("1080p");
+      expect(videoQuote.data.generateAudio).toBe(true);
+    }
+  });
+
+  it("validates publishPriceVersionSchema with SECOND pricing dimension", () => {
+    const valid = publishPriceVersionSchema.safeParse({
+      providerCostMicroUsd: 468_000n,
+      targetMarginBps: 2500,
+      pricingDimension: "SECOND",
+      unitQuantity: 5,
+    });
+    expect(valid.success).toBe(true);
+    if (valid.success) {
+      expect(valid.data.pricingDimension).toBe("SECOND");
+      expect(valid.data.unitQuantity).toBe(5);
+    }
+  });
+
+  it("validates pricing dimensions against media types", async () => {
+    const {
+      assertPricingDimensionMatchesMediaKind,
+      isPricingDimensionSupportedForMedia,
+    } = await import("../src/index");
+
+    // IMAGE allows REQUEST only
+    expect(isPricingDimensionSupportedForMedia("IMAGE", "REQUEST")).toBe(true);
+    expect(isPricingDimensionSupportedForMedia("IMAGE", "CHARACTER")).toBe(
+      false,
+    );
+    expect(isPricingDimensionSupportedForMedia("IMAGE", "SECOND")).toBe(false);
+    expect(() =>
+      assertPricingDimensionMatchesMediaKind("IMAGE", "REQUEST"),
+    ).not.toThrow();
+    expect(() =>
+      assertPricingDimensionMatchesMediaKind("IMAGE", "CHARACTER"),
+    ).toThrow(
+      "Pricing dimension 'CHARACTER' is not supported for IMAGE models",
+    );
+    expect(() =>
+      assertPricingDimensionMatchesMediaKind("IMAGE", "SECOND"),
+    ).toThrow("Pricing dimension 'SECOND' is not supported for IMAGE models");
+
+    // VIDEO allows SECOND and REQUEST
+    expect(isPricingDimensionSupportedForMedia("VIDEO", "SECOND")).toBe(true);
+    expect(isPricingDimensionSupportedForMedia("VIDEO", "REQUEST")).toBe(true);
+    expect(isPricingDimensionSupportedForMedia("VIDEO", "CHARACTER")).toBe(
+      false,
+    );
+    expect(() =>
+      assertPricingDimensionMatchesMediaKind("VIDEO", "SECOND"),
+    ).not.toThrow();
+    expect(() =>
+      assertPricingDimensionMatchesMediaKind("VIDEO", "REQUEST"),
+    ).not.toThrow();
+    expect(() =>
+      assertPricingDimensionMatchesMediaKind("VIDEO", "CHARACTER"),
+    ).toThrow(
+      "Pricing dimension 'CHARACTER' is not supported for VIDEO models",
+    );
+
+    // VOICE allows CHARACTER and REQUEST
+    expect(isPricingDimensionSupportedForMedia("VOICE", "CHARACTER")).toBe(
+      true,
+    );
+    expect(isPricingDimensionSupportedForMedia("VOICE", "REQUEST")).toBe(true);
+    expect(isPricingDimensionSupportedForMedia("VOICE", "SECOND")).toBe(false);
+    expect(() =>
+      assertPricingDimensionMatchesMediaKind("VOICE", "CHARACTER"),
+    ).not.toThrow();
+    expect(() =>
+      assertPricingDimensionMatchesMediaKind("VOICE", "SECOND"),
+    ).toThrow("Pricing dimension 'SECOND' is not supported for VOICE models");
   });
 });

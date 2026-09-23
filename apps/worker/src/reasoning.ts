@@ -137,11 +137,11 @@ export async function processReasoningJob(
   if (!claimed.count) return;
 
   const modelId = dbJob.providerModel.id ?? dbJob.providerModelId;
-  const currentModel = await db.providerModel?.findUnique?.({
+  const currentModel = await db.providerModel.findUnique({
     where: { id: modelId },
     select: { enabled: true },
   });
-  if (currentModel && currentModel.enabled === false) {
+  if (!currentModel || currentModel.enabled === false) {
     await db.reasoningJob.updateMany({
       where: { id: jobId, status: "PROCESSING" },
       data: { status: "QUEUED", processingAt: null },

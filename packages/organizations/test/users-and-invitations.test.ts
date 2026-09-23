@@ -86,6 +86,17 @@ describe("users and invitations domain", () => {
     ).rejects.toThrow(PermissionDeniedError);
   });
 
+  it("rejects administrative verification from non-owner actors", async () => {
+    await expect(
+      setUserEmailVerified({
+        actor: { userId: "admin1", platformRole: "PLATFORM_ADMIN" },
+        targetUserId: "user2",
+        verified: true,
+        reason: "Support escalation requested manual verification.",
+      }),
+    ).rejects.toThrow(PermissionDeniedError);
+  });
+
   it("rejects setUserEmailVerified from actors without users:manage permission", async () => {
     await expect(
       setUserEmailVerified({

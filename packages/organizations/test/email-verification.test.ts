@@ -215,9 +215,10 @@ describe("email verification enforcement", () => {
       });
 
       const updated = await setUserEmailVerified({
-        actor: { userId: "admin1", platformRole: "PLATFORM_ADMIN" },
+        actor: { userId: "owner1", platformRole: "PLATFORM_OWNER" },
         targetUserId: "user3",
         verified: true,
+        reason: "Verified through documented support escalation.",
       });
 
       expect(updated.emailVerified).toBe(true);
@@ -227,7 +228,7 @@ describe("email verification enforcement", () => {
       });
       expect(mockTx.auditEvent.create).toHaveBeenCalledWith({
         data: {
-          actorUserId: "admin1",
+          actorUserId: "owner1",
           action: "user.email_verified",
           targetType: "User",
           targetId: "user3",
@@ -235,6 +236,8 @@ describe("email verification enforcement", () => {
             email: "user3@example.com",
             previousEmailVerified: false,
             newEmailVerified: true,
+            reason: "Verified through documented support escalation.",
+            verificationSource: "platform_owner_attestation",
           },
         },
       });

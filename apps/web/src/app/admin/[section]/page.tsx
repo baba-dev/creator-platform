@@ -4,6 +4,7 @@ import {
   type PlatformRole,
 } from "@aiwa/authz";
 import { db } from "@aiwa/db";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { ModelActions } from "@/components/admin/model-actions";
@@ -604,13 +605,19 @@ async function renderSection(
               "Reserved",
               "Charged",
               "Status",
+              "Action",
             ]}
           />
           <tbody className="divide-y divide-border">
             {rows.map((row) => (
               <tr key={row.id}>
                 <Cell>
-                  <strong className="font-mono">{shortId(row.id)}</strong>
+                  <Link
+                    href={`/admin/jobs/${row.id}`}
+                    className="font-mono font-semibold text-primary hover:underline"
+                  >
+                    {shortId(row.id)}
+                  </Link>
                   <Meta>{formatDate(row.createdAt)}</Meta>
                 </Cell>
                 <Cell>{row.organization.name}</Cell>
@@ -621,6 +628,16 @@ async function renderSection(
                   <StatusBadge tone={statusTone(row.status)}>
                     {titleCase(row.status)}
                   </StatusBadge>
+                </Cell>
+                <Cell>
+                  <Link
+                    href={`/admin/jobs/${row.id}`}
+                    className="inline-flex min-h-8 items-center text-xs font-semibold text-primary hover:underline"
+                  >
+                    {row.status === "MANUAL_REVIEW"
+                      ? "Reconcile →"
+                      : "Details →"}
+                  </Link>
                 </Cell>
               </tr>
             ))}

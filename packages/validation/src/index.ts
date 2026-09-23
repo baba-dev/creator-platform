@@ -311,3 +311,38 @@ export const ledgerExportQuerySchema = exportDateRangeSchema.and(
     type: ledgerEntryTypeSchema.optional(),
   }),
 );
+
+export const reconcileJobOutcomeSchema = z.object({
+  outcome: z.enum(["SUCCEEDED", "FAILED", "NOT_SUBMITTED"]),
+  evidence: z.string().trim().min(5).max(1000),
+  providerRequestId: z.string().trim().max(128).optional(),
+  actualProviderCostMicroUsd: positiveDatabaseBigIntSchema.optional(),
+  notes: z.string().trim().max(2000).optional(),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+export const recoverJobOutputSchema = z.object({
+  outputUrl: z.string().trim().url().max(2048).optional(),
+  mode: z.enum(["immediate", "resume_processing"]).default("immediate"),
+  reason: z.string().trim().min(5).max(1000),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+export const releaseJobReservationSchema = z.object({
+  reason: z.string().trim().min(5).max(1000),
+  evidence: z.string().trim().min(5).max(1000),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+export const refundSettledJobSchema = z.object({
+  amountCredits: positiveDatabaseBigIntSchema.optional(),
+  reason: z.string().trim().min(5).max(1000),
+  idempotencyKey: idempotencyKeySchema,
+});
+
+export const jobResolutionActionSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("reconcile") }).merge(reconcileJobOutcomeSchema),
+  z.object({ action: z.literal("recover") }).merge(recoverJobOutputSchema),
+  z.object({ action: z.literal("release") }).merge(releaseJobReservationSchema),
+  z.object({ action: z.literal("refund") }).merge(refundSettledJobSchema),
+]);

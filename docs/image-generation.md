@@ -57,8 +57,25 @@ another provider charge. After 24 hours, unresolved image or voice storage
 failures require review; video tasks enter review after a two-hour recovery
 window. An operator must reconcile the provider outcome before
 refunding/releasing a reservation or restoring PROCESSING for storage recovery;
-do not requeue uncertain submissions. There is no automated manual-review
-resolution UI in this flow.
+do not requeue uncertain submissions.
+
+The administrative interface provides a purpose-built resolution workflow at
+`/admin/jobs/[jobId]`. Permitted actions are:
+
+- **Reconcile Provider Outcome**: Record external provider evidence (support
+  ticket ID, ModelArk console logs, or live video task polling) establishing
+  whether a charge occurred.
+- **Recover Output**: Persist already-generated media from a verified output URL
+  (downloading, storing, capturing credits, and marking SUCCEEDED) or restore
+  PROCESSING to resume worker storage retries without resubmitting.
+- **Release Reservation**: Return reserved customer credits via an immutable
+  RELEASE ledger entry and immediately delete pending storage allocations after
+  establishing no provider charge occurred.
+- **Refund Settled Job**: Issue an audited credit refund on captured jobs with a
+  mandatory documented reason.
+
+Every action requires explicit operator evidence/reason, an idempotency key, and
+emits an immutable AuditEvent. Generic blind resubmission is prohibited.
 
 ## Verification
 

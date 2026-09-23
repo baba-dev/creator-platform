@@ -15,6 +15,7 @@ const nextConfig: NextConfig = {
     "@aiwa/ui",
     "@aiwa/organizations",
     "@aiwa/payments",
+    "@aiwa/generation",
   ],
   typedRoutes: true,
 };

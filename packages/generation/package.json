@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./process": "./src/process.ts",
-    "./storage": "./src/storage.ts"
+    "./storage": "./src/storage.ts",
+    "./reconciliation": "./src/reconciliation.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",

@@ -30,6 +30,30 @@ describe("quotes API logic", () => {
     expect(seedanceQuote.customerCredits).toBe(480n);
   });
 
+  it("calculates customer credit quotes honoring custom creditsPerBaisa snapshot", () => {
+    const defaultQuote = calculateModelQuote({
+      providerCostMicroUsd: 54_000n,
+      units: 1,
+      creditsPerBaisa: 1n,
+    });
+    expect(defaultQuote.customerCredits).toBe(28n);
+
+    const doubledQuote = calculateModelQuote({
+      providerCostMicroUsd: 54_000n,
+      units: 1,
+      creditsPerBaisa: 2n,
+    });
+    expect(doubledQuote.customerCredits).toBe(56n);
+    expect(doubledQuote.creditsPerBaisa).toBe(2n);
+
+    const fiveFoldQuote = calculateModelQuote({
+      providerCostMicroUsd: 54_000n,
+      units: 1,
+      creditsPerBaisa: 5n,
+    });
+    expect(fiveFoldQuote.customerCredits).toBe(140n);
+  });
+
   it("correctly determines whether member can spend within monthly budget cap", () => {
     const quoteCredits = 28n;
 

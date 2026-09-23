@@ -417,6 +417,43 @@ describe("createNvidiaProvider", () => {
       }),
     ).rejects.toMatchObject({
       code: "INVALID_PROVIDER_RESPONSE",
+      retryable: false,
+      stage: "parsing",
+    });
+  });
+
+  it("does not retry a completed response whose structured content is malformed", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "req-complete-but-invalid-content",
+          choices: [
+            {
+              message: { role: "assistant", content: "not structured json" },
+              finish_reason: "stop",
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const provider = createNvidiaProvider({
+      ...validConfig,
+      fetch: fetchMock,
+    });
+
+    await expect(
+      provider.complete({
+        idempotencyKey: "invalid-structured-content",
+        modelId: "",
+        systemPrompt: "sys",
+        userPrompt: "usr",
+        responseSchemaName: "schema",
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_PROVIDER_RESPONSE",
+      retryable: false,
       stage: "parsing",
     });
   });

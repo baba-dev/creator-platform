@@ -176,8 +176,8 @@ function parseStructuredContent(content: string): unknown {
 
   throw new ProviderRequestError(
     "NVIDIA reasoning result was not valid JSON",
-    true,
-    { code: "INVALID_PROVIDER_RESPONSE" },
+    false,
+    { code: "INVALID_PROVIDER_RESPONSE", stage: "parsing" },
   );
 }
 
@@ -245,7 +245,7 @@ export function createNvidiaProvider(
       try {
         data = JSON.parse(responseText);
       } catch (error) {
-        throw new ProviderRequestError("NVIDIA returned invalid JSON", true, {
+        throw new ProviderRequestError("NVIDIA returned invalid JSON", false, {
           cause: error,
           code: "INVALID_PROVIDER_RESPONSE",
           stage: "parsing",
@@ -256,7 +256,7 @@ export function createNvidiaProvider(
       if (!parsed.success)
         throw new ProviderRequestError(
           "NVIDIA returned an invalid response shape",
-          true,
+          false,
           { code: "INVALID_PROVIDER_RESPONSE", stage: "parsing" },
         );
 
@@ -264,7 +264,7 @@ export function createNvidiaProvider(
       if (!messageContent)
         throw new ProviderRequestError(
           "NVIDIA reasoning returned empty content",
-          true,
+          false,
           { code: "INVALID_PROVIDER_RESPONSE", stage: "parsing" },
         );
 

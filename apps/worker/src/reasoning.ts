@@ -36,8 +36,8 @@ function readPromptEnhancementOutput(value: unknown): {
   if (!value || typeof value !== "object")
     throw new ProviderRequestError(
       "NVIDIA returned an invalid prompt enhancement result",
-      true,
-      { code: "INVALID_PROVIDER_RESPONSE" },
+      false,
+      { code: "INVALID_PROVIDER_RESPONSE", stage: "parsing" },
     );
 
   const enhancedPrompt = (value as Record<string, unknown>).enhancedPrompt;
@@ -48,8 +48,8 @@ function readPromptEnhancementOutput(value: unknown): {
   )
     throw new ProviderRequestError(
       "NVIDIA returned an invalid prompt enhancement result",
-      true,
-      { code: "INVALID_PROVIDER_RESPONSE" },
+      false,
+      { code: "INVALID_PROVIDER_RESPONSE", stage: "parsing" },
     );
 
   return { enhancedPrompt: enhancedPrompt.trim() };

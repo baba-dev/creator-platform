@@ -157,21 +157,23 @@ export const toggleModelEnabledSchema = z.object({
 });
 
 export const publishPriceVersionSchema = z.object({
-  providerCostMicroUsd: z.union([
-    z.bigint().positive(),
-    z.string().regex(/^\d+$/).transform(BigInt),
-  ]),
+  providerCostMicroUsd: z
+    .union([z.bigint(), z.string().regex(/^\d+$/).transform(BigInt)])
+    .pipe(z.bigint().positive().max(MAX_SIGNED_BIGINT)),
   targetMarginBps: z.number().int().min(0).max(9999),
   pricingDimension: z.enum(["REQUEST", "CHARACTER"]).optional(),
   unitQuantity: z.coerce.number().int().positive().optional(),
   fxBaisaNumerator: z
-    .union([z.bigint().positive(), z.string().regex(/^\d+$/).transform(BigInt)])
+    .union([z.bigint(), z.string().regex(/^\d+$/).transform(BigInt)])
+    .pipe(z.bigint().positive().max(MAX_SIGNED_BIGINT))
     .optional(),
   fxBaisaDenominator: z
-    .union([z.bigint().positive(), z.string().regex(/^\d+$/).transform(BigInt)])
+    .union([z.bigint(), z.string().regex(/^\d+$/).transform(BigInt)])
+    .pipe(z.bigint().positive().max(MAX_SIGNED_BIGINT))
     .optional(),
   creditsPerBaisa: z
-    .union([z.bigint().positive(), z.string().regex(/^\d+$/).transform(BigInt)])
+    .union([z.bigint(), z.string().regex(/^\d+$/).transform(BigInt)])
+    .pipe(z.bigint().positive().max(MAX_SIGNED_BIGINT))
     .optional(),
 });
 

@@ -533,11 +533,18 @@ export async function reconcileProviderOutcome(
 export async function recoverGeneratedOutput(
   params: RecoverGeneratedOutputParams,
 ) {
+  const mode = params.mode ?? "immediate";
+  const requestHash = resolutionHash({
+    action: "recover",
+    mode,
+    reason: params.reason,
+    outputUrl: params.outputUrl ?? null,
+  });
+
   const job = await db.generationJob.findUnique({
     where: { id: params.jobId },
     include: {
       providerModel: true,
-      priceVersion: true,
       organization: { include: { wallet: true } },
       assets: true,
     },
@@ -546,33 +553,37 @@ export async function recoverGeneratedOutput(
   if (!job) {
     throw new JobReconciliationError(
       "JOB_NOT_FOUND",
-      `Job '${params.jobId}' was not found.`,
+      "Generation job was not found.",
       404,
     );
   }
 
-  if (job.status === "SUCCEEDED") {
-    throw new JobReconciliationError(
-      "JOB_ALREADY_SUCCEEDED",
-      "Job has already completed successfully.",
-      409,
-    );
-  }
-
-  if (params.mode === "resume_processing") {
+  if (mode === "resume_processing") {
     return db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM GenerationJob WHERE id = ${params.jobId} FOR UPDATE`;
       const current = await tx.generationJob.findUniqueOrThrow({
         where: { id: params.jobId },
       });
 
-      if (
-        current.status !== "MANUAL_REVIEW" &&
-        current.status !== "PROCESSING"
-      ) {
+      const existing = await findResolutionAudit(
+        tx,
+        params.jobId,
+        params.idempotencyKey,
+      );
+      const replay = replayResult(
+        existing,
+        "generation.resumed_processing",
+        requestHash,
+        "Storage recovery was already resumed.",
+      );
+      if (replay) return replay;
+
+      assertManualReview(current.status);
+      const outcome = await latestReconciledOutcome(tx, params.jobId);
+      if (outcome !== "SUCCEEDED") {
         throw new JobReconciliationError(
-          "INVALID_STATE",
-          `Cannot resume processing from status '${current.status}'.`,
+          "RECONCILIATION_REQUIRED",
+          "Provider success must be reconciled before resuming storage recovery.",
           409,
         );
       }
@@ -583,8 +594,39 @@ export async function recoverGeneratedOutput(
         errorMessage: null,
       };
 
-      if (params.outputUrl) {
-        updateData.outputPayload = { url: params.outputUrl };
+      if (job.providerModel.mediaKind === "IMAGE") {
+        const output = current.outputPayload as { url?: unknown } | null;
+        const outputUrl =
+          params.outputUrl ||
+          (typeof output?.url === "string" ? output.url : undefined);
+        if (!outputUrl) {
+          throw new JobReconciliationError(
+            "MISSING_OUTPUT_URL",
+            "Image storage recovery requires the already-generated output URL.",
+            400,
+          );
+        }
+        updateData.outputPayload = { url: outputUrl };
+      } else if (job.providerModel.mediaKind === "VIDEO") {
+        if (!current.providerRequestId) {
+          throw new JobReconciliationError(
+            "MISSING_PROVIDER_REQUEST_ID",
+            "Video background recovery requires a provider request ID. Use immediate recovery with a verified output URL instead.",
+            400,
+          );
+        }
+      } else if (job.providerModel.mediaKind === "VOICE") {
+        throw new JobReconciliationError(
+          "VOICE_RESUME_UNSUPPORTED",
+          "Voice synthesis cannot be resumed safely. Use immediate recovery to finalize an already-stored MP3.",
+          400,
+        );
+      } else {
+        throw new JobReconciliationError(
+          "UNSUPPORTED_MEDIA_KIND",
+          "This media kind does not support storage recovery.",
+          400,
+        );
       }
 
       await tx.generationJob.update({
@@ -603,101 +645,40 @@ export async function recoverGeneratedOutput(
             reason: params.reason,
             outputUrl: params.outputUrl,
             idempotencyKey: params.idempotencyKey,
+            requestHash,
           },
         },
       });
 
       return {
         success: true,
-        message: "Storage recovery resumed in processing state.",
+        message: "Storage recovery resumed without resubmitting generation.",
       };
     });
   }
 
-  // Immediate recovery mode
   const mediaKind = job.providerModel.mediaKind;
+  let outputUrl: string | undefined = params.outputUrl;
+  let bytes: Buffer;
+  let objectKey: string;
 
   if (mediaKind === "IMAGE") {
-    const existingOutput = job.outputPayload as { url?: unknown } | null;
-    const url =
-      params.outputUrl ||
-      (typeof existingOutput?.url === "string" ? existingOutput.url : null);
-
-    if (!url) {
+    const output = job.outputPayload as { url?: unknown } | null;
+    outputUrl =
+      outputUrl || (typeof output?.url === "string" ? output.url : undefined);
+    if (!outputUrl) {
       throw new JobReconciliationError(
         "MISSING_OUTPUT_URL",
-        "An image output URL is required to perform output recovery.",
+        "An image output URL is required to recover generated output.",
         400,
       );
     }
-
-    const bytes = await downloadImage(url);
-    const stored = await storeImage(`${job.id}.png`, bytes);
-
-    return db.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM GenerationJob WHERE id = ${params.jobId} FOR UPDATE`;
-      const current = await tx.generationJob.findUniqueOrThrow({
-        where: { id: params.jobId },
-      });
-
-      const wallet = job.organization.wallet;
-      if (!wallet) {
-        throw new JobReconciliationError(
-          "WALLET_NOT_FOUND",
-          "Organization wallet was not found.",
-          404,
-        );
-      }
-
-      await captureCreditsForJob(tx, {
-        walletId: wallet.id,
-        jobId: job.id,
-        amountCredits: current.reservedCredits,
-        idempotencyKey: `generation-capture-${job.id}`,
-      });
-
-      await tx.asset.updateMany({
-        where: { generationJobId: job.id, objectKey: `${job.id}.png` },
-        data: { ...stored, status: "READY" },
-      });
-
-      await tx.generationJob.update({
-        where: { id: job.id },
-        data: {
-          status: "SUCCEEDED",
-          completedAt: new Date(),
-          outputPayload: { stored: true },
-          errorCode: null,
-          errorMessage: null,
-        },
-      });
-
-      await tx.auditEvent.create({
-        data: {
-          actorUserId: params.actorUserId,
-          organizationId: job.organizationId,
-          action: "generation.recovered",
-          targetType: "GenerationJob",
-          targetId: job.id,
-          metadata: {
-            reason: params.reason,
-            outputUrl: url,
-            byteSize: Number(stored.byteSize),
-            sha256: stored.sha256,
-            idempotencyKey: params.idempotencyKey,
-          },
-        },
-      });
-
-      return {
-        success: true,
-        message: "Image output recovered, stored, and credits captured.",
-      };
-    });
-  }
-
-  if (mediaKind === "VIDEO") {
-    let outputUrl = params.outputUrl;
+    bytes = await downloadImage(outputUrl);
+    objectKey = job.id + ".png";
+  } else if (mediaKind === "VIDEO") {
+    const output = job.outputPayload as { url?: unknown } | null;
+    outputUrl =
+      outputUrl || (typeof output?.url === "string" ? output.url : undefined);
 
     if (!outputUrl && job.providerRequestId) {
       const provider = params.provider ?? getDefaultGenerationProvider();
@@ -711,7 +692,7 @@ export async function recoverGeneratedOutput(
             outputUrl = providerJob.outputUrls[0];
           }
         } catch {
-          // Fall through if polling fails
+          // An operator may still supply a verified provider output URL.
         }
       }
     }
@@ -719,21 +700,93 @@ export async function recoverGeneratedOutput(
     if (!outputUrl) {
       throw new JobReconciliationError(
         "MISSING_OUTPUT_URL",
-        "A video output URL is required or provider task must report succeeded with output.",
+        "A verified video output URL is required or the provider task must report success.",
         400,
       );
     }
+    bytes = await downloadVideo(outputUrl);
+    objectKey = job.id + ".mp4";
+  } else if (mediaKind === "VOICE") {
+    if (params.outputUrl) {
+      throw new JobReconciliationError(
+        "VOICE_OUTPUT_URL_UNSUPPORTED",
+        "Voice recovery only finalizes an MP3 already stored by the original synthesis attempt.",
+        400,
+      );
+    }
+    objectKey = job.id + ".mp3";
+    try {
+      bytes = await readStoredAsset(objectKey);
+      validateMp3Bytes(bytes);
+    } catch {
+      throw new JobReconciliationError(
+        "VOICE_OUTPUT_NOT_RECOVERABLE",
+        "No valid already-generated MP3 is available to finalize. Do not resubmit synthesis; reconcile a non-successful outcome before releasing credits.",
+        409,
+      );
+    }
+  } else {
+    throw new JobReconciliationError(
+      "UNSUPPORTED_MEDIA_KIND",
+      "Output recovery is not supported for this media kind.",
+      400,
+    );
+  }
 
-    const bytes = await downloadVideo(outputUrl);
-    const stored = await storeVideo(`${job.id}.mp4`, bytes);
-
-    return db.$transaction(async (tx) => {
+  let wroteStoredAsset = false;
+  try {
+    return await db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM GenerationJob WHERE id = ${params.jobId} FOR UPDATE`;
       const current = await tx.generationJob.findUniqueOrThrow({
         where: { id: params.jobId },
       });
 
-      const wallet = job.organization.wallet;
+      const existing = await findResolutionAudit(
+        tx,
+        params.jobId,
+        params.idempotencyKey,
+      );
+      const replay = replayResult(
+        existing,
+        "generation.recovered",
+        requestHash,
+        "Generated output was already recovered.",
+      );
+      if (replay) return replay;
+
+      if (
+        current.status !== "MANUAL_REVIEW" &&
+        current.status !== "PROCESSING"
+      ) {
+        throw new JobReconciliationError(
+          "INVALID_STATE",
+          "Output recovery is only permitted from MANUAL_REVIEW or PROCESSING.",
+          409,
+        );
+      }
+
+      if (current.status === "MANUAL_REVIEW") {
+        const outcome = await latestReconciledOutcome(tx, params.jobId);
+        if (outcome !== "SUCCEEDED") {
+          throw new JobReconciliationError(
+            "RECONCILIATION_REQUIRED",
+            "Provider success must be reconciled before generated output can be finalized.",
+            409,
+          );
+        }
+      }
+
+      if (current.chargedCredits > 0n || current.reservedCredits <= 0n) {
+        throw new JobReconciliationError(
+          "INVALID_ACCOUNTING_STATE",
+          "This job no longer has an active reservation that can be captured.",
+          409,
+        );
+      }
+
+      const wallet = await tx.wallet.findUnique({
+        where: { organizationId: current.organizationId },
+      });
       if (!wallet) {
         throw new JobReconciliationError(
           "WALLET_NOT_FOUND",
@@ -742,24 +795,45 @@ export async function recoverGeneratedOutput(
         );
       }
 
+      let stored: { byteSize: bigint; sha256: string };
+      if (mediaKind === "IMAGE") {
+        stored = await storeImage(objectKey, bytes);
+        wroteStoredAsset = true;
+      } else if (mediaKind === "VIDEO") {
+        stored = await storeVideo(objectKey, bytes);
+        wroteStoredAsset = true;
+      } else {
+        stored = {
+          byteSize: BigInt(bytes.byteLength),
+          sha256: createHash("sha256").update(bytes).digest("hex"),
+        };
+      }
+
       await captureCreditsForJob(tx, {
         walletId: wallet.id,
-        jobId: job.id,
+        jobId: current.id,
         amountCredits: current.reservedCredits,
-        idempotencyKey: `generation-capture-${job.id}`,
+        idempotencyKey: "generation-capture-" + current.id,
       });
 
-      await tx.asset.updateMany({
-        where: { generationJobId: job.id, objectKey: `${job.id}.mp4` },
+      await tx.asset.update({
+        where: { objectKey },
         data: { ...stored, status: "READY" },
       });
 
       await tx.generationJob.update({
-        where: { id: job.id },
+        where: { id: current.id },
         data: {
           status: "SUCCEEDED",
           completedAt: new Date(),
-          outputPayload: { stored: true },
+          outputPayload:
+            mediaKind === "VOICE"
+              ? {
+                  stored: true,
+                  byteSize: Number(stored.byteSize),
+                  sha256: stored.sha256,
+                }
+              : { stored: true },
           errorCode: null,
           errorMessage: null,
         },
@@ -768,32 +842,36 @@ export async function recoverGeneratedOutput(
       await tx.auditEvent.create({
         data: {
           actorUserId: params.actorUserId,
-          organizationId: job.organizationId,
+          organizationId: current.organizationId,
           action: "generation.recovered",
           targetType: "GenerationJob",
-          targetId: job.id,
+          targetId: current.id,
           metadata: {
             reason: params.reason,
             outputUrl,
+            mediaKind,
             byteSize: Number(stored.byteSize),
             sha256: stored.sha256,
             idempotencyKey: params.idempotencyKey,
+            requestHash,
           },
         },
       });
 
       return {
         success: true,
-        message: "Video output recovered, stored, and credits captured.",
+        message:
+          mediaKind === "VOICE"
+            ? "Stored voice output validated, finalized, and credits captured."
+            : "Generated output recovered, stored, and credits captured.",
       };
     });
+  } catch (error) {
+    if (wroteStoredAsset) {
+      await deleteStoredAsset(objectKey).catch(() => undefined);
+    }
+    throw error;
   }
-
-  throw new JobReconciliationError(
-    "UNSUPPORTED_MEDIA_KIND",
-    `Output recovery is not supported for ${mediaKind}.`,
-    400,
-  );
 }
 
 export async function releaseJobReservation(

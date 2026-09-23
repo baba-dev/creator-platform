@@ -877,6 +877,12 @@ export async function recoverGeneratedOutput(
 export async function releaseJobReservation(
   params: ReleaseJobReservationParams,
 ) {
+  const requestHash = resolutionHash({
+    action: "release",
+    reason: params.reason,
+    evidence: params.evidence,
+  });
+
   return db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM GenerationJob WHERE id = ${params.jobId} FOR UPDATE`;
     const job = await tx.generationJob.findUnique({
@@ -889,15 +895,42 @@ export async function releaseJobReservation(
     if (!job) {
       throw new JobReconciliationError(
         "JOB_NOT_FOUND",
-        `Job '${params.jobId}' was not found.`,
+        "Generation job was not found.",
         404,
       );
     }
 
-    if (job.status === "SUCCEEDED" || job.chargedCredits > 0n) {
+    const existing = await findResolutionAudit(
+      tx,
+      params.jobId,
+      params.idempotencyKey,
+    );
+    const replay = replayResult(
+      existing,
+      "generation.reservation_released",
+      requestHash,
+      "Reservation was already released.",
+    );
+    if (replay) return replay;
+
+    assertManualReview(job.status);
+    const outcome = await latestReconciledOutcome(tx, params.jobId);
+    if (
+      outcome !== "FAILED" &&
+      outcome !== "CANCELLED" &&
+      outcome !== "NOT_SUBMITTED"
+    ) {
+      throw new JobReconciliationError(
+        "RECONCILIATION_REQUIRED",
+        "Reconcile the provider outcome as FAILED, CANCELLED, or NOT_SUBMITTED before releasing credits.",
+        409,
+      );
+    }
+
+    if (job.chargedCredits > 0n) {
       throw new JobReconciliationError(
         "JOB_ALREADY_SETTLED",
-        "Cannot release reservation on a settled job. Use refund instead.",
+        "Cannot release a captured reservation. Use refund instead.",
         409,
       );
     }
@@ -919,7 +952,6 @@ export async function releaseJobReservation(
       );
     }
 
-    // Release held credits back to customer wallet
     const releaseEntry = await releaseOrRefundCredits(tx, {
       walletId: wallet.id,
       jobId: job.id,
@@ -929,20 +961,20 @@ export async function releaseJobReservation(
       metadata: {
         evidence: params.evidence,
         actorUserId: params.actorUserId,
+        reconciliationOutcome: outcome,
       },
     });
 
-    // Delete any pending asset allocation to free storage quota immediately
     await tx.asset.updateMany({
       where: { generationJobId: job.id, status: "PENDING" },
       data: { status: "DELETED", byteSize: 0n },
     });
 
-    // Mark job FAILED with administrative release code
     await tx.generationJob.update({
       where: { id: job.id },
       data: {
-        status: "FAILED",
+        status: outcome === "CANCELLED" ? "CANCELLED" : "FAILED",
+        reservedCredits: 0n,
         errorCode: "ADMIN_RELEASED",
         errorMessage: params.reason,
         completedAt: new Date(),
@@ -959,22 +991,31 @@ export async function releaseJobReservation(
         metadata: {
           reason: params.reason,
           evidence: params.evidence,
+          reconciliationOutcome: outcome,
           releasedCredits: job.reservedCredits.toString(),
           ledgerEntryId: releaseEntry.id,
           idempotencyKey: params.idempotencyKey,
+          requestHash,
         },
       },
     });
 
     return {
       success: true,
-      message: `Credit reservation (${job.reservedCredits.toString()} credits) and pending storage released.`,
+      message:
+        "Reservation released, pending storage allocation removed, and job resolved.",
       releasedCredits: job.reservedCredits.toString(),
     };
   });
 }
 
 export async function refundSettledJob(params: RefundSettledJobParams) {
+  const requestHash = resolutionHash({
+    action: "refund",
+    amountCredits: params.amountCredits?.toString() ?? null,
+    reason: params.reason,
+  });
+
   return db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM GenerationJob WHERE id = ${params.jobId} FOR UPDATE`;
     const job = await tx.generationJob.findUnique({
@@ -987,10 +1028,23 @@ export async function refundSettledJob(params: RefundSettledJobParams) {
     if (!job) {
       throw new JobReconciliationError(
         "JOB_NOT_FOUND",
-        `Job '${params.jobId}' was not found.`,
+        "Generation job was not found.",
         404,
       );
     }
+
+    const existing = await findResolutionAudit(
+      tx,
+      params.jobId,
+      params.idempotencyKey,
+    );
+    const replay = replayResult(
+      existing,
+      "generation.refunded",
+      requestHash,
+      "Refund was already processed.",
+    );
+    if (replay) return replay;
 
     if (job.chargedCredits <= 0n) {
       throw new JobReconciliationError(
@@ -1068,6 +1122,7 @@ export async function refundSettledJob(params: RefundSettledJobParams) {
           refundedCredits: refundAmount.toString(),
           ledgerEntryId: refundEntry.id,
           idempotencyKey: params.idempotencyKey,
+          requestHash,
         },
       },
     });

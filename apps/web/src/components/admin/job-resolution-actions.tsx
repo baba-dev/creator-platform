@@ -54,7 +54,7 @@ export function JobResolutionActions({
 
   // Form states
   const [reconcileOutcome, setReconcileOutcome] = useState<
-    "SUCCEEDED" | "FAILED" | "NOT_SUBMITTED"
+    "SUCCEEDED" | "FAILED" | "CANCELLED" | "NOT_SUBMITTED"
   >("FAILED");
   const [reconcileEvidence, setReconcileEvidence] = useState("");
   const [reconcileProviderReqId, setReconcileProviderReqId] = useState(
@@ -193,7 +193,9 @@ export function JobResolutionActions({
               <span className="text-sm font-bold text-foreground">
                 1. Reconcile Provider Outcome
               </span>
-              <StatusBadge tone="info">Available</StatusBadge>
+              <StatusBadge tone={permittedActions.canReconcile ? "info" : "neutral"}>
+                {permittedActions.canReconcile ? "Available" : "Unavailable"}
+              </StatusBadge>
             </div>
             <p className="mt-2 text-xs leading-5 text-muted-foreground">
               Document verified provider outcome, ticket reference, or console
@@ -204,7 +206,9 @@ export function JobResolutionActions({
             <Button
               size="sm"
               variant="secondary"
-              disabled={!canManage || isPending}
+              disabled={
+                !canManage || !permittedActions.canReconcile || isPending
+              }
               onClick={() => {
                 setActionError(null);
                 setActiveDialog("reconcile");
@@ -393,13 +397,16 @@ export function JobResolutionActions({
                   onChange={(e) =>
                     setReconcileOutcome(
                       e.target.value as
-                        "SUCCEEDED" | "FAILED" | "NOT_SUBMITTED",
+                        "SUCCEEDED" | "FAILED" | "CANCELLED" | "NOT_SUBMITTED",
                     )
                   }
                   className="mt-1 block w-full rounded-xl border border-input bg-background px-3 py-2 text-sm"
                 >
                   <option value="FAILED">
                     FAILED (Provider rejected or failed task)
+                  </option>
+                  <option value="CANCELLED">
+                    CANCELLED (Provider confirms task cancellation)
                   </option>
                   <option value="NOT_SUBMITTED">
                     NOT_SUBMITTED (Verified request never reached provider; zero
@@ -528,19 +535,22 @@ export function JobResolutionActions({
                       SUCCEEDED)
                     </span>
                   </label>
-                  <label className="flex items-center gap-2 text-xs">
-                    <input
-                      type="radio"
-                      name="recoverMode"
-                      value="resume_processing"
-                      checked={recoverMode === "resume_processing"}
-                      onChange={() => setRecoverMode("resume_processing")}
-                    />
-                    <span>
-                      <strong>Resume Background Storage Recovery</strong>{" "}
-                      (Returns job to PROCESSING for worker storage loop)
-                    </span>
-                  </label>
+                  {mediaKind !== "VOICE" &&
+                  (mediaKind !== "VIDEO" || providerRequestId) ? (
+                    <label className="flex items-center gap-2 text-xs">
+                      <input
+                        type="radio"
+                        name="recoverMode"
+                        value="resume_processing"
+                        checked={recoverMode === "resume_processing"}
+                        onChange={() => setRecoverMode("resume_processing")}
+                      />
+                      <span>
+                        <strong>Resume Background Storage Recovery</strong>{" "}
+                        (Returns job to PROCESSING without resubmitting)
+                      </span>
+                    </label>
+                  ) : null}
                 </div>
               </div>
 

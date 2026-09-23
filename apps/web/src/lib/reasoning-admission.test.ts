@@ -1,12 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   admitReasoningJob,
+  ReasoningAdmissionError,
   ReasoningAdmissionLimitError,
 } from "./reasoning-admission";
 
 describe("admitReasoningJob atomic admission limits", () => {
   const fakeTx = {
     $queryRaw: vi.fn(),
+    membership: {
+      findUnique: vi.fn(),
+    },
     reasoningJob: {
       findUnique: vi.fn(),
       count: vi.fn(),
@@ -31,7 +35,11 @@ describe("admitReasoningJob atomic admission limits", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    fakeTx.$queryRaw.mockResolvedValue([]);
+    fakeTx.$queryRaw.mockResolvedValue([{ id: "membership-1" }]);
+    fakeTx.membership.findUnique.mockResolvedValue({
+      role: "ORGANIZATION_MEMBER",
+      organization: { status: "ACTIVE" },
+    });
     fakeTx.reasoningJob.findUnique.mockResolvedValue(null);
     fakeTx.reasoningJob.create.mockImplementation(
       ({ data }: { data: Record<string, unknown> }) =>
@@ -47,6 +55,31 @@ describe("admitReasoningJob atomic admission limits", () => {
 
     expect(fakeTx.$queryRaw).toHaveBeenCalledTimes(1);
     expect(fakeTx.reasoningJob.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects if membership disappears before the admission lock is acquired", async () => {
+    fakeTx.$queryRaw.mockResolvedValue([]);
+
+    await expect(admitReasoningJob(sampleInput, txClient)).rejects.toMatchObject({
+      status: 403,
+      message: "Access denied.",
+    });
+
+    expect(fakeTx.reasoningJob.create).not.toHaveBeenCalled();
+  });
+
+  it("revalidates generation permission after acquiring the membership lock", async () => {
+    fakeTx.membership.findUnique.mockResolvedValue({
+      role: "ORGANIZATION_VIEWER",
+      organization: { status: "ACTIVE" },
+    });
+
+    await expect(admitReasoningJob(sampleInput, txClient)).rejects.toBeInstanceOf(
+      ReasoningAdmissionError,
+    );
+
+    expect(fakeTx.reasoningJob.count).not.toHaveBeenCalled();
+    expect(fakeTx.reasoningJob.create).not.toHaveBeenCalled();
   });
 
   it("rejects atomically when active jobs limit (3) is reached", async () => {

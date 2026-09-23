@@ -1,15 +1,30 @@
-import { db, type Prisma } from "@aiwa/db";
+import {
+  hasOrganizationPermission,
+  type OrganizationRole,
+} from "@aiwa/authz";
+import { db, Prisma } from "@aiwa/db";
 
 export const MAX_ACTIVE_REASONING_JOBS_PER_USER = 3;
 export const MAX_REASONING_JOBS_PER_HOUR = 60;
 
-export class ReasoningAdmissionLimitError extends Error {
+export class ReasoningAdmissionError extends Error {
   constructor(
     message: string,
     readonly status: number,
-    readonly retryAfterSeconds: number,
+    readonly retryAfterSeconds = 0,
   ) {
     super(message);
+    this.name = "ReasoningAdmissionError";
+  }
+}
+
+export class ReasoningAdmissionLimitError extends ReasoningAdmissionError {
+  constructor(
+    message: string,
+    status: number,
+    retryAfterSeconds: number,
+  ) {
+    super(message, status, retryAfterSeconds);
     this.name = "ReasoningAdmissionLimitError";
   }
 }
@@ -29,8 +44,42 @@ export async function admitReasoningJob(
   txClient?: Prisma.TransactionClient,
 ) {
   const execute = async (tx: Prisma.TransactionClient) => {
-    // 1. Serialize admission per user and organization
-    await tx.$queryRaw`SELECT id FROM Membership WHERE organizationId = ${input.organizationId} AND userId = ${input.userId} FOR UPDATE`;
+    // 1. Serialize admission per user and organization, then re-check
+    // authorization inside the same transaction. The route-level check is only
+    // an early rejection; it must not be trusted across this lock boundary.
+    const lockedMembership = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id
+      FROM Membership
+      WHERE organizationId = ${input.organizationId}
+        AND userId = ${input.userId}
+      FOR UPDATE
+    `;
+    if (lockedMembership.length !== 1) {
+      throw new ReasoningAdmissionError("Access denied.", 403);
+    }
+
+    const membership = await tx.membership.findUnique({
+      where: {
+        organizationId_userId: {
+          organizationId: input.organizationId,
+          userId: input.userId,
+        },
+      },
+      select: {
+        role: true,
+        organization: { select: { status: true } },
+      },
+    });
+    if (
+      !membership ||
+      membership.organization.status !== "ACTIVE" ||
+      !hasOrganizationPermission(
+        membership.role as OrganizationRole,
+        "generation:create",
+      )
+    ) {
+      throw new ReasoningAdmissionError("Access denied.", 403);
+    }
 
     // 2. Check idempotency within the locked transaction
     const existing = await tx.reasoningJob.findUnique({
@@ -127,5 +176,8 @@ export async function admitReasoningJob(
   if (txClient) {
     return execute(txClient);
   }
-  return db.$transaction(execute);
+  return db.$transaction(execute, {
+    isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+    timeout: 10_000,
+  });
 }

@@ -5,7 +5,7 @@ import { z } from "zod";
 import { getRequestSession } from "@/lib/request-auth";
 import {
   admitReasoningJob,
-  ReasoningAdmissionLimitError,
+  ReasoningAdmissionError,
 } from "@/lib/reasoning-admission";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
 
@@ -178,7 +178,7 @@ export async function POST(request: Request) {
         { status: 202 },
       );
     } catch (error) {
-      if (error instanceof ReasoningAdmissionLimitError) {
+      if (error instanceof ReasoningAdmissionError) {
         const headers: Record<string, string> = {};
         if (error.retryAfterSeconds > 0) {
           headers["Retry-After"] = String(error.retryAfterSeconds);

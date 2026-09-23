@@ -13,7 +13,7 @@ ALTER TABLE `ModelPriceVersion`
 CREATE TEMPORARY TABLE `_ModelPriceVersionCreditsBackfill` (
   `id` VARCHAR(191) NOT NULL PRIMARY KEY,
   `creditsPerBaisa` BIGINT NOT NULL
-);
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 INSERT INTO `_ModelPriceVersionCreditsBackfill` (`id`, `creditsPerBaisa`)
 SELECT

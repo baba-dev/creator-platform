@@ -2,16 +2,22 @@
 
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
+import type { Route } from "next";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 const inputClassName = "form-control mt-2 text-sm";
 
-export function SignUpForm() {
+export function SignUpForm({ returnTo }: { returnTo?: Route }) {
+  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [verificationEmail, setVerificationEmail] = useState<string | null>(
     null,
   );
   const [pending, setPending] = useState(false);
+
+  const isInvite = Boolean(returnTo && returnTo.startsWith("/invite/"));
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -47,18 +53,31 @@ export function SignUpForm() {
 
     setVerificationEmail(email);
     setPending(false);
+    if (!email) {
+      router.push(returnTo ?? "/onboarding");
+      router.refresh();
+    }
   }
 
   if (verificationEmail) {
+    const signInHref =
+      returnTo && returnTo !== "/onboarding"
+        ? (`/sign-in?returnTo=${encodeURIComponent(returnTo)}` as Route)
+        : ("/sign-in" as Route);
+
     return (
       <div className="space-y-4">
         <p className="rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-sm text-success">
           We sent a verification link to <strong>{verificationEmail}</strong>.
         </p>
         <p className="text-xs leading-5 text-muted-foreground">
-          Verify that email address first, then sign in to create your
-          organization workspace.
+          {isInvite
+            ? "Verify that email address first, then sign in to accept your invitation and join the workspace."
+            : "Verify that email address first, then sign in to create your organization workspace."}
         </p>
+        <Button asChild className="w-full">
+          <Link href={signInHref}>Continue to sign in</Link>
+        </Button>
       </div>
     );
   }
@@ -135,8 +154,9 @@ export function SignUpForm() {
       </Button>
 
       <p className="text-xs leading-5 text-muted-foreground">
-        Workspace creation begins only after you verify ownership of this email
-        address. An administrator can assign credits after signup.
+        {isInvite
+          ? "Workspace access begins after you verify ownership of this email address."
+          : "Workspace creation begins only after you verify ownership of this email address. An administrator can assign credits after signup."}
       </p>
     </form>
   );

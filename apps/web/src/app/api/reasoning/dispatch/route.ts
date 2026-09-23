@@ -3,12 +3,14 @@ import { db, Prisma } from "@aiwa/db";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getRequestSession } from "@/lib/request-auth";
+import {
+  admitReasoningJob,
+  ReasoningAdmissionLimitError,
+} from "@/lib/reasoning-admission";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
 
 const DEFAULT_NVIDIA_REASONING_MODEL =
   "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning";
-const MAX_ACTIVE_REASONING_JOBS_PER_USER = 3;
-const MAX_REASONING_JOBS_PER_HOUR = 60;
 function promptEnhancementSystemPrompt(targetMedia: "IMAGE" | "VIDEO") {
   return [
     `You are an expert creative director for AI ${targetMedia === "VIDEO" ? "video" : "image"} generation.`,
@@ -160,70 +162,15 @@ export async function POST(request: Request) {
     );
     if (previous) return previous;
 
-    const [activeJobs, recentJobs] = await Promise.all([
-      db.reasoningJob.count({
-        where: {
-          createdById: session.user.id,
-          organizationId: parsed.organizationId,
-          status: { in: ["QUEUED", "PROCESSING"] },
-        },
-      }),
-      db.reasoningJob.count({
-        where: {
-          createdById: session.user.id,
-          organizationId: parsed.organizationId,
-          createdAt: { gte: new Date(Date.now() - 60 * 60 * 1000) },
-        },
-      }),
-    ]);
-    if (recentJobs >= MAX_REASONING_JOBS_PER_HOUR)
-      return NextResponse.json(
-        {
-          error: "Prompt enhancement hourly limit reached. Try again later.",
-        },
-        { status: 429, headers: { "Retry-After": "60" } },
-      );
-
-    if (activeJobs >= MAX_ACTIVE_REASONING_JOBS_PER_USER)
-      return NextResponse.json(
-        {
-          error:
-            "Too many prompt enhancements are already running. Wait for one to finish.",
-        },
-        { status: 429, headers: { "Retry-After": "5" } },
-      );
-
     try {
-      const job = await db.$transaction(async (tx) => {
-        const created = await tx.reasoningJob.create({
-          data: {
-            organizationId: parsed.organizationId,
-            createdById: session.user.id,
-            providerModelId: providerModel.id,
-            status: "QUEUED",
-            queuedAt: new Date(),
-            idempotencyKey,
-            requestPayload: {
-              task: "prompt-enhancement",
-              systemPrompt: promptEnhancementSystemPrompt(parsed.targetMedia),
-              userPrompt: parsed.userPrompt,
-              targetMedia: parsed.targetMedia,
-              responseSchemaName: "prompt-enhancement-v1",
-            },
-          },
-        });
-
-        await tx.auditEvent.create({
-          data: {
-            organizationId: parsed.organizationId,
-            actorUserId: session.user.id,
-            action: "reasoning.queued",
-            targetType: "ReasoningJob",
-            targetId: created.id,
-            metadata: { task: "prompt-enhancement" },
-          },
-        });
-        return created;
+      const { job } = await admitReasoningJob({
+        organizationId: parsed.organizationId,
+        userId: session.user.id,
+        providerModelId: providerModel.id,
+        idempotencyKey,
+        userPrompt: parsed.userPrompt,
+        targetMedia: parsed.targetMedia,
+        systemPrompt: promptEnhancementSystemPrompt(parsed.targetMedia),
       });
 
       return NextResponse.json(
@@ -231,6 +178,16 @@ export async function POST(request: Request) {
         { status: 202 },
       );
     } catch (error) {
+      if (error instanceof ReasoningAdmissionLimitError) {
+        const headers: Record<string, string> = {};
+        if (error.retryAfterSeconds > 0) {
+          headers["Retry-After"] = String(error.retryAfterSeconds);
+        }
+        return NextResponse.json(
+          { error: error.message },
+          { status: error.status, headers },
+        );
+      }
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === "P2002"

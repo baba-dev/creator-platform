@@ -3,7 +3,6 @@ import {
   createImageJob,
   createVideoJob,
   createVoiceJob,
-  GenerationError,
   imageModelIds,
   listPublicPresetVoices,
   priceCredits,
@@ -11,33 +10,15 @@ import {
   videoModelIds,
   voiceModelIds,
 } from "@aiwa/generation";
-import { LedgerDomainError } from "@aiwa/credits";
 import {
   isBytePlusMediaConfigured,
   isBytePlusVoiceConfigured,
 } from "@aiwa/providers/byteplus";
 import { NextResponse } from "next/server";
-import { z, ZodError } from "zod";
+import { z } from "zod";
+import { generationError } from "@/lib/generation-api";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
-
-function failure(error: unknown) {
-  const status =
-    error instanceof GenerationError
-      ? error.status
-      : error instanceof ZodError ||
-          error instanceof SyntaxError ||
-          error instanceof LedgerDomainError
-        ? 400
-        : 503;
-  const message =
-    error instanceof GenerationError || error instanceof LedgerDomainError
-      ? error.message
-      : status === 400
-        ? "Invalid generation request."
-        : "Generation service unavailable. Retry with the same request.";
-  return NextResponse.json({ error: message }, { status });
-}
 export async function POST(request: Request) {
   if (!hasTrustedMutationOrigin(request))
     return NextResponse.json({ error: "Origin not allowed." }, { status: 403 });
@@ -101,7 +82,7 @@ export async function POST(request: Request) {
       { status: 202 },
     );
   } catch (error) {
-    return failure(error);
+    return generationError(error);
   }
 }
 export async function GET(request: Request) {
@@ -196,6 +177,6 @@ export async function GET(request: Request) {
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
-    return failure(error);
+    return generationError(error);
   }
 }

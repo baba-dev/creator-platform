@@ -338,4 +338,86 @@ describe("createNvidiaProvider", () => {
       retryable: false,
     });
   });
+
+  it("classifies stream read errors during response body as non-retryable with response_body stage", async () => {
+    const brokenStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"choices":'));
+        controller.error(new Error("Connection reset by peer"));
+      },
+    });
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(brokenStream, { status: 200 }));
+
+    const provider = createNvidiaProvider({
+      ...validConfig,
+      fetch: fetchMock,
+    });
+
+    const promise = provider.complete({
+      idempotencyKey: "broken-stream-test",
+      modelId: "",
+      systemPrompt: "sys",
+      userPrompt: "usr",
+      responseSchemaName: "schema",
+    });
+
+    await expect(promise).rejects.toMatchObject({
+      code: "BODY_READ_OUTCOME_UNKNOWN",
+      retryable: false,
+      stage: "response_body",
+    });
+  });
+
+  it("classifies response body size limit exceeded as non-retryable with response_body stage", async () => {
+    const oversized = "x".repeat(1024 * 1024 + 10);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(oversized, { status: 200 }));
+
+    const provider = createNvidiaProvider({
+      ...validConfig,
+      fetch: fetchMock,
+    });
+
+    const promise = provider.complete({
+      idempotencyKey: "oversized-body-test",
+      modelId: "",
+      systemPrompt: "sys",
+      userPrompt: "usr",
+      responseSchemaName: "schema",
+    });
+
+    await expect(promise).rejects.toMatchObject({
+      code: "RESPONSE_TOO_LARGE",
+      retryable: false,
+      stage: "response_body",
+    });
+  });
+
+  it("classifies parsing failures with parsing stage", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response("not valid json", { status: 200 }));
+
+    const provider = createNvidiaProvider({
+      ...validConfig,
+      fetch: fetchMock,
+    });
+
+    await expect(
+      provider.complete({
+        idempotencyKey: "invalid-json-test",
+        modelId: "",
+        systemPrompt: "sys",
+        userPrompt: "usr",
+        responseSchemaName: "schema",
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_PROVIDER_RESPONSE",
+      stage: "parsing",
+    });
+  });
 });

@@ -100,7 +100,7 @@ export function mapNvidiaError(
   return new ProviderRequestError(
     `NVIDIA request failed with status ${status}`,
     retryable,
-    { code: safeCode ?? `HTTP_${status}` },
+    { code: safeCode ?? `HTTP_${status}`, stage: "response_headers" },
   );
 }
 
@@ -121,6 +121,7 @@ export async function safeFetch(
     onAbortCode: "REQUEST_OUTCOME_UNKNOWN",
     onAbortRetryable: false,
     onNetworkErrorCode: "NETWORK_OUTCOME_UNKNOWN",
+    stage: "dispatch",
   });
 }
 
@@ -132,7 +133,9 @@ export async function readResponseText(
     providerName: "NVIDIA",
     onAbortCode: "REQUEST_OUTCOME_UNKNOWN",
     onAbortRetryable: false,
-    onNetworkErrorCode: "NETWORK_ERROR",
+    onNetworkErrorCode: "BODY_READ_OUTCOME_UNKNOWN",
+    onNetworkErrorRetryable: false,
+    stage: "response_body",
   });
 }
 
@@ -245,6 +248,7 @@ export function createNvidiaProvider(
         throw new ProviderRequestError("NVIDIA returned invalid JSON", true, {
           cause: error,
           code: "INVALID_PROVIDER_RESPONSE",
+          stage: "parsing",
         });
       }
 
@@ -253,7 +257,7 @@ export function createNvidiaProvider(
         throw new ProviderRequestError(
           "NVIDIA returned an invalid response shape",
           true,
-          { code: "INVALID_PROVIDER_RESPONSE" },
+          { code: "INVALID_PROVIDER_RESPONSE", stage: "parsing" },
         );
 
       const messageContent = parsed.data.choices[0]?.message.content;
@@ -261,7 +265,7 @@ export function createNvidiaProvider(
         throw new ProviderRequestError(
           "NVIDIA reasoning returned empty content",
           true,
-          { code: "INVALID_PROVIDER_RESPONSE" },
+          { code: "INVALID_PROVIDER_RESPONSE", stage: "parsing" },
         );
 
       const contentJson = parseStructuredContent(messageContent);

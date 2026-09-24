@@ -21,6 +21,7 @@
     "bullmq": "6.3.5",
     "ioredis": "^5.8.1",
     "@aiwa/generation": "workspace:*",
+    "@aiwa/mail": "workspace:*",
     "@aiwa/db": "workspace:*",
     "@prisma/client": "6.19.3"
   },

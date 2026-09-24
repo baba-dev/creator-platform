@@ -55,6 +55,12 @@ const navigation: readonly (AdminNavigationItem & {
     icon: "assets",
     permission: "audit:read",
   },
+  {
+    href: "/admin/email",
+    label: "Email delivery",
+    icon: "activity",
+    permission: "audit:read",
+  },
 ];
 
 export default async function AdminLayout({

@@ -317,12 +317,22 @@ export async function addMember(input: {
       const user = input.userId
         ? await tx.user.findUnique({
             where: { id: input.userId },
-            select: { id: true, email: true, emailVerified: true, disabledAt: true },
+            select: {
+              id: true,
+              email: true,
+              emailVerified: true,
+              disabledAt: true,
+            },
           })
         : input.email
           ? await tx.user.findUnique({
               where: { email: normalizeMemberEmail(input.email) },
-              select: { id: true, email: true, emailVerified: true, disabledAt: true },
+              select: {
+                id: true,
+                email: true,
+                emailVerified: true,
+                disabledAt: true,
+              },
             })
           : null;
       if (!user || user.disabledAt) throw new UserUnavailableError();

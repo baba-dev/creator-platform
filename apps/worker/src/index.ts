@@ -6,7 +6,7 @@ import {
   processVideoSubmitJob,
   processVoiceJob,
 } from "@aiwa/generation/process";
-import { processMailMessage } from "@aiwa/mail/transport";
+import { closeSmtpTransport, processMailMessage } from "@aiwa/mail/transport";
 import { createBytePlusProvider } from "@aiwa/providers/byteplus";
 import { createNvidiaProvider } from "@aiwa/providers/nvidia";
 import { Queue, Worker } from "bullmq";
@@ -421,6 +421,7 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
     generationQueue.close(),
     reasoningQueue.close(),
     maintenanceWorker.close(),
+    closeSmtpTransport(),
   ]);
 
   let timeoutHandle: NodeJS.Timeout | undefined;

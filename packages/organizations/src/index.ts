@@ -461,7 +461,7 @@ export async function updateMember(input: {
             : `Your monthly spending cap is now ${updated.monthlySpendingCapCredits.toString()} credits.`,
         eventVersion: entityVersion(
           updated.updatedAt,
-          `role:${updated.platformRole}`,
+          `member:${updated.role}:${updated.monthlySpendingCapCredits?.toString() ?? "none"}`,
         ),
       }),
       tx,

@@ -141,6 +141,34 @@ export function teamMemberAddedEmail(input: {
   };
 }
 
+export function billingStatusEmail(input: {
+  to: string;
+  organizationName: string;
+  organizationId: string;
+  paymentId: string;
+  status: "CONFIRMED" | "REJECTED" | "REVERSED";
+  amountBaisa: bigint;
+  userId: string;
+  detail?: string;
+}): MailDraft {
+  const amountOmr = (Number(input.amountBaisa) / 1000).toFixed(3);
+  const action = input.status === "CONFIRMED" ? "confirmed" : input.status === "REJECTED" ? "rejected" : "reversed";
+  return {
+    kind: "SECURITY",
+    template: `billing.payment_${action}.v1`,
+    to: input.to,
+    subject: `Payment ${action} for ${input.organizationName}`,
+    text: `A payment of OMR ${amountOmr} for ${input.organizationName} was ${action}.${input.detail ? ` ${input.detail}` : ""}`,
+    html: emailShell(
+      `Payment ${action}`,
+      `<p style="line-height:1.6">A payment of <strong>OMR ${amountOmr}</strong> for <strong>${escapeHtml(input.organizationName)}</strong> was ${action}.</p>${input.detail ? `<p style="line-height:1.6">${escapeHtml(input.detail)}</p>` : ""}`,
+    ),
+    organizationId: input.organizationId,
+    userId: input.userId,
+    idempotencyKey: `billing:${input.paymentId}:${input.status.toLowerCase()}`,
+  };
+}
+
 export function generationCompletedEmail(input: {
   to: string;
   assetUrl: string;

@@ -179,6 +179,55 @@ export function billingStatusEmail(input: {
   };
 }
 
+export function invitationEmail(input: {
+  to: string;
+  organizationName: string;
+  organizationId: string;
+  role: string;
+  invitationId: string;
+  invitationUrl: string;
+}): MailDraft {
+  const safeUrl = escapeHtml(input.invitationUrl);
+  return {
+    kind: "SECURITY",
+    template: "organization.invitation.v1",
+    to: input.to,
+    subject: `You're invited to ${input.organizationName} on Aiwa Creators`,
+    text: `You were invited to ${input.organizationName} with role ${input.role}. Accept the invitation: ${input.invitationUrl}`,
+    html: emailShell(
+      "Workspace invitation",
+      `<p style="line-height:1.6">You were invited to <strong>${escapeHtml(input.organizationName)}</strong> with role <strong>${escapeHtml(input.role)}</strong>.</p><p><a href="${safeUrl}" style="display:inline-block;padding:12px 18px;border-radius:10px;background:#171717;color:#fff;text-decoration:none;font-weight:700">Accept invitation</a></p>`,
+    ),
+    organizationId: input.organizationId,
+    sensitive: true,
+    idempotencyKey: `invitation:${input.invitationId}`,
+  };
+}
+
+export function generationFailedEmail(input: {
+  to: string;
+  userId: string;
+  organizationId: string;
+  generationJobId: string;
+  message: string;
+}): MailDraft {
+  return {
+    kind: "ROUTINE",
+    template: "generation.failed.v1",
+    to: input.to,
+    subject: "Your Aiwa Creators generation could not be completed",
+    text: `Your generation could not be completed. ${input.message}`,
+    html: emailShell(
+      "Generation not completed",
+      `<p style="line-height:1.6">Your generation could not be completed.</p><p style="line-height:1.6">${escapeHtml(input.message)}</p>`,
+    ),
+    organizationId: input.organizationId,
+    userId: input.userId,
+    sensitive: false,
+    idempotencyKey: `generation-failed:${input.generationJobId}`,
+  };
+}
+
 export function generationCompletedEmail(input: {
   to: string;
   assetUrl: string;

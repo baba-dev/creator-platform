@@ -29,7 +29,7 @@ export default async function Overview({
     where: { id: organizationId },
     include: {
       owner: { select: { name: true, email: true } },
-      wallet: true,
+      wallet: canReadPayments ? true : false,
       memberships: true,
       assets: {
         where: { status: { not: "DELETED" } },

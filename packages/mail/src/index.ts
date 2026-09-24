@@ -49,7 +49,8 @@ export async function enqueueMail(
     const row = await client.mailMessage.create({
       data: {
         kind: input.kind,
-        priority: input.priority ?? (input.kind === "SECURITY" ? "HIGH" : "NORMAL"),
+        priority:
+          input.priority ?? (input.kind === "SECURITY" ? "HIGH" : "NORMAL"),
         template: input.template,
         recipient: to,
         subject: input.subject,
@@ -152,7 +153,12 @@ export function billingStatusEmail(input: {
   detail?: string;
 }): MailDraft {
   const amountOmr = (Number(input.amountBaisa) / 1000).toFixed(3);
-  const action = input.status === "CONFIRMED" ? "confirmed" : input.status === "REJECTED" ? "rejected" : "reversed";
+  const action =
+    input.status === "CONFIRMED"
+      ? "confirmed"
+      : input.status === "REJECTED"
+        ? "rejected"
+        : "reversed";
   return {
     kind: "SECURITY",
     template: `billing.payment_${action}.v1`,
@@ -228,7 +234,8 @@ class SmtpSession {
       });
     });
     const greeting = await session.read();
-    if (greeting.code !== 220) throw new Error(`SMTP greeting failed: ${greeting.code}`);
+    if (greeting.code !== 220)
+      throw new Error(`SMTP greeting failed: ${greeting.code}`);
     return session;
   }
 
@@ -265,7 +272,9 @@ class SmtpSession {
     this.socket.write(`${command}\r\n`);
     const response = await this.read();
     if (!expected.includes(response.code)) {
-      const error = new Error(`SMTP command failed with status ${response.code}`);
+      const error = new Error(
+        `SMTP command failed with status ${response.code}`,
+      );
       Object.assign(error, { smtpCode: response.code });
       throw error;
     }
@@ -311,7 +320,9 @@ export async function sendMailViaSmtp(
     await session.command(`EHLO ${env.SMTP_EHLO_NAME}`, [250]);
     await session.command("AUTH LOGIN", [334]);
     await session.command(Buffer.from(env.SMTP_USER).toString("base64"), [334]);
-    await session.command(Buffer.from(env.SMTP_PASSWORD).toString("base64"), [235]);
+    await session.command(Buffer.from(env.SMTP_PASSWORD).toString("base64"), [
+      235,
+    ]);
     await session.command(`MAIL FROM:<${headerSafe(message.from)}>`, [250]);
     await session.command(`RCPT TO:<${headerSafe(message.to)}>`, [250, 251]);
     await session.command("DATA", [354]);
@@ -388,8 +399,12 @@ export async function processMailMessage(
         sentAt: new Date(),
         nextAttemptAt: null,
         sendingAt: null,
-        textBody: message.sensitive ? "[redacted after delivery]" : message.textBody,
-        htmlBody: message.sensitive ? "[redacted after delivery]" : message.htmlBody,
+        textBody: message.sensitive
+          ? "[redacted after delivery]"
+          : message.textBody,
+        htmlBody: message.sensitive
+          ? "[redacted after delivery]"
+          : message.htmlBody,
       },
     });
     return { sent: true, terminal: true };
@@ -399,7 +414,8 @@ export async function processMailMessage(
     const highDelays = [30_000, 120_000, 600_000, 1_800_000];
     const normalDelays = [60_000, 300_000, 1_200_000, 3_600_000];
     const delays = message.priority === "HIGH" ? highDelays : normalDelays;
-    const delay = delays[Math.min(Math.max(attemptNumber - 1, 0), delays.length - 1)];
+    const delay =
+      delays[Math.min(Math.max(attemptNumber - 1, 0), delays.length - 1)];
     await db.mailMessage.update({
       where: { id },
       data: {

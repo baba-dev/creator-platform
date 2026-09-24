@@ -1,0 +1,34 @@
+name: Format Mail Split
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.head_ref == 'feat/transactional-mail'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feat/transactional-mail
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm prettier --write packages/mail/src/index.ts packages/mail/test/mail.test.ts
+      - name: Commit canonical formatting and remove helper
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/format-mail-split.yml
+          git add packages/mail/src/index.ts packages/mail/test/mail.test.ts
+          git commit -m "style: format mail transport split"
+          git push origin HEAD:feat/transactional-mail

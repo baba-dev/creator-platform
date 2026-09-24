@@ -784,7 +784,7 @@ export async function setUserPlatformRole(input: {
         detail: `Your Aiwa Creators platform role changed from ${targetUser.platformRole} to ${updated.platformRole}.`,
         eventVersion: entityVersion(
           updated.updatedAt,
-          `disabled:${input.disabled}`,
+          `role:${updated.platformRole}`,
         ),
       }),
       tx,
@@ -856,7 +856,10 @@ export async function setUserDisabled(input: {
         detail: input.disabled
           ? "An administrator disabled your Aiwa Creators account and active sessions were revoked."
           : "An administrator reactivated your Aiwa Creators account.",
-        eventVersion: updated.updatedAt.getTime().toString(),
+        eventVersion: entityVersion(
+          updated.updatedAt,
+          `disabled:${input.disabled}`,
+        ),
       }),
       tx,
     );

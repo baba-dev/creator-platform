@@ -27,7 +27,24 @@ describe("mail helpers", () => {
   });
 
   it("treats 5xx SMTP responses as permanent", () => {
-    const error = Object.assign(new Error("rejected"), { smtpCode: 550 });
-    expect(classifySmtpFailure(error).retryable).toBe(false);
+    const error = Object.assign(new Error("rejected"), {
+      code: "EENVELOPE",
+      responseCode: 550,
+    });
+    expect(classifySmtpFailure(error)).toMatchObject({
+      retryable: false,
+      code: "SMTP_550",
+    });
+  });
+
+  it("treats 4xx SMTP responses as retryable", () => {
+    const error = Object.assign(new Error("mailbox temporarily unavailable"), {
+      code: "EENVELOPE",
+      responseCode: 451,
+    });
+    expect(classifySmtpFailure(error)).toMatchObject({
+      retryable: true,
+      code: "SMTP_451",
+    });
   });
 });

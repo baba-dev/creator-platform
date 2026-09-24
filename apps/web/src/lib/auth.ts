@@ -22,7 +22,6 @@ async function deliverVerificationEmail(input: {
   );
 }
 
-
 export const auth = betterAuth({
   appName: "Aiwa Creators",
   baseURL: env.APP_URL,

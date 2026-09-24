@@ -15,7 +15,8 @@
   },
   "dependencies": {
     "@aiwa/credits": "workspace:*",
-    "@aiwa/db": "workspace:*"
+    "@aiwa/db": "workspace:*",
+    "@aiwa/mail": "workspace:*"
   },
   "devDependencies": {
     "vitest": "^4.1.11"

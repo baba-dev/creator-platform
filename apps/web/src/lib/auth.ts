@@ -147,38 +147,94 @@ export const auth = betterAuth({
   },
   hooks: {
     after: createAuthMiddleware(async (ctx) => {
-      const eventByPath = {
-        "/two-factor/verify-totp": "MFA_ENABLED",
-        "/two-factor/disable": "MFA_DISABLED",
-        "/two-factor/generate-backup-codes": "BACKUP_CODES_REGENERATED",
-      } as const;
-      const event = eventByPath[ctx.path as keyof typeof eventByPath];
-      if (!event) return;
+      if (ctx.path !== "/two-factor/generate-backup-codes") return;
 
       const session = ctx.context.session;
       const userId = session?.user?.id;
       if (!userId) return;
 
-      const user = await db.user.findUnique({
-        where: { id: userId },
-        select: { email: true, twoFactorEnabled: true },
-      });
-      if (!user) return;
-
-      if (event === "MFA_ENABLED" && !user.twoFactorEnabled) return;
-      if (event === "MFA_DISABLED" && user.twoFactorEnabled) return;
+      const [user, factor] = await Promise.all([
+        db.user.findUnique({
+          where: { id: userId },
+          select: { email: true },
+        }),
+        db.twoFactor.findFirst({
+          where: { userId },
+          orderBy: { updatedAt: "desc" },
+          select: { updatedAt: true },
+        }),
+      ]);
+      if (!user || !factor) return;
 
       await enqueueMail(
         securityEventEmail({
           to: user.email,
           userId,
-          event,
-          idempotencyKey: `security:${event.toLowerCase()}:${userId}:${Date.now()}`,
+          event: "BACKUP_CODES_REGENERATED",
+          idempotencyKey: `security:backup-codes-regenerated:${userId}:${factor.updatedAt.getTime()}`,
         }),
       );
     }),
   },
   databaseHooks: {
+    user: {
+      update: {
+        after: async (updatedUser, ctx) => {
+          if (
+            ctx?.path !== "/two-factor/verify-totp" &&
+            ctx?.path !== "/two-factor/disable"
+          ) {
+            return;
+          }
+
+          const user = await db.user.findUnique({
+            where: { id: updatedUser.id },
+            select: {
+              id: true,
+              email: true,
+              twoFactorEnabled: true,
+              updatedAt: true,
+            },
+          });
+          if (!user) return;
+
+          if (
+            ctx.path === "/two-factor/verify-totp" &&
+            user.twoFactorEnabled
+          ) {
+            const factor = await db.twoFactor.findFirst({
+              where: { userId: user.id, verified: true },
+              orderBy: { updatedAt: "desc" },
+              select: { updatedAt: true },
+            });
+            if (!factor) return;
+            await enqueueMail(
+              securityEventEmail({
+                to: user.email,
+                userId: user.id,
+                event: "MFA_ENABLED",
+                idempotencyKey: `security:mfa-enabled:${user.id}:${factor.updatedAt.getTime()}`,
+              }),
+            );
+            return;
+          }
+
+          if (
+            ctx.path === "/two-factor/disable" &&
+            !user.twoFactorEnabled
+          ) {
+            await enqueueMail(
+              securityEventEmail({
+                to: user.email,
+                userId: user.id,
+                event: "MFA_DISABLED",
+                idempotencyKey: `security:mfa-disabled:${user.id}:${user.updatedAt.getTime()}`,
+              }),
+            );
+          }
+        },
+      },
+    },
     session: {
       create: {
         before: async (session) => {

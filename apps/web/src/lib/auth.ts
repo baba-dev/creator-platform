@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { platformRoles } from "@aiwa/authz";
 import { parseServerEnv } from "@aiwa/config";
 import { db } from "@aiwa/db";
@@ -17,6 +18,9 @@ async function deliverVerificationEmail(input: {
     verificationEmail({
       to: input.email,
       verificationUrl: input.verificationUrl,
+      idempotencyKey: `verify:${createHash("sha256")
+        .update(input.verificationUrl)
+        .digest("hex")}`,
       userId: input.userId,
     }),
   );

@@ -70,5 +70,6 @@ messages can be explicitly requeued by an authorized operator.
   is returned to the browser.
 - SMTP credentials, reset links, verification links, and MFA secrets must never
   be logged.
+- Use the admin SMTP verification control after every credential or mail-server change.
 - SPF, DKIM, and DMARC should be configured for the sending domain before
   production launch.

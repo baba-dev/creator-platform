@@ -193,6 +193,52 @@ export function securityEventEmail(input: {
   };
 }
 
+export function accountAdministrationEmail(input: {
+  to: string;
+  userId: string;
+  event:
+    | "PLATFORM_ROLE_CHANGED"
+    | "ACCOUNT_DISABLED"
+    | "ACCOUNT_ENABLED"
+    | "SESSIONS_REVOKED";
+  detail: string;
+  eventVersion: string;
+}): MailDraft {
+  const content = {
+    PLATFORM_ROLE_CHANGED: {
+      subject: "Your Aiwa Creators platform role changed",
+      title: "Platform role changed",
+    },
+    ACCOUNT_DISABLED: {
+      subject: "Your Aiwa Creators account was disabled",
+      title: "Account disabled",
+    },
+    ACCOUNT_ENABLED: {
+      subject: "Your Aiwa Creators account was reactivated",
+      title: "Account reactivated",
+    },
+    SESSIONS_REVOKED: {
+      subject: "Aiwa Creators sessions were revoked",
+      title: "Sessions revoked",
+    },
+  }[input.event];
+
+  return {
+    kind: "SECURITY",
+    template: `account.admin_${input.event.toLowerCase()}.v1`,
+    to: input.to,
+    subject: content.subject,
+    text: input.detail,
+    html: emailShell(
+      content.title,
+      `<p style="line-height:1.6">${escapeHtml(input.detail)}</p>`,
+    ),
+    userId: input.userId,
+    sensitive: false,
+    idempotencyKey: `account:${input.userId}:${input.event.toLowerCase()}:${input.eventVersion}`,
+  };
+}
+
 export function teamMemberAddedEmail(input: {
   to: string;
   organizationName: string;

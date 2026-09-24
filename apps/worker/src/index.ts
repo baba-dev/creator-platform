@@ -70,7 +70,10 @@ const mailWorker = new Worker(
   "mail",
   async (job) => {
     if (!env.MAIL_ENABLED) return;
-    if (typeof job.data.mailId !== "string" || typeof job.data.attemptNumber !== "number") {
+    if (
+      typeof job.data.mailId !== "string" ||
+      typeof job.data.attemptNumber !== "number"
+    ) {
       throw new Error("Invalid mail queue payload");
     }
     await processMailMessage(env, job.data.mailId, job.data.attemptNumber, 5);

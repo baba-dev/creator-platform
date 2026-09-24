@@ -404,6 +404,8 @@ model GenerationJob {
 
   @@unique([providerModelId, providerRequestId])
   @@index([organizationId, status, createdAt])
+  @@index([organizationId, createdAt, id])
+  @@index([organizationId, createdById, createdAt, id])
   @@index([projectId, createdAt])
   @@index([status, updatedAt])
 }

@@ -217,6 +217,62 @@ export function teamMemberAddedEmail(input: {
   };
 }
 
+export function teamMembershipChangedEmail(input: {
+  to: string;
+  organizationName: string;
+  organizationId: string;
+  userId: string;
+  membershipId: string;
+  event: "ROLE_CHANGED" | "CAP_CHANGED" | "REMOVED" | "OWNER_GRANTED" | "OWNER_RELEASED";
+  detail?: string;
+  eventVersion: string;
+}): MailDraft {
+  const content = {
+    ROLE_CHANGED: {
+      subject: `Your role changed in ${input.organizationName}`,
+      title: "Workspace role changed",
+      message: input.detail ?? "Your workspace role was changed.",
+    },
+    CAP_CHANGED: {
+      subject: `Your spending limit changed in ${input.organizationName}`,
+      title: "Spending limit changed",
+      message: input.detail ?? "Your workspace spending limit was changed.",
+    },
+    REMOVED: {
+      subject: `Your access to ${input.organizationName} was removed`,
+      title: "Workspace access removed",
+      message: "Your membership in this workspace was removed.",
+    },
+    OWNER_GRANTED: {
+      subject: `You are now the owner of ${input.organizationName}`,
+      title: "Workspace ownership transferred to you",
+      message: "You are now the organization owner for this workspace.",
+    },
+    OWNER_RELEASED: {
+      subject: `Ownership changed for ${input.organizationName}`,
+      title: "Workspace ownership transferred",
+      message:
+        "You are no longer the organization owner. Your workspace membership remains active.",
+    },
+  }[input.event];
+
+  return {
+    kind: "SECURITY",
+    template: `organization.membership_${input.event.toLowerCase()}.v1`,
+    to: input.to,
+    subject: content.subject,
+    text: `${content.message} Organization: ${input.organizationName}.`,
+    html: emailShell(
+      content.title,
+      `<p style="line-height:1.6">${escapeHtml(content.message)}</p><p style="line-height:1.6"><strong>Workspace:</strong> ${escapeHtml(input.organizationName)}</p>`,
+    ),
+    organizationId: input.organizationId,
+    userId: input.userId,
+    sensitive: false,
+    idempotencyKey: `membership:${input.membershipId}:${input.event.toLowerCase()}:${input.eventVersion}`,
+  };
+}
+
 export function billingStatusEmail(input: {
   to: string;
   organizationName: string;

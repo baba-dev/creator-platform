@@ -118,7 +118,7 @@ export function parseServerEnv(
     throw new Error(`Invalid server environment variables: ${fields}`);
   }
 
-  if (result.data.NODE_ENV === "production" && result.data.MAIL_ENABLED) {
+  if (result.data.APP_ENV === "production" && result.data.MAIL_ENABLED) {
     const requiredMailVariables = [
       "SMTP_HOST",
       "SMTP_USER",

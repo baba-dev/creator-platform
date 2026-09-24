@@ -74,10 +74,7 @@ jobs:
           bash -n infra/deploy/package-release.sh
 
       - name: Check formatting
-        run: |
-          pnpm exec prettier --write packages/organizations/test/email-verification.test.ts packages/payments/test/payments.test.ts
-          git diff -- packages/organizations/test/email-verification.test.ts packages/payments/test/payments.test.ts
-          exit 1
+        run: pnpm format:check
 
       - name: Lint
         run: pnpm lint

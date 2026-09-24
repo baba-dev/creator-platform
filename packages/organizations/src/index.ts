@@ -7,6 +7,7 @@ import {
 } from "@aiwa/authz";
 import { db, Prisma } from "@aiwa/db";
 import {
+  accountAdministrationEmail,
   enqueueMail,
   invitationEmail,
   teamMemberAddedEmail,
@@ -734,7 +735,12 @@ export async function setUserPlatformRole(input: {
     await tx.$queryRaw`SELECT id FROM User WHERE id = ${input.targetUserId} FOR UPDATE`;
     const targetUser = await tx.user.findUnique({
       where: { id: input.targetUserId },
-      select: { id: true, platformRole: true, disabledAt: true },
+      select: {
+        id: true,
+        email: true,
+        platformRole: true,
+        disabledAt: true,
+      },
     });
     if (!targetUser) throw new UserNotFoundError();
 
@@ -762,6 +768,16 @@ export async function setUserPlatformRole(input: {
         },
       },
     });
+    await enqueueMail(
+      accountAdministrationEmail({
+        to: targetUser.email,
+        userId: targetUser.id,
+        event: "PLATFORM_ROLE_CHANGED",
+        detail: `Your Aiwa Creators platform role changed from ${targetUser.platformRole} to ${updated.platformRole}.`,
+        eventVersion: updated.updatedAt.getTime().toString(),
+      }),
+      tx,
+    );
 
     return updated;
   });
@@ -783,7 +799,12 @@ export async function setUserDisabled(input: {
     await tx.$queryRaw`SELECT id FROM User WHERE id = ${input.targetUserId} FOR UPDATE`;
     const targetUser = await tx.user.findUnique({
       where: { id: input.targetUserId },
-      select: { id: true, platformRole: true, disabledAt: true },
+      select: {
+        id: true,
+        email: true,
+        platformRole: true,
+        disabledAt: true,
+      },
     });
     if (!targetUser) throw new UserNotFoundError();
 
@@ -816,6 +837,18 @@ export async function setUserDisabled(input: {
         },
       },
     });
+    await enqueueMail(
+      accountAdministrationEmail({
+        to: targetUser.email,
+        userId: targetUser.id,
+        event: input.disabled ? "ACCOUNT_DISABLED" : "ACCOUNT_ENABLED",
+        detail: input.disabled
+          ? "An administrator disabled your Aiwa Creators account and active sessions were revoked."
+          : "An administrator reactivated your Aiwa Creators account.",
+        eventVersion: updated.updatedAt.getTime().toString(),
+      }),
+      tx,
+    );
 
     return updated;
   });
@@ -832,7 +865,7 @@ export async function revokeUserSessions(input: {
   return db.$transaction(async (tx) => {
     const targetUser = await tx.user.findUnique({
       where: { id: input.targetUserId },
-      select: { id: true },
+      select: { id: true, email: true, updatedAt: true },
     });
     if (!targetUser) throw new UserNotFoundError();
 
@@ -854,6 +887,21 @@ export async function revokeUserSessions(input: {
         },
       },
     });
+    if (deleted.count > 0) {
+      await enqueueMail(
+        accountAdministrationEmail({
+          to: targetUser.email,
+          userId: targetUser.id,
+          event: "SESSIONS_REVOKED",
+          detail:
+            deleted.count === 1
+              ? "An administrator revoked one active Aiwa Creators session."
+              : `An administrator revoked ${deleted.count} active Aiwa Creators sessions.`,
+          eventVersion: `${Date.now()}:${deleted.count}`,
+        }),
+        tx,
+      );
+    }
 
     return deleted;
   });

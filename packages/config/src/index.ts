@@ -118,5 +118,28 @@ export function parseServerEnv(
     throw new Error(`Invalid server environment variables: ${fields}`);
   }
 
+  if (result.data.NODE_ENV === "production" && result.data.MAIL_ENABLED) {
+    const requiredMailVariables = [
+      "SMTP_HOST",
+      "SMTP_USER",
+      "SMTP_PASSWORD",
+      "MAIL_SECURITY_FROM_ADDRESS",
+      "MAIL_ROUTINE_FROM_ADDRESS",
+    ] as const;
+    const missing = requiredMailVariables.filter(
+      (key) => !environment[key]?.trim(),
+    );
+    if (missing.length) {
+      throw new Error(
+        `Invalid server environment variables: ${missing.join(", ")}`,
+      );
+    }
+    if (result.data.SMTP_PORT !== 465) {
+      throw new Error(
+        "Invalid server environment variables: SMTP_PORT (implicit TLS on port 465 is required in production)",
+      );
+    }
+  }
+
   return result.data;
 }

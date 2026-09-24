@@ -5,7 +5,7 @@ import { Eyebrow } from "@/components/ui/creative";
 import { requirePlatformPermission } from "@/lib/request-auth";
 
 function maskEmail(email: string): string {
-  const [local, domain] = email.split("@");
+  const [local = "", domain] = email.split("@");
   if (!domain) return "••••";
   const visible = local.length <= 2 ? local.slice(0, 1) : local.slice(0, 2);
   return `${visible}••••@${domain}`;

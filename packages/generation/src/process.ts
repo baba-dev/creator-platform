@@ -346,9 +346,7 @@ export async function processVideoPollJob(
       },
     });
     if (asset?.id) {
-      if (asset?.id) {
-        await enqueueGenerationSuccess(tx, { ...job, id }, asset.id);
-      }
+      await enqueueGenerationSuccess(tx, { ...job, id }, asset.id);
     }
   });
 }

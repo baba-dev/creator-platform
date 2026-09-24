@@ -6,11 +6,7 @@ import {
   type PlatformRole,
 } from "@aiwa/authz";
 import { db, Prisma } from "@aiwa/db";
-import {
-  enqueueMail,
-  invitationEmail,
-  teamMemberAddedEmail,
-} from "@aiwa/mail";
+import { enqueueMail, invitationEmail, teamMemberAddedEmail } from "@aiwa/mail";
 
 export const MAX_ORGANIZATION_NON_OWNER_MEMBERS = 9;
 export const MAX_ORGANIZATION_SEATS = 10;

@@ -6,7 +6,7 @@ import {
   processVideoSubmitJob,
   processVoiceJob,
 } from "@aiwa/generation/process";
-import { processMailMessage } from "@aiwa/mail";
+import { processMailMessage } from "@aiwa/mail/transport";
 import { createBytePlusProvider } from "@aiwa/providers/byteplus";
 import { createNvidiaProvider } from "@aiwa/providers/nvidia";
 import { Queue, Worker } from "bullmq";

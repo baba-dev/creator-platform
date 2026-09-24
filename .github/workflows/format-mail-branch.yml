@@ -5,7 +5,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   format:
@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: feat/transactional-mail
       - uses: pnpm/action-setup@v6
         with:
           version: 11.19.0
@@ -22,13 +24,11 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm prettier --write apps/web/src/lib/auth.ts apps/worker/src/index.ts packages/config/src/index.ts packages/mail/src/index.ts packages/mail/test/mail.test.ts packages/organizations/src/index.ts
-      - uses: actions/upload-artifact@v4
-        with:
-          name: formatted-mail-files
-          path: |
-            apps/web/src/lib/auth.ts
-            apps/worker/src/index.ts
-            packages/config/src/index.ts
-            packages/mail/src/index.ts
-            packages/mail/test/mail.test.ts
-            packages/organizations/src/index.ts
+      - name: Commit canonical formatting and remove helper
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/format-mail-branch.yml
+          git add apps/web/src/lib/auth.ts apps/worker/src/index.ts packages/config/src/index.ts packages/mail/src/index.ts packages/mail/test/mail.test.ts packages/organizations/src/index.ts
+          git commit -m "style: apply canonical mail formatting"
+          git push origin HEAD:feat/transactional-mail

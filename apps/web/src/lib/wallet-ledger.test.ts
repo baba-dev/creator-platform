@@ -79,14 +79,31 @@ describe("getLedgerRowPresentation", () => {
     expect(overCapture.isSettlement).toBe(true);
   });
 
-  it("falls back to zero balance movement if capture has no reservation metadata", () => {
+  it("does not invent a balance movement if capture reservation metadata is missing", () => {
     const capture = getLedgerRowPresentation({
       type: "CAPTURE",
       amountCredits: 50n,
     });
-    expect(capture.balanceMovementText).toBe("0");
+    expect(capture.balanceMovementText).toBe("—");
+    expect(capture.balanceMovementTone).toBe("muted");
     expect(capture.settlementText).toBe("50");
     expect(capture.isSettlement).toBe(true);
+  });
+
+  it("treats malformed or negative reservation metadata as unknown movement", () => {
+    const malformed = getLedgerRowPresentation({
+      type: "CAPTURE",
+      amountCredits: 50n,
+      metadata: { reservedCredits: "not-a-number" },
+    });
+    expect(malformed.balanceMovementText).toBe("—");
+
+    const negative = getLedgerRowPresentation({
+      type: "CAPTURE",
+      amountCredits: 50n,
+      metadata: { reservedCredits: "-1" },
+    });
+    expect(negative.balanceMovementText).toBe("—");
   });
 
   it("presents releases and refunds as positive balance movements", () => {

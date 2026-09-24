@@ -26,6 +26,7 @@ CREATE TABLE `MailMessage` (
   UNIQUE INDEX `MailMessage_idempotencyKey_key`(`idempotencyKey`),
   INDEX `MailMessage_status_priority_createdAt_idx`(`status`, `priority`, `createdAt`),
   INDEX `MailMessage_status_nextAttemptAt_idx`(`status`, `nextAttemptAt`),
+  INDEX `MailMessage_status_sendingAt_idx`(`status`, `sendingAt`),
   INDEX `MailMessage_userId_createdAt_idx`(`userId`, `createdAt`),
   INDEX `MailMessage_organizationId_createdAt_idx`(`organizationId`, `createdAt`),
   INDEX `MailMessage_recipient_createdAt_idx`(`recipient`, `createdAt`),

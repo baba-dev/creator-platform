@@ -1123,3 +1123,183 @@ export async function checkMemberSpendingBudget(input: {
     remainingCredits: remaining,
   };
 }
+
+
+export class ProjectNotFoundError extends OrganizationDomainError {
+  constructor() {
+    super("PROJECT_NOT_FOUND", "Project not found.");
+  }
+}
+
+export class ProjectArchivedError extends OrganizationDomainError {
+  constructor() {
+    super("PROJECT_ARCHIVED", "Archived projects cannot receive new generations.");
+  }
+}
+
+function authorizeProject(
+  actor: OrganizationActor,
+  organizationId: string,
+  permission: "read" | "write",
+): void {
+  if (
+    actor.organizationId === organizationId &&
+    actor.organizationRole &&
+    hasOrganizationPermission(
+      actor.organizationRole,
+      permission === "write" ? "projects:write" : "projects:read",
+    )
+  ) {
+    return;
+  }
+  if (
+    actor.platformRole !== "USER" &&
+    hasPlatformPermission(actor.platformRole, "organizations:manage")
+  ) {
+    return;
+  }
+  throw new PermissionDeniedError();
+}
+
+function normalizeProjectName(name: string): string {
+  const normalized = name.trim().replace(/\s+/g, " ");
+  if (normalized.length < 1 || normalized.length > 80) {
+    throw new OrganizationDomainError(
+      "INVALID_PROJECT_NAME",
+      "Project name must be between 1 and 80 characters.",
+    );
+  }
+  return normalized;
+}
+
+function normalizeProjectDescription(
+  description?: string | null,
+): string | null {
+  const normalized = description?.trim() ?? "";
+  if (normalized.length > 2000) {
+    throw new OrganizationDomainError(
+      "INVALID_PROJECT_DESCRIPTION",
+      "Project description cannot exceed 2,000 characters.",
+    );
+  }
+  return normalized || null;
+}
+
+export async function createProject(input: {
+  actor: OrganizationActor;
+  organizationId: string;
+  name: string;
+  description?: string | null;
+}) {
+  authorizeProject(input.actor, input.organizationId, "write");
+  const name = normalizeProjectName(input.name);
+  const description = normalizeProjectDescription(input.description);
+
+  return db.$transaction(async (tx) => {
+    await lockedOrganization(tx, input.organizationId);
+    const project = await tx.project.create({
+      data: {
+        organizationId: input.organizationId,
+        name,
+        description,
+      },
+    });
+    await audit(
+      tx,
+      input.actor,
+      input.organizationId,
+      "project.created",
+      "Project",
+      project.id,
+      { name: project.name },
+    );
+    return project;
+  });
+}
+
+export async function updateProject(input: {
+  actor: OrganizationActor;
+  organizationId: string;
+  projectId: string;
+  name: string;
+  description?: string | null;
+}) {
+  authorizeProject(input.actor, input.organizationId, "write");
+  const name = normalizeProjectName(input.name);
+  const description = normalizeProjectDescription(input.description);
+
+  return db.$transaction(async (tx) => {
+    await lockedOrganization(tx, input.organizationId);
+    const existing = await tx.project.findFirst({
+      where: { id: input.projectId, organizationId: input.organizationId },
+    });
+    if (!existing) throw new ProjectNotFoundError();
+    if (existing.archivedAt) throw new ProjectArchivedError();
+
+    const project = await tx.project.update({
+      where: { id: existing.id },
+      data: { name, description },
+    });
+    await audit(
+      tx,
+      input.actor,
+      input.organizationId,
+      "project.updated",
+      "Project",
+      project.id,
+      {
+        previousName: existing.name,
+        name: project.name,
+      },
+    );
+    return project;
+  });
+}
+
+export async function setProjectArchived(input: {
+  actor: OrganizationActor;
+  organizationId: string;
+  projectId: string;
+  archived: boolean;
+}) {
+  authorizeProject(input.actor, input.organizationId, "write");
+
+  return db.$transaction(async (tx) => {
+    await lockedOrganization(tx, input.organizationId);
+    const existing = await tx.project.findFirst({
+      where: { id: input.projectId, organizationId: input.organizationId },
+    });
+    if (!existing) throw new ProjectNotFoundError();
+
+    if (Boolean(existing.archivedAt) === input.archived) return existing;
+
+    const project = await tx.project.update({
+      where: { id: existing.id },
+      data: { archivedAt: input.archived ? new Date() : null },
+    });
+    await audit(
+      tx,
+      input.actor,
+      input.organizationId,
+      input.archived ? "project.archived" : "project.restored",
+      "Project",
+      project.id,
+    );
+    return project;
+  });
+}
+
+export async function assertAssignableProject(
+  tx: Prisma.TransactionClient,
+  organizationId: string,
+  projectId?: string | null,
+) {
+  if (!projectId) return null;
+  const project = await tx.project.findFirst({
+    where: { id: projectId, organizationId },
+    select: { id: true, archivedAt: true },
+  });
+  if (!project) throw new ProjectNotFoundError();
+  if (project.archivedAt) throw new ProjectArchivedError();
+  return project;
+}

@@ -10,9 +10,9 @@ and authorization model.
 Email verification is delivered through the durable transactional-mail outbox.
 Security, billing, and team-membership messages use
 `security@aiwamediagroup.com`; routine user activity uses
-`creator-tool@aiwamediagroup.com`. SMTP delivery is performed only by the
-worker over implicit TLS, while MariaDB remains the delivery source of truth.
-The password policy requires 12 to 128 characters.
+`creator-tool@aiwamediagroup.com`. SMTP delivery is performed only by the worker
+over implicit TLS, while MariaDB remains the delivery source of truth. The
+password policy requires 12 to 128 characters.
 
 ## Signup and organization onboarding
 
@@ -92,12 +92,11 @@ Apply the database migration before starting the new web image:
 pnpm --filter @aiwa/db migrate:deploy
 ```
 
-
 ## Transactional email operations
 
-Production mail requires `MAIL_ENABLED=true`, an implicit-TLS SMTP endpoint,
-and valid `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, and `SMTP_PASSWORD`
-values. Keep `MAIL_SECURITY_FROM_ADDRESS=security@aiwamediagroup.com` and
+Production mail requires `MAIL_ENABLED=true`, an implicit-TLS SMTP endpoint, and
+valid `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, and `SMTP_PASSWORD` values. Keep
+`MAIL_SECURITY_FROM_ADDRESS=security@aiwamediagroup.com` and
 `MAIL_ROUTINE_FROM_ADDRESS=creator-tool@aiwamediagroup.com`.
 
 Application code writes a `MailMessage` outbox row first. The worker dispatches

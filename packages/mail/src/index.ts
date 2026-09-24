@@ -324,9 +324,10 @@ export async function sendMailViaSmtp(
     await session.command(`EHLO ${env.SMTP_EHLO_NAME}`, [250]);
     await session.command("AUTH LOGIN", [334]);
     await session.command(Buffer.from(env.SMTP_USER).toString("base64"), [334]);
-    await session.command(Buffer.from(env.SMTP_PASSWORD).toString("base64"), [
-      235,
-    ]);
+    await session.command(
+      Buffer.from(env.SMTP_PASSWORD).toString("base64"),
+      [235],
+    );
     await session.command(`MAIL FROM:<${headerSafe(message.from)}>`, [250]);
     await session.command(`RCPT TO:<${headerSafe(message.to)}>`, [250, 251]);
     await session.command("DATA", [354]);

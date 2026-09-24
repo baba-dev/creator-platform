@@ -1,7 +1,7 @@
 import type { ServerEnv } from "@aiwa/config";
 import { db } from "@aiwa/db";
 import nodemailer, { type Transporter } from "nodemailer";
-import SMTPTransport from "nodemailer/lib/smtp-transport";
+import type SMTPTransport from "nodemailer/lib/smtp-transport";
 import { senderForKind } from "./index";
 
 let transporter: Transporter<SMTPTransport.SentMessageInfo> | null = null;

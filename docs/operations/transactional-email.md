@@ -5,8 +5,8 @@ outbound email.
 
 ## Sender identities
 
-- `security@aiwamediagroup.com`: verification, password and MFA events,
-  billing, invitations, and team membership.
+- `security@aiwamediagroup.com`: verification, password and MFA events, billing,
+  invitations, and team membership.
 - `creator-tool@aiwamediagroup.com`: routine generation, report, and activity
   notifications.
 

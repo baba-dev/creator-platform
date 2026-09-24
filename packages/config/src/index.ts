@@ -47,15 +47,24 @@ export const serverEnvSchema = z.object({
   APP_URL: z.url().default("http://localhost:3000"),
   AUTH_SECRET: z.string().min(32),
   SIGNUPS_ENABLED: booleanFromString,
-  MAIL_ENABLED: z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
+  MAIL_ENABLED: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((value) => value === "true"),
   SMTP_HOST: z.string().min(1).default("localhost"),
   SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(465),
   SMTP_USER: z.string().min(1).default("local"),
   SMTP_PASSWORD: z.string().min(1).default("local"),
   SMTP_EHLO_NAME: z.string().min(1).default("creator.aiwamediagroup.com"),
   SMTP_SOCKET_TIMEOUT_MS: optionalPositiveInteger.default(30_000),
-  MAIL_SECURITY_FROM_ADDRESS: z.string().email().default("security@aiwamediagroup.com"),
-  MAIL_ROUTINE_FROM_ADDRESS: z.string().email().default("creator-tool@aiwamediagroup.com"),
+  MAIL_SECURITY_FROM_ADDRESS: z
+    .string()
+    .email()
+    .default("security@aiwamediagroup.com"),
+  MAIL_ROUTINE_FROM_ADDRESS: z
+    .string()
+    .email()
+    .default("creator-tool@aiwamediagroup.com"),
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.url().default("redis://127.0.0.1:6379/0"),
   BYTEPLUS_API_KEY: optionalString,

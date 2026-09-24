@@ -95,7 +95,11 @@ export async function GET(request: Request) {
   const organizationId =
     new URL(request.url).searchParams.get("organizationId") ?? "";
   try {
-    await requireMembership(db, organizationId, session.user.id);
+    const membership = await requireMembership(
+      db,
+      organizationId,
+      session.user.id,
+    );
     const now = new Date();
     const models = await db.providerModel.findMany({
       where: {
@@ -120,7 +124,12 @@ export async function GET(request: Request) {
     });
     const [jobs, projects] = await Promise.all([
       db.generationJob.findMany({
-        where: { organizationId },
+        where: {
+          organizationId,
+          ...(membership.role === "ORGANIZATION_OWNER"
+            ? {}
+            : { createdById: session.user.id }),
+        },
         orderBy: { createdAt: "desc" },
         take: 30,
         select: {

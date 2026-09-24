@@ -21,6 +21,7 @@ const primaryNavigation: readonly {
   { label: "Dashboard", href: "#dashboard", icon: "dashboard" },
   { label: "Create", href: "#create", icon: "sparkles" },
   { label: "Projects", href: "projects", icon: "projects" },
+  { label: "History", href: "history", icon: "activity" },
   { label: "Assets", href: "#assets", icon: "assets" },
   { label: "Usage", href: "#usage", icon: "activity" },
 ];
@@ -88,7 +89,12 @@ export default async function OrganizationWorkspacePage({
         orderBy: { createdAt: "asc" },
       }),
       db.generationJob.count({
-        where: { organizationId: membership.organization.id },
+        where: {
+          organizationId: membership.organization.id,
+          ...(membership.role === "ORGANIZATION_OWNER"
+            ? {}
+            : { createdById: session.user.id }),
+        },
       }),
       db.project.count({
         where: {
@@ -103,7 +109,12 @@ export default async function OrganizationWorkspacePage({
         },
       }),
       db.generationJob.findMany({
-        where: { organizationId: membership.organization.id },
+        where: {
+          organizationId: membership.organization.id,
+          ...(membership.role === "ORGANIZATION_OWNER"
+            ? {}
+            : { createdById: session.user.id }),
+        },
         select: {
           id: true,
           status: true,
@@ -145,8 +156,8 @@ export default async function OrganizationWorkspacePage({
               <a
                 key={item.label}
                 href={
-                  item.label === "Projects"
-                    ? `/app/${organizationSlug}/projects`
+                  item.label === "Projects" || item.label === "History"
+                    ? `/app/${organizationSlug}/${item.href}`
                     : item.href
                 }
                 className={`group flex items-center gap-3 rounded-xl border px-3 py-2.5 text-sm font-semibold transition ${
@@ -306,8 +317,8 @@ export default async function OrganizationWorkspacePage({
                 <a
                   key={item.label}
                   href={
-                    item.label === "Projects"
-                      ? `/app/${organizationSlug}/projects`
+                    item.label === "Projects" || item.label === "History"
+                      ? `/app/${organizationSlug}/${item.href}`
                       : item.href
                   }
                   className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${index === 0 ? "bg-primary/10 text-primary" : "text-muted-foreground"}`}

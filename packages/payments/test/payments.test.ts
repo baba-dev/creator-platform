@@ -1,4 +1,22 @@
 import { describe, expect, it, vi } from "vitest";
+
+const enqueueMailMock = vi.fn().mockResolvedValue({ id: "mail1", created: true });
+const billingStatusEmailMock = vi.fn((input) => ({
+  kind: "SECURITY",
+  template: "billing.payment.v1",
+  to: input.to,
+  subject: "billing status",
+  text: "billing status",
+  html: "<p>billing status</p>",
+  organizationId: input.organizationId,
+  userId: input.userId,
+  idempotencyKey: `billing:${input.paymentId}:${input.status.toLowerCase()}`,
+}));
+
+vi.mock("@aiwa/mail", () => ({
+  enqueueMail: enqueueMailMock,
+  billingStatusEmail: billingStatusEmailMock,
+}));
 import type { Prisma } from "@aiwa/db";
 
 import {
@@ -97,6 +115,16 @@ function createMockTx(initial?: {
 
   const tx = {
     $queryRaw: vi.fn().mockResolvedValue([]),
+    organization: {
+      findUnique: vi.fn(async ({ where }: { where: { id: string } }) => ({
+        id: where.id,
+        name: "Test Organization",
+        owner: {
+          id: "owner_test_1",
+          email: "owner@example.com",
+        },
+      })),
+    },
     manualPayment: {
       findUnique: vi.fn(
         async ({

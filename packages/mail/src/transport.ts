@@ -67,6 +67,7 @@ export async function sendMailViaSmtp(
     subject: string;
     text: string;
     html: string;
+    messageId?: string;
   },
 ): Promise<{ providerMessageId: string }> {
   const info = await getTransporter(env).sendMail({
@@ -75,6 +76,7 @@ export async function sendMailViaSmtp(
     subject: message.subject,
     text: message.text,
     html: message.html,
+    messageId: message.messageId,
   });
 
   return { providerMessageId: info.messageId };
@@ -112,6 +114,7 @@ export async function processMailMessage(
       subject: message.subject,
       text: message.textBody,
       html: message.htmlBody,
+      messageId: `<mail-${message.id}@creator.aiwamediagroup.com>`,
     });
     await db.mailMessage.update({
       where: { id },
@@ -153,6 +156,26 @@ export async function processMailMessage(
     if (!terminal) throw error;
     return { sent: false, terminal: true };
   }
+}
+
+export async function recoverStaleMailDeliveries(
+  staleBefore: Date,
+): Promise<number> {
+  const result = await db.mailMessage.updateMany({
+    where: {
+      status: "SENDING",
+      sendingAt: { lt: staleBefore },
+    },
+    data: {
+      status: "RETRY",
+      sendingAt: null,
+      nextAttemptAt: new Date(),
+      lastErrorCode: "WORKER_INTERRUPTED",
+      lastErrorMessage:
+        "Mail delivery was interrupted before completion was recorded. Delivery will be retried with the same Message-ID.",
+    },
+  });
+  return result.count;
 }
 
 export function classifySmtpFailure(error: unknown): {

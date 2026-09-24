@@ -50,6 +50,9 @@ importers:
       '@aiwa/generation':
         specifier: workspace:*
         version: link:../../packages/generation
+      '@aiwa/mail':
+        specifier: workspace:*
+        version: link:../../packages/mail
       '@aiwa/organizations':
         specifier: workspace:*
         version: link:../../packages/organizations
@@ -123,6 +126,9 @@ importers:
       '@aiwa/generation':
         specifier: workspace:*
         version: link:../../packages/generation
+      '@aiwa/mail':
+        specifier: workspace:*
+        version: link:../../packages/mail
       '@aiwa/providers':
         specifier: workspace:*
         version: link:../../packages/providers
@@ -225,6 +231,19 @@ importers:
         specifier: ^4.1.11
         version: 4.1.11(@types/node@24.13.4)(vite@7.3.6(@types/node@24.13.4)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.13))
 
+  packages/mail:
+    dependencies:
+      '@aiwa/config':
+        specifier: workspace:*
+        version: link:../config
+      '@aiwa/db':
+        specifier: workspace:*
+        version: link:../db
+    devDependencies:
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@types/node@24.13.4)(vite@7.3.6(@types/node@24.13.4)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.13))
+
   packages/observability:
     devDependencies:
       vitest:
@@ -239,6 +258,9 @@ importers:
       '@aiwa/db':
         specifier: workspace:*
         version: link:../db
+      '@aiwa/mail':
+        specifier: workspace:*
+        version: link:../mail
     devDependencies:
       vitest:
         specifier: ^4.1.11
@@ -252,6 +274,9 @@ importers:
       '@aiwa/db':
         specifier: workspace:*
         version: link:../db
+      '@aiwa/mail':
+        specifier: workspace:*
+        version: link:../mail
     devDependencies:
       vitest:
         specifier: ^4.1.11

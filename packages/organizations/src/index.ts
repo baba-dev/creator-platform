@@ -6,6 +6,7 @@ import {
   type PlatformRole,
 } from "@aiwa/authz";
 import { db, Prisma } from "@aiwa/db";
+import { enqueueMail, teamMemberAddedEmail } from "@aiwa/mail";
 
 export const MAX_ORGANIZATION_NON_OWNER_MEMBERS = 9;
 export const MAX_ORGANIZATION_SEATS = 10;
@@ -293,7 +294,7 @@ async function lockedOrganization(
   await tx.$queryRaw`SELECT id FROM Organization WHERE id = ${organizationId} FOR UPDATE`;
   const organization = await tx.organization.findUnique({
     where: { id: organizationId },
-    select: { id: true, status: true, ownerUserId: true },
+    select: { id: true, status: true, ownerUserId: true, name: true },
   });
   if (!organization) throw new OrganizationNotFoundError();
   if (!allowSuspended && organization.status !== "ACTIVE")
@@ -312,16 +313,16 @@ export async function addMember(input: {
   authorize(input.actor, input.organizationId, "members");
   return db.$transaction(
     async (tx) => {
-      await lockedOrganization(tx, input.organizationId);
+      const organization = await lockedOrganization(tx, input.organizationId);
       const user = input.userId
         ? await tx.user.findUnique({
             where: { id: input.userId },
-            select: { id: true, emailVerified: true, disabledAt: true },
+            select: { id: true, email: true, emailVerified: true, disabledAt: true },
           })
         : input.email
           ? await tx.user.findUnique({
               where: { email: normalizeMemberEmail(input.email) },
-              select: { id: true, emailVerified: true, disabledAt: true },
+              select: { id: true, email: true, emailVerified: true, disabledAt: true },
             })
           : null;
       if (!user || user.disabledAt) throw new UserUnavailableError();
@@ -365,6 +366,17 @@ export async function addMember(input: {
         "Membership",
         member.id,
         { membershipId: member.id, userId: user.id },
+      );
+      await enqueueMail(
+        teamMemberAddedEmail({
+          to: user.email,
+          organizationName: organization.name,
+          role: member.role,
+          organizationId: input.organizationId,
+          userId: user.id,
+          membershipId: member.id,
+        }),
+        tx,
       );
       return member;
     },

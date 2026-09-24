@@ -32,20 +32,32 @@ export function getLedgerRowPresentation(row: {
         isSettlement: false,
       };
     case "CAPTURE": {
-      let reservedCredits = row.amountCredits;
+      let reservedCredits: bigint | null = null;
       if (
         row.metadata &&
         typeof row.metadata === "object" &&
         "reservedCredits" in row.metadata
       ) {
         try {
-          reservedCredits = BigInt(
+          const parsed = BigInt(
             String((row.metadata as Record<string, unknown>).reservedCredits),
           );
+          if (parsed >= 0n) reservedCredits = parsed;
         } catch {
-          reservedCredits = row.amountCredits;
+          reservedCredits = null;
         }
       }
+
+      if (reservedCredits === null) {
+        return {
+          balanceMovementText: "—",
+          balanceMovementTone: "muted",
+          settlementText: formatCredits(row.amountCredits),
+          settlementTone: "neutral",
+          isSettlement: true,
+        };
+      }
+
       const adjustment = reservedCredits - row.amountCredits;
       let moveText = "0";
       let moveTone: "success" | "destructive" | "muted" = "muted";

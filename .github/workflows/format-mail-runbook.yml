@@ -1,0 +1,34 @@
+name: Format Mail Runbook
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.head_ref == 'feat/transactional-mail'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feat/transactional-mail
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm prettier --write docs/operations/transactional-email.md
+      - name: Commit canonical runbook formatting
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/format-mail-runbook.yml
+          git add docs/operations/transactional-email.md
+          git commit -m "style(mail): apply canonical runbook formatting"
+          git push origin HEAD:feat/transactional-mail

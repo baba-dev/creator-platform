@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-const enqueueMailMock = vi.fn().mockResolvedValue({ id: "mail1", created: true });
+const enqueueMailMock = vi
+  .fn()
+  .mockResolvedValue({ id: "mail1", created: true });
 const billingStatusEmailMock = vi.fn((input) => ({
   kind: "SECURITY",
   template: "billing.payment.v1",

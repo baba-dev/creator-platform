@@ -56,6 +56,10 @@ export const serverEnvSchema = z.object({
   SMTP_USER: z.string().min(1).default("local"),
   SMTP_PASSWORD: z.string().min(1).default("local"),
   SMTP_EHLO_NAME: z.string().min(1).default("creator.aiwamediagroup.com"),
+  SMTP_POOL_MAX_CONNECTIONS: z.coerce.number().int().min(1).max(20).default(3),
+  SMTP_POOL_MAX_MESSAGES: z.coerce.number().int().min(1).max(1000).default(100),
+  SMTP_CONNECTION_TIMEOUT_MS: optionalPositiveInteger.default(10_000),
+  SMTP_GREETING_TIMEOUT_MS: optionalPositiveInteger.default(10_000),
   SMTP_SOCKET_TIMEOUT_MS: optionalPositiveInteger.default(30_000),
   MAIL_SECURITY_FROM_ADDRESS: z
     .string()

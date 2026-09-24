@@ -328,7 +328,9 @@ export async function processVideoPollJob(
       },
     });
     if (asset?.id) {
+      if (asset?.id) {
       await enqueueGenerationSuccess(tx, { ...job, id }, asset.id);
+    }
     }
   });
 }
@@ -476,7 +478,9 @@ export async function processImageJob(
         targetId: id,
       },
     });
-    await enqueueGenerationSuccess(tx, { ...job, id }, asset.id);
+    if (asset?.id) {
+      await enqueueGenerationSuccess(tx, { ...job, id }, asset.id);
+    }
   });
 }
 
@@ -740,6 +744,8 @@ async function finalizeVoiceJob(
         targetId: id,
       },
     });
-    await enqueueGenerationSuccess(tx, { ...job, id }, asset.id);
+    if (asset?.id) {
+      await enqueueGenerationSuccess(tx, { ...job, id }, asset.id);
+    }
   });
 }

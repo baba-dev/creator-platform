@@ -98,31 +98,31 @@ enum AssetStatus {
 }
 
 model User {
-  id                    String              @id @default(cuid())
-  name                  String
-  email                 String              @unique
-  emailVerified         Boolean             @default(false)
-  image                 String?             @db.Text
-  platformRole          PlatformRole        @default(USER)
-  disabledAt            DateTime?
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
-  sessions              Session[]
-  accounts              Account[]
-  memberships           Membership[]
-  onboardedOrganization Organization?       @relation("SelfServeOrganization")
-  createdPayments       ManualPayment[]     @relation("PaymentCreatedBy")
-  confirmedPayments     ManualPayment[]     @relation("PaymentConfirmedBy")
-  priceVersions         ModelPriceVersion[] @relation("PriceVersionCreatedBy")
-  generationJobs        GenerationJob[]     @relation("GenerationCreatedBy")
-  reasoningJobs         ReasoningJob[]      @relation("ReasoningCreatedBy")
-  ownedOrganizations    Organization[]      @relation("OrganizationOwner")
-  storageAssets         Asset[]             @relation("AssetStorageOwner")
-  auditEvents           AuditEvent[]        @relation("AuditActor")
-  createdInvitations    OrganizationInvitation[] @relation("InvitationCreatedBy")
-  acceptedInvitations   OrganizationInvitation[] @relation("InvitationAcceptedBy")
-  twoFactorEnabled      Boolean             @default(false)
-  twoFactors            TwoFactor[]
+  id                     String                   @id @default(cuid())
+  name                   String
+  email                  String                   @unique
+  emailVerified          Boolean                  @default(false)
+  image                  String?                  @db.Text
+  platformRole           PlatformRole             @default(USER)
+  disabledAt             DateTime?
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+  sessions               Session[]
+  accounts               Account[]
+  memberships            Membership[]
+  onboardedOrganization  Organization?            @relation("SelfServeOrganization")
+  createdPayments        ManualPayment[]          @relation("PaymentCreatedBy")
+  confirmedPayments      ManualPayment[]          @relation("PaymentConfirmedBy")
+  priceVersions          ModelPriceVersion[]      @relation("PriceVersionCreatedBy")
+  generationJobs         GenerationJob[]          @relation("GenerationCreatedBy")
+  reasoningJobs          ReasoningJob[]           @relation("ReasoningCreatedBy")
+  ownedOrganizations     Organization[]           @relation("OrganizationOwner")
+  storageAssets          Asset[]                  @relation("AssetStorageOwner")
+  auditEvents            AuditEvent[]             @relation("AuditActor")
+  createdInvitations     OrganizationInvitation[] @relation("InvitationCreatedBy")
+  acceptedInvitations    OrganizationInvitation[] @relation("InvitationAcceptedBy")
+  twoFactorEnabled       Boolean                  @default(false)
+  twoFactors             TwoFactor[]
   notificationPreference NotificationPreference?
 
   @@index([platformRole, disabledAt])
@@ -194,26 +194,26 @@ model TwoFactor {
 }
 
 model NotificationPreference {
-  userId               String   @id
-  generationCompleted  Boolean  @default(true)
-  generationFailed     Boolean  @default(true)
-  reports              Boolean  @default(true)
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
-  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId              String   @id
+  generationCompleted Boolean  @default(true)
+  generationFailed    Boolean  @default(true)
+  reports             Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Organization {
-  id                     String             @id @default(cuid())
+  id                     String                   @id @default(cuid())
   name                   String
-  slug                   String             @unique
-  status                 OrganizationStatus @default(ACTIVE)
-  selfServeCreatorUserId String?            @unique
+  slug                   String                   @unique
+  status                 OrganizationStatus       @default(ACTIVE)
+  selfServeCreatorUserId String?                  @unique
   ownerUserId            String
-  createdAt              DateTime           @default(now())
-  updatedAt              DateTime           @updatedAt
-  selfServeCreator       User?              @relation("SelfServeOrganization", fields: [selfServeCreatorUserId], references: [id], onDelete: SetNull)
-  owner                  User               @relation("OrganizationOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+  selfServeCreator       User?                    @relation("SelfServeOrganization", fields: [selfServeCreatorUserId], references: [id], onDelete: SetNull)
+  owner                  User                     @relation("OrganizationOwner", fields: [ownerUserId], references: [id], onDelete: Restrict)
   activeSessions         Session[]
   wallet                 Wallet?
   memberships            Membership[]
@@ -231,15 +231,15 @@ model Organization {
 }
 
 model Membership {
-  id             String         @id @default(cuid())
-  organizationId String
-  userId         String
-  role           MembershipRole @default(ORGANIZATION_MEMBER)
+  id                        String         @id @default(cuid())
+  organizationId            String
+  userId                    String
+  role                      MembershipRole @default(ORGANIZATION_MEMBER)
   monthlySpendingCapCredits BigInt?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt                 DateTime       @default(now())
+  updatedAt                 DateTime       @updatedAt
+  organization              Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user                      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, userId])
   @@index([userId])
@@ -279,33 +279,33 @@ model LedgerEntry {
 }
 
 model ManualPayment {
-  id              String        @id @default(cuid())
-  organizationId  String
-  method          PaymentMethod
-  status          PaymentStatus @default(DRAFT)
-  amountBaisa     BigInt
-  reference       String?
-  chequeNumber    String?
-  bankName        String?
-  notes           String?       @db.Text
-  receivedAt      DateTime
-  confirmedAt     DateTime?
-  rejectedAt      DateTime?
-  reversedAt      DateTime?
+  id                      String        @id @default(cuid())
+  organizationId          String
+  method                  PaymentMethod
+  status                  PaymentStatus @default(DRAFT)
+  amountBaisa             BigInt
+  reference               String?
+  chequeNumber            String?
+  bankName                String?
+  notes                   String?       @db.Text
+  receivedAt              DateTime
+  confirmedAt             DateTime?
+  rejectedAt              DateTime?
+  reversedAt              DateTime?
   rejectionReason         String?       @db.Text
   rejectionIdempotencyKey String?       @unique
   reversalReason          String?       @db.Text
-  creditsGranted  BigInt?
-  creditsPerBaisa BigInt?
-  idempotencyKey  String        @unique
-  createdById     String
-  confirmedById   String?
-  ledgerEntryId   String?       @unique
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  createdBy       User          @relation("PaymentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  confirmedBy     User?         @relation("PaymentConfirmedBy", fields: [confirmedById], references: [id], onDelete: Restrict)
+  creditsGranted          BigInt?
+  creditsPerBaisa         BigInt?
+  idempotencyKey          String        @unique
+  createdById             String
+  confirmedById           String?
+  ledgerEntryId           String?       @unique
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+  organization            Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  createdBy               User          @relation("PaymentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  confirmedBy             User?         @relation("PaymentConfirmedBy", fields: [confirmedById], references: [id], onDelete: Restrict)
 
   @@index([organizationId, status])
   @@index([method, receivedAt])
@@ -409,25 +409,25 @@ model GenerationJob {
 }
 
 model Asset {
-  id              String         @id @default(cuid())
-  organizationId  String
-  projectId       String?
-  generationJobId String?
+  id                 String         @id @default(cuid())
+  organizationId     String
+  projectId          String?
+  generationJobId    String?
   storageOwnerUserId String?
-  status          AssetStatus    @default(PENDING)
-  objectKey       String         @unique
-  mimeType        String
-  byteSize        BigInt
-  sha256          String?
-  width           Int?
-  height          Int?
-  durationMs      Int?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  project         Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  generationJob   GenerationJob? @relation(fields: [generationJobId], references: [id], onDelete: SetNull)
-  storageOwner    User?          @relation("AssetStorageOwner", fields: [storageOwnerUserId], references: [id], onDelete: SetNull)
+  status             AssetStatus    @default(PENDING)
+  objectKey          String         @unique
+  mimeType           String
+  byteSize           BigInt
+  sha256             String?
+  width              Int?
+  height             Int?
+  durationMs         Int?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  organization       Organization   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  project            Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  generationJob      GenerationJob? @relation(fields: [generationJobId], references: [id], onDelete: SetNull)
+  storageOwner       User?          @relation("AssetStorageOwner", fields: [storageOwnerUserId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, createdAt])
   @@index([generationJobId])
@@ -538,28 +538,28 @@ enum ReasoningJobStatus {
 }
 
 model ReasoningJob {
-  id                 String             @id @default(cuid())
-  organizationId     String
-  createdById        String
-  providerModelId    String
-  status             ReasoningJobStatus @default(QUEUED)
-  idempotencyKey     String             @unique
-  requestPayload     Json
-  outputPayload      Json?
-  providerRequestId  String?
-  inputTokens        Int?
-  outputTokens       Int?
-  errorCode          String?
-  errorMessage       String?            @db.Text
-  queuedAt           DateTime?
-  processingAt       DateTime?
-  completedAt        DateTime?
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
+  id                String             @id @default(cuid())
+  organizationId    String
+  createdById       String
+  providerModelId   String
+  status            ReasoningJobStatus @default(QUEUED)
+  idempotencyKey    String             @unique
+  requestPayload    Json
+  outputPayload     Json?
+  providerRequestId String?
+  inputTokens       Int?
+  outputTokens      Int?
+  errorCode         String?
+  errorMessage      String?            @db.Text
+  queuedAt          DateTime?
+  processingAt      DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
-  organization       Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  createdBy          User               @relation("ReasoningCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  providerModel      ProviderModel      @relation(fields: [providerModelId], references: [id], onDelete: Restrict)
+  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  createdBy     User          @relation("ReasoningCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  providerModel ProviderModel @relation(fields: [providerModelId], references: [id], onDelete: Restrict)
 
   @@index([organizationId, status, createdAt])
   @@index([createdById, organizationId, status, createdAt])
@@ -567,4 +567,3 @@ model ReasoningJob {
   @@index([status, updatedAt])
   @@index([providerRequestId])
 }
-

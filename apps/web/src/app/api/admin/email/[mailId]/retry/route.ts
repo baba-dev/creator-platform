@@ -16,7 +16,10 @@ export async function POST(
 
   const session = await getRequestSession(request.headers);
   if (!session) {
-    return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+    return NextResponse.json(
+      { error: "Authentication required." },
+      { status: 401 },
+    );
   }
   if (!hasPlatformPermission(session.user.platformRole, "jobs:manage")) {
     return NextResponse.json({ error: "Permission denied." }, { status: 403 });
@@ -24,7 +27,10 @@ export async function POST(
 
   const { mailId } = await params;
   if (!cuidSchema.safeParse(mailId).success) {
-    return NextResponse.json({ error: "Mail delivery not found." }, { status: 404 });
+    return NextResponse.json(
+      { error: "Mail delivery not found." },
+      { status: 404 },
+    );
   }
 
   const current = await db.mailMessage.findUnique({
@@ -32,7 +38,10 @@ export async function POST(
     select: { id: true, kind: true, status: true, attemptCount: true },
   });
   if (!current) {
-    return NextResponse.json({ error: "Mail delivery not found." }, { status: 404 });
+    return NextResponse.json(
+      { error: "Mail delivery not found." },
+      { status: 404 },
+    );
   }
   if (current.kind !== "ROUTINE") {
     return NextResponse.json(

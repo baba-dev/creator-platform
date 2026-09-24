@@ -35,7 +35,9 @@ export default async function NotificationSettingsPage() {
         </div>
 
         <div className="mt-6 rounded-2xl border border-warning/20 bg-warning/[0.06] p-5">
-          <p className="text-sm font-semibold">Security messages always stay on</p>
+          <p className="text-sm font-semibold">
+            Security messages always stay on
+          </p>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
             Email verification, password and MFA changes, billing events, and
             team membership notices cannot be disabled because they protect the

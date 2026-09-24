@@ -13,7 +13,10 @@ const schema = z.object({
 export async function GET(request: Request) {
   const session = await getRequestSession(request.headers);
   if (!session) {
-    return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+    return NextResponse.json(
+      { error: "Authentication required." },
+      { status: 401 },
+    );
   }
 
   const preference = await db.notificationPreference.findUnique({
@@ -41,12 +44,18 @@ export async function PATCH(request: Request) {
 
   const session = await getRequestSession(request.headers);
   if (!session) {
-    return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+    return NextResponse.json(
+      { error: "Authentication required." },
+      { status: 401 },
+    );
   }
 
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid notification preferences." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid notification preferences." },
+      { status: 400 },
+    );
   }
 
   const preference = await db.notificationPreference.upsert({

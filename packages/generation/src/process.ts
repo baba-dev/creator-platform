@@ -75,7 +75,11 @@ async function enqueueGenerationSuccess(
   job: { id: string; organizationId: string; createdById: string },
   assetId: string,
 ): Promise<void> {
-  const to = await generationRecipient(tx, job.createdById, "generationCompleted");
+  const to = await generationRecipient(
+    tx,
+    job.createdById,
+    "generationCompleted",
+  );
   if (!to) return;
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
   await enqueueMail(

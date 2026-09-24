@@ -16,10 +16,10 @@ export function GET(): Response {
       voiceConfigured: isBytePlusVoiceConfigured(),
       mailConfigured: Boolean(
         process.env.SMTP_HOST &&
-          process.env.SMTP_USER &&
-          process.env.SMTP_PASSWORD &&
-          process.env.MAIL_SECURITY_FROM_ADDRESS &&
-          process.env.MAIL_ROUTINE_FROM_ADDRESS,
+        process.env.SMTP_USER &&
+        process.env.SMTP_PASSWORD &&
+        process.env.MAIL_SECURITY_FROM_ADDRESS &&
+        process.env.MAIL_ROUTINE_FROM_ADDRESS,
       ),
       timestamp: new Date().toISOString(),
     },

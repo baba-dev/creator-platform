@@ -15,7 +15,9 @@ export function NotificationPreferencesForm({
   initial: Preferences;
 }) {
   const [value, setValue] = useState(initial);
-  const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [state, setState] = useState<"idle" | "saving" | "saved" | "error">(
+    "idle",
+  );
 
   async function save() {
     setState("saving");
@@ -31,17 +33,20 @@ export function NotificationPreferencesForm({
     {
       key: "generationCompleted" as const,
       title: "Generation completed",
-      description: "Receive a link when an image, video, or voice generation is ready.",
+      description:
+        "Receive a link when an image, video, or voice generation is ready.",
     },
     {
       key: "generationFailed" as const,
       title: "Generation failed",
-      description: "Receive a message when a generation cannot be completed and needs attention.",
+      description:
+        "Receive a message when a generation cannot be completed and needs attention.",
     },
     {
       key: "reports" as const,
       title: "Reports and summaries",
-      description: "Receive routine platform reports and summaries when those features are enabled.",
+      description:
+        "Receive routine platform reports and summaries when those features are enabled.",
     },
   ];
 
@@ -74,14 +79,20 @@ export function NotificationPreferencesForm({
       ))}
 
       <div className="flex items-center gap-3">
-        <Button type="button" onClick={() => void save()} disabled={state === "saving"}>
+        <Button
+          type="button"
+          onClick={() => void save()}
+          disabled={state === "saving"}
+        >
           {state === "saving" ? "Saving…" : "Save preferences"}
         </Button>
         {state === "saved" ? (
           <span className="text-xs text-success">Preferences saved.</span>
         ) : null}
         {state === "error" ? (
-          <span className="text-xs text-destructive">Could not save preferences.</span>
+          <span className="text-xs text-destructive">
+            Could not save preferences.
+          </span>
         ) : null}
       </div>
     </div>

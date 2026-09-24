@@ -11,7 +11,9 @@ function maskEmail(email: string): string {
   return `${visible}••••@${domain}`;
 }
 
-function statusTone(status: string): "success" | "warning" | "danger" | "neutral" {
+function statusTone(
+  status: string,
+): "success" | "warning" | "danger" | "neutral" {
   if (status === "SENT") return "success";
   if (status === "FAILED") return "danger";
   if (status === "RETRY" || status === "SENDING") return "warning";
@@ -22,7 +24,9 @@ export default async function AdminEmailPage() {
   await requirePlatformPermission("audit:read");
 
   const [pending, retrying, failed, sent, recent] = await Promise.all([
-    db.mailMessage.count({ where: { status: { in: ["PENDING", "QUEUED", "SENDING"] } } }),
+    db.mailMessage.count({
+      where: { status: { in: ["PENDING", "QUEUED", "SENDING"] } },
+    }),
     db.mailMessage.count({ where: { status: "RETRY" } }),
     db.mailMessage.count({ where: { status: "FAILED" } }),
     db.mailMessage.count({ where: { status: "SENT" } }),
@@ -68,7 +72,10 @@ export default async function AdminEmailPage() {
 
       <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {cards.map(([label, value]) => (
-          <div key={label} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+          <div
+            key={label}
+            className="rounded-2xl border border-border bg-card p-5 shadow-sm"
+          >
             <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
               {label}
             </p>
@@ -81,9 +88,12 @@ export default async function AdminEmailPage() {
 
       <div className="mt-6 overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
         <div className="border-b border-border px-5 py-4 sm:px-6">
-          <h2 className="font-display text-xl font-semibold">Recent deliveries</h2>
+          <h2 className="font-display text-xl font-semibold">
+            Recent deliveries
+          </h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Latest 50 messages. Recipients are masked and mail bodies are excluded.
+            Latest 50 messages. Recipients are masked and mail bodies are
+            excluded.
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -130,7 +140,9 @@ export default async function AdminEmailPage() {
                     {mail.attemptCount}
                   </td>
                   <td className="px-3 py-4 font-mono text-[10px] text-muted-foreground">
-                    {(mail.sentAt ?? mail.nextAttemptAt)?.toLocaleString("en-OM") ?? "—"}
+                    {(mail.sentAt ?? mail.nextAttemptAt)?.toLocaleString(
+                      "en-OM",
+                    ) ?? "—"}
                   </td>
                   <td className="max-w-72 px-3 py-4 text-[10px] text-muted-foreground">
                     {mail.lastErrorCode ? (
@@ -153,14 +165,19 @@ export default async function AdminEmailPage() {
                     ["FAILED", "RETRY"].includes(mail.status) ? (
                       <MailRetryButton mailId={mail.id} />
                     ) : (
-                      <span className="text-[10px] text-muted-foreground">—</span>
+                      <span className="text-[10px] text-muted-foreground">
+                        —
+                      </span>
                     )}
                   </td>
                 </tr>
               ))}
               {recent.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-5 py-12 text-center text-sm text-muted-foreground">
+                  <td
+                    colSpan={9}
+                    className="px-5 py-12 text-center text-sm text-muted-foreground"
+                  >
                     No transactional mail has been queued yet.
                   </td>
                 </tr>

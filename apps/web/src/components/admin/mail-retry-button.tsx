@@ -11,9 +11,12 @@ export function MailRetryButton({ mailId }: { mailId: string }) {
   async function retry() {
     setBusy(true);
     try {
-      const response = await fetch(`/api/admin/email/${encodeURIComponent(mailId)}/retry`, {
-        method: "POST",
-      });
+      const response = await fetch(
+        `/api/admin/email/${encodeURIComponent(mailId)}/retry`,
+        {
+          method: "POST",
+        },
+      );
       if (response.ok) router.refresh();
     } finally {
       setBusy(false);

@@ -118,7 +118,8 @@ export async function GET(request: Request) {
         },
       },
     });
-    const jobs = await db.generationJob.findMany({
+    const [jobs, projects] = await Promise.all([
+      db.generationJob.findMany({
       where: { organizationId },
       orderBy: { createdAt: "desc" },
       take: 30,
@@ -130,12 +131,19 @@ export async function GET(request: Request) {
         chargedCredits: true,
         createdAt: true,
         providerModel: { select: { displayName: true, mediaKind: true } },
+        project: { select: { id: true, name: true } },
         assets: {
           where: { status: "READY" },
           select: { id: true, mimeType: true },
         },
       },
-    });
+      }),
+      db.project.findMany({
+        where: { organizationId, archivedAt: null },
+        orderBy: [{ updatedAt: "desc" }, { name: "asc" }],
+        select: { id: true, name: true },
+      }),
+    ]);
     const wallet = await db.wallet.findUnique({
       where: { organizationId },
       select: { balanceCache: true },
@@ -168,6 +176,7 @@ export async function GET(request: Request) {
             : [],
         ),
         voices: listPublicPresetVoices(),
+        projects,
         jobs: jobs.map((j) => ({
           ...j,
           reservedCredits: j.reservedCredits.toString(),

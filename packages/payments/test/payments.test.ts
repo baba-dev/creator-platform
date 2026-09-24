@@ -1,9 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 const { enqueueMailMock, billingStatusEmailMock } = vi.hoisted(() => ({
-  enqueueMailMock: vi
-    .fn()
-    .mockResolvedValue({ id: "mail1", created: true }),
+  enqueueMailMock: vi.fn().mockResolvedValue({ id: "mail1", created: true }),
   billingStatusEmailMock: vi.fn((input) => ({
     kind: "SECURITY",
     template: "billing.payment.v1",

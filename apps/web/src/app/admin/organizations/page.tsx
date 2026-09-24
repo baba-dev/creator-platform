@@ -57,7 +57,7 @@ export default async function OrganizationsPage({
       status: true,
       createdAt: true,
       owner: { select: { name: true, email: true } },
-      wallet: { select: { balanceCache: true } },
+      wallet: canReadPayments ? { select: { balanceCache: true } } : false,
       _count: { select: { memberships: true } },
     },
   });
@@ -183,7 +183,7 @@ export default async function OrganizationsPage({
                         {(org.wallet?.balanceCache ?? 0n).toLocaleString()}
                       </Link>
                     ) : (
-                      (org.wallet?.balanceCache ?? 0n).toLocaleString()
+                      "Restricted"
                     )}
                   </td>
                   <td className="p-4 tabular-nums">

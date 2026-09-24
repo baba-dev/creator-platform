@@ -6,7 +6,11 @@ import {
   type PlatformRole,
 } from "@aiwa/authz";
 import { db, Prisma } from "@aiwa/db";
-import { enqueueMail, teamMemberAddedEmail } from "@aiwa/mail";
+import {
+  enqueueMail,
+  invitationEmail,
+  teamMemberAddedEmail,
+} from "@aiwa/mail";
 
 export const MAX_ORGANIZATION_NON_OWNER_MEMBERS = 9;
 export const MAX_ORGANIZATION_SEATS = 10;
@@ -866,7 +870,7 @@ export async function createOrganizationInvitation(input: {
   authorize(input.actor, input.organizationId, "members");
   return db.$transaction(
     async (tx) => {
-      await lockedOrganization(tx, input.organizationId);
+      const organization = await lockedOrganization(tx, input.organizationId);
 
       const nonOwnerCount = await tx.membership.count({
         where: {
@@ -910,6 +914,24 @@ export async function createOrganizationInvitation(input: {
           expiresAt: expiresAt.toISOString(),
         },
       );
+
+      if (normalizedEmail) {
+        const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+        await enqueueMail(
+          invitationEmail({
+            to: normalizedEmail,
+            organizationName: organization.name,
+            organizationId: input.organizationId,
+            role: input.role,
+            invitationId: invitation.id,
+            invitationUrl: new URL(
+              `/invite/${encodeURIComponent(token)}`,
+              appUrl,
+            ).toString(),
+          }),
+          tx,
+        );
+      }
 
       return invitation;
     },

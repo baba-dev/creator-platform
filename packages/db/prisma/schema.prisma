@@ -525,6 +525,7 @@ model MailMessage {
 
   @@index([status, priority, createdAt])
   @@index([status, nextAttemptAt])
+  @@index([status, sendingAt])
   @@index([userId, createdAt])
   @@index([organizationId, createdAt])
   @@index([recipient, createdAt])

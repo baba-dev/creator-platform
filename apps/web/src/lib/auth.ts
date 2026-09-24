@@ -2,9 +2,15 @@ import { createHash } from "node:crypto";
 import { platformRoles } from "@aiwa/authz";
 import { parseServerEnv } from "@aiwa/config";
 import { db } from "@aiwa/db";
-import { enqueueMail, verificationEmail } from "@aiwa/mail";
+import {
+  enqueueMail,
+  passwordResetEmail,
+  securityEventEmail,
+  verificationEmail,
+} from "@aiwa/mail";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
+import { createAuthMiddleware } from "better-auth/api";
 import { twoFactor } from "better-auth/plugins";
 
 const env = parseServerEnv();
@@ -59,6 +65,29 @@ export const auth = betterAuth({
     maxPasswordLength: 128,
     autoSignIn: false,
     revokeSessionsOnPasswordReset: true,
+    resetPasswordTokenExpiresIn: 60 * 60,
+    sendResetPassword: async ({ user, url, token }) => {
+      await enqueueMail(
+        passwordResetEmail({
+          to: user.email,
+          resetUrl: url,
+          userId: user.id,
+          idempotencyKey: `password-reset:${createHash("sha256")
+            .update(token)
+            .digest("hex")}`,
+        }),
+      );
+    },
+    onPasswordReset: async ({ user }) => {
+      await enqueueMail(
+        securityEventEmail({
+          to: user.email,
+          userId: user.id,
+          event: "PASSWORD_RESET",
+          idempotencyKey: `security:password-reset:${user.id}:${Date.now()}`,
+        }),
+      );
+    },
   },
   account: {
     accountLinking: {
@@ -115,6 +144,39 @@ export const auth = betterAuth({
     database: {
       validateSchema: true,
     },
+  },
+  hooks: {
+    after: createAuthMiddleware(async (ctx) => {
+      const eventByPath = {
+        "/two-factor/verify-totp": "MFA_ENABLED",
+        "/two-factor/disable": "MFA_DISABLED",
+        "/two-factor/generate-backup-codes": "BACKUP_CODES_REGENERATED",
+      } as const;
+      const event = eventByPath[ctx.path as keyof typeof eventByPath];
+      if (!event) return;
+
+      const session = ctx.context.session;
+      const userId = session?.user?.id;
+      if (!userId) return;
+
+      const user = await db.user.findUnique({
+        where: { id: userId },
+        select: { email: true, twoFactorEnabled: true },
+      });
+      if (!user) return;
+
+      if (event === "MFA_ENABLED" && !user.twoFactorEnabled) return;
+      if (event === "MFA_DISABLED" && user.twoFactorEnabled) return;
+
+      await enqueueMail(
+        securityEventEmail({
+          to: user.email,
+          userId,
+          event,
+          idempotencyKey: `security:${event.toLowerCase()}:${userId}:${Date.now()}`,
+        }),
+      );
+    }),
   },
   databaseHooks: {
     session: {

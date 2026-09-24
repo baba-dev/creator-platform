@@ -13,7 +13,9 @@ describe("mail helpers", () => {
       MAIL_ROUTINE_FROM_ADDRESS: "creator-tool@aiwamediagroup.com",
     } as never;
     expect(senderForKind(env, "SECURITY")).toBe("security@aiwamediagroup.com");
-    expect(senderForKind(env, "ROUTINE")).toBe("creator-tool@aiwamediagroup.com");
+    expect(senderForKind(env, "ROUTINE")).toBe(
+      "creator-tool@aiwamediagroup.com",
+    );
   });
 
   it("builds idempotent routine generation mail", () => {

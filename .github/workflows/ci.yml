@@ -74,7 +74,10 @@ jobs:
           bash -n infra/deploy/package-release.sh
 
       - name: Check formatting
-        run: pnpm format:check
+        run: |
+          pnpm exec prettier --write packages/mail/src/index.ts
+          git diff -- packages/mail/src/index.ts
+          exit 1
 
       - name: Lint
         run: pnpm lint

@@ -117,6 +117,82 @@ export function verificationEmail(input: {
   };
 }
 
+export function passwordResetEmail(input: {
+  to: string;
+  resetUrl: string;
+  idempotencyKey: string;
+  userId?: string;
+}): MailDraft {
+  const safeUrl = escapeHtml(input.resetUrl);
+  return {
+    kind: "SECURITY",
+    template: "auth.password_reset.v1",
+    to: input.to,
+    subject: "Reset your Aiwa Creators password",
+    text: `Use this link to reset your Aiwa Creators password: ${input.resetUrl}\n\nIf you did not request this, ignore this email and your password will remain unchanged.`,
+    html: emailShell(
+      "Reset your password",
+      `<p style="line-height:1.6">A password reset was requested for your Aiwa Creators account.</p><p><a href="${safeUrl}" style="display:inline-block;padding:12px 18px;border-radius:10px;background:#171717;color:#fff;text-decoration:none;font-weight:700">Reset password</a></p><p style="font-size:12px;color:#77736b;word-break:break-all">If the button does not work, copy this link:<br>${safeUrl}</p><p style="line-height:1.6">If you did not request this, you can safely ignore this message.</p>`,
+    ),
+    sensitive: true,
+    userId: input.userId,
+    idempotencyKey: input.idempotencyKey,
+  };
+}
+
+export function securityEventEmail(input: {
+  to: string;
+  userId: string;
+  event:
+    | "PASSWORD_RESET"
+    | "MFA_ENABLED"
+    | "MFA_DISABLED"
+    | "BACKUP_CODES_REGENERATED";
+  idempotencyKey: string;
+}): MailDraft {
+  const content = {
+    PASSWORD_RESET: {
+      subject: "Your Aiwa Creators password was changed",
+      title: "Password changed",
+      message:
+        "Your account password was successfully changed and existing sessions were revoked. If this was not you, contact your administrator immediately.",
+    },
+    MFA_ENABLED: {
+      subject: "Two-factor authentication enabled",
+      title: "Two-factor authentication enabled",
+      message:
+        "Authenticator-based two-factor authentication was enabled on your Aiwa Creators account.",
+    },
+    MFA_DISABLED: {
+      subject: "Two-factor authentication disabled",
+      title: "Two-factor authentication disabled",
+      message:
+        "Two-factor authentication was disabled on your Aiwa Creators account. If this was not you, contact your administrator immediately.",
+    },
+    BACKUP_CODES_REGENERATED: {
+      subject: "New two-factor recovery codes generated",
+      title: "Recovery codes regenerated",
+      message:
+        "New two-factor recovery codes were generated for your Aiwa Creators account. Previous recovery codes are no longer valid.",
+    },
+  }[input.event];
+
+  return {
+    kind: "SECURITY",
+    template: `auth.security_event.${input.event.toLowerCase()}.v1`,
+    to: input.to,
+    subject: content.subject,
+    text: content.message,
+    html: emailShell(
+      content.title,
+      `<p style="line-height:1.6">${escapeHtml(content.message)}</p>`,
+    ),
+    sensitive: false,
+    userId: input.userId,
+    idempotencyKey: input.idempotencyKey,
+  };
+}
+
 export function teamMemberAddedEmail(input: {
   to: string;
   organizationName: string;

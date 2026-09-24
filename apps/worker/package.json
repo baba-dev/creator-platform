@@ -18,16 +18,16 @@
     "@aiwa/config": "workspace:*",
     "@aiwa/core": "workspace:*",
     "@aiwa/providers": "workspace:*",
-    "bullmq": "6.3.5",
-    "ioredis": "^5.8.1",
+    "bullmq": "6.3.8",
+    "ioredis": "^6.0.0",
     "@aiwa/generation": "workspace:*",
     "@aiwa/mail": "workspace:*",
     "@aiwa/db": "workspace:*",
-    "@prisma/client": "6.19.3"
+    "@prisma/client": "7.10.0"
   },
   "devDependencies": {
     "tsup": "^8.5.0",
-    "tsx": "^4.20.6",
-    "vitest": "^4.1.11"
+    "tsx": "^4.23.15",
+    "vitest": "^5.0.1"
   }
 }

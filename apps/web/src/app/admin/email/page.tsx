@@ -1,5 +1,6 @@
 import { db } from "@aiwa/db";
 import { MailRetryButton } from "@/components/admin/mail-retry-button";
+import { MailVerifyButton } from "@/components/admin/mail-verify-button";
 import { StatusBadge } from "@/components/admin/primitives";
 import { Eyebrow } from "@/components/ui/creative";
 import { requirePlatformPermission } from "@/lib/request-auth";
@@ -68,6 +69,9 @@ export default async function AdminEmailPage() {
           Durable transactional-mail outbox and delivery diagnostics. Security
           content is never displayed here.
         </p>
+        <div className="mt-4">
+          <MailVerifyButton />
+        </div>
       </div>
 
       <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

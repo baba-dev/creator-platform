@@ -109,6 +109,7 @@ describe("email verification enforcement", () => {
         id: "org1",
         status: "ACTIVE",
         ownerUserId: "owner1",
+        name: "Test Organization",
       });
       mockTx.user.findUnique.mockResolvedValue({
         id: "user2",

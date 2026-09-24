@@ -1,8 +1,11 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
+import Link from "next/link";
+import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import { Button } from "@aiwa/ui";
+import { Icon } from "@/components/ui/icon";
 import {
   formatBaisa,
   formatCredits,
@@ -858,6 +861,223 @@ export function GrantCreditsDialog({
                   className="min-h-10 px-4 text-sm"
                 >
                   {isPending ? "Granting..." : "Grant Credits"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+export interface AssignCreditsDialogProps {
+  organizations: readonly { id: string; name: string; slug: string }[];
+  canGrant: boolean;
+}
+
+export function AssignCreditsDialog({
+  organizations,
+  canGrant,
+}: AssignCreditsDialogProps) {
+  const [open, setOpen] = useState(false);
+  const [selectedOrgId, setSelectedOrgId] = useState(
+    organizations[0]?.id ?? "",
+  );
+  const [amountCredits, setAmountCredits] = useState("");
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+  const router = useRouter();
+  const { getKey, resetKey } = useStableIdempotencyKey();
+
+  if (!canGrant) {
+    return (
+      <Button
+        disabled
+        title="Finance permission required"
+        className="min-h-10 px-4 text-sm font-medium"
+      >
+        <Icon name="plus" className="size-4" />
+        Assign credits
+      </Button>
+    );
+  }
+
+  const handleGrant = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    const orgId = selectedOrgId || organizations[0]?.id;
+    if (!orgId) {
+      setError("Please select an organization.");
+      return;
+    }
+
+    const creditsVal = safeBigInt(amountCredits);
+    if (creditsVal <= 0n) {
+      setError("Grant amount must be greater than 0.");
+      return;
+    }
+
+    if (reason.trim().length < 5) {
+      setError("Reason must be at least 5 characters.");
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        const idempotencyKey = getKey(
+          JSON.stringify({
+            organizationId: orgId,
+            amountCredits: creditsVal.toString(),
+            reason: reason.trim(),
+          }),
+        );
+        const res = await fetch(
+          `/api/admin/organizations/${orgId}/wallet/credits`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              amountCredits: creditsVal.toString(),
+              reason: reason.trim(),
+              idempotencyKey,
+            }),
+          },
+        );
+
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.error || "Failed to assign credits.");
+          return;
+        }
+
+        setOpen(false);
+        resetKey();
+        setAmountCredits("");
+        setReason("");
+        router.refresh();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Network error");
+      }
+    });
+  };
+
+  return (
+    <>
+      <Button
+        onClick={() => setOpen(true)}
+        className="min-h-10 px-4 text-sm font-medium"
+      >
+        <Icon name="plus" className="size-4" />
+        Assign credits
+      </Button>
+
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/20 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-lg rounded-lg border border-border bg-card p-6 shadow-xl">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <h2 className="font-display text-lg font-semibold text-card-foreground">
+                Assign Organization Credits
+              </h2>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+                aria-label="Close dialog"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleGrant} className="mt-4 space-y-4">
+              {error && (
+                <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                  {error}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-muted-foreground">
+                  Target Organization
+                </label>
+                {organizations.length > 0 ? (
+                  <select
+                    value={selectedOrgId || organizations[0]?.id}
+                    onChange={(e) => setSelectedOrgId(e.target.value)}
+                    required
+                    className="mt-1 w-full min-h-10 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-ring focus:outline-hidden"
+                  >
+                    {organizations.map((org) => (
+                      <option key={org.id} value={org.id}>
+                        {org.name} ({org.slug})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="mt-1 rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+                    No active organizations available.
+                  </div>
+                )}
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Or inspect full ledger details in{" "}
+                  <Link
+                    href={"/admin/organizations" as Route}
+                    className="text-primary hover:underline"
+                    onClick={() => setOpen(false)}
+                  >
+                    Organization Wallets →
+                  </Link>
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-muted-foreground">
+                  Credits to Grant
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="1"
+                  step="1"
+                  value={amountCredits}
+                  onChange={(e) => setAmountCredits(e.target.value)}
+                  placeholder="e.g. 5000"
+                  className="mt-1 w-full min-h-10 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground tabular-nums placeholder:text-muted-foreground/60 focus:border-ring focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-muted-foreground">
+                  Reason / Purpose (Required)
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="e.g. Marketing welcome package, goodwill compensation..."
+                  className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-ring focus:outline-hidden"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-border">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setOpen(false)}
+                  disabled={isPending}
+                  className="min-h-10 px-4 text-sm"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isPending || organizations.length === 0}
+                  className="min-h-10 px-4 text-sm"
+                >
+                  {isPending ? "Assigning..." : "Assign Credits"}
                 </Button>
               </div>
             </form>

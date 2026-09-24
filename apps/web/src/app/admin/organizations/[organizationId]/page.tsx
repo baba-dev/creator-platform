@@ -5,6 +5,8 @@ import {
   ORGANIZATION_STORAGE_QUOTA_BYTES,
 } from "@aiwa/organizations";
 import { notFound } from "next/navigation";
+import Link from "next/link";
+import type { Route } from "next";
 import { OrganizationActions } from "@/components/organizations/organization-actions";
 import { formatBinaryBytes } from "@/lib/format-bytes";
 import { requirePlatformPermission } from "@/lib/request-auth";
@@ -27,7 +29,7 @@ export default async function Overview({
     where: { id: organizationId },
     include: {
       owner: { select: { name: true, email: true } },
-      wallet: true,
+      wallet: canReadPayments ? true : false,
       memberships: true,
       assets: {
         where: { status: { not: "DELETED" } },
@@ -80,7 +82,18 @@ export default async function Overview({
           <div>
             <dt className="text-muted-foreground">Wallet</dt>
             <dd className="tabular-nums">
-              {(org.wallet?.balanceCache ?? 0n).toLocaleString()} credits
+              {canReadPayments ? (
+                <Link
+                  href={
+                    `/admin/organizations/${organizationId}/wallet` as Route
+                  }
+                  className="text-primary hover:underline"
+                >
+                  {(org.wallet?.balanceCache ?? 0n).toLocaleString()} credits
+                </Link>
+              ) : (
+                "Restricted"
+              )}
             </dd>
           </div>
           <div>

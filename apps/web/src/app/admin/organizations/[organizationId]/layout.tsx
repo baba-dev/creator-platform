@@ -1,9 +1,9 @@
 import { db } from "@aiwa/db";
-import { hasPlatformPermission } from "@aiwa/authz";
 import Link from "next/link";
 import type { Route } from "next";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
+import { getVisibleOrganizationTabs } from "@/lib/navigation";
 import { requirePlatformPermission } from "@/lib/request-auth";
 export default async function OrganizationLayout({
   children,
@@ -19,18 +19,7 @@ export default async function OrganizationLayout({
     select: { name: true, slug: true, status: true },
   });
   if (!organization) notFound();
-  const tabs = [
-    { label: "Overview" },
-    { label: "Members" },
-    { label: "Wallet" },
-    { label: "Payments", permission: "payments:read" as const },
-    { label: "Jobs", permission: "jobs:read" as const },
-    { label: "Assets" },
-  ].filter(
-    (tab) =>
-      !tab.permission ||
-      hasPlatformPermission(session.user.platformRole, tab.permission),
-  );
+  const tabs = getVisibleOrganizationTabs(session.user.platformRole);
   return (
     <div>
       <header className="px-4 pt-8 sm:px-7 lg:px-9">

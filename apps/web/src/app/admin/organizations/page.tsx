@@ -1,3 +1,4 @@
+import { hasPlatformPermission } from "@aiwa/authz";
 import {
   MAX_ORGANIZATION_SEATS,
   ORGANIZATION_STORAGE_QUOTA_BYTES,
@@ -16,7 +17,11 @@ export default async function OrganizationsPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  await requirePlatformPermission("organizations:read");
+  const session = await requirePlatformPermission("organizations:read");
+  const canReadPayments = hasPlatformPermission(
+    session.user.platformRole,
+    "payments:read",
+  );
   const raw = await searchParams;
   const parsed = organizationSearchSchema.safeParse({
     search: raw.search,
@@ -52,7 +57,7 @@ export default async function OrganizationsPage({
       status: true,
       createdAt: true,
       owner: { select: { name: true, email: true } },
-      wallet: { select: { balanceCache: true } },
+      wallet: canReadPayments ? { select: { balanceCache: true } } : false,
       _count: { select: { memberships: true } },
     },
   });
@@ -170,7 +175,16 @@ export default async function OrganizationsPage({
                     {formatBinaryBytes(ORGANIZATION_STORAGE_QUOTA_BYTES)}
                   </td>
                   <td className="p-4 tabular-nums">
-                    {(org.wallet?.balanceCache ?? 0n).toLocaleString()}
+                    {canReadPayments ? (
+                      <Link
+                        href={`/admin/organizations/${org.id}/wallet` as Route}
+                        className="text-primary hover:underline"
+                      >
+                        {(org.wallet?.balanceCache ?? 0n).toLocaleString()}
+                      </Link>
+                    ) : (
+                      "Restricted"
+                    )}
                   </td>
                   <td className="p-4 tabular-nums">
                     {jobsByOrganization.get(org.id) ?? 0}

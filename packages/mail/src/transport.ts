@@ -4,7 +4,10 @@ import nodemailer, { type Transporter } from "nodemailer";
 import type SMTPPool from "nodemailer/lib/smtp-pool";
 import { senderForKind } from "./index";
 
-let transporter: Transporter<SMTPPool.SentMessageInfo, SMTPPool.Options> | null = null;
+let transporter: Transporter<
+  SMTPPool.SentMessageInfo,
+  SMTPPool.Options
+> | null = null;
 let transporterFingerprint = "";
 
 function getTransporter(

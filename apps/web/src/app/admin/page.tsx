@@ -49,7 +49,7 @@ export default async function AdminPage({
     can("organizations:read")
       ? db.organization.groupBy({ by: ["status"], _count: true })
       : [],
-    can("organizations:read")
+    can("payments:read")
       ? db.wallet.aggregate({ _sum: { balanceCache: true } })
       : null,
     can("payments:read")
@@ -81,7 +81,9 @@ export default async function AdminPage({
             slug: true,
             status: true,
             createdAt: true,
-            wallet: { select: { balanceCache: true } },
+            wallet: can("payments:read")
+              ? { select: { balanceCache: true } }
+              : false,
             _count: { select: { memberships: true, generationJobs: true } },
           },
           orderBy: { createdAt: "desc" },
@@ -294,7 +296,7 @@ export default async function AdminPage({
                             )}
                           </Link>
                         ) : (
-                          formatBigInt(organization.wallet?.balanceCache ?? 0n)
+                          "Restricted"
                         )}
                       </td>
                       <td className="py-4 text-right">

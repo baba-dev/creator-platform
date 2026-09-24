@@ -272,6 +272,10 @@ function authorize(
     return;
   throw new PermissionDeniedError();
 }
+function entityVersion(updatedAt: unknown, fallback: string): string {
+  return updatedAt instanceof Date ? updatedAt.getTime().toString() : fallback;
+}
+
 async function audit(
   tx: Prisma.TransactionClient,
   actor: OrganizationActor,
@@ -455,7 +459,10 @@ export async function updateMember(input: {
           : updated.monthlySpendingCapCredits === null
             ? "Your monthly spending cap was removed."
             : `Your monthly spending cap is now ${updated.monthlySpendingCapCredits.toString()} credits.`,
-        eventVersion: updated.updatedAt.getTime().toString(),
+        eventVersion: entityVersion(
+          updated.updatedAt,
+          `role:${updated.platformRole}`,
+        ),
       }),
       tx,
     );
@@ -775,7 +782,10 @@ export async function setUserPlatformRole(input: {
         userId: targetUser.id,
         event: "PLATFORM_ROLE_CHANGED",
         detail: `Your Aiwa Creators platform role changed from ${targetUser.platformRole} to ${updated.platformRole}.`,
-        eventVersion: updated.updatedAt.getTime().toString(),
+        eventVersion: entityVersion(
+          updated.updatedAt,
+          `disabled:${input.disabled}`,
+        ),
       }),
       tx,
     );

@@ -16,7 +16,8 @@ ExecStart=/usr/bin/node /var/www/creator-platform/current/apps/worker/dist/index
 Restart=on-failure
 RestartSec=5s
 TimeoutStartSec=30s
-TimeoutStopSec=45s
+# 600s max provider request + 120s media transfer + 60s shutdown margin.
+TimeoutStopSec=780s
 KillSignal=SIGTERM
 UMask=0027
 NoNewPrivileges=true

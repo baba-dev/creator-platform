@@ -613,6 +613,27 @@ export async function withStorageAllocation<T>(input: {
   );
 }
 
+async function lockActivePlatformOwners(
+  tx: Prisma.TransactionClient,
+): Promise<Array<{ id: string }>> {
+  return tx.$queryRaw<Array<{ id: string }>>`
+    SELECT id
+    FROM User
+    WHERE platformRole = 'PLATFORM_OWNER' AND disabledAt IS NULL
+    ORDER BY id
+    FOR UPDATE
+  `;
+}
+
+function assertActivePlatformOwnerInvariant(
+  lockedOwners: readonly { id: string }[],
+  targetUserId: string,
+): void {
+  if (!lockedOwners.some((owner) => owner.id !== targetUserId)) {
+    throw new SolePlatformOwnerError();
+  }
+}
+
 export async function setUserPlatformRole(input: {
   actor: { userId: string; platformRole: PlatformRole };
   targetUserId: string;
@@ -624,6 +645,8 @@ export async function setUserPlatformRole(input: {
     );
   }
   return db.$transaction(async (tx) => {
+    const lockedOwners = await lockActivePlatformOwners(tx);
+    await tx.$queryRaw`SELECT id FROM User WHERE id = ${input.targetUserId} FOR UPDATE`;
     const targetUser = await tx.user.findUnique({
       where: { id: input.targetUserId },
       select: { id: true, platformRole: true, disabledAt: true },
@@ -634,16 +657,7 @@ export async function setUserPlatformRole(input: {
       targetUser.platformRole === "PLATFORM_OWNER" &&
       input.role !== "PLATFORM_OWNER"
     ) {
-      const otherActiveOwners = await tx.user.count({
-        where: {
-          platformRole: "PLATFORM_OWNER",
-          disabledAt: null,
-          id: { not: targetUser.id },
-        },
-      });
-      if (otherActiveOwners === 0) {
-        throw new SolePlatformOwnerError();
-      }
+      assertActivePlatformOwnerInvariant(lockedOwners, targetUser.id);
     }
 
     const updated = await tx.user.update({
@@ -680,6 +694,8 @@ export async function setUserDisabled(input: {
     throw new CannotDisableSelfError();
   }
   return db.$transaction(async (tx) => {
+    const lockedOwners = await lockActivePlatformOwners(tx);
+    await tx.$queryRaw`SELECT id FROM User WHERE id = ${input.targetUserId} FOR UPDATE`;
     const targetUser = await tx.user.findUnique({
       where: { id: input.targetUserId },
       select: { id: true, platformRole: true, disabledAt: true },
@@ -687,16 +703,7 @@ export async function setUserDisabled(input: {
     if (!targetUser) throw new UserNotFoundError();
 
     if (input.disabled && targetUser.platformRole === "PLATFORM_OWNER") {
-      const otherActiveOwners = await tx.user.count({
-        where: {
-          platformRole: "PLATFORM_OWNER",
-          disabledAt: null,
-          id: { not: targetUser.id },
-        },
-      });
-      if (otherActiveOwners === 0) {
-        throw new SolePlatformOwnerError();
-      }
+      assertActivePlatformOwnerInvariant(lockedOwners, targetUser.id);
     }
 
     const updated = await tx.user.update({

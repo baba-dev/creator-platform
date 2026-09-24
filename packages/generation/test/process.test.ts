@@ -15,6 +15,9 @@ const mocks = vi.hoisted(() => ({
       updateMany: vi.fn(),
       update: vi.fn(),
     },
+    providerModel: {
+      findUnique: vi.fn(),
+    },
     $transaction: vi.fn(),
   },
   capture: vi.fn(),
@@ -92,6 +95,7 @@ function transaction(
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.db.generationJob.updateMany.mockResolvedValue({ count: 1 });
+  mocks.db.providerModel.findUnique.mockResolvedValue({ enabled: true });
   mocks.store.mockResolvedValue({ byteSize: 100n, sha256: "hash" });
   mocks.download.mockResolvedValue(Buffer.from("png"));
   mocks.downloadVideo.mockResolvedValue(Buffer.from("mp4"));
@@ -534,5 +538,151 @@ describe("voice processing", () => {
         }),
       }),
     );
+  });
+});
+
+describe("model disabling emergency stop and pause semantics", () => {
+  it("pauses a queued video job without submitting when model is disabled", async () => {
+    const p = provider();
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+      ...base,
+      status: "QUEUED",
+      providerModel: { providerModelId: "seedance-2.5", enabled: false },
+    });
+
+    await processVideoSubmitJob("job1", p);
+
+    expect(p.submit).not.toHaveBeenCalled();
+    expect(mocks.db.generationJob.updateMany).not.toHaveBeenCalled();
+    expect(mocks.release).not.toHaveBeenCalled();
+  });
+
+  it("rolls back video submission to QUEUED if model is disabled immediately before submission", async () => {
+    const p = provider();
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+      ...base,
+      status: "QUEUED",
+      providerModel: {
+        id: "m1",
+        providerModelId: "seedance-2.5",
+        enabled: true,
+      },
+    });
+    mocks.db.providerModel.findUnique.mockResolvedValue({ enabled: false });
+
+    await processVideoSubmitJob("job1", p);
+
+    expect(p.submit).not.toHaveBeenCalled();
+    expect(mocks.db.generationJob.updateMany).toHaveBeenCalledWith({
+      where: { id: "job1", status: "SUBMITTED" },
+      data: { status: "QUEUED", submittedAt: null },
+    });
+  });
+
+  it("pauses a queued image job without submitting when model is disabled", async () => {
+    const p = provider();
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+      ...base,
+      status: "QUEUED",
+      providerModel: { providerModelId: "seedream-5-0", enabled: false },
+    });
+
+    await processImageJob("job1", p);
+
+    expect(p.submit).not.toHaveBeenCalled();
+    expect(mocks.db.generationJob.updateMany).not.toHaveBeenCalled();
+    expect(mocks.release).not.toHaveBeenCalled();
+  });
+
+  it("fails closed and requeues if the model disappears before submission", async () => {
+    const p = provider();
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+      ...base,
+      status: "QUEUED",
+      providerModel: {
+        id: "m1",
+        providerModelId: "seedream-5-0",
+        enabled: true,
+      },
+    });
+    mocks.db.providerModel.findUnique.mockResolvedValue(null);
+
+    await processImageJob("job1", p);
+
+    expect(p.submit).not.toHaveBeenCalled();
+    expect(mocks.db.generationJob.updateMany).toHaveBeenCalledWith({
+      where: { id: "job1", status: "SUBMITTED" },
+      data: { status: "QUEUED", submittedAt: null },
+    });
+  });
+
+  it("rolls back image submission to QUEUED if model is disabled immediately before submission", async () => {
+    const p = provider();
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+      ...base,
+      status: "QUEUED",
+      providerModel: {
+        id: "m1",
+        providerModelId: "seedream-5-0",
+        enabled: true,
+      },
+    });
+    mocks.db.providerModel.findUnique.mockResolvedValue({ enabled: false });
+
+    await processImageJob("job1", p);
+
+    expect(p.submit).not.toHaveBeenCalled();
+    expect(mocks.db.generationJob.updateMany).toHaveBeenCalledWith({
+      where: { id: "job1", status: "SUBMITTED" },
+      data: { status: "QUEUED", submittedAt: null },
+    });
+  });
+
+  it("pauses a queued voice job without submitting when model is disabled", async () => {
+    const p = provider();
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+      id: "job1",
+      organizationId: "org1",
+      createdById: "user1",
+      idempotencyKey: "key1",
+      requestPayload: { prompt: "voice" },
+      reservedCredits: 28n,
+      status: "QUEUED",
+      providerModel: { providerModelId: "seed-tts-2.0", enabled: false },
+      priceVersion: { providerCostMicroUsd: 10_000n },
+    });
+
+    await processVoiceJob("job1", p);
+
+    expect(p.submit).not.toHaveBeenCalled();
+    expect(mocks.db.generationJob.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("rolls back voice submission to QUEUED if model is disabled immediately before submission", async () => {
+    const p = provider();
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+      id: "job1",
+      organizationId: "org1",
+      createdById: "user1",
+      idempotencyKey: "key1",
+      requestPayload: { prompt: "voice" },
+      reservedCredits: 28n,
+      status: "QUEUED",
+      providerModel: {
+        id: "m1",
+        providerModelId: "seed-tts-2.0",
+        enabled: true,
+      },
+      priceVersion: { providerCostMicroUsd: 10_000n },
+    });
+    mocks.db.providerModel.findUnique.mockResolvedValue({ enabled: false });
+
+    await processVoiceJob("job1", p);
+
+    expect(p.submit).not.toHaveBeenCalled();
+    expect(mocks.db.generationJob.updateMany).toHaveBeenCalledWith({
+      where: { id: "job1", status: "SUBMITTED" },
+      data: { status: "QUEUED", submittedAt: null },
+    });
   });
 });

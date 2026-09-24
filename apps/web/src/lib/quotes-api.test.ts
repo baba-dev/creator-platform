@@ -131,4 +131,16 @@ describe("quotes API logic", () => {
     expect(full10s.durationUnits).toBe(2n);
     expect(full10s.quote.customerCredits).toBe(864n);
   });
+
+  it("restricts commercial pricing internals to finance-capable roles", async () => {
+    const { hasPlatformPermission } = await import("@aiwa/authz");
+
+    expect(hasPlatformPermission("USER", "payments:read")).toBe(false);
+    expect(hasPlatformPermission("SUPPORT", "payments:read")).toBe(false);
+    expect(hasPlatformPermission("OPERATOR", "payments:read")).toBe(false);
+
+    expect(hasPlatformPermission("FINANCE_ADMIN", "payments:read")).toBe(true);
+    expect(hasPlatformPermission("PLATFORM_ADMIN", "payments:read")).toBe(true);
+    expect(hasPlatformPermission("PLATFORM_OWNER", "payments:read")).toBe(true);
+  });
 });

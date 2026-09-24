@@ -1,14 +1,33 @@
-import { NextResponse } from "next/server";
-
+import { hasPlatformPermission } from "@aiwa/authz";
 import { db } from "@aiwa/db";
 import { VERIFIED_BYTEPLUS_MODELS } from "@aiwa/providers/byteplus";
+import { revalidatePath } from "next/cache";
+import { NextResponse } from "next/server";
 
-import { requirePlatformPermission } from "@/lib/request-auth";
+import { getRequestSession } from "@/lib/request-auth";
+import { hasTrustedMutationOrigin } from "@/lib/request-security";
 
-export async function POST() {
+export async function POST(request: Request): Promise<NextResponse> {
+  if (!hasTrustedMutationOrigin(request)) {
+    return NextResponse.json({ error: "Origin not allowed." }, { status: 403 });
+  }
+
+  const session = await getRequestSession(request.headers);
+  if (!session) {
+    return NextResponse.json(
+      { error: "Authentication required." },
+      { status: 401 },
+    );
+  }
+
+  if (!hasPlatformPermission(session.user.platformRole, "models:manage")) {
+    return NextResponse.json(
+      { error: "You do not have permission to manage models." },
+      { status: 403 },
+    );
+  }
+
   try {
-    const session = await requirePlatformPermission("models:manage");
-
     let syncedCount = 0;
     for (const model of VERIFIED_BYTEPLUS_MODELS) {
       await db.providerModel.upsert({
@@ -47,16 +66,13 @@ export async function POST() {
       },
     });
 
+    revalidatePath("/admin/models");
+
     return NextResponse.json({ success: true, count: syncedCount });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Sync failed" },
-      {
-        status:
-          error instanceof Error && error.message.includes("Access denied")
-            ? 403
-            : 500,
-      },
+      { error: "Failed to synchronize models." },
+      { status: 500 },
     );
   }
 }

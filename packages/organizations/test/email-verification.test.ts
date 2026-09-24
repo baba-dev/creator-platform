@@ -1,4 +1,22 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const enqueueMailMock = vi.fn().mockResolvedValue({ id: "mail1", created: true });
+const teamMemberAddedEmailMock = vi.fn((input) => ({
+  kind: "SECURITY",
+  template: "organization.member_added.v1",
+  to: input.to,
+  subject: "member added",
+  text: "member added",
+  html: "<p>member added</p>",
+  organizationId: input.organizationId,
+  userId: input.userId,
+  idempotencyKey: `membership-added:${input.membershipId}`,
+}));
+
+vi.mock("@aiwa/mail", () => ({
+  enqueueMail: enqueueMailMock,
+  teamMemberAddedEmail: teamMemberAddedEmailMock,
+}));
 import {
   addMember,
   acceptOrganizationInvitation,
@@ -59,6 +77,7 @@ describe("email verification enforcement", () => {
         id: "org1",
         status: "ACTIVE",
         ownerUserId: "owner1",
+        name: "Test Organization",
       });
       mockTx.user.findUnique.mockResolvedValue({
         id: "user1",
@@ -91,6 +110,7 @@ describe("email verification enforcement", () => {
       });
       mockTx.user.findUnique.mockResolvedValue({
         id: "user2",
+        email: "verified@example.com",
         emailVerified: true,
         disabledAt: null,
       });
@@ -123,6 +143,19 @@ describe("email verification enforcement", () => {
             action: "organization.member_added",
           }),
         }),
+      );
+      expect(teamMemberAddedEmailMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: "verified@example.com",
+          organizationName: "Test Organization",
+          membershipId: "mem1",
+        }),
+      );
+      expect(enqueueMailMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          idempotencyKey: "membership-added:mem1",
+        }),
+        mockTx,
       );
     });
   });

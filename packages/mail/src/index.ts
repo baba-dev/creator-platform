@@ -420,7 +420,8 @@ export async function processMailMessage(
     const normalDelays = [60_000, 300_000, 1_200_000, 3_600_000];
     const delays = message.priority === "HIGH" ? highDelays : normalDelays;
     const delay =
-      delays[Math.min(Math.max(attemptNumber - 1, 0), delays.length - 1)];
+      delays[Math.min(Math.max(attemptNumber - 1, 0), delays.length - 1)] ??
+      delays[delays.length - 1]!;
     await db.mailMessage.update({
       where: { id },
       data: {

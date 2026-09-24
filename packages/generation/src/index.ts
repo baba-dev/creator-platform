@@ -9,6 +9,7 @@ import {
 } from "@aiwa/credits";
 import { db, type Prisma } from "@aiwa/db";
 import {
+  assertAssignableProject,
   assertStorageAllocationFits,
   muscatCalendarMonth,
 } from "@aiwa/organizations";
@@ -26,6 +27,7 @@ export const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 export const imageRequestSchema = z
   .object({
     organizationId: z.string().min(1).max(100),
+    projectId: z.string().min(1).max(100).nullable().optional(),
     modelId: z.string().min(1).max(100),
     priceVersionId: z.string().min(1).max(100),
     idempotencyKey: z.uuid(),
@@ -47,6 +49,7 @@ export const imageRequestSchema = z
 export const videoRequestSchema = z
   .object({
     organizationId: z.string().min(1).max(100),
+    projectId: z.string().min(1).max(100).nullable().optional(),
     modelId: z.string().min(1).max(100),
     priceVersionId: z.string().min(1).max(100),
     idempotencyKey: z.uuid(),
@@ -61,6 +64,7 @@ export const videoRequestSchema = z
 export const voiceRequestSchema = z
   .object({
     organizationId: z.string().min(1).max(100),
+    projectId: z.string().min(1).max(100).nullable().optional(),
     modelId: z.string().min(1).max(100),
     priceVersionId: z.string().min(1).max(100),
     idempotencyKey: z.uuid(),
@@ -172,6 +176,7 @@ export async function createImageJob(userId: string, raw: unknown) {
       });
       if (existing) {
         if (
+          existing.projectId !== (input.projectId ?? null) ||
           existing.providerModelId !== input.modelId ||
           existing.priceVersionId !== input.priceVersionId ||
           JSON.stringify(existing.requestPayload) !== JSON.stringify(payload)
@@ -179,6 +184,7 @@ export async function createImageJob(userId: string, raw: unknown) {
           // JSON columns can reorder keys: compare canonical fields below.
           const old = existing.requestPayload as typeof payload;
           if (
+            existing.projectId !== (input.projectId ?? null) ||
             existing.providerModelId !== input.modelId ||
             existing.priceVersionId !== input.priceVersionId ||
             Object.entries(payload).some(
@@ -192,6 +198,7 @@ export async function createImageJob(userId: string, raw: unknown) {
         }
         return existing;
       }
+      await assertAssignableProject(tx, input.organizationId, input.projectId);
       const now = new Date();
       const model = await tx.providerModel.findFirst({
         where: {
@@ -281,6 +288,7 @@ export async function createImageJob(userId: string, raw: unknown) {
       const job = await tx.generationJob.create({
         data: {
           organizationId: input.organizationId,
+          projectId: input.projectId ?? null,
           createdById: userId,
           providerModelId: model.id,
           priceVersionId: price.id,
@@ -299,6 +307,7 @@ export async function createImageJob(userId: string, raw: unknown) {
       await tx.asset.create({
         data: {
           organizationId: input.organizationId,
+          projectId: input.projectId ?? null,
           storageOwnerUserId: userId,
           generationJobId: job.id,
           objectKey: `${job.id}.png`,
@@ -354,12 +363,14 @@ export async function createVideoJob(userId: string, raw: unknown) {
       });
       if (existing) {
         if (
+          existing.projectId !== (input.projectId ?? null) ||
           existing.providerModelId !== input.modelId ||
           existing.priceVersionId !== input.priceVersionId ||
           JSON.stringify(existing.requestPayload) !== JSON.stringify(payload)
         ) {
           const old = existing.requestPayload as typeof payload;
           if (
+            existing.projectId !== (input.projectId ?? null) ||
             existing.providerModelId !== input.modelId ||
             existing.priceVersionId !== input.priceVersionId ||
             Object.entries(payload).some(
@@ -373,6 +384,7 @@ export async function createVideoJob(userId: string, raw: unknown) {
         }
         return existing;
       }
+      await assertAssignableProject(tx, input.organizationId, input.projectId);
       const now = new Date();
       const model = await tx.providerModel.findFirst({
         where: {
@@ -502,6 +514,7 @@ export async function createVideoJob(userId: string, raw: unknown) {
       const job = await tx.generationJob.create({
         data: {
           organizationId: input.organizationId,
+          projectId: input.projectId ?? null,
           createdById: userId,
           providerModelId: model.id,
           priceVersionId: price.id,
@@ -522,6 +535,7 @@ export async function createVideoJob(userId: string, raw: unknown) {
       await tx.asset.create({
         data: {
           organizationId: input.organizationId,
+          projectId: input.projectId ?? null,
           storageOwnerUserId: userId,
           generationJobId: job.id,
           objectKey: `${job.id}.mp4`,
@@ -595,12 +609,14 @@ export async function createVoiceJob(userId: string, raw: unknown) {
       });
       if (existing) {
         if (
+          existing.projectId !== (input.projectId ?? null) ||
           existing.providerModelId !== input.modelId ||
           existing.priceVersionId !== input.priceVersionId ||
           JSON.stringify(existing.requestPayload) !== JSON.stringify(payload)
         ) {
           const old = existing.requestPayload as typeof payload;
           if (
+            existing.projectId !== (input.projectId ?? null) ||
             existing.providerModelId !== input.modelId ||
             existing.priceVersionId !== input.priceVersionId ||
             Object.entries(payload).some(
@@ -614,6 +630,7 @@ export async function createVoiceJob(userId: string, raw: unknown) {
         }
         return existing;
       }
+      await assertAssignableProject(tx, input.organizationId, input.projectId);
       const now = new Date();
       const model = await tx.providerModel.findFirst({
         where: {
@@ -700,6 +717,7 @@ export async function createVoiceJob(userId: string, raw: unknown) {
       const job = await tx.generationJob.create({
         data: {
           organizationId: input.organizationId,
+          projectId: input.projectId ?? null,
           createdById: userId,
           providerModelId: model.id,
           priceVersionId: price.id,
@@ -720,6 +738,7 @@ export async function createVoiceJob(userId: string, raw: unknown) {
       await tx.asset.create({
         data: {
           organizationId: input.organizationId,
+          projectId: input.projectId ?? null,
           storageOwnerUserId: userId,
           generationJobId: job.id,
           objectKey: `${job.id}.mp3`,

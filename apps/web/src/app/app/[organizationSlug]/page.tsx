@@ -15,12 +15,12 @@ import { requireOrganizationPermission } from "@/lib/request-auth";
 
 const primaryNavigation: readonly {
   label: string;
-  href: `#${string}`;
+  href: string;
   icon: IconName;
 }[] = [
   { label: "Dashboard", href: "#dashboard", icon: "dashboard" },
   { label: "Create", href: "#create", icon: "sparkles" },
-  { label: "Projects", href: "#projects", icon: "projects" },
+  { label: "Projects", href: "projects", icon: "projects" },
   { label: "Assets", href: "#assets", icon: "assets" },
   { label: "Usage", href: "#usage", icon: "activity" },
 ];
@@ -144,7 +144,11 @@ export default async function OrganizationWorkspacePage({
             {primaryNavigation.map((item, index) => (
               <a
                 key={item.label}
-                href={item.href}
+                href={
+                  item.label === "Projects"
+                    ? `/app/${organizationSlug}/projects`
+                    : item.href
+                }
                 className={`group flex items-center gap-3 rounded-xl border px-3 py-2.5 text-sm font-semibold transition ${
                   index === 0
                     ? "border-primary/20 bg-card text-foreground shadow-xs"
@@ -301,7 +305,11 @@ export default async function OrganizationWorkspacePage({
               {primaryNavigation.map((item, index) => (
                 <a
                   key={item.label}
-                  href={item.href}
+                  href={
+                    item.label === "Projects"
+                      ? `/app/${organizationSlug}/projects`
+                      : item.href
+                  }
                   className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${index === 0 ? "bg-primary/10 text-primary" : "text-muted-foreground"}`}
                 >
                   <Icon name={item.icon} className="size-3.5" />
@@ -375,6 +383,7 @@ export default async function OrganizationWorkspacePage({
                 key={membership.organizationId}
                 canGenerate={canGenerate}
                 organizationId={membership.organizationId}
+                organizationSlug={organizationSlug}
               />
             </div>
 
@@ -392,12 +401,12 @@ export default async function OrganizationWorkspacePage({
                       Latest creative work in this organization
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    className="text-xs font-semibold text-primary transition hover:text-primary"
+                  <Link
+                    href={`/app/${organizationSlug}/projects`}
+                    className="inline-flex min-h-10 items-center text-xs font-semibold text-primary transition hover:text-primary"
                   >
-                    View all
-                  </button>
+                    Manage projects
+                  </Link>
                 </div>
 
                 {recentJobs.length > 0 ? (

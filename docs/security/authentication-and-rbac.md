@@ -7,9 +7,12 @@ login, phone login, passkeys, and magic links are intentionally not configured.
 Better Auth owns credentials and database sessions; Aiwa owns the organization
 and authorization model.
 
-Email verification and password-reset email delivery remain disabled until a
-transactional email provider and verified sender domain are configured. The
-password policy requires 12 to 128 characters.
+Email verification is delivered through the durable transactional-mail outbox.
+Security, billing, and team-membership messages use
+`security@aiwamediagroup.com`; routine user activity uses
+`creator-tool@aiwamediagroup.com`. SMTP delivery is performed only by the
+worker over implicit TLS, while MariaDB remains the delivery source of truth.
+The password policy requires 12 to 128 characters.
 
 ## Signup and organization onboarding
 
@@ -88,3 +91,24 @@ Apply the database migration before starting the new web image:
 ```bash
 pnpm --filter @aiwa/db migrate:deploy
 ```
+
+
+## Transactional email operations
+
+Production mail requires `MAIL_ENABLED=true`, an implicit-TLS SMTP endpoint,
+and valid `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, and `SMTP_PASSWORD`
+values. Keep `MAIL_SECURITY_FROM_ADDRESS=security@aiwamediagroup.com` and
+`MAIL_ROUTINE_FROM_ADDRESS=creator-tool@aiwamediagroup.com`.
+
+Application code writes a `MailMessage` outbox row first. The worker dispatches
+eligible rows through BullMQ and SMTP. A Redis or SMTP outage therefore does not
+discard pending mail. Security mail is high priority, uses idempotency keys, and
+has sensitive message bodies redacted after successful delivery. Routine
+generation notifications are non-critical to the generation lifecycle: failure
+to enqueue or deliver a notification must never turn a successfully stored and
+charged generation into a failed generation.
+
+After deployment, verify migrations were applied and both web and worker
+services use the same production environment. Test both sender identities before
+enabling customer-facing notification volume. Never expose SMTP credentials
+through `NEXT_PUBLIC_*` variables or application logs.

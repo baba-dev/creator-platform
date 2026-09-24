@@ -1,3 +1,8 @@
+import {
+  hasPlatformPermission,
+  type PlatformPermission,
+  type PlatformRole,
+} from "@aiwa/authz";
 import type { Route } from "next";
 
 const internalOrigin = "https://internal.aiwa.invalid";
@@ -50,4 +55,26 @@ export function safeInvitationRoute(
   }
 
   return fallback;
+}
+
+export interface OrganizationTabItem {
+  label: string;
+  permission?: PlatformPermission;
+}
+
+export const organizationDetailTabs: readonly OrganizationTabItem[] = [
+  { label: "Overview" },
+  { label: "Members" },
+  { label: "Wallet", permission: "payments:read" },
+  { label: "Payments", permission: "payments:read" },
+  { label: "Jobs", permission: "jobs:read" },
+  { label: "Assets" },
+];
+
+export function getVisibleOrganizationTabs(
+  role: PlatformRole,
+): OrganizationTabItem[] {
+  return organizationDetailTabs.filter(
+    (tab) => !tab.permission || hasPlatformPermission(role, tab.permission),
+  );
 }

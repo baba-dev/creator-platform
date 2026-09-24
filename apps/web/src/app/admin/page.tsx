@@ -9,7 +9,7 @@ import {
   Pagination,
   StatusBadge,
 } from "@/components/admin/primitives";
-import { Button } from "@/components/ui/button";
+import { AssignCreditsDialog } from "@/components/admin/payment-actions";
 import { Eyebrow } from "@/components/ui/creative";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { requirePlatformPermission } from "@/lib/request-auth";
@@ -43,6 +43,7 @@ export default async function AdminPage({
     organizations,
     organizationTotal,
     recentEvents,
+    allOrganizations,
   ] = await Promise.all([
     can("users:read") ? db.user.count({ where: { disabledAt: null } }) : null,
     can("organizations:read")
@@ -103,6 +104,13 @@ export default async function AdminPage({
           take: 6,
         })
       : [],
+    can("organizations:read")
+      ? db.organization.findMany({
+          where: { status: "ACTIVE" },
+          select: { id: true, name: true, slug: true },
+          orderBy: { name: "asc" },
+        })
+      : [],
   ]);
 
   const orgCount = (status: "ACTIVE" | "SUSPENDED") =>
@@ -133,17 +141,10 @@ export default async function AdminPage({
             signals.
           </p>
         </div>
-        <Button
-          disabled
-          title={
-            can("credits:grant")
-              ? "Credit mutations remain disabled until the transactional wallet workflow is implemented"
-              : "Finance permission required"
-          }
-        >
-          <Icon name="plus" className="size-4" />
-          Assign credits
-        </Button>
+        <AssignCreditsDialog
+          canGrant={can("credits:grant")}
+          organizations={allOrganizations}
+        />
       </section>
 
       <section
@@ -262,7 +263,14 @@ export default async function AdminPage({
                   {organizations.map((organization) => (
                     <tr key={organization.id} className="text-xs">
                       <td className="py-4">
-                        <p className="font-semibold">{organization.name}</p>
+                        <Link
+                          href={
+                            `/admin/organizations/${organization.id}` as Route
+                          }
+                          className="font-semibold text-primary hover:underline"
+                        >
+                          {organization.name}
+                        </Link>
                         <p className="mt-1 font-mono text-[9px] text-muted-foreground">
                           {organization.slug}
                         </p>
@@ -274,7 +282,20 @@ export default async function AdminPage({
                         {organization._count.generationJobs}
                       </td>
                       <td className="py-4 text-right font-mono font-semibold tabular-nums">
-                        {formatBigInt(organization.wallet?.balanceCache ?? 0n)}
+                        {can("payments:read") ? (
+                          <Link
+                            href={
+                              `/admin/organizations/${organization.id}/wallet` as Route
+                            }
+                            className="text-primary hover:underline"
+                          >
+                            {formatBigInt(
+                              organization.wallet?.balanceCache ?? 0n,
+                            )}
+                          </Link>
+                        ) : (
+                          formatBigInt(organization.wallet?.balanceCache ?? 0n)
+                        )}
                       </td>
                       <td className="py-4 text-right">
                         <StatusBadge

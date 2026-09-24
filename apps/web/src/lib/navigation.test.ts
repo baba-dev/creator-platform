@@ -58,3 +58,46 @@ describe("safeInvitationRoute", () => {
     expect(safeInvitationRoute("/app?tab=usage")).toBe("/app?tab=usage");
   });
 });
+
+import { getVisibleOrganizationTabs } from "./navigation";
+
+describe("getVisibleOrganizationTabs", () => {
+  it("hides Wallet and Payments navigation tabs from roles without payments:read", () => {
+    const supportTabs = getVisibleOrganizationTabs("SUPPORT").map(
+      (t) => t.label,
+    );
+    expect(supportTabs).not.toContain("Wallet");
+    expect(supportTabs).not.toContain("Payments");
+    expect(supportTabs).toContain("Overview");
+    expect(supportTabs).toContain("Members");
+    expect(supportTabs).toContain("Jobs");
+    expect(supportTabs).toContain("Assets");
+
+    const operatorTabs = getVisibleOrganizationTabs("OPERATOR").map(
+      (t) => t.label,
+    );
+    expect(operatorTabs).not.toContain("Wallet");
+    expect(operatorTabs).not.toContain("Payments");
+    expect(operatorTabs).toContain("Jobs");
+  });
+
+  it("shows Wallet and Payments navigation tabs to roles with payments:read", () => {
+    const financeTabs = getVisibleOrganizationTabs("FINANCE_ADMIN").map(
+      (t) => t.label,
+    );
+    expect(financeTabs).toContain("Wallet");
+    expect(financeTabs).toContain("Payments");
+
+    const platformAdminTabs = getVisibleOrganizationTabs("PLATFORM_ADMIN").map(
+      (t) => t.label,
+    );
+    expect(platformAdminTabs).toContain("Wallet");
+    expect(platformAdminTabs).toContain("Payments");
+
+    const ownerTabs = getVisibleOrganizationTabs("PLATFORM_OWNER").map(
+      (t) => t.label,
+    );
+    expect(ownerTabs).toContain("Wallet");
+    expect(ownerTabs).toContain("Payments");
+  });
+});

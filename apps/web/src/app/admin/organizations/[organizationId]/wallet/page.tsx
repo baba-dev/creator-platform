@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import { requirePlatformPermission } from "@/lib/request-auth";
 import { formatCredits, formatMuscatDateTime } from "@/lib/format-baisa";
+import { getLedgerRowPresentation } from "@/lib/wallet-ledger";
 import { GrantCreditsDialog } from "@/components/admin/payment-actions";
 
 const PAGE_SIZE = 25;
@@ -26,15 +27,6 @@ function LedgerTypeBadge({ type }: { type: string }) {
     >
       {type}
     </span>
-  );
-}
-
-function isPositiveEntry(type: string): boolean {
-  return (
-    type === "PAYMENT_GRANT" ||
-    type === "ADMIN_GRANT" ||
-    type === "RELEASE" ||
-    type === "REFUND"
   );
 }
 
@@ -112,7 +104,8 @@ export default async function Page({
           <thead className="border-b border-border text-muted-foreground">
             <tr>
               <th className="p-4 font-medium">Type</th>
-              <th className="p-4 text-right font-medium">Amount</th>
+              <th className="p-4 text-right font-medium">Balance movement</th>
+              <th className="p-4 text-right font-medium">Settlement</th>
               <th className="p-4 text-right font-medium">Balance after</th>
               <th className="p-4 font-medium">Reference</th>
               <th className="p-4 font-medium">Description</th>
@@ -121,7 +114,7 @@ export default async function Page({
           </thead>
           <tbody className="divide-y divide-border">
             {rows.map((row) => {
-              const positive = isPositiveEntry(row.type);
+              const presentation = getLedgerRowPresentation(row);
               return (
                 <tr key={row.id} className="hover:bg-muted/30">
                   <td className="p-4">
@@ -129,11 +122,25 @@ export default async function Page({
                   </td>
                   <td
                     className={`p-4 text-right tabular-nums font-semibold ${
-                      positive ? "text-success" : "text-foreground"
+                      presentation.balanceMovementTone === "success"
+                        ? "text-success"
+                        : presentation.balanceMovementTone === "destructive"
+                          ? "text-destructive"
+                          : presentation.balanceMovementTone === "muted"
+                            ? "text-muted-foreground"
+                            : "text-foreground"
                     }`}
                   >
-                    {positive ? "+" : "−"}
-                    {formatCredits(row.amountCredits)}
+                    {presentation.balanceMovementText}
+                  </td>
+                  <td
+                    className={`p-4 text-right tabular-nums font-semibold ${
+                      presentation.settlementTone === "muted"
+                        ? "text-muted-foreground"
+                        : "text-foreground"
+                    }`}
+                  >
+                    {presentation.settlementText}
                   </td>
                   <td className="p-4 text-right tabular-nums text-muted-foreground">
                     {formatCredits(row.balanceAfter)}

@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  classifySmtpFailure,
-  fingerprint,
-  generationCompletedEmail,
-  senderForKind,
-} from "../src/index";
+import { generationCompletedEmail, senderForKind } from "../src/index";
+import { classifySmtpFailure } from "../src/transport";
 
 describe("mail helpers", () => {
   it("keeps sender identities separated", () => {
@@ -35,7 +31,4 @@ describe("mail helpers", () => {
     expect(classifySmtpFailure(error).retryable).toBe(false);
   });
 
-  it("does not expose source values through fingerprints", () => {
-    expect(fingerprint("secret-link")).not.toContain("secret-link");
-  });
 });

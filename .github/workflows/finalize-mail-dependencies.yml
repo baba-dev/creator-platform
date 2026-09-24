@@ -1,0 +1,36 @@
+name: Finalize Mail Dependencies
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.head_ref == 'feat/transactional-mail'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feat/transactional-mail
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @aiwa/mail add nodemailer@9.1.1
+      - run: pnpm --filter @aiwa/mail add -D @types/nodemailer@8.0.2
+      - run: pnpm prettier --write .env.example apps/web/src/app/admin/email/page.tsx apps/web/src/app/api/account/notification-preferences/route.ts apps/web/src/app/api/admin/email/[mailId]/retry/route.ts apps/web/src/app/api/health/route.ts apps/web/src/app/settings/notifications/page.tsx apps/web/src/components/admin/mail-retry-button.tsx apps/web/src/components/settings/notification-preferences-form.tsx apps/web/src/lib/auth.ts apps/worker/src/index.ts packages/config/src/index.ts packages/db/prisma/schema.prisma packages/generation/src/process.ts packages/mail/src/index.ts packages/mail/src/transport.ts
+      - name: Commit dependency lock and canonical formatting
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/finalize-mail-dependencies.yml
+          git add .
+          git commit -m "chore(mail): finalize SMTP dependencies and formatting"
+          git push origin HEAD:feat/transactional-mail

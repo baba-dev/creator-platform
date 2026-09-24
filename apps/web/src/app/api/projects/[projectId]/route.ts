@@ -34,12 +34,18 @@ export async function PATCH(
   }
   const session = await getRequestSession(request.headers);
   if (!session) {
-    return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+    return NextResponse.json(
+      { error: "Authentication required." },
+      { status: 401 },
+    );
   }
   try {
     const text = await request.text();
     if (text.length > 6000) {
-      return NextResponse.json({ error: "Request too large." }, { status: 413 });
+      return NextResponse.json(
+        { error: "Request too large." },
+        { status: 413 },
+      );
     }
     const input = updateSchema.parse(JSON.parse(text));
     const { projectId } = await context.params;
@@ -52,7 +58,10 @@ export async function PATCH(
       },
     });
     if (!membership) {
-      return NextResponse.json({ error: "Workspace access denied." }, { status: 403 });
+      return NextResponse.json(
+        { error: "Workspace access denied." },
+        { status: 403 },
+      );
     }
     const actor = {
       userId: session.user.id,

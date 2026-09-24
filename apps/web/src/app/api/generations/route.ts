@@ -120,23 +120,23 @@ export async function GET(request: Request) {
     });
     const [jobs, projects] = await Promise.all([
       db.generationJob.findMany({
-      where: { organizationId },
-      orderBy: { createdAt: "desc" },
-      take: 30,
-      select: {
-        id: true,
-        status: true,
-        errorMessage: true,
-        reservedCredits: true,
-        chargedCredits: true,
-        createdAt: true,
-        providerModel: { select: { displayName: true, mediaKind: true } },
-        project: { select: { id: true, name: true } },
-        assets: {
-          where: { status: "READY" },
-          select: { id: true, mimeType: true },
+        where: { organizationId },
+        orderBy: { createdAt: "desc" },
+        take: 30,
+        select: {
+          id: true,
+          status: true,
+          errorMessage: true,
+          reservedCredits: true,
+          chargedCredits: true,
+          createdAt: true,
+          providerModel: { select: { displayName: true, mediaKind: true } },
+          project: { select: { id: true, name: true } },
+          assets: {
+            where: { status: "READY" },
+            select: { id: true, mimeType: true },
+          },
         },
-      },
       }),
       db.project.findMany({
         where: { organizationId, archivedAt: null },

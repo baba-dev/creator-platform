@@ -1124,7 +1124,6 @@ export async function checkMemberSpendingBudget(input: {
   };
 }
 
-
 export class ProjectNotFoundError extends OrganizationDomainError {
   constructor() {
     super("PROJECT_NOT_FOUND", "Project not found.");
@@ -1133,7 +1132,10 @@ export class ProjectNotFoundError extends OrganizationDomainError {
 
 export class ProjectArchivedError extends OrganizationDomainError {
   constructor() {
-    super("PROJECT_ARCHIVED", "Archived projects cannot receive new generations.");
+    super(
+      "PROJECT_ARCHIVED",
+      "Archived projects cannot receive new generations.",
+    );
   }
 }
 

@@ -110,13 +110,16 @@ export function ProjectManager({
               }),
             });
       const body = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(body.error ?? "Unable to save project.");
+      if (!response.ok)
+        throw new Error(body.error ?? "Unable to save project.");
       await refresh();
       setEditingId(null);
       setName("");
       setDescription("");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to save project.");
+      setError(
+        cause instanceof Error ? cause.message : "Unable to save project.",
+      );
     } finally {
       setBusyId(null);
     }
@@ -145,7 +148,8 @@ export function ProjectManager({
         }),
       });
       const body = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(body.error ?? "Unable to update project.");
+      if (!response.ok)
+        throw new Error(body.error ?? "Unable to update project.");
       await refresh();
       if (editingId === project.id) setEditingId(null);
     } catch (cause) {
@@ -243,7 +247,11 @@ export function ProjectManager({
                 disabled={!name.trim() || Boolean(busyId)}
                 aria-busy={Boolean(busyId)}
               >
-                {busyId ? "Saving…" : editingId === "new" ? "Create project" : "Save changes"}
+                {busyId
+                  ? "Saving…"
+                  : editingId === "new"
+                    ? "Create project"
+                    : "Save changes"}
               </Button>
             </div>
           </div>
@@ -301,7 +309,9 @@ export function ProjectManager({
               </dl>
               <div className="mt-5 flex flex-wrap items-center gap-2">
                 <Button asChild size="sm" variant="secondary">
-                  <Link href={`/app/${organizationSlug}/projects/${project.id}`}>
+                  <Link
+                    href={`/app/${organizationSlug}/projects/${project.id}`}
+                  >
                     Open
                   </Link>
                 </Button>

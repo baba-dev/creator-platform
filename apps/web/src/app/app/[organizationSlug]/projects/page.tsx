@@ -2,7 +2,10 @@ import { hasOrganizationPermission } from "@aiwa/authz";
 import { db } from "@aiwa/db";
 import Link from "next/link";
 
-import { ProjectManager, type ProjectRow } from "@/components/projects/project-manager";
+import {
+  ProjectManager,
+  type ProjectRow,
+} from "@/components/projects/project-manager";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Brand } from "@/components/ui/brand";
 import { requireOrganizationPermission } from "@/lib/request-auth";
@@ -58,7 +61,10 @@ export default async function ProjectsPage({
           <ProjectManager
             organizationId={membership.organizationId}
             organizationSlug={organizationSlug}
-            canWrite={hasOrganizationPermission(membership.role, "projects:write")}
+            canWrite={hasOrganizationPermission(
+              membership.role,
+              "projects:write",
+            )}
             initialProjects={rows}
           />
         </div>

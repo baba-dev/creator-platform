@@ -94,7 +94,10 @@ export default async function ProjectDetailPage({
           {project.generationJobs.length ? (
             <div className="mt-4 divide-y divide-border">
               {project.generationJobs.map((job) => (
-                <article key={job.id} className="flex flex-wrap items-center gap-3 py-4">
+                <article
+                  key={job.id}
+                  className="flex flex-wrap items-center gap-3 py-4"
+                >
                   <span className="grid size-10 place-items-center rounded-xl bg-surface-sunken text-muted-foreground">
                     <Icon
                       name={
@@ -142,8 +145,8 @@ export default async function ProjectDetailPage({
             </div>
           ) : (
             <p className="mt-4 rounded-xl border border-dashed border-border p-6 text-sm text-muted-foreground">
-              No generations are assigned to this project yet. Choose this project
-              in Studio before generating.
+              No generations are assigned to this project yet. Choose this
+              project in Studio before generating.
             </p>
           )}
         </section>

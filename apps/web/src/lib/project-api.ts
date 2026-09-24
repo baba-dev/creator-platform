@@ -18,7 +18,10 @@ export function projectApiError(error: unknown): NextResponse {
           : error.code === "ORGANIZATION_SUSPENDED"
             ? 409
             : 400;
-    return NextResponse.json({ error: error.message, code: error.code }, { status });
+    return NextResponse.json(
+      { error: error.message, code: error.code },
+      { status },
+    );
   }
   return NextResponse.json(
     { error: "Project operation failed." },

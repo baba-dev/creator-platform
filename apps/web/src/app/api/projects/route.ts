@@ -25,14 +25,20 @@ async function membershipFor(userId: string, organizationId: string) {
 export async function GET(request: Request) {
   const session = await getRequestSession(request.headers);
   if (!session) {
-    return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+    return NextResponse.json(
+      { error: "Authentication required." },
+      { status: 401 },
+    );
   }
   const url = new URL(request.url);
   const organizationId = url.searchParams.get("organizationId") ?? "";
   const includeArchived = url.searchParams.get("includeArchived") === "true";
   const membership = await membershipFor(session.user.id, organizationId);
   if (!membership || membership.organization.status !== "ACTIVE") {
-    return NextResponse.json({ error: "Workspace access denied." }, { status: 403 });
+    return NextResponse.json(
+      { error: "Workspace access denied." },
+      { status: 403 },
+    );
   }
   const projects = await db.project.findMany({
     where: {
@@ -69,17 +75,29 @@ export async function POST(request: Request) {
   }
   const session = await getRequestSession(request.headers);
   if (!session) {
-    return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+    return NextResponse.json(
+      { error: "Authentication required." },
+      { status: 401 },
+    );
   }
   try {
     const text = await request.text();
     if (text.length > 6000) {
-      return NextResponse.json({ error: "Request too large." }, { status: 413 });
+      return NextResponse.json(
+        { error: "Request too large." },
+        { status: 413 },
+      );
     }
     const input = projectSchema.parse(JSON.parse(text));
-    const membership = await membershipFor(session.user.id, input.organizationId);
+    const membership = await membershipFor(
+      session.user.id,
+      input.organizationId,
+    );
     if (!membership) {
-      return NextResponse.json({ error: "Workspace access denied." }, { status: 403 });
+      return NextResponse.json(
+        { error: "Workspace access denied." },
+        { status: 403 },
+      );
     }
     const project = await createProject({
       actor: {

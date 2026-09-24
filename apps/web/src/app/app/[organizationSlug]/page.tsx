@@ -306,10 +306,10 @@ export default async function OrganizationWorkspacePage({
                 <a
                   key={item.label}
                   href={
-                  item.label === "Projects"
-                    ? `/app/${organizationSlug}/projects`
-                    : item.href
-                }
+                    item.label === "Projects"
+                      ? `/app/${organizationSlug}/projects`
+                      : item.href
+                  }
                   className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold ${index === 0 ? "bg-primary/10 text-primary" : "text-muted-foreground"}`}
                 >
                   <Icon name={item.icon} className="size-3.5" />

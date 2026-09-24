@@ -198,11 +198,7 @@ export async function createImageJob(userId: string, raw: unknown) {
         }
         return existing;
       }
-      await assertAssignableProject(
-        tx,
-        input.organizationId,
-        input.projectId,
-      );
+      await assertAssignableProject(tx, input.organizationId, input.projectId);
       const now = new Date();
       const model = await tx.providerModel.findFirst({
         where: {
@@ -388,11 +384,7 @@ export async function createVideoJob(userId: string, raw: unknown) {
         }
         return existing;
       }
-      await assertAssignableProject(
-        tx,
-        input.organizationId,
-        input.projectId,
-      );
+      await assertAssignableProject(tx, input.organizationId, input.projectId);
       const now = new Date();
       const model = await tx.providerModel.findFirst({
         where: {
@@ -638,11 +630,7 @@ export async function createVoiceJob(userId: string, raw: unknown) {
         }
         return existing;
       }
-      await assertAssignableProject(
-        tx,
-        input.organizationId,
-        input.projectId,
-      );
+      await assertAssignableProject(tx, input.organizationId, input.projectId);
       const now = new Date();
       const model = await tx.providerModel.findFirst({
         where: {

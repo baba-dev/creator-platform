@@ -17,8 +17,8 @@ const tx = {
 
 vi.mock("@aiwa/db", () => ({
   db: {
-    $transaction: vi.fn(async (callback: (client: typeof tx) => Promise<unknown>) =>
-      callback(tx),
+    $transaction: vi.fn(
+      async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
     ),
   },
   Prisma: {

@@ -473,6 +473,7 @@ export async function removeMember(input: {
     const organization = await lockedOrganization(tx, input.organizationId);
     const member = await tx.membership.findFirst({
       where: { id: input.membershipId, organizationId: input.organizationId },
+      include: { user: { select: { email: true } } },
     });
     if (!member) throw new OrganizationNotFoundError();
     if (

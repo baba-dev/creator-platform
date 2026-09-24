@@ -1,15 +1,15 @@
 import type { ServerEnv } from "@aiwa/config";
 import { db } from "@aiwa/db";
 import nodemailer, { type Transporter } from "nodemailer";
-import type SMTPTransport from "nodemailer/lib/smtp-transport";
+import type SMTPPool from "nodemailer/lib/smtp-pool";
 import { senderForKind } from "./index";
 
-let transporter: Transporter<SMTPTransport.SentMessageInfo> | null = null;
+let transporter: Transporter<SMTPPool.SentMessageInfo, SMTPPool.Options> | null = null;
 let transporterFingerprint = "";
 
 function getTransporter(
   env: ServerEnv,
-): Transporter<SMTPTransport.SentMessageInfo> {
+): Transporter<SMTPPool.SentMessageInfo, SMTPPool.Options> {
   const fingerprint = [
     env.SMTP_HOST,
     env.SMTP_PORT,
@@ -22,7 +22,7 @@ function getTransporter(
 
   transporter?.close();
   transporterFingerprint = fingerprint;
-  transporter = nodemailer.createTransport({
+  const nextTransporter = nodemailer.createTransport({
     host: env.SMTP_HOST,
     port: env.SMTP_PORT,
     secure: true,
@@ -42,7 +42,8 @@ function getTransporter(
     },
   });
 
-  return transporter;
+  transporter = nextTransporter;
+  return nextTransporter;
 }
 
 export async function verifySmtpTransport(env: ServerEnv): Promise<void> {

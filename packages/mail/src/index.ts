@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { connect, type TLSSocket } from "node:tls";
 import { db, type Prisma } from "@aiwa/db";
 import type { ServerEnv } from "@aiwa/config";
@@ -278,7 +278,7 @@ export async function sendMailViaSmtp(
   },
 ): Promise<{ providerMessageId: string }> {
   const session = await SmtpSession.connect(env);
-  const providerMessageId = `<${crypto.randomUUID()}@aiwamediagroup.com>`;
+  const providerMessageId = `<${randomUUID()}@aiwamediagroup.com>`;
   try {
     await session.command(`EHLO ${env.SMTP_EHLO_NAME}`, [250]);
     await session.command("AUTH LOGIN", [334]);
@@ -288,7 +288,7 @@ export async function sendMailViaSmtp(
     await session.command(`RCPT TO:<${headerSafe(message.to)}>`, [250, 251]);
     await session.command("DATA", [354]);
 
-    const boundary = `aiwa-${crypto.randomUUID()}`;
+    const boundary = `aiwa-${randomUUID()}`;
     const mime = [
       `From: Aiwa Creators <${headerSafe(message.from)}>`,
       `To: <${headerSafe(message.to)}>`,
@@ -316,6 +316,75 @@ export async function sendMailViaSmtp(
     return { providerMessageId };
   } finally {
     session.close();
+  }
+}
+
+export async function processMailMessage(
+  env: ServerEnv,
+  id: string,
+  attemptNumber: number,
+  maxAttempts: number,
+): Promise<{ sent: boolean; terminal: boolean }> {
+  const current = await db.mailMessage.findUnique({ where: { id } });
+  if (!current) return { sent: false, terminal: true };
+  if (["SENT", "FAILED", "SUPPRESSED"].includes(current.status)) {
+    return { sent: current.status === "SENT", terminal: true };
+  }
+
+  const claimed = await db.mailMessage.updateMany({
+    where: { id, status: { in: ["PENDING", "QUEUED", "RETRY"] } },
+    data: {
+      status: "SENDING",
+      sendingAt: new Date(),
+      attemptCount: { increment: 1 },
+      lastErrorCode: null,
+      lastErrorMessage: null,
+    },
+  });
+  if (claimed.count !== 1) return { sent: false, terminal: false };
+
+  const message = await db.mailMessage.findUniqueOrThrow({ where: { id } });
+  try {
+    const result = await sendMailViaSmtp(env, {
+      from: senderForKind(env, message.kind),
+      to: message.recipient,
+      subject: message.subject,
+      text: message.textBody,
+      html: message.htmlBody,
+    });
+    await db.mailMessage.update({
+      where: { id },
+      data: {
+        status: "SENT",
+        providerMessageId: result.providerMessageId,
+        sentAt: new Date(),
+        nextAttemptAt: null,
+        sendingAt: null,
+        textBody: message.sensitive ? "[redacted after delivery]" : message.textBody,
+        htmlBody: message.sensitive ? "[redacted after delivery]" : message.htmlBody,
+      },
+    });
+    return { sent: true, terminal: true };
+  } catch (error) {
+    const failure = classifySmtpFailure(error);
+    const terminal = !failure.retryable || attemptNumber >= maxAttempts;
+    const highDelays = [30_000, 120_000, 600_000, 1_800_000];
+    const normalDelays = [60_000, 300_000, 1_200_000, 3_600_000];
+    const delays = message.priority === "HIGH" ? highDelays : normalDelays;
+    const delay = delays[Math.min(Math.max(attemptNumber - 1, 0), delays.length - 1)];
+    await db.mailMessage.update({
+      where: { id },
+      data: {
+        status: terminal ? "FAILED" : "RETRY",
+        failedAt: terminal ? new Date() : null,
+        nextAttemptAt: terminal ? null : new Date(Date.now() + delay),
+        sendingAt: null,
+        lastErrorCode: failure.code,
+        lastErrorMessage: failure.message.slice(0, 2000),
+      },
+    });
+    if (!terminal) throw error;
+    return { sent: false, terminal: true };
   }
 }
 

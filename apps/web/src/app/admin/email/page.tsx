@@ -1,4 +1,5 @@
 import { db } from "@aiwa/db";
+import { MailRetryButton } from "@/components/admin/mail-retry-button";
 import { StatusBadge } from "@/components/admin/primitives";
 import { Eyebrow } from "@/components/ui/creative";
 import { requirePlatformPermission } from "@/lib/request-auth";
@@ -96,7 +97,8 @@ export default async function AdminEmailPage() {
                 <th className="px-3 py-3">Status</th>
                 <th className="px-3 py-3 text-center">Attempts</th>
                 <th className="px-3 py-3">Next / sent</th>
-                <th className="px-5 py-3">Last error</th>
+                <th className="px-3 py-3">Last error</th>
+                <th className="px-5 py-3 text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -130,7 +132,7 @@ export default async function AdminEmailPage() {
                   <td className="px-3 py-4 font-mono text-[10px] text-muted-foreground">
                     {(mail.sentAt ?? mail.nextAttemptAt)?.toLocaleString("en-OM") ?? "—"}
                   </td>
-                  <td className="max-w-72 px-5 py-4 text-[10px] text-muted-foreground">
+                  <td className="max-w-72 px-3 py-4 text-[10px] text-muted-foreground">
                     {mail.lastErrorCode ? (
                       <>
                         <span className="font-mono font-semibold text-foreground">
@@ -146,11 +148,19 @@ export default async function AdminEmailPage() {
                       "—"
                     )}
                   </td>
+                  <td className="px-5 py-4 text-right">
+                    {mail.kind === "ROUTINE" &&
+                    ["FAILED", "RETRY"].includes(mail.status) ? (
+                      <MailRetryButton mailId={mail.id} />
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground">—</span>
+                    )}
+                  </td>
                 </tr>
               ))}
               {recent.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-5 py-12 text-center text-sm text-muted-foreground">
+                  <td colSpan={9} className="px-5 py-12 text-center text-sm text-muted-foreground">
                     No transactional mail has been queued yet.
                   </td>
                 </tr>

@@ -6,7 +6,12 @@ import {
   type PlatformRole,
 } from "@aiwa/authz";
 import { db, Prisma } from "@aiwa/db";
-import { enqueueMail, invitationEmail, teamMemberAddedEmail } from "@aiwa/mail";
+import {
+  enqueueMail,
+  invitationEmail,
+  teamMemberAddedEmail,
+  teamMembershipChangedEmail,
+} from "@aiwa/mail";
 
 export const MAX_ORGANIZATION_NON_OWNER_MEMBERS = 9;
 export const MAX_ORGANIZATION_SEATS = 10;
@@ -406,6 +411,7 @@ export async function updateMember(input: {
     const organization = await lockedOrganization(tx, input.organizationId);
     const member = await tx.membership.findFirst({
       where: { id: input.membershipId, organizationId: input.organizationId },
+      include: { user: { select: { email: true } } },
     });
     if (!member) throw new OrganizationNotFoundError();
     if (
@@ -434,6 +440,23 @@ export async function updateMember(input: {
       "Membership",
       member.id,
       { membershipId: member.id, userId: member.userId },
+    );
+    await enqueueMail(
+      teamMembershipChangedEmail({
+        to: member.user.email,
+        organizationName: organization.name,
+        organizationId: input.organizationId,
+        userId: member.userId,
+        membershipId: member.id,
+        event: input.role ? "ROLE_CHANGED" : "CAP_CHANGED",
+        detail: input.role
+          ? `Your workspace role is now ${updated.role}.`
+          : updated.monthlySpendingCapCredits === null
+            ? "Your monthly spending cap was removed."
+            : `Your monthly spending cap is now ${updated.monthlySpendingCapCredits.toString()} credits.`,
+        eventVersion: updated.updatedAt.getTime().toString(),
+      }),
+      tx,
     );
     return updated;
   });
@@ -473,6 +496,18 @@ export async function removeMember(input: {
       member.id,
       { membershipId: member.id, userId: member.userId },
     );
+    await enqueueMail(
+      teamMembershipChangedEmail({
+        to: member.user.email,
+        organizationName: organization.name,
+        organizationId: input.organizationId,
+        userId: member.userId,
+        membershipId: member.id,
+        event: "REMOVED",
+        eventVersion: "removed",
+      }),
+      tx,
+    );
   });
 }
 
@@ -490,6 +525,7 @@ export async function transferOwnership(input: {
         organizationId: input.organizationId,
         user: { disabledAt: null },
       },
+      include: { user: { select: { email: true } } },
     });
     if (!target || target.userId === organization.ownerUserId)
       throw new InvalidOwnershipTransferError();
@@ -500,6 +536,7 @@ export async function transferOwnership(input: {
           userId: organization.ownerUserId,
         },
       },
+      include: { user: { select: { email: true } } },
     });
     if (!previous) throw new InvalidOwnershipTransferError();
     await tx.membership.update({
@@ -510,9 +547,10 @@ export async function transferOwnership(input: {
       where: { id: target.id },
       data: { role: "ORGANIZATION_OWNER", monthlySpendingCapCredits: null },
     });
-    await tx.organization.update({
+    const ownership = await tx.organization.update({
       where: { id: input.organizationId },
       data: { ownerUserId: target.userId },
+      select: { updatedAt: true },
     });
     await audit(
       tx,
@@ -526,6 +564,31 @@ export async function transferOwnership(input: {
         newOwnerUserId: target.userId,
         targetMembershipId: target.id,
       },
+    );
+    const eventVersion = ownership.updatedAt.getTime().toString();
+    await enqueueMail(
+      teamMembershipChangedEmail({
+        to: target.user.email,
+        organizationName: organization.name,
+        organizationId: input.organizationId,
+        userId: target.userId,
+        membershipId: target.id,
+        event: "OWNER_GRANTED",
+        eventVersion,
+      }),
+      tx,
+    );
+    await enqueueMail(
+      teamMembershipChangedEmail({
+        to: previous.user.email,
+        organizationName: organization.name,
+        organizationId: input.organizationId,
+        userId: previous.userId,
+        membershipId: previous.id,
+        event: "OWNER_RELEASED",
+        eventVersion,
+      }),
+      tx,
     );
   });
 }

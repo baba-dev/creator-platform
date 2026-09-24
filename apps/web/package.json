@@ -18,6 +18,7 @@
     "@aiwa/credits": "workspace:*",
     "@aiwa/db": "workspace:*",
     "@aiwa/generation": "workspace:*",
+    "@aiwa/mail": "workspace:*",
     "@aiwa/organizations": "workspace:*",
     "@aiwa/payments": "workspace:*",
     "@aiwa/providers": "workspace:*",

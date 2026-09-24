@@ -436,3 +436,11 @@ Studio supports queued BytePlus image generation with wallet reservation,
 persistent PNG assets and authenticated downloads. See
 [the image-generation runbook](docs/image-generation.md) for deployment,
 recovery behavior and the live acceptance check.
+
+
+## Transactional email
+
+Authentication, billing, membership, generation and report notifications use a
+durable MariaDB outbox with BullMQ delivery and pooled TLS SMTP. See
+[the transactional-email operations runbook](docs/operations/transactional-email.md)
+for production configuration, sender identities, retry behavior and diagnostics.

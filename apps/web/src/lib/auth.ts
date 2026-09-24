@@ -1,8 +1,16 @@
+import { createHash } from "node:crypto";
 import { platformRoles } from "@aiwa/authz";
 import { parseServerEnv } from "@aiwa/config";
 import { db } from "@aiwa/db";
+import {
+  enqueueMail,
+  passwordResetEmail,
+  securityEventEmail,
+  verificationEmail,
+} from "@aiwa/mail";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
+import { createAuthMiddleware } from "better-auth/api";
 import { twoFactor } from "better-auth/plugins";
 
 const env = parseServerEnv();
@@ -10,43 +18,18 @@ const env = parseServerEnv();
 async function deliverVerificationEmail(input: {
   email: string;
   verificationUrl: string;
+  userId?: string;
 }): Promise<void> {
-  if (!env.AUTH_EMAIL_WEBHOOK_URL) {
-    if (env.NODE_ENV !== "production") {
-      console.info(
-        `[EmailVerification] Verification link for ${input.email}: ${input.verificationUrl}`,
-      );
-      return;
-    }
-    throw new Error(
-      "Authentication email delivery is not configured. Set AUTH_EMAIL_WEBHOOK_URL.",
-    );
-  }
-
-  const headers: Record<string, string> = {
-    "content-type": "application/json",
-  };
-  if (env.AUTH_EMAIL_WEBHOOK_BEARER_TOKEN) {
-    headers.authorization = `Bearer ${env.AUTH_EMAIL_WEBHOOK_BEARER_TOKEN}`;
-  }
-
-  const response = await fetch(env.AUTH_EMAIL_WEBHOOK_URL, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      type: "email_verification",
+  await enqueueMail(
+    verificationEmail({
       to: input.email,
-      from: env.AUTH_EMAIL_FROM ?? "Aiwa Creators",
-      subject: "Verify your Aiwa Creators email",
-      text: `Verify your email address to activate workspace access: ${input.verificationUrl}`,
       verificationUrl: input.verificationUrl,
+      idempotencyKey: `verify:${createHash("sha256")
+        .update(input.verificationUrl)
+        .digest("hex")}`,
+      userId: input.userId,
     }),
-  });
-  if (!response.ok) {
-    throw new Error(
-      `Authentication email delivery failed with status ${response.status}.`,
-    );
-  }
+  );
 }
 
 export const auth = betterAuth({
@@ -70,6 +53,7 @@ export const auth = betterAuth({
       await deliverVerificationEmail({
         email: user.email,
         verificationUrl: url,
+        userId: user.id,
       });
     },
   },
@@ -81,6 +65,29 @@ export const auth = betterAuth({
     maxPasswordLength: 128,
     autoSignIn: false,
     revokeSessionsOnPasswordReset: true,
+    resetPasswordTokenExpiresIn: 60 * 60,
+    sendResetPassword: async ({ user, url, token }) => {
+      await enqueueMail(
+        passwordResetEmail({
+          to: user.email,
+          resetUrl: url,
+          userId: user.id,
+          idempotencyKey: `password-reset:${createHash("sha256")
+            .update(token)
+            .digest("hex")}`,
+        }),
+      );
+    },
+    onPasswordReset: async ({ user }) => {
+      await enqueueMail(
+        securityEventEmail({
+          to: user.email,
+          userId: user.id,
+          event: "PASSWORD_RESET",
+          idempotencyKey: `security:password-reset:${user.id}:${Date.now()}`,
+        }),
+      );
+    },
   },
   account: {
     accountLinking: {
@@ -138,7 +145,90 @@ export const auth = betterAuth({
       validateSchema: true,
     },
   },
+  hooks: {
+    after: createAuthMiddleware(async (ctx) => {
+      if (ctx.path !== "/two-factor/generate-backup-codes") return;
+
+      const session = ctx.context.session;
+      const userId = session?.user?.id;
+      if (!userId) return;
+
+      const [user, factor] = await Promise.all([
+        db.user.findUnique({
+          where: { id: userId },
+          select: { email: true },
+        }),
+        db.twoFactor.findFirst({
+          where: { userId },
+          orderBy: { updatedAt: "desc" },
+          select: { updatedAt: true },
+        }),
+      ]);
+      if (!user || !factor) return;
+
+      await enqueueMail(
+        securityEventEmail({
+          to: user.email,
+          userId,
+          event: "BACKUP_CODES_REGENERATED",
+          idempotencyKey: `security:backup-codes-regenerated:${userId}:${factor.updatedAt.getTime()}`,
+        }),
+      );
+    }),
+  },
   databaseHooks: {
+    user: {
+      update: {
+        after: async (updatedUser, ctx) => {
+          if (
+            ctx?.path !== "/two-factor/verify-totp" &&
+            ctx?.path !== "/two-factor/disable"
+          ) {
+            return;
+          }
+
+          const user = await db.user.findUnique({
+            where: { id: updatedUser.id },
+            select: {
+              id: true,
+              email: true,
+              twoFactorEnabled: true,
+              updatedAt: true,
+            },
+          });
+          if (!user) return;
+
+          if (ctx.path === "/two-factor/verify-totp" && user.twoFactorEnabled) {
+            const factor = await db.twoFactor.findFirst({
+              where: { userId: user.id, verified: true },
+              orderBy: { updatedAt: "desc" },
+              select: { updatedAt: true },
+            });
+            if (!factor) return;
+            await enqueueMail(
+              securityEventEmail({
+                to: user.email,
+                userId: user.id,
+                event: "MFA_ENABLED",
+                idempotencyKey: `security:mfa-enabled:${user.id}:${factor.updatedAt.getTime()}`,
+              }),
+            );
+            return;
+          }
+
+          if (ctx.path === "/two-factor/disable" && !user.twoFactorEnabled) {
+            await enqueueMail(
+              securityEventEmail({
+                to: user.email,
+                userId: user.id,
+                event: "MFA_DISABLED",
+                idempotencyKey: `security:mfa-disabled:${user.id}:${user.updatedAt.getTime()}`,
+              }),
+            );
+          }
+        },
+      },
+    },
     session: {
       create: {
         before: async (session) => {

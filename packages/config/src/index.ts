@@ -47,9 +47,28 @@ export const serverEnvSchema = z.object({
   APP_URL: z.url().default("http://localhost:3000"),
   AUTH_SECRET: z.string().min(32),
   SIGNUPS_ENABLED: booleanFromString,
-  AUTH_EMAIL_WEBHOOK_URL: optionalHttpsUrl,
-  AUTH_EMAIL_WEBHOOK_BEARER_TOKEN: optionalString,
-  AUTH_EMAIL_FROM: optionalString,
+  MAIL_ENABLED: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((value) => value === "true"),
+  SMTP_HOST: z.string().min(1).default("localhost"),
+  SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(465),
+  SMTP_USER: z.string().min(1).default("local"),
+  SMTP_PASSWORD: z.string().min(1).default("local"),
+  SMTP_EHLO_NAME: z.string().min(1).default("creator.aiwamediagroup.com"),
+  SMTP_POOL_MAX_CONNECTIONS: z.coerce.number().int().min(1).max(20).default(3),
+  SMTP_POOL_MAX_MESSAGES: z.coerce.number().int().min(1).max(1000).default(100),
+  SMTP_CONNECTION_TIMEOUT_MS: optionalPositiveInteger.default(10_000),
+  SMTP_GREETING_TIMEOUT_MS: optionalPositiveInteger.default(10_000),
+  SMTP_SOCKET_TIMEOUT_MS: optionalPositiveInteger.default(30_000),
+  MAIL_SECURITY_FROM_ADDRESS: z
+    .string()
+    .email()
+    .default("security@aiwamediagroup.com"),
+  MAIL_ROUTINE_FROM_ADDRESS: z
+    .string()
+    .email()
+    .default("creator-tool@aiwamediagroup.com"),
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.url().default("redis://127.0.0.1:6379/0"),
   BYTEPLUS_API_KEY: optionalString,
@@ -97,6 +116,29 @@ export function parseServerEnv(
       .join(", ");
 
     throw new Error(`Invalid server environment variables: ${fields}`);
+  }
+
+  if (result.data.APP_ENV === "production" && result.data.MAIL_ENABLED) {
+    const requiredMailVariables = [
+      "SMTP_HOST",
+      "SMTP_USER",
+      "SMTP_PASSWORD",
+      "MAIL_SECURITY_FROM_ADDRESS",
+      "MAIL_ROUTINE_FROM_ADDRESS",
+    ] as const;
+    const missing = requiredMailVariables.filter(
+      (key) => !environment[key]?.trim(),
+    );
+    if (missing.length) {
+      throw new Error(
+        `Invalid server environment variables: ${missing.join(", ")}`,
+      );
+    }
+    if (result.data.SMTP_PORT !== 465) {
+      throw new Error(
+        "Invalid server environment variables: SMTP_PORT (implicit TLS on port 465 is required in production)",
+      );
+    }
   }
 
   return result.data;

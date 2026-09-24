@@ -20,6 +20,14 @@ const mockTx = {
   },
 };
 
+vi.mock("@aiwa/mail", () => ({
+  accountAdministrationEmail: vi.fn((input) => input),
+  enqueueMail: vi.fn().mockResolvedValue({ id: "mail-1", created: true }),
+  invitationEmail: vi.fn((input) => input),
+  teamMemberAddedEmail: vi.fn((input) => input),
+  teamMembershipChangedEmail: vi.fn((input) => input),
+}));
+
 vi.mock("@aiwa/db", () => ({
   db: {
     $transaction: vi.fn(async (cb: (tx: typeof mockTx) => Promise<unknown>) =>

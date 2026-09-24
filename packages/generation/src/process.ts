@@ -1,5 +1,10 @@
 import { captureCreditsForJob, releaseOrRefundCredits } from "@aiwa/credits";
-import { db } from "@aiwa/db";
+import { db, type Prisma } from "@aiwa/db";
+import {
+  enqueueMail,
+  generationCompletedEmail,
+  generationFailedEmail,
+} from "@aiwa/mail";
 import {
   ProviderConfigurationError,
   ProviderRequestError,
@@ -15,6 +20,82 @@ import {
   storeVideo,
   storedAssetSize,
 } from "./storage";
+
+async function generationRecipient(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  category: "generationCompleted" | "generationFailed",
+): Promise<string | null> {
+  const runtimeTx = tx as Prisma.TransactionClient & {
+    user?: Prisma.TransactionClient["user"];
+    mailMessage?: Prisma.TransactionClient["mailMessage"];
+    notificationPreference?: Prisma.TransactionClient["notificationPreference"];
+  };
+  if (!runtimeTx.user || !runtimeTx.mailMessage) return null;
+  const user = await runtimeTx.user.findUnique({
+    where: { id: userId },
+    select: {
+      email: true,
+      disabledAt: true,
+      notificationPreference: {
+        select: {
+          generationCompleted: true,
+          generationFailed: true,
+        },
+      },
+    },
+  });
+  if (!user || user.disabledAt) return null;
+  const preferences = user.notificationPreference;
+  if (preferences && preferences[category] === false) return null;
+  return user.email;
+}
+
+async function enqueueGenerationFailure(
+  tx: Prisma.TransactionClient,
+  job: { id: string; organizationId: string; createdById: string },
+  message: string,
+): Promise<void> {
+  const to = await generationRecipient(tx, job.createdById, "generationFailed");
+  if (!to) return;
+  await enqueueMail(
+    generationFailedEmail({
+      to,
+      userId: job.createdById,
+      organizationId: job.organizationId,
+      generationJobId: job.id,
+      message,
+    }),
+    tx,
+  );
+}
+
+async function enqueueGenerationSuccess(
+  tx: Prisma.TransactionClient,
+  job: { id: string; organizationId: string; createdById: string },
+  assetId: string,
+): Promise<void> {
+  const to = await generationRecipient(
+    tx,
+    job.createdById,
+    "generationCompleted",
+  );
+  if (!to) return;
+  const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+  await enqueueMail(
+    generationCompletedEmail({
+      to,
+      userId: job.createdById,
+      organizationId: job.organizationId,
+      generationJobId: job.id,
+      assetUrl: new URL(
+        `/api/assets/${encodeURIComponent(assetId)}`,
+        appUrl,
+      ).toString(),
+    }),
+    tx,
+  );
+}
 
 export async function failJob(
   id: string,
@@ -50,6 +131,7 @@ export async function failJob(
         completedAt: new Date(),
       },
     });
+    await enqueueGenerationFailure(tx, job, message);
   });
 }
 
@@ -240,7 +322,7 @@ export async function processVideoPollJob(
       amountCredits: current.reservedCredits,
       idempotencyKey: `generation-capture-${id}`,
     });
-    await tx.asset.update({
+    const asset = await tx.asset.update({
       where: { objectKey: `${id}.mp4` },
       data: { ...stored, status: "READY" },
     });
@@ -263,6 +345,9 @@ export async function processVideoPollJob(
         targetId: id,
       },
     });
+    if (asset?.id) {
+      await enqueueGenerationSuccess(tx, { ...job, id }, asset.id);
+    }
   });
 }
 
@@ -386,7 +471,7 @@ export async function processImageJob(
       amountCredits: current.reservedCredits,
       idempotencyKey: `generation-capture-${id}`,
     });
-    await tx.asset.update({
+    const asset = await tx.asset.update({
       where: { objectKey: `${id}.png` },
       data: { ...stored, status: "READY" },
     });
@@ -409,6 +494,9 @@ export async function processImageJob(
         targetId: id,
       },
     });
+    if (asset?.id) {
+      await enqueueGenerationSuccess(tx, { ...job, id }, asset.id);
+    }
   });
 }
 
@@ -639,7 +727,7 @@ async function finalizeVoiceJob(
       amountCredits: current.reservedCredits,
       idempotencyKey: `generation-capture-${id}`,
     });
-    await tx.asset.update({
+    const asset = await tx.asset.update({
       where: { objectKey: `${id}.mp3` },
       data: { ...stored, status: "READY" },
     });
@@ -672,5 +760,8 @@ async function finalizeVoiceJob(
         targetId: id,
       },
     });
+    if (asset?.id) {
+      await enqueueGenerationSuccess(tx, { ...job, id }, asset.id);
+    }
   });
 }

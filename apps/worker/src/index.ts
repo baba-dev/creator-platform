@@ -6,6 +6,11 @@ import {
   processVideoSubmitJob,
   processVoiceJob,
 } from "@aiwa/generation/process";
+import {
+  closeSmtpTransport,
+  processMailMessage,
+  recoverStaleMailDeliveries,
+} from "@aiwa/mail/transport";
 import { createBytePlusProvider } from "@aiwa/providers/byteplus";
 import { createNvidiaProvider } from "@aiwa/providers/nvidia";
 import { Queue, Worker } from "bullmq";
@@ -59,6 +64,36 @@ maintenanceWorker.on("failed", (job, error) => {
     errorName: error.name,
   });
 });
+
+const mailQueue = new Queue("mail", {
+  connection: redis,
+  prefix: "aiwa",
+});
+
+const mailWorker = new Worker(
+  "mail",
+  async (job) => {
+    if (!env.MAIL_ENABLED) return;
+    if (
+      typeof job.data.mailId !== "string" ||
+      typeof job.data.attemptNumber !== "number"
+    ) {
+      throw new Error("Invalid mail queue payload");
+    }
+    await processMailMessage(env, job.data.mailId, job.data.attemptNumber, 5);
+  },
+  { connection: redis, prefix: "aiwa", concurrency: 3 },
+);
+
+mailWorker.on("error", () => log("error", "Mail queue connection failed"));
+mailWorker.on("failed", (job, error) =>
+  log("error", "Mail delivery attempt failed", {
+    mailId: job?.data?.mailId,
+    attemptsMade: job?.attemptsMade,
+    errorName: error.name,
+    errorMessage: error.message,
+  }),
+);
 
 const generationQueue = new Queue("generation", {
   connection: redis,
@@ -158,6 +193,76 @@ reasoningWorker.on("failed", (job, error) =>
 );
 
 let isShuttingDown = false;
+let mailDispatching = false;
+async function dispatchMail() {
+  if (isShuttingDown || mailDispatching || !env.MAIL_ENABLED) return;
+  mailDispatching = true;
+  try {
+    const now = new Date();
+    const recovered = await recoverStaleMailDeliveries(
+      new Date(now.getTime() - 10 * 60 * 1000),
+    );
+    if (recovered > 0) {
+      log("error", "Recovered stale interrupted mail deliveries", {
+        recovered,
+      });
+    }
+
+    const rows = await db.mailMessage.findMany({
+      where: {
+        OR: [
+          { status: "PENDING" },
+          { status: "QUEUED" },
+          { status: "RETRY", nextAttemptAt: { lte: now } },
+        ],
+      },
+      orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
+      take: 100,
+    });
+
+    for (const row of rows) {
+      if (isShuttingDown) break;
+      const jobId = `mail:${row.id}`;
+      const existing = await mailQueue.getJob(jobId);
+      if (existing) {
+        const state = await existing.getState();
+        if (["failed", "completed"].includes(state)) {
+          await existing.remove();
+        } else {
+          if (row.status !== "QUEUED") {
+            await db.mailMessage.update({
+              where: { id: row.id },
+              data: { status: "QUEUED", queuedAt: new Date() },
+            });
+          }
+          continue;
+        }
+      }
+      await mailQueue.add(
+        "deliver",
+        { mailId: row.id, attemptNumber: row.attemptCount + 1 },
+        {
+          jobId,
+          attempts: 1,
+          removeOnComplete: true,
+          removeOnFail: 100,
+        },
+      );
+      await db.mailMessage.update({
+        where: { id: row.id },
+        data: { status: "QUEUED", queuedAt: new Date() },
+      });
+    }
+  } catch (error) {
+    log("error", "Mail dispatch unavailable; outbox rows retained", {
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      errorMessage: error instanceof Error ? error.message : "Unknown",
+    });
+  } finally {
+    mailDispatching = false;
+  }
+}
+
 let generationDispatching = false;
 async function dispatchGeneration() {
   if (isShuttingDown || generationDispatching || !bytePlusProvider) return;
@@ -285,6 +390,7 @@ async function dispatchReasoning() {
   }
 }
 
+const mailDispatchTimer = setInterval(() => void dispatchMail(), 5_000);
 const generationDispatchTimer = setInterval(
   () => void dispatchGeneration(),
   10_000,
@@ -293,17 +399,20 @@ const reasoningDispatchTimer = setInterval(
   () => void dispatchReasoning(),
   2_000,
 );
+void dispatchMail();
 void dispatchGeneration();
 void dispatchReasoning();
 
 async function shutdown(signal: NodeJS.Signals): Promise<void> {
   log("info", "worker shutting down", { signal });
   isShuttingDown = true;
+  clearInterval(mailDispatchTimer);
   clearInterval(generationDispatchTimer);
   clearInterval(reasoningDispatchTimer);
 
   // Stop accepting new jobs from Redis queues immediately
   await Promise.allSettled([
+    mailWorker.pause(true),
     generationWorker.pause(true),
     reasoningWorker.pause(true),
   ]);
@@ -318,11 +427,14 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   );
   const drainTimeoutMs = providerDeadlineMs + 120_000 + 30_000;
   const drainPromise = Promise.all([
+    mailWorker.close(),
     generationWorker.close(),
     reasoningWorker.close(),
+    mailQueue.close(),
     generationQueue.close(),
     reasoningQueue.close(),
     maintenanceWorker.close(),
+    closeSmtpTransport(),
   ]);
 
   let timeoutHandle: NodeJS.Timeout | undefined;
@@ -368,8 +480,9 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
 }
 
 log("info", "worker started", {
-  queues: ["maintenance", "generation", "reasoning"],
+  queues: ["maintenance", "mail", "generation", "reasoning"],
   environment: env.APP_ENV,
   bytePlusConfigured: Boolean(bytePlusProvider),
   nvidiaConfigured: Boolean(nvidiaProvider),
+  mailEnabled: env.MAIL_ENABLED,
 });

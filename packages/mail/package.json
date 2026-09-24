@@ -1,24 +1,26 @@
 {
-  "name": "@aiwa/payments",
+  "name": "@aiwa/mail",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./transport": "./src/transport.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",
+    "clean": "rm -rf dist .turbo",
     "lint": "eslint src test --max-warnings=0",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit",
-    "clean": "rm -rf .turbo"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aiwa/credits": "workspace:*",
+    "@aiwa/config": "workspace:*",
     "@aiwa/db": "workspace:*",
-    "@aiwa/mail": "workspace:*"
+    "nodemailer": "9.1.1"
   },
   "devDependencies": {
+    "@types/nodemailer": "8.0.2",
     "vitest": "^4.1.11"
   }
 }

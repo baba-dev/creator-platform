@@ -6,6 +6,13 @@ import {
   type PlatformRole,
 } from "@aiwa/authz";
 import { db, Prisma } from "@aiwa/db";
+import {
+  accountAdministrationEmail,
+  enqueueMail,
+  invitationEmail,
+  teamMemberAddedEmail,
+  teamMembershipChangedEmail,
+} from "@aiwa/mail";
 
 export const MAX_ORGANIZATION_NON_OWNER_MEMBERS = 9;
 export const MAX_ORGANIZATION_SEATS = 10;
@@ -265,6 +272,10 @@ function authorize(
     return;
   throw new PermissionDeniedError();
 }
+function entityVersion(updatedAt: unknown, fallback: string): string {
+  return updatedAt instanceof Date ? updatedAt.getTime().toString() : fallback;
+}
+
 async function audit(
   tx: Prisma.TransactionClient,
   actor: OrganizationActor,
@@ -293,7 +304,7 @@ async function lockedOrganization(
   await tx.$queryRaw`SELECT id FROM Organization WHERE id = ${organizationId} FOR UPDATE`;
   const organization = await tx.organization.findUnique({
     where: { id: organizationId },
-    select: { id: true, status: true, ownerUserId: true },
+    select: { id: true, status: true, ownerUserId: true, name: true },
   });
   if (!organization) throw new OrganizationNotFoundError();
   if (!allowSuspended && organization.status !== "ACTIVE")
@@ -312,16 +323,26 @@ export async function addMember(input: {
   authorize(input.actor, input.organizationId, "members");
   return db.$transaction(
     async (tx) => {
-      await lockedOrganization(tx, input.organizationId);
+      const organization = await lockedOrganization(tx, input.organizationId);
       const user = input.userId
         ? await tx.user.findUnique({
             where: { id: input.userId },
-            select: { id: true, emailVerified: true, disabledAt: true },
+            select: {
+              id: true,
+              email: true,
+              emailVerified: true,
+              disabledAt: true,
+            },
           })
         : input.email
           ? await tx.user.findUnique({
               where: { email: normalizeMemberEmail(input.email) },
-              select: { id: true, emailVerified: true, disabledAt: true },
+              select: {
+                id: true,
+                email: true,
+                emailVerified: true,
+                disabledAt: true,
+              },
             })
           : null;
       if (!user || user.disabledAt) throw new UserUnavailableError();
@@ -366,6 +387,17 @@ export async function addMember(input: {
         member.id,
         { membershipId: member.id, userId: user.id },
       );
+      await enqueueMail(
+        teamMemberAddedEmail({
+          to: user.email,
+          organizationName: organization.name,
+          role: member.role,
+          organizationId: input.organizationId,
+          userId: user.id,
+          membershipId: member.id,
+        }),
+        tx,
+      );
       return member;
     },
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -384,6 +416,7 @@ export async function updateMember(input: {
     const organization = await lockedOrganization(tx, input.organizationId);
     const member = await tx.membership.findFirst({
       where: { id: input.membershipId, organizationId: input.organizationId },
+      include: { user: { select: { email: true } } },
     });
     if (!member) throw new OrganizationNotFoundError();
     if (
@@ -413,6 +446,26 @@ export async function updateMember(input: {
       member.id,
       { membershipId: member.id, userId: member.userId },
     );
+    await enqueueMail(
+      teamMembershipChangedEmail({
+        to: member.user.email,
+        organizationName: organization.name,
+        organizationId: input.organizationId,
+        userId: member.userId,
+        membershipId: member.id,
+        event: input.role ? "ROLE_CHANGED" : "CAP_CHANGED",
+        detail: input.role
+          ? `Your workspace role is now ${updated.role}.`
+          : updated.monthlySpendingCapCredits === null
+            ? "Your monthly spending cap was removed."
+            : `Your monthly spending cap is now ${updated.monthlySpendingCapCredits.toString()} credits.`,
+        eventVersion: entityVersion(
+          updated.updatedAt,
+          `member:${updated.role}:${updated.monthlySpendingCapCredits?.toString() ?? "none"}`,
+        ),
+      }),
+      tx,
+    );
     return updated;
   });
 }
@@ -427,6 +480,7 @@ export async function removeMember(input: {
     const organization = await lockedOrganization(tx, input.organizationId);
     const member = await tx.membership.findFirst({
       where: { id: input.membershipId, organizationId: input.organizationId },
+      include: { user: { select: { email: true } } },
     });
     if (!member) throw new OrganizationNotFoundError();
     if (
@@ -451,6 +505,18 @@ export async function removeMember(input: {
       member.id,
       { membershipId: member.id, userId: member.userId },
     );
+    await enqueueMail(
+      teamMembershipChangedEmail({
+        to: member.user.email,
+        organizationName: organization.name,
+        organizationId: input.organizationId,
+        userId: member.userId,
+        membershipId: member.id,
+        event: "REMOVED",
+        eventVersion: "removed",
+      }),
+      tx,
+    );
   });
 }
 
@@ -468,6 +534,7 @@ export async function transferOwnership(input: {
         organizationId: input.organizationId,
         user: { disabledAt: null },
       },
+      include: { user: { select: { email: true } } },
     });
     if (!target || target.userId === organization.ownerUserId)
       throw new InvalidOwnershipTransferError();
@@ -478,6 +545,7 @@ export async function transferOwnership(input: {
           userId: organization.ownerUserId,
         },
       },
+      include: { user: { select: { email: true } } },
     });
     if (!previous) throw new InvalidOwnershipTransferError();
     await tx.membership.update({
@@ -488,9 +556,10 @@ export async function transferOwnership(input: {
       where: { id: target.id },
       data: { role: "ORGANIZATION_OWNER", monthlySpendingCapCredits: null },
     });
-    await tx.organization.update({
+    const ownership = await tx.organization.update({
       where: { id: input.organizationId },
       data: { ownerUserId: target.userId },
+      select: { updatedAt: true },
     });
     await audit(
       tx,
@@ -504,6 +573,31 @@ export async function transferOwnership(input: {
         newOwnerUserId: target.userId,
         targetMembershipId: target.id,
       },
+    );
+    const eventVersion = ownership.updatedAt.getTime().toString();
+    await enqueueMail(
+      teamMembershipChangedEmail({
+        to: target.user.email,
+        organizationName: organization.name,
+        organizationId: input.organizationId,
+        userId: target.userId,
+        membershipId: target.id,
+        event: "OWNER_GRANTED",
+        eventVersion,
+      }),
+      tx,
+    );
+    await enqueueMail(
+      teamMembershipChangedEmail({
+        to: previous.user.email,
+        organizationName: organization.name,
+        organizationId: input.organizationId,
+        userId: previous.userId,
+        membershipId: previous.id,
+        event: "OWNER_RELEASED",
+        eventVersion,
+      }),
+      tx,
     );
   });
 }
@@ -649,7 +743,12 @@ export async function setUserPlatformRole(input: {
     await tx.$queryRaw`SELECT id FROM User WHERE id = ${input.targetUserId} FOR UPDATE`;
     const targetUser = await tx.user.findUnique({
       where: { id: input.targetUserId },
-      select: { id: true, platformRole: true, disabledAt: true },
+      select: {
+        id: true,
+        email: true,
+        platformRole: true,
+        disabledAt: true,
+      },
     });
     if (!targetUser) throw new UserNotFoundError();
 
@@ -677,6 +776,19 @@ export async function setUserPlatformRole(input: {
         },
       },
     });
+    await enqueueMail(
+      accountAdministrationEmail({
+        to: targetUser.email,
+        userId: targetUser.id,
+        event: "PLATFORM_ROLE_CHANGED",
+        detail: `Your Aiwa Creators platform role changed from ${targetUser.platformRole} to ${updated.platformRole}.`,
+        eventVersion: entityVersion(
+          updated.updatedAt,
+          `role:${updated.platformRole}`,
+        ),
+      }),
+      tx,
+    );
 
     return updated;
   });
@@ -698,7 +810,12 @@ export async function setUserDisabled(input: {
     await tx.$queryRaw`SELECT id FROM User WHERE id = ${input.targetUserId} FOR UPDATE`;
     const targetUser = await tx.user.findUnique({
       where: { id: input.targetUserId },
-      select: { id: true, platformRole: true, disabledAt: true },
+      select: {
+        id: true,
+        email: true,
+        platformRole: true,
+        disabledAt: true,
+      },
     });
     if (!targetUser) throw new UserNotFoundError();
 
@@ -731,6 +848,21 @@ export async function setUserDisabled(input: {
         },
       },
     });
+    await enqueueMail(
+      accountAdministrationEmail({
+        to: targetUser.email,
+        userId: targetUser.id,
+        event: input.disabled ? "ACCOUNT_DISABLED" : "ACCOUNT_ENABLED",
+        detail: input.disabled
+          ? "An administrator disabled your Aiwa Creators account and active sessions were revoked."
+          : "An administrator reactivated your Aiwa Creators account.",
+        eventVersion: entityVersion(
+          updated.updatedAt,
+          `disabled:${input.disabled}`,
+        ),
+      }),
+      tx,
+    );
 
     return updated;
   });
@@ -747,7 +879,7 @@ export async function revokeUserSessions(input: {
   return db.$transaction(async (tx) => {
     const targetUser = await tx.user.findUnique({
       where: { id: input.targetUserId },
-      select: { id: true },
+      select: { id: true, email: true, updatedAt: true },
     });
     if (!targetUser) throw new UserNotFoundError();
 
@@ -769,6 +901,21 @@ export async function revokeUserSessions(input: {
         },
       },
     });
+    if (deleted.count > 0) {
+      await enqueueMail(
+        accountAdministrationEmail({
+          to: targetUser.email,
+          userId: targetUser.id,
+          event: "SESSIONS_REVOKED",
+          detail:
+            deleted.count === 1
+              ? "An administrator revoked one active Aiwa Creators session."
+              : `An administrator revoked ${deleted.count} active Aiwa Creators sessions.`,
+          eventVersion: `${Date.now()}:${deleted.count}`,
+        }),
+        tx,
+      );
+    }
 
     return deleted;
   });
@@ -844,7 +991,7 @@ export async function createOrganizationInvitation(input: {
   authorize(input.actor, input.organizationId, "members");
   return db.$transaction(
     async (tx) => {
-      await lockedOrganization(tx, input.organizationId);
+      const organization = await lockedOrganization(tx, input.organizationId);
 
       const nonOwnerCount = await tx.membership.count({
         where: {
@@ -888,6 +1035,24 @@ export async function createOrganizationInvitation(input: {
           expiresAt: expiresAt.toISOString(),
         },
       );
+
+      if (normalizedEmail) {
+        const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+        await enqueueMail(
+          invitationEmail({
+            to: normalizedEmail,
+            organizationName: organization.name,
+            organizationId: input.organizationId,
+            role: input.role,
+            invitationId: invitation.id,
+            invitationUrl: new URL(
+              `/invite/${encodeURIComponent(token)}`,
+              appUrl,
+            ).toString(),
+          }),
+          tx,
+        );
+      }
 
       return invitation;
     },

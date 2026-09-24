@@ -19,6 +19,7 @@
   "dependencies": {
     "@aiwa/credits": "workspace:*",
     "@aiwa/db": "workspace:*",
+    "@aiwa/mail": "workspace:*",
     "@aiwa/authz": "workspace:*",
     "@aiwa/config": "workspace:*",
     "@aiwa/organizations": "workspace:*",

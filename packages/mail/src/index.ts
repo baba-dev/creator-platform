@@ -247,4 +247,3 @@ export function generationCompletedEmail(input: {
     idempotencyKey: `generation-completed:${input.generationJobId}`,
   };
 }
-

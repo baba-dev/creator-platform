@@ -30,5 +30,4 @@ describe("mail helpers", () => {
     const error = Object.assign(new Error("rejected"), { smtpCode: 550 });
     expect(classifySmtpFailure(error).retryable).toBe(false);
   });
-
 });

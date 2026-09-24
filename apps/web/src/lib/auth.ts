@@ -198,10 +198,7 @@ export const auth = betterAuth({
           });
           if (!user) return;
 
-          if (
-            ctx.path === "/two-factor/verify-totp" &&
-            user.twoFactorEnabled
-          ) {
+          if (ctx.path === "/two-factor/verify-totp" && user.twoFactorEnabled) {
             const factor = await db.twoFactor.findFirst({
               where: { userId: user.id, verified: true },
               orderBy: { updatedAt: "desc" },
@@ -219,10 +216,7 @@ export const auth = betterAuth({
             return;
           }
 
-          if (
-            ctx.path === "/two-factor/disable" &&
-            !user.twoFactorEnabled
-          ) {
+          if (ctx.path === "/two-factor/disable" && !user.twoFactorEnabled) {
             await enqueueMail(
               securityEventEmail({
                 to: user.email,

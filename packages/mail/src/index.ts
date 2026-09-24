@@ -269,7 +269,12 @@ export function teamMembershipChangedEmail(input: {
   organizationId: string;
   userId: string;
   membershipId: string;
-  event: "ROLE_CHANGED" | "CAP_CHANGED" | "REMOVED" | "OWNER_GRANTED" | "OWNER_RELEASED";
+  event:
+    | "ROLE_CHANGED"
+    | "CAP_CHANGED"
+    | "REMOVED"
+    | "OWNER_GRANTED"
+    | "OWNER_RELEASED";
   detail?: string;
   eventVersion: string;
 }): MailDraft {

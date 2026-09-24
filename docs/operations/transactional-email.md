@@ -50,9 +50,9 @@ sudo systemctl restart creator-web.service creator-worker.service
 Business operations persist an outbox row before delivery. Redis is only the
 dispatcher, so Redis or SMTP downtime does not lose queued mail. Temporary
 delivery failures retry with bounded backoff. A worker interruption that leaves
-a message in `SENDING` is recovered after ten minutes and retried using the
-same RFC Message-ID, reducing duplicate-delivery risk. Permanent SMTP failures
-remain visible in the admin Email delivery page.
+a message in `SENDING` is recovered after ten minutes and retried using the same
+RFC Message-ID, reducing duplicate-delivery risk. Permanent SMTP failures remain
+visible in the admin Email delivery page.
 
 Security-message bodies are redacted after successful delivery. Failed security
 messages are not generically replayable because reset or invitation tokens may

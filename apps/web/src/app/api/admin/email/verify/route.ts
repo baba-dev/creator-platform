@@ -1,10 +1,7 @@
 import { hasPlatformPermission } from "@aiwa/authz";
 import { parseServerEnv } from "@aiwa/config";
 import { db } from "@aiwa/db";
-import {
-  classifySmtpFailure,
-  verifySmtpTransport,
-} from "@aiwa/mail/transport";
+import { classifySmtpFailure, verifySmtpTransport } from "@aiwa/mail/transport";
 import { NextResponse } from "next/server";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";

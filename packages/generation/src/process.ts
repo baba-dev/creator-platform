@@ -24,17 +24,31 @@ import {
 async function generationRecipient(
   tx: Prisma.TransactionClient,
   userId: string,
+  category: "generationCompleted" | "generationFailed",
 ): Promise<string | null> {
   const runtimeTx = tx as Prisma.TransactionClient & {
     user?: Prisma.TransactionClient["user"];
     mailMessage?: Prisma.TransactionClient["mailMessage"];
+    notificationPreference?: Prisma.TransactionClient["notificationPreference"];
   };
   if (!runtimeTx.user || !runtimeTx.mailMessage) return null;
   const user = await runtimeTx.user.findUnique({
     where: { id: userId },
-    select: { email: true, disabledAt: true },
+    select: {
+      email: true,
+      disabledAt: true,
+      notificationPreference: {
+        select: {
+          generationCompleted: true,
+          generationFailed: true,
+        },
+      },
+    },
   });
-  return user && !user.disabledAt ? user.email : null;
+  if (!user || user.disabledAt) return null;
+  const preferences = user.notificationPreference;
+  if (preferences && preferences[category] === false) return null;
+  return user.email;
 }
 
 async function enqueueGenerationFailure(
@@ -42,7 +56,7 @@ async function enqueueGenerationFailure(
   job: { id: string; organizationId: string; createdById: string },
   message: string,
 ): Promise<void> {
-  const to = await generationRecipient(tx, job.createdById);
+  const to = await generationRecipient(tx, job.createdById, "generationFailed");
   if (!to) return;
   await enqueueMail(
     generationFailedEmail({
@@ -61,7 +75,7 @@ async function enqueueGenerationSuccess(
   job: { id: string; organizationId: string; createdById: string },
   assetId: string,
 ): Promise<void> {
-  const to = await generationRecipient(tx, job.createdById);
+  const to = await generationRecipient(tx, job.createdById, "generationCompleted");
   if (!to) return;
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
   await enqueueMail(

@@ -86,9 +86,13 @@ function escapeHtml(value: string): string {
   return value.replace(
     /[&<>"']/g,
     (char) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
-        char
-      ] ?? char,
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      })[char] ?? char,
   );
 }
 

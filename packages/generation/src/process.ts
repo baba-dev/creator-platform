@@ -25,7 +25,12 @@ async function generationRecipient(
   tx: Prisma.TransactionClient,
   userId: string,
 ): Promise<string | null> {
-  const user = await tx.user.findUnique({
+  const runtimeTx = tx as Prisma.TransactionClient & {
+    user?: Prisma.TransactionClient["user"];
+    mailMessage?: Prisma.TransactionClient["mailMessage"];
+  };
+  if (!runtimeTx.user || !runtimeTx.mailMessage) return null;
+  const user = await runtimeTx.user.findUnique({
     where: { id: userId },
     select: { email: true, disabledAt: true },
   });
@@ -322,7 +327,9 @@ export async function processVideoPollJob(
         targetId: id,
       },
     });
-    await enqueueGenerationSuccess(tx, { ...job, id }, asset.id);
+    if (asset?.id) {
+      await enqueueGenerationSuccess(tx, { ...job, id }, asset.id);
+    }
   });
 }
 

@@ -7,6 +7,7 @@ import {
 
 export type { LedgerEntry, ManualPayment } from "@aiwa/db";
 import type { LedgerEntry, ManualPayment } from "@aiwa/db";
+import { billingStatusEmail, enqueueMail } from "@aiwa/mail";
 
 const MAX_SIGNED_BIGINT = 9_223_372_036_854_775_807n;
 
@@ -293,6 +294,26 @@ export async function _confirmPaymentTx(
     },
   });
 
+  const organization = await tx.organization.findUnique({
+    where: { id: payment.organizationId },
+    select: { name: true, owner: { select: { id: true, email: true } } },
+  });
+  if (organization) {
+    await enqueueMail(
+      billingStatusEmail({
+        to: organization.owner.email,
+        organizationName: organization.name,
+        organizationId: payment.organizationId,
+        paymentId: payment.id,
+        status: "CONFIRMED",
+        amountBaisa: payment.amountBaisa,
+        userId: organization.owner.id,
+        detail: `${creditsGranted.toString()} credits were added to the workspace.`,
+      }),
+      tx,
+    );
+  }
+
   return { payment: updatedPayment, ledgerEntry };
 }
 
@@ -361,6 +382,26 @@ export async function _rejectPaymentTx(
       },
     },
   });
+
+  const organization = await tx.organization.findUnique({
+    where: { id: payment.organizationId },
+    select: { name: true, owner: { select: { id: true, email: true } } },
+  });
+  if (organization) {
+    await enqueueMail(
+      billingStatusEmail({
+        to: organization.owner.email,
+        organizationName: organization.name,
+        organizationId: payment.organizationId,
+        paymentId: payment.id,
+        status: "REJECTED",
+        amountBaisa: payment.amountBaisa,
+        userId: organization.owner.id,
+        detail: params.reason,
+      }),
+      tx,
+    );
+  }
 
   return updated;
 }
@@ -479,6 +520,26 @@ export async function _reversePaymentTx(
       },
     },
   });
+
+  const organization = await tx.organization.findUnique({
+    where: { id: payment.organizationId },
+    select: { name: true, owner: { select: { id: true, email: true } } },
+  });
+  if (organization) {
+    await enqueueMail(
+      billingStatusEmail({
+        to: organization.owner.email,
+        organizationName: organization.name,
+        organizationId: payment.organizationId,
+        paymentId: payment.id,
+        status: "REVERSED",
+        amountBaisa: payment.amountBaisa,
+        userId: organization.owner.id,
+        detail: params.reason,
+      }),
+      tx,
+    );
+  }
 
   return { payment: updatedPayment, ledgerEntry };
 }

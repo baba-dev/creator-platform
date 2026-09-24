@@ -33,6 +33,11 @@ MAIL_SECURITY_FROM_ADDRESS=security@aiwamediagroup.com
 MAIL_ROUTINE_FROM_ADDRESS=creator-tool@aiwamediagroup.com
 ```
 
+When `APP_ENV=production` and `MAIL_ENABLED=true`, startup fails closed unless
+the SMTP host, username, password, both sender addresses, and port 465 are
+explicitly configured. This prevents a deployment from silently accepting
+security mail into an undeliverable queue.
+
 Apply database migrations before restarting services:
 
 ```bash
@@ -44,8 +49,10 @@ sudo systemctl restart creator-web.service creator-worker.service
 
 Business operations persist an outbox row before delivery. Redis is only the
 dispatcher, so Redis or SMTP downtime does not lose queued mail. Temporary
-delivery failures retry with bounded backoff. Permanent SMTP failures remain
-visible in the admin Email delivery page.
+delivery failures retry with bounded backoff. A worker interruption that leaves
+a message in `SENDING` is recovered after ten minutes and retried using the
+same RFC Message-ID, reducing duplicate-delivery risk. Permanent SMTP failures
+remain visible in the admin Email delivery page.
 
 Security-message bodies are redacted after successful delivery. Failed security
 messages are not generically replayable because reset or invitation tokens may
@@ -58,6 +65,9 @@ messages can be explicitly requeued by an authorized operator.
   configured.
 - `/admin/email` shows queue state, delivery counts, masked recipients,
   attempts, and sanitized failure diagnostics.
+- **Verify SMTP** on `/admin/email` performs a live TLS/authentication handshake
+  without sending mail. The result is audited and only a sanitized failure code
+  is returned to the browser.
 - SMTP credentials, reset links, verification links, and MFA secrets must never
   be logged.
 - SPF, DKIM, and DMARC should be configured for the sending domain before

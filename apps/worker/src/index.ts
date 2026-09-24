@@ -6,7 +6,11 @@ import {
   processVideoSubmitJob,
   processVoiceJob,
 } from "@aiwa/generation/process";
-import { closeSmtpTransport, processMailMessage } from "@aiwa/mail/transport";
+import {
+  closeSmtpTransport,
+  processMailMessage,
+  recoverStaleMailDeliveries,
+} from "@aiwa/mail/transport";
 import { createBytePlusProvider } from "@aiwa/providers/byteplus";
 import { createNvidiaProvider } from "@aiwa/providers/nvidia";
 import { Queue, Worker } from "bullmq";
@@ -195,6 +199,15 @@ async function dispatchMail() {
   mailDispatching = true;
   try {
     const now = new Date();
+    const recovered = await recoverStaleMailDeliveries(
+      new Date(now.getTime() - 10 * 60 * 1000),
+    );
+    if (recovered > 0) {
+      log("error", "Recovered stale interrupted mail deliveries", {
+        recovered,
+      });
+    }
+
     const rows = await db.mailMessage.findMany({
       where: {
         OR: [

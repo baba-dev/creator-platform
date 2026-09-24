@@ -28,6 +28,10 @@ type Model = {
   credits: string;
   capabilities?: Record<string, CapabilityValue> | null;
 };
+type ProjectOption = {
+  id: string;
+  name: string;
+};
 type Job = {
   id: string;
   status: string;
@@ -35,6 +39,7 @@ type Job = {
   reservedCredits: string;
   chargedCredits: string;
   providerModel: { displayName: string; mediaKind: MediaKind };
+  project: ProjectOption | null;
   assets: { id: string; mimeType: string }[];
 };
 type Studio = {
@@ -44,6 +49,7 @@ type Studio = {
   balance: string;
   models: Model[];
   voices?: PresetVoice[];
+  projects: ProjectOption[];
   jobs: Job[];
 };
 function statusLabel(status: string, mediaKind: MediaKind): string {
@@ -82,13 +88,16 @@ const mediaModes = ["IMAGE", "VIDEO", "VOICE"] as const;
 export function GenerationStudio({
   canGenerate,
   organizationId,
+  organizationSlug,
 }: {
   canGenerate: boolean;
   organizationId: string;
+  organizationSlug: string;
 }) {
   const [data, setData] = useState<Studio | null>(null);
   const [activeMode, setActiveMode] = useState<MediaKind>("IMAGE");
   const [modelId, setModelId] = useState("");
+  const [projectId, setProjectId] = useState("");
   const [prompt, setPrompt] = useState("");
   const [voiceText, setVoiceText] = useState("");
   const [voiceKey, setVoiceKey] = useState("jasper");
@@ -130,6 +139,11 @@ export function GenerationStudio({
   );
 
   const model = modelsForMode.find((m) => m.id === modelId) ?? modelsForMode[0];
+  const selectedProjectId = (data?.projects ?? []).some(
+    (project) => project.id === projectId,
+  )
+    ? projectId
+    : "";
 
   const availableVoices = useMemo(
     () =>
@@ -376,6 +390,7 @@ export function GenerationStudio({
     if (model.mediaKind === "VOICE") {
       input = {
         organizationId,
+        projectId: selectedProjectId || null,
         modelId: model.id,
         priceVersionId: model.priceVersionId,
         text: voiceText.trim(),
@@ -386,6 +401,7 @@ export function GenerationStudio({
     } else {
       input = {
         organizationId,
+        projectId: selectedProjectId || null,
         modelId: model.id,
         priceVersionId: model.priceVersionId,
         prompt,
@@ -609,6 +625,41 @@ export function GenerationStudio({
           {model?.description ? (
             <p className="text-xs text-muted-foreground">{model.description}</p>
           ) : null}
+
+          <div className="grid gap-2">
+            <div className="flex items-center justify-between gap-3">
+              <label
+                className="text-sm font-semibold text-foreground"
+                htmlFor="generation-project"
+              >
+                Project
+              </label>
+              <a
+                href={`/app/${organizationSlug}/projects`}
+                className="text-xs font-semibold text-primary"
+              >
+                Manage projects
+              </a>
+            </div>
+            <select
+              id="generation-project"
+              value={selectedProjectId}
+              onChange={(event) => setProjectId(event.target.value)}
+              disabled={busy || isEnhancing}
+              className="min-h-11 w-full rounded-xl border border-input bg-card px-3 text-foreground"
+            >
+              <option value="">No project</option>
+              {(data?.projects ?? []).map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-subtle-foreground">
+              Optional. The generation and its output asset stay linked to the
+              selected project.
+            </p>
+          </div>
 
           {activeMode === "VOICE" ? (
             <>
@@ -953,8 +1004,18 @@ export function GenerationStudio({
                 className="rounded-2xl border border-border bg-card p-4"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-sm font-semibold text-foreground">
-                    {job.providerModel.displayName}
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold text-foreground">
+                      {job.providerModel.displayName}
+                    </span>
+                    {job.project ? (
+                      <a
+                        href={`/app/${organizationSlug}/projects/${job.project.id}`}
+                        className="mt-1 block truncate text-xs font-semibold text-primary"
+                      >
+                        {job.project.name}
+                      </a>
+                    ) : null}
                   </span>
                   <StatusDot
                     tone={

@@ -97,8 +97,7 @@ pnpm --filter @aiwa/db migrate:deploy
 Production mail requires `MAIL_ENABLED=true`, an implicit-TLS SMTP endpoint, and
 valid `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, and `SMTP_PASSWORD` values for
 security mail, plus `ROUTINE_USER` and `ROUTINE_USER_PASSWORD` for routine mail.
-Keep
-`MAIL_SECURITY_FROM_ADDRESS=security@aiwamediagroup.com` and
+Keep `MAIL_SECURITY_FROM_ADDRESS=security@aiwamediagroup.com` and
 `MAIL_ROUTINE_FROM_ADDRESS=creator-tool@aiwamediagroup.com`.
 
 Application code writes a `MailMessage` outbox row first. The worker dispatches

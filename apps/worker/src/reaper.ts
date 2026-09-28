@@ -84,7 +84,6 @@ export async function reapExpiredRecoveryJobs(now = new Date()) {
   });
 }
 
-
 export async function reapExpiredReferenceAssets(now = new Date()) {
   const candidates = await db.asset.findMany({
     where: {

@@ -1,5 +1,9 @@
 import { randomBytes } from "crypto";
 import {
+  DEFAULT_MEMBER_STORAGE_QUOTA_BYTES,
+  DEFAULT_ORGANIZATION_STORAGE_QUOTA_BYTES,
+} from "@aiwa/assets";
+import {
   hasOrganizationPermission,
   hasPlatformPermission,
   type OrganizationRole,
@@ -16,8 +20,9 @@ import {
 
 export const MAX_ORGANIZATION_NON_OWNER_MEMBERS = 9;
 export const MAX_ORGANIZATION_SEATS = 10;
-export const MEMBER_STORAGE_QUOTA_BYTES = 1_073_741_824n;
-export const ORGANIZATION_STORAGE_QUOTA_BYTES = 10_737_418_240n;
+export const MEMBER_STORAGE_QUOTA_BYTES = DEFAULT_MEMBER_STORAGE_QUOTA_BYTES;
+export const ORGANIZATION_STORAGE_QUOTA_BYTES =
+  DEFAULT_ORGANIZATION_STORAGE_QUOTA_BYTES;
 
 export type ManagedMemberRole = "ORGANIZATION_MEMBER" | "ORGANIZATION_VIEWER";
 export type OrganizationActor = {

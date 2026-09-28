@@ -23,7 +23,8 @@
     "@aiwa/generation": "workspace:*",
     "@aiwa/mail": "workspace:*",
     "@aiwa/db": "workspace:*",
-    "@prisma/client": "6.19.3"
+    "@prisma/client": "6.19.3",
+    "sharp": "0.35.4"
   },
   "devDependencies": {
     "tsup": "^8.5.0",

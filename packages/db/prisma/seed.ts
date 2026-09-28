@@ -1,4 +1,5 @@
 import { type Prisma, PrismaClient } from "@prisma/client";
+import { curatedGenerationTemplates } from "./templates";
 
 const db = new PrismaClient();
 
@@ -224,6 +225,34 @@ async function main(): Promise<void> {
     },
   });
 
+  for (const template of curatedGenerationTemplates) {
+    await db.generationTemplate.upsert({
+      where: { slug: template.slug },
+      update: {
+        name: template.name,
+        description: template.description,
+        category: template.category,
+        mediaKind: template.mediaKind,
+        promptTemplate: template.promptTemplate,
+        variables: template.variables as Prisma.InputJsonValue,
+        defaultInput: template.defaultInput as Prisma.InputJsonValue,
+        preferredModelId: template.preferredModelId ?? null,
+        featured: template.featured ?? false,
+        sortOrder: template.sortOrder,
+        status: "PUBLISHED",
+      },
+      create: {
+        ...template,
+        variables: template.variables as Prisma.InputJsonValue,
+        defaultInput: template.defaultInput as Prisma.InputJsonValue,
+        preferredModelId: template.preferredModelId ?? null,
+        featured: template.featured ?? false,
+        status: "PUBLISHED",
+      },
+    });
+  }
+
+  console.info(`Seeded ${curatedGenerationTemplates.length} generation templates.`);
   console.info("Seeding completed successfully.");
 }
 

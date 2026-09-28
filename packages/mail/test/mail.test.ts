@@ -4,10 +4,7 @@ import {
   mailJobId,
   senderForKind,
 } from "../src/index";
-import {
-  classifySmtpFailure,
-  smtpCredentialsForKind,
-} from "../src/transport";
+import { classifySmtpFailure, smtpCredentialsForKind } from "../src/transport";
 
 describe("mail helpers", () => {
   it("uses a BullMQ-safe stable job ID for outbox delivery", () => {

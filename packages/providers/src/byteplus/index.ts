@@ -115,7 +115,12 @@ export const bytePlusImageInputSchema = z.object({
   resolution: z.enum(["2K", "3K", "4K"]).default("2K"),
   outputFormat: z.enum(["jpeg", "png"]).default("png"),
   referenceImages: z
-    .array(z.string().startsWith("data:image/").max(6 * 1024 * 1024))
+    .array(
+      z
+        .string()
+        .startsWith("data:image/")
+        .max(6 * 1024 * 1024),
+    )
     .max(14)
     .default([]),
   watermark: z.boolean().default(false),

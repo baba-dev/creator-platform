@@ -97,6 +97,8 @@ export async function reapExpiredReferenceAssets(now = new Date()) {
       id: true,
       organizationId: true,
       objectKey: true,
+      status: true,
+      byteSize: true,
     },
     take: 100,
     orderBy: { expiresAt: "asc" },
@@ -122,7 +124,19 @@ export async function reapExpiredReferenceAssets(now = new Date()) {
     });
 
     if (claimed) {
-      await deleteStoredAsset(candidate.objectKey).catch(() => undefined);
+      try {
+        await deleteStoredAsset(candidate.objectKey);
+      } catch {
+        await db.asset
+          .updateMany({
+            where: { id: candidate.id, status: "DELETED" },
+            data: {
+              status: candidate.status,
+              byteSize: candidate.byteSize,
+            },
+          })
+          .catch(() => undefined);
+      }
     }
   }
 }

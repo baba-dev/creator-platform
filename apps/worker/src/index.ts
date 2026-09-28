@@ -17,7 +17,10 @@ import { createNvidiaProvider } from "@aiwa/providers/nvidia";
 import { Queue, Worker } from "bullmq";
 import Redis from "ioredis";
 import { processReasoningJob } from "./reasoning";
-import { reapExpiredRecoveryJobs } from "./reaper";
+import {
+  reapExpiredRecoveryJobs,
+  reapExpiredReferenceAssets,
+} from "./reaper";
 
 const env = parseServerEnv();
 const redis = new Redis(env.REDIS_URL, {
@@ -269,6 +272,7 @@ async function dispatchGeneration() {
   if (isShuttingDown || generationDispatching || !bytePlusProvider) return;
   generationDispatching = true;
   try {
+    await reapExpiredReferenceAssets();
     await reapExpiredRecoveryJobs();
 
     const retryBefore = new Date(Date.now() - 60 * 1000);

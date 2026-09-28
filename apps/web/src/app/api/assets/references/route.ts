@@ -17,7 +17,9 @@ import { generationError } from "@/lib/generation-api";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
 
-export const runtime = "nodejs";\n\nconst querySchema = z.object({
+export const runtime = "nodejs";
+
+const querySchema = z.object({
   organizationId: z.string().min(1).max(100),
 });
 
@@ -169,7 +171,11 @@ export async function POST(request: Request) {
       { status: 201, headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
-    if (objectKey) {\n      await deleteStoredAsset(objectKey).catch(() => undefined);\n    }\n    if (assetId) {\n      await db.asset
+    if (objectKey) {
+      await deleteStoredAsset(objectKey).catch(() => undefined);
+    }
+    if (assetId) {
+      await db.asset
         .updateMany({
           where: { id: assetId, status: "PENDING" },
           data: { status: "DELETED", byteSize: 0n },

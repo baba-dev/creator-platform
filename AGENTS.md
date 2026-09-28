@@ -35,8 +35,16 @@ These rules apply to every contributor and coding agent.
   upload, derivative or external-storage flows.
 - Generated-asset provenance is immutable: moving an asset must not rewrite the
   generation job that originally produced it.
-- Keep original media private. Grid/list UIs should use bounded derivatives,
-  never full originals, once variants are available.
+- Keep original media private. Grid/list UIs must use bounded derivatives, never
+  full originals, once variants are available.
+- Never trust upload filenames, extensions, or browser MIME declarations; verify
+  supported content by binary signature before persistence.
+- Customer trash is a recoverable 30-day lifecycle state. Do not delete bytes or
+  free used storage until purge succeeds for the original and all variants.
+- Favourites are per-user; folders and tags are organization-scoped. Every
+  assignment mutation must revalidate tenant ownership.
+- Bound bulk asset mutations to 100 IDs per request and keep generated
+  provenance immutable during project/folder/tag changes.
 
 ## Quality and security
 

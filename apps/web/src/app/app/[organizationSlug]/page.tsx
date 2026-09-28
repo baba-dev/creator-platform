@@ -22,7 +22,7 @@ const primaryNavigation: readonly {
   { label: "Create", href: "#create", icon: "sparkles" },
   { label: "Projects", href: "projects", icon: "projects" },
   { label: "History", href: "history", icon: "activity" },
-  { label: "Assets", href: "#assets", icon: "assets" },
+  { label: "Assets", href: "assets", icon: "assets" },
   { label: "Usage", href: "#usage", icon: "activity" },
 ];
 
@@ -156,7 +156,7 @@ export default async function OrganizationWorkspacePage({
               <a
                 key={item.label}
                 href={
-                  item.label === "Projects" || item.label === "History"
+                  ["Projects", "History", "Assets"].includes(item.label)
                     ? `/app/${organizationSlug}/${item.href}`
                     : item.href
                 }
@@ -317,7 +317,7 @@ export default async function OrganizationWorkspacePage({
                 <a
                   key={item.label}
                   href={
-                    item.label === "Projects" || item.label === "History"
+                    ["Projects", "History", "Assets"].includes(item.label)
                       ? `/app/${organizationSlug}/${item.href}`
                       : item.href
                   }

@@ -1,8 +1,8 @@
-# Asset management foundation
+# Asset management architecture
 
-This document defines the P0 asset architecture. The customer-facing library,
-folders, tags, favorites and bulk-management workflows belong to later phases;
-P0 establishes the invariants those features must use.
+This document defines the P0/P1 asset architecture: canonical media identity,
+secure storage/accounting, uploads, derivatives, organization library metadata,
+search, favourites, trash and bulk organization workflows.
 
 ## Core invariant
 
@@ -27,12 +27,15 @@ PENDING -> READY -> DELETED -> PURGED
 - **READY** means the object is durable and can be served.
 - **QUARANTINED** keeps bytes accounted while preventing normal customer use.
 - **DELETED** is a recoverable logical deletion; `deletedAt` and `purgeAfter`
-  control retention.
+  control retention. Customer trash retains bytes for 30 days and therefore
+  continues counting against physical storage until purge.
 - **PURGED** retains audit/provenance metadata after bytes have been removed.
 
 Generation failure currently sets `purgeAfter` immediately because a failed
-PENDING reservation never represented user-visible media. Customer trash will
-use a retention window in the P1 library implementation.
+PENDING reservation never represented user-visible media. Customer trash uses a
+30-day retention window. The worker permanently removes the original and all
+variants before changing the row to PURGED and releasing the physical storage
+bytes.
 
 ## Provenance
 
@@ -76,20 +79,28 @@ Future S3, Google Drive and OneDrive implementations must satisfy the same
 interface. Provider-specific tokens and identifiers must not leak into client
 components.
 
-## Variants
+## Variants and derivative pipeline
 
-`AssetVariant` reserves the data model for THUMBNAIL, PREVIEW and POSTER
-objects. Variants are separate objects with their own checksum and dimensions
-but are cascade-owned by the canonical asset.
+`AssetVariant` stores THUMBNAIL, PREVIEW and POSTER objects. Variants are
+private objects with their own checksum and dimensions and are cascade-owned by
+the canonical asset.
 
-P1 should use these variants for library grids so a 4K original or full video is
-not fetched merely to render a card.
+The `asset-ingestion` worker produces bounded derivatives:
+
+- IMAGE -> WebP THUMBNAIL and PREVIEW.
+- VIDEO -> WebP POSTER, keeping the MP4 out of grid/list rendering.
+
+The library and inspector request variants through authenticated endpoints.
+Originals remain private and are fetched only for full
+preview/download/playback. Derivative bytes are platform-generated overhead and
+are not charged to the customer quota; the canonical original remains the
+billing/accounting unit.
 
 ## Storage accounting
 
 `AssetStorageUsage` maintains organization-level cached accounting:
 
-- `usedBytes` for READY/QUARANTINED objects
+- `usedBytes` for READY/QUARANTINED/retained-DELETED original objects
 - `reservedBytes` for accepted PENDING allocations
 - `readyAssetCount`
 - monotonic `version`
@@ -138,26 +149,44 @@ Reservation rules:
 - All future upload mutations require trusted-origin/CSRF protection, explicit
   size limits, binary validation and quota reservation before persistence.
 
+## Library metadata
+
+Folders are organization-scoped and support parent/child relationships.
+Generated-asset provenance never changes when an asset is moved between a folder
+or project.
+
+Tags are normalized per organization with a unique normalized identity while
+preserving display casing. Favourites are per-user joins, so one member's
+favourite state never changes another member's library.
+
+Search/filter endpoints are organization-authorized and support media kind,
+source, project, folder, tag, favourite and trash filters. Bulk mutations are
+bounded to 100 assets per request and revalidate project/folder ownership.
+
+## Upload security
+
+Direct uploads are Node-runtime multipart requests with a hard 100 MB request
+object cap and tighter per-media limits. Browser MIME types and extensions are
+not trusted. The server accepts only a conservative allowlist after binary
+signature inspection: PNG, JPEG, WebP, MP4, MP3, WAV and PDF.
+
+Uploads follow reserve -> PENDING row -> atomic object write -> READY finalize.
+Any persistence failure deletes the partial object and releases the reservation.
+Production Nginx must enforce a request body ceiling at or below the platform
+hard limit to prevent oversized multipart buffering before application checks.
+
 ## API compatibility
 
 `GET /api/assets/:assetId` remains the authenticated binary endpoint during P0,
 including byte ranges for video/audio. P1 may introduce explicit `/content` and
 `/thumbnail` endpoints while retaining this route until all callers migrate.
 
-## P1 handoff
+## P1 product surface
 
-The P0 schema intentionally leaves folders, tags and favorites out. P1 should
-build:
+The organization workspace exposes a responsive grid/list Asset Library with
+search, media/project/folder/tag filters, favourites, trash, upload drag/drop,
+bulk selection and an inspector for preview, rename, project/folder assignment,
+tagging, favourite state and download.
 
-- organization asset library
-- direct uploads through the asset service
-- thumbnail/poster generation
-- search/filter/sort
-- virtual folders
-- normalized tags
-- per-user favorites
-- trash/restore
-- project reassignment and bulk operations
-
-Reference-image generation should consume authorized Asset IDs, not arbitrary
-remote URLs.
+Reference-image generation must consume authorized Asset IDs from this library,
+not arbitrary remote URLs.

@@ -7,12 +7,11 @@ boundary and provider-neutral in the application domain.
 ## Supported image capabilities
 
 Seedream 5.0 Lite publishes the common aspect ratios `1:1`, `4:3`, `3:4`,
-`16:9`, `9:16`, `3:2`, `2:3`, and `21:9`, with `2K`, `3K`, and
-`4K` output.
+`16:9`, `9:16`, `3:2`, `2:3`, and `21:9`, with `2K`, `3K`, and `4K` output.
 
-Seedream 4.5 publishes the same common aspect ratios with `2K` and `4K`
-output. The provider adapter rejects `3K` for 4.5 even if an internal caller
-bypasses Studio admission.
+Seedream 4.5 publishes the same common aspect ratios with `2K` and `4K` output.
+The provider adapter rejects `3K` for 4.5 even if an internal caller bypasses
+Studio admission.
 
 Studio reads these values from persisted `ProviderModel.capabilities`; the
 database migration normalizes existing model rows so deployed environments do
@@ -20,9 +19,9 @@ not require a seed run to expose the new controls.
 
 ## Private reference images
 
-Reference images are normal `Asset` records with
-`purpose = REFERENCE_INPUT`. They are not public objects and are never stored
-as provider URLs inside a generation request.
+Reference images are normal `Asset` records with `purpose = REFERENCE_INPUT`.
+They are not public objects and are never stored as provider URLs inside a
+generation request.
 
 Uploads use `POST /api/assets/references` with multipart form fields:
 
@@ -39,9 +38,9 @@ counts, applies EXIF orientation, re-encodes the image to remove incidental
 metadata, generates a random private object key, and records the checksum,
 normalized dimensions, MIME type, and byte size.
 
-`GET /api/assets/references?organizationId=...` returns only the current
-user's READY reference inputs. Generic asset delivery also treats reference
-inputs as owner-private and returns 404 to other workspace members.
+`GET /api/assets/references?organizationId=...` returns only the current user's
+READY reference inputs. Generic asset delivery also treats reference inputs as
+owner-private and returns 404 to other workspace members.
 
 ## Generation linkage
 
@@ -86,8 +85,8 @@ Tasks 4-6 should build on this foundation:
 2. reservation and settlement should reserve the requested maximum and capture
    only actual successful outputs, releasing the remainder idempotently; and
 3. Studio should use the reference API for drag/drop, thumbnails, reordering,
-   removal, and capability-driven controls without sending file bytes as part
-   of the generation request itself.
+   removal, and capability-driven controls without sending file bytes as part of
+   the generation request itself.
 
 Streaming is a later concern. Persist each provider output before publishing a
 progress event; MariaDB remains authoritative and Redis/SSE should only deliver

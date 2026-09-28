@@ -474,19 +474,15 @@ model GenerationTemplate {
   variables        Json
   defaultInput     Json
   preferredModelId String?
-  thumbnailAssetId String?
   featured         Boolean                  @default(false)
   sortOrder        Int                      @default(0)
-  usageCount       Int                      @default(0)
   createdAt        DateTime                 @default(now())
   updatedAt        DateTime                 @updatedAt
-  thumbnailAsset   Asset?                   @relation("TemplateThumbnail", fields: [thumbnailAssetId], references: [id], onDelete: SetNull)
   generationJobs   GenerationJob[]
   favorites        TemplateFavorite[]
 
   @@index([status, mediaKind, featured, sortOrder])
   @@index([category, status])
-  @@index([thumbnailAssetId])
 }
 
 model TemplateFavorite {
@@ -539,7 +535,6 @@ model Asset {
   generationInputs   GenerationInputAsset[]
   tagAssignments      AssetTagAssignment[]
   favorites           AssetFavorite[]
-  templateThumbnails  GenerationTemplate[] @relation("TemplateThumbnail")
 
   @@index([organizationId, createdAt])
   @@index([organizationId, mediaKind, status, createdAt])

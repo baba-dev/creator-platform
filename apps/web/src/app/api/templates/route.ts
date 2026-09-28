@@ -49,7 +49,6 @@ export async function GET(request: Request) {
       mediaKind: true,
       featured: true,
       defaultInput: true,
-      thumbnailAssetId: true,
       favorites: {
         where: { userId: session.user.id },
         select: { userId: true },

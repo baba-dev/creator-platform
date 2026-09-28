@@ -279,7 +279,8 @@ describe("BytePlus provider adapter", () => {
     });
     const referenceImages = Array.from(
       { length: 14 },
-      (_, index) => `data:image/png;base64,${Buffer.from(String(index)).toString("base64")}`,
+      (_, index) =>
+        `data:image/png;base64,${Buffer.from(String(index)).toString("base64")}`,
     );
 
     await expect(

@@ -155,27 +155,32 @@ describe("BytePlus provider adapter", () => {
     ["3:2", "3744x2496"],
     ["2:3", "2496x3744"],
     ["21:9", "4704x2016"],
-  ])("uses the documented Lite 3K dimensions for %s", async (aspectRatio, size) => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(
-        jsonResponse({ data: [{ url: "https://cdn.example.com/image.png" }] }),
-      );
-    const provider = createBytePlusProvider({
-      ...validConfig,
-      fetch: fetchMock as typeof fetch,
-    });
+  ])(
+    "uses the documented Lite 3K dimensions for %s",
+    async (aspectRatio, size) => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(
+          jsonResponse({
+            data: [{ url: "https://cdn.example.com/image.png" }],
+          }),
+        );
+      const provider = createBytePlusProvider({
+        ...validConfig,
+        fetch: fetchMock as typeof fetch,
+      });
 
-    await provider.submit({
-      idempotencyKey: `image-3k-${aspectRatio}`,
-      modelId: "seedream-5-0-260128",
-      mediaKind: "image",
-      input: { prompt: "A studio photograph", aspectRatio, resolution: "3K" },
-    });
+      await provider.submit({
+        idempotencyKey: `image-3k-${aspectRatio}`,
+        modelId: "seedream-5-0-260128",
+        mediaKind: "image",
+        input: { prompt: "A studio photograph", aspectRatio, resolution: "3K" },
+      });
 
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(JSON.parse(init.body as string).size).toBe(size);
-  });
+      const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(JSON.parse(init.body as string).size).toBe(size);
+    },
+  );
 
   it("submits ordered reference images using the provider image field", async () => {
     const fetchMock = vi

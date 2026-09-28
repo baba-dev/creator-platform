@@ -1,33 +1,53 @@
+import { createHash } from "node:crypto";
 import type { ServerEnv } from "@aiwa/config";
 import { db } from "@aiwa/db";
 import nodemailer, { type Transporter } from "nodemailer";
 import type SMTPPool from "nodemailer/lib/smtp-pool";
-import { senderForKind } from "./index";
+import { senderForKind, type MailKind } from "./index";
 
-let transporter: Transporter<
-  SMTPPool.SentMessageInfo,
-  SMTPPool.Options
-> | null = null;
-let transporterFingerprint = "";
+type SmtpTransport = Transporter<SMTPPool.SentMessageInfo, SMTPPool.Options>;
+type TransportEntry = { fingerprint: string; transport: SmtpTransport };
+const transporters = new Map<MailKind, TransportEntry>();
 
-function getTransporter(
+export function smtpCredentialsForKind(
   env: ServerEnv,
-): Transporter<SMTPPool.SentMessageInfo, SMTPPool.Options> {
-  const fingerprint = [
-    env.SMTP_HOST,
-    env.SMTP_PORT,
-    env.SMTP_USER,
-    env.SMTP_POOL_MAX_CONNECTIONS,
-    env.SMTP_POOL_MAX_MESSAGES,
-  ].join(":");
+  kind: MailKind,
+): { user: string; password: string } {
+  if (kind === "SECURITY") {
+    return { user: env.SMTP_USER, password: env.SMTP_PASSWORD };
+  }
+  return {
+    user: env.ROUTINE_USER ?? env.SMTP_USER,
+    password: env.ROUTINE_USER_PASSWORD ?? env.SMTP_PASSWORD,
+  };
+}
 
-  if (transporter && transporterFingerprint === fingerprint) return transporter;
+function getTransporter(env: ServerEnv, kind: MailKind): SmtpTransport {
+  const credentials = smtpCredentialsForKind(env, kind);
+  const fingerprint = createHash("sha256")
+    .update(
+      JSON.stringify([
+        env.SMTP_HOST,
+        env.SMTP_PORT,
+        env.SMTP_EHLO_NAME,
+        credentials.user,
+        credentials.password,
+        env.SMTP_POOL_MAX_CONNECTIONS,
+        env.SMTP_POOL_MAX_MESSAGES,
+        env.SMTP_CONNECTION_TIMEOUT_MS,
+        env.SMTP_GREETING_TIMEOUT_MS,
+        env.SMTP_SOCKET_TIMEOUT_MS,
+      ]),
+    )
+    .digest("hex");
+  const existing = transporters.get(kind);
+  if (existing?.fingerprint === fingerprint) return existing.transport;
 
-  transporter?.close();
-  transporterFingerprint = fingerprint;
-  const nextTransporter = nodemailer.createTransport({
+  existing?.transport.close();
+  const transport = nodemailer.createTransport({
     host: env.SMTP_HOST,
     port: env.SMTP_PORT,
+    name: env.SMTP_EHLO_NAME,
     secure: true,
     pool: true,
     maxConnections: env.SMTP_POOL_MAX_CONNECTIONS,
@@ -36,33 +56,32 @@ function getTransporter(
     greetingTimeout: env.SMTP_GREETING_TIMEOUT_MS,
     socketTimeout: env.SMTP_SOCKET_TIMEOUT_MS,
     auth: {
-      user: env.SMTP_USER,
-      pass: env.SMTP_PASSWORD,
+      user: credentials.user,
+      pass: credentials.password,
     },
     tls: {
       servername: env.SMTP_HOST,
       rejectUnauthorized: true,
     },
   });
-
-  transporter = nextTransporter;
-  return nextTransporter;
+  transporters.set(kind, { fingerprint, transport });
+  return transport;
 }
 
 export async function verifySmtpTransport(env: ServerEnv): Promise<void> {
-  await getTransporter(env).verify();
+  await getTransporter(env, "SECURITY").verify();
+  await getTransporter(env, "ROUTINE").verify();
 }
 
 export async function closeSmtpTransport(): Promise<void> {
-  transporter?.close();
-  transporter = null;
-  transporterFingerprint = "";
+  for (const entry of transporters.values()) entry.transport.close();
+  transporters.clear();
 }
 
 export async function sendMailViaSmtp(
   env: ServerEnv,
   message: {
-    from: string;
+    kind: MailKind;
     to: string;
     subject: string;
     text: string;
@@ -70,8 +89,8 @@ export async function sendMailViaSmtp(
     messageId?: string;
   },
 ): Promise<{ providerMessageId: string }> {
-  const info = await getTransporter(env).sendMail({
-    from: { name: "Aiwa Creators", address: message.from },
+  const info = await getTransporter(env, message.kind).sendMail({
+    from: { name: "Aiwa Creators", address: senderForKind(env, message.kind) },
     to: message.to,
     subject: message.subject,
     text: message.text,
@@ -109,7 +128,7 @@ export async function processMailMessage(
   const message = await db.mailMessage.findUniqueOrThrow({ where: { id } });
   try {
     const result = await sendMailViaSmtp(env, {
-      from: senderForKind(env, message.kind),
+      kind: message.kind,
       to: message.recipient,
       subject: message.subject,
       text: message.textBody,

@@ -11,7 +11,7 @@
     "@aiwa/db": "workspace:*"
   },
   "devDependencies": {
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.2"
   },
   "scripts": {
     "build": "tsc --noEmit",

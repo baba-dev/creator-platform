@@ -26,9 +26,9 @@
     "@aiwa/organizations": "workspace:*",
     "@aiwa/providers": "workspace:*",
     "sharp": "0.35.4",
-    "zod": "^4.1.12"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.2"
   }
 }

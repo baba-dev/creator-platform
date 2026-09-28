@@ -82,8 +82,8 @@ components.
 objects. Variants are separate objects with their own checksum and dimensions
 but are cascade-owned by the canonical asset.
 
-P1 should use these variants for library grids so a 4K original or full video is
-not fetched merely to render a card.
+P1 should use these variants for library grids so a 4K original or full video
+is not fetched merely to render a card.
 
 ## Storage accounting
 

@@ -421,9 +421,21 @@ describe("Generation Job Reconciliation", () => {
         }),
       );
       // Ensures pending storage is immediately released
+      expect(mocks.releaseAssetStorage).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          organizationId: "org-1",
+          reservedBytes: 25_000_000n,
+        }),
+      );
       expect(mocks.db.asset.updateMany).toHaveBeenCalledWith({
         where: { generationJobId: "job-123", status: "PENDING" },
-        data: { status: "DELETED", byteSize: 0n },
+        data: expect.objectContaining({
+          status: "DELETED",
+          byteSize: 0n,
+          deletedAt: expect.any(Date),
+          purgeAfter: expect.any(Date),
+        }),
       });
       expect(mocks.db.generationJob.update).toHaveBeenCalledWith(
         expect.objectContaining({

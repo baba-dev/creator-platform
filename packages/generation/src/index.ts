@@ -301,10 +301,7 @@ export async function createImageJob(userId: string, raw: unknown) {
         typeof capabilityRecord.maxTotalInputOutputImages === "number"
           ? capabilityRecord.maxTotalInputOutputImages
           : maxGeneratedImages;
-      if (
-        input.outputCount > 1 &&
-        capabilityRecord.sequentialImages !== true
-      ) {
+      if (input.outputCount > 1 && capabilityRecord.sequentialImages !== true) {
         throw new GenerationError(
           "Multiple related images are not supported by this model.",
         );

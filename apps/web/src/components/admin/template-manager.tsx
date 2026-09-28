@@ -17,7 +17,6 @@ export type AdminTemplateRow = {
   variables: unknown;
   defaultInput: unknown;
   preferredModelId: string | null;
-  thumbnailAssetId: string | null;
   featured: boolean;
   sortOrder: number;
   usageCount: number;
@@ -36,7 +35,6 @@ type Draft = {
   variables: string;
   defaultInput: string;
   preferredModelId: string;
-  thumbnailAssetId: string;
   featured: boolean;
   sortOrder: number;
 };
@@ -52,7 +50,6 @@ const blank: Draft = {
   variables: "[]",
   defaultInput: "{}",
   preferredModelId: "",
-  thumbnailAssetId: "",
   featured: false,
   sortOrder: 0,
 };
@@ -70,7 +67,6 @@ function toDraft(template: AdminTemplateRow): Draft {
     variables: JSON.stringify(template.variables, null, 2),
     defaultInput: JSON.stringify(template.defaultInput, null, 2),
     preferredModelId: template.preferredModelId ?? "",
-    thumbnailAssetId: template.thumbnailAssetId ?? "",
     featured: template.featured,
     sortOrder: template.sortOrder,
   };
@@ -122,7 +118,6 @@ export function TemplateManager({
         variables,
         defaultInput,
         preferredModelId: draft.preferredModelId.trim() || null,
-        thumbnailAssetId: draft.thumbnailAssetId.trim() || null,
         featured: draft.featured,
         sortOrder: Number(draft.sortOrder),
       };
@@ -268,9 +263,6 @@ export function TemplateManager({
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Preferred provider model ID" hint="Preference only; the resolver still enforces live compatibility.">
               <input value={draft.preferredModelId} onChange={(e) => setDraft({ ...draft, preferredModelId: e.target.value })} className="field font-mono text-xs" />
-            </Field>
-            <Field label="Thumbnail asset ID" hint="Optional READY image asset.">
-              <input value={draft.thumbnailAssetId} onChange={(e) => setDraft({ ...draft, thumbnailAssetId: e.target.value })} className="field font-mono text-xs" />
             </Field>
           </div>
 

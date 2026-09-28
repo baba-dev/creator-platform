@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { StatusBadge } from "@/components/admin/primitives";
 import { Eyebrow } from "@/components/ui/creative";
 import { JobResolutionActions } from "@/components/admin/job-resolution-actions";
+import { CancelJobButton } from "@/components/studio/cancel-job-button";
 import { serializeJobDetails } from "@/lib/job-serialization";
 import { requirePlatformPermission } from "@/lib/request-auth";
 
@@ -112,6 +113,12 @@ export default async function JobDetailPage({
           </span>
         </div>
       </div>
+
+      {canManage && job.status === "QUEUED" && (
+        <div className="mt-4 rounded-2xl border border-border bg-card p-4">
+          <CancelJobButton jobId={job.id} />
+        </div>
+      )}
 
       {/* Manual Review Alert Notice */}
       {job.status === "MANUAL_REVIEW" ? (

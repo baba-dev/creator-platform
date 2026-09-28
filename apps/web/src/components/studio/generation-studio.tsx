@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Eyebrow } from "@/components/ui/creative";
 import { StatusDot, Tape } from "@/components/ui/sketch";
@@ -989,9 +990,17 @@ export function GenerationStudio({
           ) : null}
         </div>
         <div>
-          <h3 className="font-display text-lg font-semibold text-foreground">
-            Recent creations
-          </h3>
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="font-display text-lg font-semibold text-foreground">
+              Recent creations
+            </h3>
+            <Link
+              href={`/app/${organizationSlug}/history`}
+              className="text-sm font-semibold text-primary"
+            >
+              View full history →
+            </Link>
+          </div>
           <div className="mt-4 space-y-4" aria-live="polite">
             {data?.jobs.length === 0 ? (
               <p className="rounded-2xl border border-border p-6 text-muted-foreground">
@@ -1003,6 +1012,12 @@ export function GenerationStudio({
                 key={job.id}
                 className="rounded-2xl border border-border bg-card p-4"
               >
+                <Link
+                  href={`/app/${organizationSlug}/history/${job.id}`}
+                  className="mb-2 inline-flex text-xs font-semibold text-primary"
+                >
+                  Job details →
+                </Link>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-semibold text-foreground">

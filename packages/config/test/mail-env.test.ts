@@ -30,6 +30,14 @@ describe("production mail configuration", () => {
     expect(env.MAIL_ENABLED).toBe(false);
   });
 
+  it("requires both routine credentials for a configured staging SMTP host", () => {
+    const staging = { ...productionBase, APP_ENV: "staging", SMTP_HOST: "mail.aiwamediagroup.com" };
+    expect(() => parseServerEnv({ ...staging, ROUTINE_USER: "creator-tool@aiwamediagroup.com" })).toThrow(/ROUTINE_USER_PASSWORD/);
+    expect(() => parseServerEnv({ ...staging, SMTP_USER: "security@aiwamediagroup.com", SMTP_PASSWORD: "security-secret" })).toThrow(/ROUTINE_USER/);
+    const env = parseServerEnv({ ...staging, ROUTINE_USER: "creator-tool@aiwamediagroup.com", ROUTINE_USER_PASSWORD: "routine-secret" });
+    expect(env.ROUTINE_USER).toBe("creator-tool@aiwamediagroup.com");
+  });
+
   it("requires implicit TLS port 465 in production", () => {
     expect(() =>
       parseServerEnv({

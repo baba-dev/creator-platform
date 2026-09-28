@@ -120,7 +120,10 @@ export function parseServerEnv(
     throw new Error(`Invalid server environment variables: ${fields}`);
   }
 
-  if (Boolean(result.data.ROUTINE_USER) !== Boolean(result.data.ROUTINE_USER_PASSWORD)) {
+  if (
+    Boolean(result.data.ROUTINE_USER) !==
+    Boolean(result.data.ROUTINE_USER_PASSWORD)
+  ) {
     throw new Error(
       "Invalid server environment variables: ROUTINE_USER, ROUTINE_USER_PASSWORD must be configured together",
     );

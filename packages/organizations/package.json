@@ -20,6 +20,6 @@
     "@aiwa/mail": "workspace:*"
   },
   "devDependencies": {
-    "vitest": "^5.0.2"
+    "vitest": "^4.1.11"
   }
 }

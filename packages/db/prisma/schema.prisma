@@ -452,6 +452,7 @@ model Asset {
   organizationId     String
   projectId          String?
   generationJobId    String?
+  generationOutputIndex Int?
   storageOwnerUserId String?
   createdById        String?
   uploadedById       String?
@@ -486,6 +487,7 @@ model Asset {
   @@index([organizationId, mediaKind, status, createdAt])
   @@index([organizationId, sourceType, status, createdAt])
   @@index([generationJobId])
+  @@unique([generationJobId, generationOutputIndex])
   @@index([projectId, status, createdAt])
   @@index([status, purgeAfter])
   @@index([organizationId, storageOwnerUserId, status])

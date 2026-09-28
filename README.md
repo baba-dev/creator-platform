@@ -90,7 +90,7 @@ Long-running provider calls must never execute inside a browser request. The web
 | Database | MariaDB |
 | ORM and migrations | Prisma |
 | Background processing | Redis and BullMQ |
-| Media storage | S3-compatible object storage |
+| Media storage | Provider-neutral asset storage (private local backend today; S3/external adapters planned) |
 | Media generation | BytePlus ModelArk and Seed Speech |
 | Creative reasoning | NVIDIA AI APIs |
 | Testing | Vitest, React Testing Library, and Playwright |
@@ -127,6 +127,7 @@ creator-platform/
 │   ├── ui/
 │   ├── db/
 │   ├── core/
+│   ├── assets/
 │   ├── credits/
 │   ├── providers/
 │   │   ├── byteplus/
@@ -429,6 +430,17 @@ Financial-ledger, authentication, pricing, and provider-adapter changes require 
 This repository currently includes the GNU General Public License v3.0. See [LICENSE](./LICENSE).
 
 Before distributing the platform or sharing source with customers, the company should confirm that GPL-3.0 matches the intended commercial and source-distribution model.
+
+## Asset management
+
+The P0 asset foundation makes `Asset` the canonical record for generated,
+uploaded, derived and future externally stored media. It includes explicit
+provenance/media metadata, provider-neutral storage interfaces, transactional
+quota reservation, cached/reconcilable organization usage, and derivative
+variant groundwork.
+
+See [docs/architecture/assets.md](docs/architecture/assets.md) for lifecycle,
+security, accounting and P1 integration rules.
 
 ## Image generation
 

@@ -110,6 +110,7 @@ describe("BytePlus provider adapter", () => {
       prompt: "A studio product photograph",
       size: "2848x1600",
       output_format: "png",
+      sequential_image_generation: "disabled",
       response_format: "url",
       watermark: false,
     });
@@ -232,6 +233,73 @@ describe("BytePlus provider adapter", () => {
     expect(JSON.parse(init.body as string).image).toEqual(refs);
   });
 
+  it("requests a bounded related-image sequence from BytePlus", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        data: [
+          { url: "https://cdn.example.com/image-1.png" },
+          { url: "https://cdn.example.com/image-2.png" },
+          { url: "https://cdn.example.com/image-3.png" },
+        ],
+      }),
+    );
+    const provider = createBytePlusProvider({
+      ...validConfig,
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const result = await provider.submit({
+      idempotencyKey: "image-related-set",
+      modelId: "seedream-5-0-260128",
+      mediaKind: "image",
+      input: {
+        prompt: "Three related campaign images",
+        outputCount: 3,
+        referenceImages: ["data:image/png;base64,aGVsbG8="],
+      },
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      sequential_image_generation: "auto",
+      sequential_image_generation_options: { max_images: 3 },
+    });
+    expect(result.outputUrls).toEqual([
+      "https://cdn.example.com/image-1.png",
+      "https://cdn.example.com/image-2.png",
+      "https://cdn.example.com/image-3.png",
+    ]);
+  });
+
+  it("rejects input plus output images above BytePlus's total limit", async () => {
+    const fetchMock = vi.fn();
+    const provider = createBytePlusProvider({
+      ...validConfig,
+      fetch: fetchMock as typeof fetch,
+    });
+    const referenceImages = Array.from(
+      { length: 14 },
+      (_, index) => `data:image/png;base64,${Buffer.from(String(index)).toString("base64")}`,
+    );
+
+    await expect(
+      provider.submit({
+        idempotencyKey: "image-over-limit",
+        modelId: "seedream-4-5-251128",
+        mediaKind: "image",
+        input: {
+          prompt: "Too many total images",
+          outputCount: 2,
+          referenceImages,
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_INPUT",
+      retryable: false,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("omits output_format for Seedream 4.5 because the live API rejects it", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({
@@ -260,6 +328,7 @@ describe("BytePlus provider adapter", () => {
       model: "seedream-4-5-251128",
       prompt: "A studio product photograph",
       size: "2048x2048",
+      sequential_image_generation: "disabled",
       response_format: "url",
       watermark: false,
     });

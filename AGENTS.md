@@ -21,6 +21,23 @@ These rules apply to every contributor and coding agent.
 - Reserve customer credits before submitting a billable provider request.
 - Require idempotency keys on generation and financial mutations.
 
+## Assets and media
+
+- Treat `Asset` as the canonical media identity; pass asset IDs across product
+  boundaries instead of raw customer-controlled paths or URLs.
+- Keep user filenames as display metadata only. Storage object keys must be
+  opaque, server-generated and tenant scoped.
+- Reserve storage before accepting uploads or billable generation work, then
+  atomically finalize or release that reservation with the asset state change.
+- The `AssetStorageUsage` row is a cache; Asset rows remain authoritative and
+  reconciliation must be safe to run repeatedly.
+- Do not bypass `@aiwa/assets` storage/accounting primitives when adding new
+  upload, derivative or external-storage flows.
+- Generated-asset provenance is immutable: moving an asset must not rewrite the
+  generation job that originally produced it.
+- Keep original media private. Grid/list UIs should use bounded derivatives,
+  never full originals, once variants are available.
+
 ## Quality and security
 
 - Validate every external boundary with Zod or an equally explicit schema.

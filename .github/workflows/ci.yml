@@ -6,13 +6,46 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  format-p0-studio:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feat/p0-generation-templates'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out PR head
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.19.0
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Format Studio
+        run: pnpm exec prettier --write apps/web/src/components/studio/generation-studio.tsx
+      - name: Commit formatting when needed
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web/src/components/studio/generation-studio.tsx
+          git commit -m "style: format template handoff"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
+
   quality:
     runs-on: ubuntu-latest
     timeout-minutes: 25

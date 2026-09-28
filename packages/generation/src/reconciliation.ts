@@ -628,7 +628,8 @@ export async function recoverGeneratedOutput(
           ? output.outputs
           : null;
         if (storedOutputs && storedOutputs.length > 0) {
-          updateData.outputPayload = current.outputPayload;
+          updateData.outputPayload =
+            current.outputPayload as Prisma.InputJsonValue;
         } else {
           const outputUrl =
             params.outputUrl ||

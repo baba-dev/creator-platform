@@ -352,6 +352,72 @@ describe("Generation Job Reconciliation", () => {
       );
     });
 
+    it("resumes a partially stored multi-image job with its ordered provider manifest intact", async () => {
+      const outputPayload = {
+        requestedCount: 3,
+        outputs: [
+          { index: 0, url: "https://trusted.bytepluscdn.com/one.png" },
+          { index: 1, url: "https://trusted.bytepluscdn.com/two.png" },
+        ],
+      };
+      mocks.db.generationJob.findUnique.mockResolvedValue({
+        ...baseJob,
+        quotedUnits: 3,
+        outputPayload,
+        assets: [
+          {
+            ...baseJob.assets[0],
+            sourceType: "GENERATED",
+            mediaKind: "IMAGE",
+            generationOutputIndex: 0,
+            status: "READY",
+          },
+          {
+            ...baseJob.assets[0],
+            id: "asset-2",
+            objectKey: "job-123-2.png",
+            sourceType: "GENERATED",
+            mediaKind: "IMAGE",
+            generationOutputIndex: 1,
+            status: "PENDING",
+          },
+          {
+            ...baseJob.assets[0],
+            id: "asset-3",
+            objectKey: "job-123-3.png",
+            sourceType: "GENERATED",
+            mediaKind: "IMAGE",
+            generationOutputIndex: 2,
+            status: "PENDING",
+          },
+        ],
+      });
+      mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+        ...baseJob,
+        quotedUnits: 3,
+        outputPayload,
+      });
+
+      const result = await recoverGeneratedOutput({
+        jobId: "job-123",
+        actorUserId: "operator-1",
+        reason: "Resume remaining output storage",
+        mode: "resume_processing",
+        idempotencyKey: "recover-multi-resume",
+      });
+
+      expect(result.success).toBe(true);
+      expect(mocks.db.generationJob.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: "PROCESSING",
+            outputPayload,
+          }),
+        }),
+      );
+      expect(mocks.downloadImage).not.toHaveBeenCalled();
+    });
+
     it("resumes processing mode by transitioning to PROCESSING", async () => {
       const result = await recoverGeneratedOutput({
         jobId: "job-123",
@@ -381,6 +447,40 @@ describe("Generation Job Reconciliation", () => {
         }),
       );
     });
+  });
+
+  it("requires resume_processing for multi-image immediate recovery", async () => {
+    mocks.db.generationJob.findUnique.mockResolvedValue({
+      ...baseJob,
+      quotedUnits: 2,
+      assets: [
+        {
+          ...baseJob.assets[0],
+          sourceType: "GENERATED",
+          mediaKind: "IMAGE",
+          generationOutputIndex: 0,
+        },
+        {
+          ...baseJob.assets[0],
+          id: "asset-2",
+          objectKey: "job-123-2.png",
+          sourceType: "GENERATED",
+          mediaKind: "IMAGE",
+          generationOutputIndex: 1,
+        },
+      ],
+    });
+
+    await expect(
+      recoverGeneratedOutput({
+        jobId: "job-123",
+        actorUserId: "operator-1",
+        reason: "Attempt direct multi-output recovery",
+        mode: "immediate",
+        idempotencyKey: "recover-multi-immediate",
+      }),
+    ).rejects.toMatchObject({ code: "MULTI_OUTPUT_RESUME_REQUIRED" });
+    expect(mocks.downloadImage).not.toHaveBeenCalled();
   });
 
   describe("releaseJobReservation", () => {

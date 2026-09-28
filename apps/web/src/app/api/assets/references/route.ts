@@ -6,10 +6,7 @@ import {
   releaseAssetStorage,
   reserveAssetStorage,
 } from "@aiwa/assets";
-import {
-  createAssetObjectKey,
-  LocalAssetStorage,
-} from "@aiwa/assets/storage";
+import { createAssetObjectKey, LocalAssetStorage } from "@aiwa/assets/storage";
 import { db } from "@aiwa/db";
 import { requireMembership } from "@aiwa/generation";
 import {
@@ -223,7 +220,9 @@ export async function POST(request: Request) {
         .catch(() => undefined);
     }
     if (objectStored && objectKey) {
-      await assetStorage().delete(objectKey).catch(() => undefined);
+      await assetStorage()
+        .delete(objectKey)
+        .catch(() => undefined);
     }
     if (error instanceof AssetQuotaExceededError) return quotaResponse(error);
     if (error instanceof ImageStorageError) {

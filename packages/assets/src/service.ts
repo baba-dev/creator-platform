@@ -10,7 +10,9 @@ export class AssetQuotaExceededError extends Error {
     public readonly proposedBytes: bigint,
     public readonly quotaBytes: bigint,
   ) {
-    super(`${scope === "member" ? "Member" : "Organization"} storage quota exceeded.`);
+    super(
+      `${scope === "member" ? "Member" : "Organization"} storage quota exceeded.`,
+    );
     this.name = "AssetQuotaExceededError";
   }
 }

@@ -408,10 +408,7 @@ export async function normalizeImageToPng(bytes: Buffer): Promise<Buffer> {
   return png;
 }
 
-export type ReferenceImageMimeType =
-  | "image/jpeg"
-  | "image/png"
-  | "image/webp";
+export type ReferenceImageMimeType = "image/jpeg" | "image/png" | "image/webp";
 
 export async function validateAndNormalizeReferenceImage(
   bytes: Buffer,
@@ -424,7 +421,10 @@ export async function validateAndNormalizeReferenceImage(
     );
   }
 
-  const normalizedClaim = claimedContentType.split(";", 1)[0]!.trim().toLowerCase();
+  const normalizedClaim = claimedContentType
+    .split(";", 1)[0]!
+    .trim()
+    .toLowerCase();
   const image = sharp(bytes, {
     failOn: "error",
     limitInputPixels: MAX_REFERENCE_PIXELS,
@@ -509,7 +509,11 @@ export async function validateAndNormalizeReferenceImage(
     bytes: normalized,
     mimeType,
     extension:
-      mimeType === "image/jpeg" ? "jpg" : mimeType === "image/png" ? "png" : "webp",
+      mimeType === "image/jpeg"
+        ? "jpg"
+        : mimeType === "image/png"
+          ? "png"
+          : "webp",
     width: normalizedMetadata.width ?? width,
     height: normalizedMetadata.height ?? height,
     byteSize: BigInt(normalized.byteLength),

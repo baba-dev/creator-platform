@@ -12,7 +12,7 @@ import {
 import { get } from "node:https";
 import { BlockList, isIP } from "node:net";
 import { isAbsolute, resolve } from "node:path";
-import sharp from "sharp";
+import sharp, { type Metadata } from "sharp";
 import { MAX_AUDIO_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES } from "./index";
 
 const MAX_REDIRECTS = 3;
@@ -302,8 +302,11 @@ async function downloadTrustedImage(
   });
 }
 
+export const MAX_REFERENCE_IMAGE_BYTES = 30 * 1024 * 1024;
+export const MAX_REFERENCE_IMAGE_PIXELS = 36_000_000;
+
 export function storagePath(key: string) {
-  if (!/^[a-zA-Z0-9_-]+\.(png|jpg|mp4|mp3)$/.test(key))
+  if (!/^[a-zA-Z0-9_-]+\.(png|jpg|webp|mp4|mp3)$/.test(key))
     throw new Error("Invalid storage key");
   const root =
     process.env.ASSET_STORAGE_ROOT ?? "/var/www/creator-platform/shared/assets";
@@ -403,6 +406,141 @@ export async function normalizeImageToPng(bytes: Buffer): Promise<Buffer> {
     );
   }
   return png;
+}
+
+export type StoredReferenceImage = {
+  objectKey: string;
+  mimeType: "image/jpeg" | "image/png" | "image/webp";
+  byteSize: bigint;
+  sha256: string;
+  width: number;
+  height: number;
+};
+
+export async function validateAndStoreReferenceImage(
+  bytes: Buffer,
+): Promise<StoredReferenceImage> {
+  if (bytes.byteLength <= 0 || bytes.byteLength > MAX_REFERENCE_IMAGE_BYTES) {
+    throw new ImageStorageError(
+      "IMAGE_OUTPUT_TOO_LARGE",
+      "Reference image must be between 1 byte and 30 MB.",
+    );
+  }
+
+  let metadata: Metadata;
+  try {
+    metadata = await sharp(bytes, {
+      failOn: "error",
+      limitInputPixels: MAX_REFERENCE_IMAGE_PIXELS,
+      animated: false,
+    }).metadata();
+  } catch (error) {
+    throw new ImageStorageError(
+      "IMAGE_OUTPUT_INVALID_PNG",
+      "Reference image could not be decoded safely.",
+      { cause: error },
+    );
+  }
+
+  const width = metadata.width ?? 0;
+  const height = metadata.height ?? 0;
+  if (
+    width <= 14 ||
+    height <= 14 ||
+    width * height < 196 ||
+    width * height > MAX_REFERENCE_IMAGE_PIXELS ||
+    width / height < 1 / 16 ||
+    width / height > 16
+  ) {
+    throw new ImageStorageError(
+      "IMAGE_OUTPUT_INVALID_PNG",
+      "Reference image dimensions are outside the supported range.",
+    );
+  }
+
+  if (!["jpeg", "png", "webp"].includes(metadata.format ?? "")) {
+    throw new ImageStorageError(
+      "IMAGE_OUTPUT_CONTENT_TYPE",
+      "Reference images must be JPEG, PNG, or WebP.",
+    );
+  }
+
+  const format = metadata.format as "jpeg" | "png" | "webp";
+  let normalizedResult: {
+    data: Buffer;
+    info: { width: number; height: number };
+  };
+  try {
+    const pipeline = sharp(bytes, {
+      failOn: "error",
+      limitInputPixels: MAX_REFERENCE_IMAGE_PIXELS,
+      animated: false,
+    }).rotate();
+    normalizedResult =
+      format === "jpeg"
+        ? await pipeline
+            .jpeg({ quality: 95, mozjpeg: true })
+            .toBuffer({ resolveWithObject: true })
+        : format === "png"
+          ? await pipeline
+              .png({ compressionLevel: 9 })
+              .toBuffer({ resolveWithObject: true })
+          : await pipeline
+              .webp({ quality: 95 })
+              .toBuffer({ resolveWithObject: true });
+  } catch (error) {
+    throw new ImageStorageError(
+      "IMAGE_OUTPUT_INVALID_PNG",
+      "Reference image normalization failed.",
+      { cause: error },
+    );
+  }
+  const normalized = normalizedResult.data;
+  if (normalized.byteLength > MAX_REFERENCE_IMAGE_BYTES) {
+    throw new ImageStorageError(
+      "IMAGE_OUTPUT_TOO_LARGE",
+      "Normalized reference image exceeds 30 MB.",
+    );
+  }
+
+  const extension = format === "jpeg" ? "jpg" : format;
+  const mimeType =
+    format === "jpeg"
+      ? "image/jpeg"
+      : format === "png"
+        ? "image/png"
+        : "image/webp";
+  const objectKey = `ref-${randomUUID()}.${extension}`;
+  await storeImage(objectKey, normalized);
+
+  return {
+    objectKey,
+    mimeType,
+    byteSize: BigInt(normalized.byteLength),
+    sha256: createHash("sha256").update(normalized).digest("hex"),
+    width: normalizedResult.info.width,
+    height: normalizedResult.info.height,
+  };
+}
+
+export async function referenceImageDataUri(input: {
+  objectKey: string;
+  mimeType: string;
+}): Promise<string> {
+  if (!["image/jpeg", "image/png", "image/webp"].includes(input.mimeType)) {
+    throw new ImageStorageError(
+      "IMAGE_OUTPUT_CONTENT_TYPE",
+      "Reference asset has an unsupported media type.",
+    );
+  }
+  const bytes = await readStoredAsset(input.objectKey);
+  if (bytes.byteLength > MAX_REFERENCE_IMAGE_BYTES) {
+    throw new ImageStorageError(
+      "IMAGE_OUTPUT_TOO_LARGE",
+      "Reference asset exceeds the provider input limit.",
+    );
+  }
+  return `data:${input.mimeType};base64,${bytes.toString("base64")}`;
 }
 
 export async function storeImage(key: string, bytes: Buffer) {

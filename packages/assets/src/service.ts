@@ -19,10 +19,7 @@ export class AssetQuotaExceededError extends Error {
   }
 }
 
-async function lockUsage(
-  tx: Prisma.TransactionClient,
-  organizationId: string,
-) {
+async function lockUsage(tx: Prisma.TransactionClient, organizationId: string) {
   await tx.assetStorageUsage.upsert({
     where: { organizationId },
     create: { organizationId },

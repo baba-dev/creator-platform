@@ -401,6 +401,7 @@ model GenerationJob {
   providerModel              ProviderModel       @relation(fields: [providerModelId], references: [id], onDelete: Restrict)
   priceVersion               ModelPriceVersion   @relation(fields: [priceVersionId], references: [id], onDelete: Restrict)
   assets                     Asset[]
+  inputAssets                GenerationInputAsset[]
 
   @@unique([providerModelId, providerRequestId])
   @@index([organizationId, status, createdAt])
@@ -422,17 +423,33 @@ model Asset {
   width              Int?
   height             Int?
   durationMs         Int?
+  expiresAt          DateTime?
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
   organization       Organization   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   project            Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
   generationJob      GenerationJob? @relation(fields: [generationJobId], references: [id], onDelete: SetNull)
   storageOwner       User?          @relation("AssetStorageOwner", fields: [storageOwnerUserId], references: [id], onDelete: SetNull)
+  generationInputs   GenerationInputAsset[]
 
   @@index([organizationId, createdAt])
+  @@index([expiresAt, status])
   @@index([generationJobId])
   @@index([status])
   @@index([organizationId, storageOwnerUserId, status])
+}
+
+model GenerationInputAsset {
+  generationJobId String
+  assetId         String
+  position        Int
+  createdAt       DateTime      @default(now())
+  generationJob   GenerationJob @relation(fields: [generationJobId], references: [id], onDelete: Cascade)
+  asset           Asset         @relation(fields: [assetId], references: [id], onDelete: Restrict)
+
+  @@id([generationJobId, assetId])
+  @@unique([generationJobId, position])
+  @@index([assetId])
 }
 
 model AuditEvent {

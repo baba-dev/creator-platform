@@ -7,7 +7,12 @@
  * classification and naming deterministic at every ingestion boundary.
  */
 
-export type AssetMediaKind = "IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT" | "OTHER";
+export type AssetMediaKind =
+  | "IMAGE"
+  | "VIDEO"
+  | "AUDIO"
+  | "DOCUMENT"
+  | "OTHER";
 
 export type AssetSourceType =
   | "GENERATED"
@@ -16,7 +21,11 @@ export type AssetSourceType =
   | "DERIVED"
   | "EXTERNAL";
 
-export type AssetStorageProvider = "LOCAL" | "S3" | "GOOGLE_DRIVE" | "ONEDRIVE";
+export type AssetStorageProvider =
+  | "LOCAL"
+  | "S3"
+  | "GOOGLE_DRIVE"
+  | "ONEDRIVE";
 
 const DOCUMENT_MIME_TYPES = new Set([
   "application/pdf",

@@ -718,9 +718,9 @@ export async function processImageJob(
       throw new Error("Not all successful outputs are durably stored.");
     }
 
-    const unused = assets.slice(successfulCount).filter(
-      (asset) => asset.status === "PENDING",
-    );
+    const unused = assets
+      .slice(successfulCount)
+      .filter((asset) => asset.status === "PENDING");
     const unusedReservedBytes = unused.reduce(
       (total, asset) => total + asset.byteSize,
       0n,
@@ -746,7 +746,9 @@ export async function processImageJob(
       quotedUnits <= 0 ||
       current.reservedCredits % BigInt(quotedUnits) !== 0n
     ) {
-      throw new Error("Image credit reservation is not divisible by quoted units.");
+      throw new Error(
+        "Image credit reservation is not divisible by quoted units.",
+      );
     }
     const creditsPerImage = current.reservedCredits / BigInt(quotedUnits);
     const chargedCredits = creditsPerImage * BigInt(successfulCount);

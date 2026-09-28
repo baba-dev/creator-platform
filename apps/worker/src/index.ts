@@ -17,10 +17,7 @@ import { createNvidiaProvider } from "@aiwa/providers/nvidia";
 import { Queue, Worker } from "bullmq";
 import Redis from "ioredis";
 import { processReasoningJob } from "./reasoning";
-import {
-  reapExpiredRecoveryJobs,
-  reapExpiredReferenceAssets,
-} from "./reaper";
+import { reapExpiredRecoveryJobs, reapExpiredReferenceAssets } from "./reaper";
 
 const env = parseServerEnv();
 const redis = new Redis(env.REDIS_URL, {

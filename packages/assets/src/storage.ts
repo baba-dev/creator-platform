@@ -29,6 +29,8 @@ export function createAssetObjectKey(
   organizationId: string,
   extension: string,
 ): string {
+  if (!/^[A-Za-z0-9_-]{1,100}$/.test(organizationId))
+    throw new Error("Invalid organization identifier.");
   const safeExtension = extension.toLowerCase().replace(/[^a-z0-9]/g, "");
   if (!safeExtension || safeExtension.length > 8)
     throw new Error("Invalid asset extension.");

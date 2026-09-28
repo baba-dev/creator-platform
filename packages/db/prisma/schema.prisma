@@ -95,6 +95,36 @@ enum AssetStatus {
   READY
   QUARANTINED
   DELETED
+  PURGED
+}
+
+enum AssetMediaKind {
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+  OTHER
+}
+
+enum AssetSourceType {
+  GENERATED
+  UPLOADED
+  IMPORTED
+  DERIVED
+  EXTERNAL
+}
+
+enum AssetStorageProvider {
+  LOCAL
+  S3
+  GOOGLE_DRIVE
+  ONEDRIVE
+}
+
+enum AssetVariantKind {
+  THUMBNAIL
+  PREVIEW
+  POSTER
 }
 
 model User {
@@ -118,6 +148,8 @@ model User {
   reasoningJobs          ReasoningJob[]           @relation("ReasoningCreatedBy")
   ownedOrganizations     Organization[]           @relation("OrganizationOwner")
   storageAssets          Asset[]                  @relation("AssetStorageOwner")
+  createdAssets          Asset[]                  @relation("AssetCreatedBy")
+  uploadedAssets         Asset[]                  @relation("AssetUploadedBy")
   auditEvents            AuditEvent[]             @relation("AuditActor")
   createdInvitations     OrganizationInvitation[] @relation("InvitationCreatedBy")
   acceptedInvitations    OrganizationInvitation[] @relation("InvitationAcceptedBy")
@@ -223,6 +255,7 @@ model Organization {
   reasoningJobs          ReasoningJob[]
   auditEvents            AuditEvent[]
   assets                 Asset[]
+  assetStorageUsage      AssetStorageUsage?
   invitations            OrganizationInvitation[]
 
   @@index([status])
@@ -409,30 +442,76 @@ model GenerationJob {
 }
 
 model Asset {
-  id                 String         @id @default(cuid())
+  id                 String               @id @default(cuid())
   organizationId     String
   projectId          String?
   generationJobId    String?
   storageOwnerUserId String?
-  status             AssetStatus    @default(PENDING)
-  objectKey          String         @unique
+  createdById        String?
+  uploadedById       String?
+  status             AssetStatus          @default(PENDING)
+  mediaKind          AssetMediaKind       @default(OTHER)
+  sourceType         AssetSourceType      @default(GENERATED)
+  storageProvider    AssetStorageProvider @default(LOCAL)
+  name               String?
+  originalFilename   String?
+  objectKey          String               @unique
   mimeType           String
   byteSize           BigInt
   sha256             String?
   width              Int?
   height             Int?
   durationMs         Int?
-  createdAt          DateTime       @default(now())
-  updatedAt          DateTime       @updatedAt
-  organization       Organization   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  project            Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  generationJob      GenerationJob? @relation(fields: [generationJobId], references: [id], onDelete: SetNull)
-  storageOwner       User?          @relation("AssetStorageOwner", fields: [storageOwnerUserId], references: [id], onDelete: SetNull)
+  deletedAt          DateTime?
+  purgeAfter         DateTime?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  organization       Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  project            Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  generationJob      GenerationJob?       @relation(fields: [generationJobId], references: [id], onDelete: SetNull)
+  storageOwner       User?                @relation("AssetStorageOwner", fields: [storageOwnerUserId], references: [id], onDelete: SetNull)
+  createdBy          User?                @relation("AssetCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  uploadedBy         User?                @relation("AssetUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+  variants           AssetVariant[]
 
   @@index([organizationId, createdAt])
+  @@index([organizationId, mediaKind, status, createdAt])
+  @@index([organizationId, sourceType, status, createdAt])
   @@index([generationJobId])
-  @@index([status])
+  @@index([projectId, status, createdAt])
+  @@index([status, purgeAfter])
   @@index([organizationId, storageOwnerUserId, status])
+  @@index([organizationId, sha256])
+}
+
+model AssetVariant {
+  id              String           @id @default(cuid())
+  assetId         String
+  kind            AssetVariantKind
+  storageProvider AssetStorageProvider @default(LOCAL)
+  objectKey       String           @unique
+  mimeType        String
+  byteSize        BigInt
+  sha256          String?
+  width           Int?
+  height          Int?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  asset           Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([assetId, kind])
+  @@index([assetId])
+}
+
+model AssetStorageUsage {
+  organizationId String       @id
+  usedBytes      BigInt       @default(0)
+  reservedBytes  BigInt       @default(0)
+  readyAssetCount Int         @default(0)
+  version        Int          @default(0)
+  reconciledAt   DateTime?
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 }
 
 model AuditEvent {

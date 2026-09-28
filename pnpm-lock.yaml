@@ -155,6 +155,16 @@ importers:
         specifier: ^4.1.11
         version: 4.1.11(@types/node@24.13.4)(vite@7.3.6(@types/node@24.13.4)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.13))
 
+  packages/assets:
+    dependencies:
+      '@aiwa/db':
+        specifier: workspace:*
+        version: link:../db
+    devDependencies:
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@types/node@24.13.4)(vite@7.3.6(@types/node@24.13.4)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.13))
+
   packages/authz:
     devDependencies:
       vitest:
@@ -208,6 +218,9 @@ importers:
 
   packages/generation:
     dependencies:
+      '@aiwa/assets':
+        specifier: workspace:*
+        version: link:../assets
       '@aiwa/authz':
         specifier: workspace:*
         version: link:../authz
@@ -267,6 +280,9 @@ importers:
 
   packages/organizations:
     dependencies:
+      '@aiwa/assets':
+        specifier: workspace:*
+        version: link:../assets
       '@aiwa/authz':
         specifier: workspace:*
         version: link:../authz

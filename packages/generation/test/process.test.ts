@@ -30,11 +30,17 @@ const mocks = vi.hoisted(() => ({
   storeAudio: vi.fn(),
   storedAssetSize: vi.fn(),
   membership: vi.fn(),
+  finalizeAssetStorage: vi.fn(),
+  releaseAssetStorage: vi.fn(),
 }));
 vi.mock("@aiwa/db", () => ({ db: mocks.db }));
 vi.mock("@aiwa/credits", () => ({
   captureCreditsForJob: mocks.capture,
   releaseOrRefundCredits: mocks.release,
+}));
+vi.mock("@aiwa/assets", () => ({
+  finalizeAssetStorage: mocks.finalizeAssetStorage,
+  releaseAssetStorage: mocks.releaseAssetStorage,
 }));
 vi.mock("../src/index", () => ({ requireMembership: mocks.membership }));
 vi.mock("../src/storage", () => ({
@@ -87,7 +93,17 @@ function transaction(
       update: vi.fn(),
     },
     wallet: { findUniqueOrThrow: vi.fn().mockResolvedValue({ id: "wallet1" }) },
-    asset: { update: vi.fn(), updateMany: vi.fn() },
+    asset: {
+      findUniqueOrThrow: vi.fn().mockResolvedValue({
+        byteSize: 25_000_000n,
+        status: "PENDING",
+      }),
+      aggregate: vi.fn().mockResolvedValue({
+        _sum: { byteSize: 25_000_000n },
+      }),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+    },
     auditEvent: { create: vi.fn() },
   };
   mocks.db.$transaction.mockImplementation((fn) => fn(tx));
@@ -107,6 +123,8 @@ beforeEach(() => {
   mocks.storeVideo.mockResolvedValue({ byteSize: 200n, sha256: "video-hash" });
   mocks.storeAudio.mockResolvedValue({ byteSize: 300n, sha256: "audio-hash" });
   mocks.storedAssetSize.mockResolvedValue(300);
+  mocks.finalizeAssetStorage.mockResolvedValue(undefined);
+  mocks.releaseAssetStorage.mockResolvedValue(undefined);
 });
 
 describe("video processing", () => {
@@ -461,7 +479,12 @@ describe("voice processing", () => {
     expect(tx.asset.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { generationJobId: "job1", status: "PENDING" },
-        data: { status: "DELETED", byteSize: 0n },
+        data: expect.objectContaining({
+          status: "DELETED",
+          byteSize: 0n,
+          deletedAt: expect.any(Date),
+          purgeAfter: expect.any(Date),
+        }),
       }),
     );
   });

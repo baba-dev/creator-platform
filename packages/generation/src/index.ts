@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { hasOrganizationPermission } from "@aiwa/authz";
+import { defaultAssetName, reserveAssetStorage } from "@aiwa/assets";
 import {
   calculateBillableUnits,
   calculateVideoPricing,
@@ -10,7 +11,6 @@ import {
 import { db, type Prisma } from "@aiwa/db";
 import {
   assertAssignableProject,
-  assertStorageAllocationFits,
   muscatCalendarMonth,
 } from "@aiwa/organizations";
 import { VERIFIED_BYTEPLUS_MODELS } from "@aiwa/providers/byteplus";
@@ -266,20 +266,11 @@ export async function createImageJob(userId: string, raw: unknown) {
         spent + credits > member.monthlySpendingCapCredits
       )
         throw new GenerationError("Monthly spending cap exceeded.");
-      const assets = await tx.asset.findMany({
-        where: {
-          organizationId: input.organizationId,
-          status: { not: "DELETED" },
-        },
-        select: { storageOwnerUserId: true, byteSize: true },
+      await reserveAssetStorage(tx, {
+        organizationId: input.organizationId,
+        userId,
+        proposedBytes: BigInt(MAX_IMAGE_BYTES),
       });
-      assertStorageAllocationFits(
-        assets
-          .filter((a) => a.storageOwnerUserId === userId)
-          .reduce((n, a) => n + a.byteSize, 0n),
-        assets.reduce((n, a) => n + a.byteSize, 0n),
-        BigInt(MAX_IMAGE_BYTES),
-      );
       const wallet = await tx.wallet.findUnique({
         where: { organizationId: input.organizationId },
       });
@@ -309,7 +300,12 @@ export async function createImageJob(userId: string, raw: unknown) {
           organizationId: input.organizationId,
           projectId: input.projectId ?? null,
           storageOwnerUserId: userId,
+          createdById: userId,
           generationJobId: job.id,
+          mediaKind: "IMAGE",
+          sourceType: "GENERATED",
+          storageProvider: "LOCAL",
+          name: defaultAssetName("IMAGE", "GENERATED"),
           objectKey: `${job.id}.${model.providerModelId === "seedream-4-5-251128" ? "jpg" : "png"}`,
           mimeType:
             model.providerModelId === "seedream-4-5-251128"
@@ -495,20 +491,11 @@ export async function createVideoJob(userId: string, raw: unknown) {
         spent + credits > member.monthlySpendingCapCredits
       )
         throw new GenerationError("Monthly spending cap exceeded.");
-      const assets = await tx.asset.findMany({
-        where: {
-          organizationId: input.organizationId,
-          status: { not: "DELETED" },
-        },
-        select: { storageOwnerUserId: true, byteSize: true },
+      await reserveAssetStorage(tx, {
+        organizationId: input.organizationId,
+        userId,
+        proposedBytes: BigInt(MAX_VIDEO_BYTES),
       });
-      assertStorageAllocationFits(
-        assets
-          .filter((a) => a.storageOwnerUserId === userId)
-          .reduce((n, a) => n + a.byteSize, 0n),
-        assets.reduce((n, a) => n + a.byteSize, 0n),
-        BigInt(MAX_VIDEO_BYTES),
-      );
       const wallet = await tx.wallet.findUnique({
         where: { organizationId: input.organizationId },
       });
@@ -540,7 +527,12 @@ export async function createVideoJob(userId: string, raw: unknown) {
           organizationId: input.organizationId,
           projectId: input.projectId ?? null,
           storageOwnerUserId: userId,
+          createdById: userId,
           generationJobId: job.id,
+          mediaKind: "VIDEO",
+          sourceType: "GENERATED",
+          storageProvider: "LOCAL",
+          name: defaultAssetName("VIDEO", "GENERATED"),
           objectKey: `${job.id}.mp4`,
           mimeType: "video/mp4",
           byteSize: BigInt(MAX_VIDEO_BYTES),
@@ -698,20 +690,11 @@ export async function createVoiceJob(userId: string, raw: unknown) {
         spent + credits > member.monthlySpendingCapCredits
       )
         throw new GenerationError("Monthly spending cap exceeded.");
-      const assets = await tx.asset.findMany({
-        where: {
-          organizationId: input.organizationId,
-          status: { not: "DELETED" },
-        },
-        select: { storageOwnerUserId: true, byteSize: true },
+      await reserveAssetStorage(tx, {
+        organizationId: input.organizationId,
+        userId,
+        proposedBytes: BigInt(MAX_AUDIO_BYTES),
       });
-      assertStorageAllocationFits(
-        assets
-          .filter((a) => a.storageOwnerUserId === userId)
-          .reduce((n, a) => n + a.byteSize, 0n),
-        assets.reduce((n, a) => n + a.byteSize, 0n),
-        BigInt(MAX_AUDIO_BYTES),
-      );
       const wallet = await tx.wallet.findUnique({
         where: { organizationId: input.organizationId },
       });
@@ -743,7 +726,12 @@ export async function createVoiceJob(userId: string, raw: unknown) {
           organizationId: input.organizationId,
           projectId: input.projectId ?? null,
           storageOwnerUserId: userId,
+          createdById: userId,
           generationJobId: job.id,
+          mediaKind: "AUDIO",
+          sourceType: "GENERATED",
+          storageProvider: "LOCAL",
+          name: defaultAssetName("AUDIO", "GENERATED"),
           objectKey: `${job.id}.mp3`,
           mimeType: "audio/mpeg",
           byteSize: BigInt(MAX_AUDIO_BYTES),

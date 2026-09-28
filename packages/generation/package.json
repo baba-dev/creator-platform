@@ -17,6 +17,7 @@
     "clean": "rm -rf .turbo"
   },
   "dependencies": {
+    "@aiwa/assets": "workspace:*",
     "@aiwa/credits": "workspace:*",
     "@aiwa/db": "workspace:*",
     "@aiwa/mail": "workspace:*",

@@ -24,7 +24,6 @@ export default async function AdminTemplatesPage() {
       variables: true,
       defaultInput: true,
       preferredModelId: true,
-      thumbnailAssetId: true,
       featured: true,
       sortOrder: true,
       updatedAt: true,

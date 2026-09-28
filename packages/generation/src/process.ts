@@ -16,6 +16,7 @@ import {
   downloadImage,
   downloadVideo,
   ImageStorageError,
+  referenceImageDataUri,
   storeAudio,
   storeImage,
   storeVideo,
@@ -385,7 +386,13 @@ export async function processImageJob(
 ) {
   let job = await db.generationJob.findUniqueOrThrow({
     where: { id },
-    include: { providerModel: true },
+    include: {
+      providerModel: true,
+      inputAssets: {
+        orderBy: { position: "asc" },
+        include: { asset: true },
+      },
+    },
   });
   if (job.status === "QUEUED") {
     if (job.providerModel.enabled === false) return;
@@ -419,11 +426,47 @@ export async function processImageJob(
       return;
     }
     try {
+      const referenceImages = await Promise.all(
+        job.inputAssets.map(async ({ asset }) => {
+          if (
+            asset.organizationId !== job.organizationId ||
+            asset.storageOwnerUserId !== job.createdById ||
+            asset.purpose !== "REFERENCE_INPUT" ||
+            asset.mediaKind !== "IMAGE" ||
+            asset.status !== "READY"
+          ) {
+            throw new ProviderRequestError(
+              "Reference image is no longer available",
+              false,
+              { code: "REFERENCE_IMAGE_UNAVAILABLE" },
+            );
+          }
+          try {
+            return await referenceImageDataUri({
+              objectKey: asset.objectKey,
+              mimeType: asset.mimeType,
+              storageProvider: asset.storageProvider,
+            });
+          } catch (error) {
+            throw new ProviderRequestError(
+              "Reference image is no longer available",
+              false,
+              {
+                code: "REFERENCE_IMAGE_UNAVAILABLE",
+                cause: error,
+              },
+            );
+          }
+        }),
+      );
       const result = await provider.submit({
         idempotencyKey: job.idempotencyKey,
         modelId: job.providerModel.providerModelId,
         mediaKind: "image",
-        input: job.requestPayload as Record<string, unknown>,
+        input: {
+          ...(job.requestPayload as Record<string, unknown>),
+          referenceImages,
+        },
       });
       if (result.status !== "succeeded" || result.outputUrls?.length !== 1)
         throw new Error("Unexpected provider result");
@@ -465,7 +508,13 @@ export async function processImageJob(
     }
     job = await db.generationJob.findUniqueOrThrow({
       where: { id },
-      include: { providerModel: true },
+      include: {
+        providerModel: true,
+        inputAssets: {
+          orderBy: { position: "asc" },
+          include: { asset: true },
+        },
+      },
     });
   }
   if (job.status !== "PROCESSING") return;

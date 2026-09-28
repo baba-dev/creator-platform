@@ -16,6 +16,7 @@ import {
   downloadImage,
   downloadVideo,
   ImageStorageError,
+  referenceImageDataUri,
   storeAudio,
   storeImage,
   storeVideo,
@@ -379,13 +380,55 @@ export async function processVideoPollJob(
   });
 }
 
+function parseImageOutputUrls(payload: unknown): string[] {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return [];
+  }
+  const record = payload as Record<string, unknown>;
+  if (typeof record.url === "string" && record.url) {
+    return [record.url];
+  }
+  if (!Array.isArray(record.outputs)) return [];
+  const urls: string[] = [];
+  for (const item of record.outputs) {
+    if (
+      !item ||
+      typeof item !== "object" ||
+      Array.isArray(item) ||
+      typeof (item as Record<string, unknown>).url !== "string"
+    ) {
+      return [];
+    }
+    urls.push((item as { url: string }).url);
+  }
+  return urls;
+}
+
+function expectedImageObjectKey(
+  jobId: string,
+  outputIndex: number,
+  totalSlots: number,
+  extension: "png" | "jpg",
+): string {
+  return totalSlots === 1
+    ? `${jobId}.${extension}`
+    : `${jobId}-${outputIndex + 1}.${extension}`;
+}
+
 export async function processImageJob(
   id: string,
   provider: MediaGenerationProvider,
 ) {
   let job = await db.generationJob.findUniqueOrThrow({
     where: { id },
-    include: { providerModel: true },
+    include: {
+      providerModel: true,
+      priceVersion: true,
+      inputAssets: {
+        orderBy: { position: "asc" },
+        include: { asset: true },
+      },
+    },
   });
   if (job.status === "QUEUED") {
     if (job.providerModel.enabled === false) return;
@@ -418,25 +461,90 @@ export async function processImageJob(
       });
       return;
     }
+
     try {
+      const referenceImages = await Promise.all(
+        (job.inputAssets ?? []).map(async ({ asset }) => {
+          if (
+            asset.organizationId !== job.organizationId ||
+            asset.storageOwnerUserId !== job.createdById ||
+            asset.purpose !== "REFERENCE_INPUT" ||
+            asset.mediaKind !== "IMAGE" ||
+            asset.status !== "READY"
+          ) {
+            throw new ProviderRequestError(
+              "Reference image is no longer available",
+              false,
+              { code: "REFERENCE_IMAGE_UNAVAILABLE" },
+            );
+          }
+          try {
+            return await referenceImageDataUri({
+              objectKey: asset.objectKey,
+              mimeType: asset.mimeType,
+              storageProvider: asset.storageProvider,
+            });
+          } catch (error) {
+            throw new ProviderRequestError(
+              "Reference image is no longer available",
+              false,
+              {
+                code: "REFERENCE_IMAGE_UNAVAILABLE",
+                cause: error,
+              },
+            );
+          }
+        }),
+      );
       const result = await provider.submit({
         idempotencyKey: job.idempotencyKey,
         modelId: job.providerModel.providerModelId,
         mediaKind: "image",
-        input: job.requestPayload as Record<string, unknown>,
+        input: {
+          ...(job.requestPayload as Record<string, unknown>),
+          referenceImages,
+        },
       });
-      if (result.status !== "succeeded" || result.outputUrls?.length !== 1)
-        throw new Error("Unexpected provider result");
-      await db.generationJob.update({
-        where: { id },
+      const requestedCount = job.quotedUnits ?? 1;
+      const outputUrls = result.outputUrls ?? [];
+      if (result.status !== "succeeded" || outputUrls.length === 0) {
+        throw new ProviderRequestError(
+          "BytePlus returned no successful image outputs",
+          false,
+          { code: "INVALID_PROVIDER_RESPONSE" },
+        );
+      }
+      if (outputUrls.length > requestedCount) {
+        await db.generationJob.updateMany({
+          where: { id, status: "SUBMITTED" },
+          data: {
+            status: "MANUAL_REVIEW",
+            providerRequestId: result.providerRequestId,
+            outputPayload: {
+              requestedCount,
+              outputs: outputUrls.map((url, index) => ({ index, url })),
+            },
+            errorCode: "PROVIDER_OUTPUT_OVERFLOW",
+            errorMessage:
+              "Provider returned more images than reserved. Credits remain held for review.",
+          },
+        });
+        return;
+      }
+      const persistedProviderResult = await db.generationJob.updateMany({
+        where: { id, status: "SUBMITTED" },
         data: {
           status: "PROCESSING",
           providerRequestId: result.providerRequestId,
-          outputPayload: { url: result.outputUrls[0]! },
+          outputPayload: {
+            requestedCount,
+            outputs: outputUrls.map((url, index) => ({ index, url })),
+          },
           errorCode: null,
           errorMessage: null,
         },
       });
+      if (!persistedProviderResult.count) return;
     } catch (error) {
       if (
         error instanceof ProviderConfigurationError ||
@@ -451,7 +559,6 @@ export async function processImageJob(
         );
         return;
       }
-      // The provider may have billed the request. Never blindly submit it again.
       await db.generationJob.updateMany({
         where: { id, status: "SUBMITTED" },
         data: {
@@ -463,81 +570,222 @@ export async function processImageJob(
       });
       return;
     }
+
     job = await db.generationJob.findUniqueOrThrow({
       where: { id },
-      include: { providerModel: true },
+      include: {
+        providerModel: true,
+        priceVersion: true,
+        inputAssets: {
+          orderBy: { position: "asc" },
+          include: { asset: true },
+        },
+      },
     });
   }
   if (job.status !== "PROCESSING") return;
 
-  let stored: Awaited<ReturnType<typeof storeImage>>;
-  let objectKey: string;
-  try {
-    const asset = await db.asset.findFirstOrThrow({
-      where: { generationJobId: id, status: "PENDING" },
-      select: { objectKey: true, mimeType: true },
-    });
-    if (!(
-      (asset.mimeType === "image/png" && asset.objectKey === `${id}.png`) ||
-      (asset.mimeType === "image/jpeg" && asset.objectKey === `${id}.jpg`)
-    )) {
-      throw new ImageStorageError(
-        "IMAGE_OUTPUT_URL_INVALID",
-        "Reserved image asset has an invalid format.",
-      );
-    }
-    const output = job.outputPayload as { url?: unknown } | null;
-    if (!output || typeof output.url !== "string" || !output.url) {
-      throw new ImageStorageError(
+  const outputUrls = parseImageOutputUrls(job.outputPayload);
+  if (outputUrls.length === 0) {
+    await recordStorageFailure(
+      id,
+      new ImageStorageError(
         "IMAGE_OUTPUT_URL_INVALID",
         "Provider image output metadata was unavailable.",
-      );
-    }
-    const bytes = await downloadImage(
-      output.url,
-      asset.mimeType === "image/jpeg" ? "jpeg" : "png",
+      ),
     );
-    objectKey = asset.objectKey;
-    stored = await storeImage(objectKey, bytes);
-  } catch (error) {
-    await recordStorageFailure(id, error);
-    throw error;
+    return;
+  }
+
+  const outputAssets = await db.asset.findMany({
+    where: {
+      generationJobId: id,
+      sourceType: "GENERATED",
+      mediaKind: "IMAGE",
+      generationOutputIndex: { not: null },
+    },
+    orderBy: { generationOutputIndex: "asc" },
+  });
+  const requestedCount = job.quotedUnits ?? outputAssets.length;
+  if (
+    outputAssets.length !== requestedCount ||
+    outputUrls.length > outputAssets.length
+  ) {
+    await db.generationJob.updateMany({
+      where: { id, status: "PROCESSING" },
+      data: {
+        status: "MANUAL_REVIEW",
+        errorCode: "OUTPUT_RESERVATION_MISMATCH",
+        errorMessage:
+          "Generated output reservations do not match the provider result. Credits remain held for review.",
+      },
+    });
+    return;
+  }
+
+  for (let outputIndex = 0; outputIndex < outputUrls.length; outputIndex += 1) {
+    const asset = outputAssets[outputIndex]!;
+    if (asset.status === "READY") continue;
+    if (asset.status !== "PENDING") {
+      await db.generationJob.updateMany({
+        where: { id, status: "PROCESSING" },
+        data: {
+          status: "MANUAL_REVIEW",
+          errorCode: "OUTPUT_ASSET_STATE_INVALID",
+          errorMessage:
+            "A generated output slot is not recoverable. Credits remain held for review.",
+        },
+      });
+      return;
+    }
+
+    const extension = asset.mimeType === "image/jpeg" ? "jpg" : "png";
+    const expectedKey = expectedImageObjectKey(
+      id,
+      outputIndex,
+      requestedCount,
+      extension,
+    );
+    if (
+      asset.objectKey !== expectedKey ||
+      !["image/png", "image/jpeg"].includes(asset.mimeType)
+    ) {
+      await db.generationJob.updateMany({
+        where: { id, status: "PROCESSING" },
+        data: {
+          status: "MANUAL_REVIEW",
+          errorCode: "OUTPUT_ASSET_METADATA_INVALID",
+          errorMessage:
+            "A generated output slot has invalid storage metadata. Credits remain held for review.",
+        },
+      });
+      return;
+    }
+
+    try {
+      const bytes = await downloadImage(
+        outputUrls[outputIndex]!,
+        asset.mimeType === "image/jpeg" ? "jpeg" : "png",
+      );
+      const stored = await storeImage(asset.objectKey, bytes);
+      await db.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM Asset WHERE id = ${asset.id} FOR UPDATE`;
+        const currentAsset = await tx.asset.findUniqueOrThrow({
+          where: { id: asset.id },
+          select: { status: true, byteSize: true },
+        });
+        if (currentAsset.status === "READY") return;
+        if (currentAsset.status !== "PENDING") {
+          throw new Error("Output asset state changed during storage.");
+        }
+        await finalizeAssetStorage(tx, {
+          organizationId: job.organizationId,
+          reservedBytes: currentAsset.byteSize,
+          actualBytes: stored.byteSize,
+        });
+        await tx.asset.update({
+          where: { id: asset.id },
+          data: { ...stored, status: "READY" },
+        });
+      });
+    } catch (error) {
+      await recordStorageFailure(id, error);
+      throw error;
+    }
   }
 
   await db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM GenerationJob WHERE id = ${id} FOR UPDATE`;
-    const current = await tx.generationJob.findUniqueOrThrow({ where: { id } });
+    const current = await tx.generationJob.findUniqueOrThrow({
+      where: { id },
+      include: { priceVersion: true },
+    });
     if (current.status !== "PROCESSING") return;
+
+    const assets = await tx.asset.findMany({
+      where: {
+        generationJobId: id,
+        sourceType: "GENERATED",
+        mediaKind: "IMAGE",
+        generationOutputIndex: { not: null },
+      },
+      orderBy: { generationOutputIndex: "asc" },
+    });
+    const successfulCount = outputUrls.length;
+    const readySuccessful = assets
+      .slice(0, successfulCount)
+      .every((asset) => asset.status === "READY");
+    if (!readySuccessful) {
+      throw new Error("Not all successful outputs are durably stored.");
+    }
+
+    const unused = assets
+      .slice(successfulCount)
+      .filter((asset) => asset.status === "PENDING");
+    const unusedReservedBytes = unused.reduce(
+      (total, asset) => total + asset.byteSize,
+      0n,
+    );
+    if (unusedReservedBytes > 0n) {
+      await releaseAssetStorage(tx, {
+        organizationId: job.organizationId,
+        reservedBytes: unusedReservedBytes,
+      });
+      await tx.asset.updateMany({
+        where: { id: { in: unused.map((asset) => asset.id) } },
+        data: {
+          status: "DELETED",
+          byteSize: 0n,
+          deletedAt: new Date(),
+          purgeAfter: new Date(),
+        },
+      });
+    }
+
+    const quotedUnits = current.quotedUnits ?? 1;
+    if (
+      quotedUnits <= 0 ||
+      current.reservedCredits % BigInt(quotedUnits) !== 0n
+    ) {
+      throw new Error(
+        "Image credit reservation is not divisible by quoted units.",
+      );
+    }
+    const creditsPerImage = current.reservedCredits / BigInt(quotedUnits);
+    const chargedCredits = creditsPerImage * BigInt(successfulCount);
     const wallet = await tx.wallet.findUniqueOrThrow({
       where: { organizationId: job.organizationId },
     });
     await captureCreditsForJob(tx, {
       walletId: wallet.id,
       jobId: id,
-      amountCredits: current.reservedCredits,
+      amountCredits: chargedCredits,
       idempotencyKey: `generation-capture-${id}`,
+      metadata: {
+        quotedOutputs: quotedUnits,
+        successfulOutputs: successfulCount,
+        unusedOutputs: quotedUnits - successfulCount,
+      },
     });
-    const pendingAsset = await tx.asset.findUniqueOrThrow({
-      where: { objectKey },
-      select: { byteSize: true, status: true },
-    });
-    if (pendingAsset.status === "PENDING") {
-      await finalizeAssetStorage(tx, {
-        organizationId: job.organizationId,
-        reservedBytes: pendingAsset.byteSize,
-        actualBytes: stored.byteSize,
-      });
-    }
-    const asset = await tx.asset.update({
-      where: { objectKey },
-      data: { ...stored, status: "READY" },
-    });
+
+    const actualProviderCostMicroUsd =
+      current.priceVersion.providerCostMicroUsd * BigInt(successfulCount);
+    const readyAssets = assets.slice(0, successfulCount);
     await tx.generationJob.update({
       where: { id },
       data: {
         status: "SUCCEEDED",
+        actualUnits: successfulCount,
+        billableQuantity: successfulCount,
+        actualProviderCostMicroUsd,
         completedAt: new Date(),
-        outputPayload: { stored: true },
+        outputPayload: {
+          stored: true,
+          requestedCount: quotedUnits,
+          successfulCount,
+          partialSuccess: successfulCount < quotedUnits,
+          assetIds: readyAssets.map((asset) => asset.id),
+        },
         errorCode: null,
         errorMessage: null,
       },
@@ -546,13 +794,25 @@ export async function processImageJob(
       data: {
         organizationId: job.organizationId,
         actorUserId: job.createdById,
-        action: "generation.succeeded",
+        action:
+          successfulCount < quotedUnits
+            ? "generation.partial_succeeded"
+            : "generation.succeeded",
         targetType: "GenerationJob",
         targetId: id,
+        metadata: {
+          requestedOutputs: quotedUnits,
+          successfulOutputs: successfulCount,
+          chargedCredits: chargedCredits.toString(),
+          releasedCredits: (
+            current.reservedCredits - chargedCredits
+          ).toString(),
+        },
       },
     });
-    if (asset?.id) {
-      await enqueueGenerationSuccess(tx, { ...job, id }, asset.id);
+    const firstAsset = readyAssets[0];
+    if (firstAsset) {
+      await enqueueGenerationSuccess(tx, { ...job, id }, firstAsset.id);
     }
   });
 }

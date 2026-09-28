@@ -22,6 +22,7 @@ export * from "./reconciliation";
 export * from "./cancel";
 
 export const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
+export const MAX_REFERENCE_SET_BYTES = 80 * 1024 * 1024;
 export const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 export const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 
@@ -43,7 +44,15 @@ export const imageRequestSchema = z
       "2:3",
       "21:9",
     ]),
-    resolution: z.enum(["2K", "4K"]).default("2K"),
+    resolution: z.enum(["2K", "3K", "4K"]).default("2K"),
+    outputCount: z.number().int().min(1).max(15).default(1),
+    referenceAssetIds: z
+      .array(z.string().min(1).max(100))
+      .max(14)
+      .default([])
+      .refine((ids) => new Set(ids).size === ids.length, {
+        message: "Reference assets must be unique.",
+      }),
   })
   .strict();
 
@@ -158,6 +167,8 @@ export async function createImageJob(userId: string, raw: unknown) {
     resolution: input.resolution,
     outputFormat: "png",
     watermark: false,
+    outputCount: input.outputCount,
+    referenceAssetIds: input.referenceAssetIds,
   };
   const key = createHash("sha256")
     .update(`${input.organizationId}:${userId}:${input.idempotencyKey}`)
@@ -183,14 +194,24 @@ export async function createImageJob(userId: string, raw: unknown) {
           JSON.stringify(existing.requestPayload) !== JSON.stringify(payload)
         ) {
           // JSON columns can reorder keys: compare canonical fields below.
-          const old = existing.requestPayload as typeof payload;
+          const old = existing.requestPayload as Partial<typeof payload>;
+          const sameReferences =
+            Array.isArray(old.referenceAssetIds) &&
+            old.referenceAssetIds.length === payload.referenceAssetIds.length &&
+            old.referenceAssetIds.every(
+              (assetId, index) => assetId === payload.referenceAssetIds[index],
+            );
           if (
             existing.projectId !== (input.projectId ?? null) ||
             existing.providerModelId !== input.modelId ||
             existing.priceVersionId !== input.priceVersionId ||
-            Object.entries(payload).some(
-              ([k, v]) => old[k as keyof typeof payload] !== v,
-            )
+            old.prompt !== payload.prompt ||
+            old.aspectRatio !== payload.aspectRatio ||
+            old.resolution !== payload.resolution ||
+            old.outputFormat !== payload.outputFormat ||
+            old.watermark !== payload.watermark ||
+            old.outputCount !== payload.outputCount ||
+            !sameReferences
           )
             throw new GenerationError(
               "Request key was already used for different inputs.",
@@ -246,7 +267,92 @@ export async function createImageJob(userId: string, raw: unknown) {
         throw new GenerationError("Resolution is not supported by this model.");
       }
 
-      const credits = priceCredits(price);
+      if (
+        input.referenceAssetIds.length > 0 &&
+        !hasModelCapability(model.capabilities, "referenceImages")
+      ) {
+        throw new GenerationError(
+          "Reference images are not supported by this model.",
+        );
+      }
+      const maxReferencesRaw =
+        model.capabilities &&
+        typeof model.capabilities === "object" &&
+        !Array.isArray(model.capabilities)
+          ? (model.capabilities as Record<string, unknown>).maxReferenceImages
+          : undefined;
+      const maxReferences =
+        typeof maxReferencesRaw === "number" ? maxReferencesRaw : 0;
+      if (input.referenceAssetIds.length > maxReferences) {
+        throw new GenerationError(
+          `This model supports at most ${maxReferences} reference images.`,
+        );
+      }
+      const capabilityRecord =
+        model.capabilities &&
+        typeof model.capabilities === "object" &&
+        !Array.isArray(model.capabilities)
+          ? (model.capabilities as Record<string, unknown>)
+          : {};
+      const maxGeneratedImages =
+        typeof capabilityRecord.maxGeneratedImages === "number"
+          ? capabilityRecord.maxGeneratedImages
+          : 1;
+      const maxTotalImages =
+        typeof capabilityRecord.maxTotalInputOutputImages === "number"
+          ? capabilityRecord.maxTotalInputOutputImages
+          : maxGeneratedImages;
+      if (input.outputCount > 1 && capabilityRecord.sequentialImages !== true) {
+        throw new GenerationError(
+          "Multiple related images are not supported by this model.",
+        );
+      }
+      if (input.outputCount > maxGeneratedImages) {
+        throw new GenerationError(
+          `This model supports at most ${maxGeneratedImages} generated images per request.`,
+        );
+      }
+      if (input.referenceAssetIds.length + input.outputCount > maxTotalImages) {
+        throw new GenerationError(
+          `Reference images plus generated images must not exceed ${maxTotalImages}.`,
+        );
+      }
+
+      const referenceAssets = input.referenceAssetIds.length
+        ? await tx.asset.findMany({
+            where: {
+              id: { in: input.referenceAssetIds },
+              organizationId: input.organizationId,
+              storageOwnerUserId: userId,
+              purpose: "REFERENCE_INPUT",
+              mediaKind: "IMAGE",
+              status: "READY",
+            },
+            select: {
+              id: true,
+              byteSize: true,
+            },
+          })
+        : [];
+      if (referenceAssets.length !== input.referenceAssetIds.length) {
+        throw new GenerationError(
+          "One or more reference images are unavailable.",
+          404,
+        );
+      }
+      const referenceBytes = referenceAssets.reduce(
+        (total, asset) => total + asset.byteSize,
+        0n,
+      );
+      if (referenceBytes > BigInt(MAX_REFERENCE_SET_BYTES)) {
+        throw new GenerationError(
+          "Reference image set exceeds the 80 MB safety limit.",
+          413,
+        );
+      }
+
+      const creditsPerImage = priceCredits(price);
+      const credits = creditsPerImage * BigInt(input.outputCount);
       const { start, end } = muscatCalendarMonth(now);
       const jobs = await tx.generationJob.findMany({
         where: {
@@ -270,7 +376,7 @@ export async function createImageJob(userId: string, raw: unknown) {
       await reserveAssetStorage(tx, {
         organizationId: input.organizationId,
         userId,
-        proposedBytes: BigInt(MAX_IMAGE_BYTES),
+        proposedBytes: BigInt(MAX_IMAGE_BYTES) * BigInt(input.outputCount),
       });
       const wallet = await tx.wallet.findUnique({
         where: { organizationId: input.organizationId },
@@ -287,34 +393,61 @@ export async function createImageJob(userId: string, raw: unknown) {
           idempotencyKey: key,
           requestPayload: payload,
           status: "QUOTED",
+          quotedUnits: input.outputCount,
+          billableQuantity: input.outputCount,
           quotedAt: now,
         },
       });
+      if (input.referenceAssetIds.length) {
+        const positions = new Map(
+          input.referenceAssetIds.map((assetId, position) => [
+            assetId,
+            position,
+          ]),
+        );
+        await tx.generationInputAsset.createMany({
+          data: referenceAssets.map((asset) => ({
+            generationJobId: job.id,
+            assetId: asset.id,
+            position: positions.get(asset.id)!,
+          })),
+        });
+      }
       await reserveCreditsForJob(tx, {
         walletId: wallet.id,
         amountCredits: credits,
         idempotencyKey: `generation-reserve-${job.id}`,
         jobId: job.id,
       });
-      await tx.asset.create({
-        data: {
+      const extension =
+        model.providerModelId === "seedream-4-5-251128" ? "jpg" : "png";
+      const mimeType =
+        model.providerModelId === "seedream-4-5-251128"
+          ? "image/jpeg"
+          : "image/png";
+      await tx.asset.createMany({
+        data: Array.from({ length: input.outputCount }, (_, outputIndex) => ({
           organizationId: input.organizationId,
           projectId: input.projectId ?? null,
           storageOwnerUserId: userId,
           createdById: userId,
           generationJobId: job.id,
-          mediaKind: "IMAGE",
-          sourceType: "GENERATED",
-          storageProvider: "LOCAL",
-          name: defaultAssetName("IMAGE", "GENERATED"),
-          objectKey: `${job.id}.${model.providerModelId === "seedream-4-5-251128" ? "jpg" : "png"}`,
-          mimeType:
-            model.providerModelId === "seedream-4-5-251128"
-              ? "image/jpeg"
-              : "image/png",
+          generationOutputIndex: outputIndex,
+          mediaKind: "IMAGE" as const,
+          sourceType: "GENERATED" as const,
+          storageProvider: "LOCAL" as const,
+          name:
+            input.outputCount === 1
+              ? defaultAssetName("IMAGE", "GENERATED")
+              : `${defaultAssetName("IMAGE", "GENERATED")} ${outputIndex + 1}`,
+          objectKey:
+            input.outputCount === 1
+              ? `${job.id}.${extension}`
+              : `${job.id}-${outputIndex + 1}.${extension}`,
+          mimeType,
           byteSize: BigInt(MAX_IMAGE_BYTES),
-          status: "PENDING",
-        },
+          status: "PENDING" as const,
+        })),
       });
       await tx.auditEvent.create({
         data: {

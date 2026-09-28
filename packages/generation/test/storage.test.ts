@@ -1,3 +1,4 @@
+import { createAssetObjectKey, LocalAssetStorage } from "@aiwa/assets/storage";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,12 +12,14 @@ import {
   readStoredAsset,
   readStoredAssetRange,
   readStoredImage,
+  referenceImageDataUri,
   storagePath,
   storeAudio,
   storeImage,
   storeVideo,
   storedAssetSize,
   validateMp3Bytes,
+  validateReferenceImage,
   validateJpegImage,
 } from "../src/storage";
 
@@ -88,6 +91,63 @@ describe("private image storage", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+
+  it("validates, normalizes, stores, and rehydrates a private reference image", async () => {
+    const root = await mkdtemp(join(tmpdir(), "creator-reference-storage-"));
+    vi.stubEnv("ASSET_STORAGE_ROOT", root);
+    try {
+      const original = await sharp({
+        create: {
+          width: 640,
+          height: 480,
+          channels: 3,
+          background: "#123456",
+        },
+      })
+        .jpeg()
+        .withMetadata({ orientation: 6 })
+        .toBuffer();
+
+      const validated = await validateReferenceImage(original);
+      expect(validated.mimeType).toBe("image/jpeg");
+      // EXIF orientation is applied before storage; persisted dimensions describe
+      // the bytes the provider will actually receive.
+      expect(validated.width).toBe(480);
+      expect(validated.height).toBe(640);
+      expect(validated.sha256).toMatch(/^[a-f0-9]{64}$/);
+
+      const objectKey = createAssetObjectKey("org_test", validated.extension);
+      await new LocalAssetStorage(root).put(objectKey, validated.bytes);
+      const dataUri = await referenceImageDataUri({
+        objectKey,
+        mimeType: validated.mimeType,
+        storageProvider: "LOCAL",
+      });
+      expect(dataUri).toMatch(/^data:image\/jpeg;base64,/);
+      const bytes = Buffer.from(dataUri.split(",", 2)[1]!, "base64");
+      expect((await sharp(bytes).metadata()).format).toBe("jpeg");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects unsupported or unsafe reference image payloads", async () => {
+    await expect(
+      validateReferenceImage(Buffer.from("<svg></svg>")),
+    ).rejects.toMatchObject({ code: "IMAGE_OUTPUT_INVALID_PNG" });
+
+    const tooWide = await sharp({
+      create: {
+        width: 1600,
+        height: 50,
+        channels: 3,
+        background: "#ffffff",
+      },
+    })
+      .png()
+      .toBuffer();
+    await expect(validateReferenceImage(tooWide)).rejects.toThrow("dimensions");
   });
 
   it.each([

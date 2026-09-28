@@ -22,6 +22,12 @@ export async function GET(
     where: { id: assetId, status: { in: ["READY", "DELETED"] } },
   });
   if (!asset) return new Response(null, { status: 404 });
+  if (
+    asset.purpose === "REFERENCE_INPUT" &&
+    asset.storageOwnerUserId !== session.user.id
+  ) {
+    return new Response(null, { status: 404 });
+  }
   try {
     await requireMembership(db, asset.organizationId, session.user.id);
   } catch {

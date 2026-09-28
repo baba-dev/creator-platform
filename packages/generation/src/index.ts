@@ -42,7 +42,8 @@ export const imageRequestSchema = z
       "2:3",
       "21:9",
     ]),
-    resolution: z.enum(["2K", "4K"]).default("2K"),
+    resolution: z.enum(["2K", "3K", "4K"]).default("2K"),
+    referenceAssetIds: z.array(z.string().min(1).max(100)).max(14).default([]),
   })
   .strict();
 
@@ -157,6 +158,7 @@ export async function createImageJob(userId: string, raw: unknown) {
     resolution: input.resolution,
     outputFormat: "png",
     watermark: false,
+    referenceAssetIds: input.referenceAssetIds,
   };
   const key = createHash("sha256")
     .update(`${input.organizationId}:${userId}:${input.idempotencyKey}`)
@@ -182,14 +184,18 @@ export async function createImageJob(userId: string, raw: unknown) {
           JSON.stringify(existing.requestPayload) !== JSON.stringify(payload)
         ) {
           // JSON columns can reorder keys: compare canonical fields below.
-          const old = existing.requestPayload as typeof payload;
+          const old = existing.requestPayload as Partial<typeof payload>;
           if (
             existing.projectId !== (input.projectId ?? null) ||
             existing.providerModelId !== input.modelId ||
             existing.priceVersionId !== input.priceVersionId ||
-            Object.entries(payload).some(
-              ([k, v]) => old[k as keyof typeof payload] !== v,
-            )
+            old.prompt !== payload.prompt ||
+            old.aspectRatio !== payload.aspectRatio ||
+            old.resolution !== payload.resolution ||
+            old.outputFormat !== payload.outputFormat ||
+            old.watermark !== payload.watermark ||
+            JSON.stringify(old.referenceAssetIds ?? []) !==
+              JSON.stringify(payload.referenceAssetIds)
           )
             throw new GenerationError(
               "Request key was already used for different inputs.",
@@ -243,6 +249,52 @@ export async function createImageJob(userId: string, raw: unknown) {
         )
       ) {
         throw new GenerationError("Resolution is not supported by this model.");
+      }
+
+      if (
+        input.referenceAssetIds.length > 0 &&
+        !hasModelCapability(model.capabilities, "referenceImages")
+      ) {
+        throw new GenerationError(
+          "Reference images are not supported by this model.",
+        );
+      }
+      const maxReferenceImages =
+        model.capabilities &&
+        typeof model.capabilities === "object" &&
+        !Array.isArray(model.capabilities) &&
+        typeof (model.capabilities as Record<string, unknown>)
+          .maxReferenceImages === "number"
+          ? ((model.capabilities as Record<string, unknown>)
+              .maxReferenceImages as number)
+          : 0;
+      if (input.referenceAssetIds.length > maxReferenceImages) {
+        throw new GenerationError(
+          "Too many reference images for the selected model.",
+        );
+      }
+
+      const uniqueReferenceIds = new Set(input.referenceAssetIds);
+      if (uniqueReferenceIds.size !== input.referenceAssetIds.length) {
+        throw new GenerationError("Reference images must be unique.");
+      }
+      const referenceAssets =
+        input.referenceAssetIds.length === 0
+          ? []
+          : await tx.asset.findMany({
+              where: {
+                id: { in: input.referenceAssetIds },
+                organizationId: input.organizationId,
+                status: "READY",
+                mimeType: { in: ["image/jpeg", "image/png", "image/webp"] },
+              },
+              select: { id: true },
+            });
+      if (referenceAssets.length !== input.referenceAssetIds.length) {
+        throw new GenerationError(
+          "One or more reference images are unavailable.",
+          409,
+        );
       }
 
       const credits = priceCredits(price);
@@ -304,6 +356,15 @@ export async function createImageJob(userId: string, raw: unknown) {
         idempotencyKey: `generation-reserve-${job.id}`,
         jobId: job.id,
       });
+      if (input.referenceAssetIds.length > 0) {
+        await tx.generationInputAsset.createMany({
+          data: input.referenceAssetIds.map((assetId, position) => ({
+            generationJobId: job.id,
+            assetId,
+            position,
+          })),
+        });
+      }
       await tx.asset.create({
         data: {
           organizationId: input.organizationId,

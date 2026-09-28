@@ -1,4 +1,8 @@
 import { captureCreditsForJob, releaseOrRefundCredits } from "@aiwa/credits";
+import {
+  finalizeAssetStorage,
+  releaseAssetStorage,
+} from "@aiwa/assets";
 import { db, type Prisma } from "@aiwa/db";
 import {
   enqueueMail,
@@ -118,9 +122,25 @@ export async function failJob(
       reason: message,
       idempotencyKey: `generation-release-${id}`,
     });
+    const pendingAssets = await tx.asset.aggregate({
+      where: { generationJobId: id, status: "PENDING" },
+      _sum: { byteSize: true },
+    });
+    const reservedAssetBytes = pendingAssets._sum.byteSize ?? 0n;
+    if (reservedAssetBytes > 0n) {
+      await releaseAssetStorage(tx, {
+        organizationId: job.organizationId,
+        reservedBytes: reservedAssetBytes,
+      });
+    }
     await tx.asset.updateMany({
       where: { generationJobId: id, status: "PENDING" },
-      data: { status: "DELETED", byteSize: 0n },
+      data: {
+        status: "DELETED",
+        byteSize: 0n,
+        deletedAt: new Date(),
+        purgeAfter: new Date(),
+      },
     });
     await tx.generationJob.update({
       where: { id },
@@ -322,6 +342,17 @@ export async function processVideoPollJob(
       amountCredits: current.reservedCredits,
       idempotencyKey: `generation-capture-${id}`,
     });
+    const pendingAsset = await tx.asset.findUniqueOrThrow({
+      where: { objectKey: `${id}.mp4` },
+      select: { byteSize: true, status: true },
+    });
+    if (pendingAsset.status === "PENDING") {
+      await finalizeAssetStorage(tx, {
+        organizationId: job.organizationId,
+        reservedBytes: pendingAsset.byteSize,
+        actualBytes: stored.byteSize,
+      });
+    }
     const asset = await tx.asset.update({
       where: { objectKey: `${id}.mp4` },
       data: { ...stored, status: "READY" },
@@ -489,6 +520,17 @@ export async function processImageJob(
       amountCredits: current.reservedCredits,
       idempotencyKey: `generation-capture-${id}`,
     });
+    const pendingAsset = await tx.asset.findUniqueOrThrow({
+      where: { objectKey },
+      select: { byteSize: true, status: true },
+    });
+    if (pendingAsset.status === "PENDING") {
+      await finalizeAssetStorage(tx, {
+        organizationId: job.organizationId,
+        reservedBytes: pendingAsset.byteSize,
+        actualBytes: stored.byteSize,
+      });
+    }
     const asset = await tx.asset.update({
       where: { objectKey },
       data: { ...stored, status: "READY" },
@@ -745,6 +787,17 @@ async function finalizeVoiceJob(
       amountCredits: current.reservedCredits,
       idempotencyKey: `generation-capture-${id}`,
     });
+    const pendingAsset = await tx.asset.findUniqueOrThrow({
+      where: { objectKey: `${id}.mp3` },
+      select: { byteSize: true, status: true },
+    });
+    if (pendingAsset.status === "PENDING") {
+      await finalizeAssetStorage(tx, {
+        organizationId: job.organizationId,
+        reservedBytes: pendingAsset.byteSize,
+        actualBytes: stored.byteSize,
+      });
+    }
     const asset = await tx.asset.update({
       where: { objectKey: `${id}.mp3` },
       data: { ...stored, status: "READY" },

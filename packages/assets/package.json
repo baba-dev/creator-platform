@@ -10,10 +10,14 @@
   "dependencies": {
     "@aiwa/db": "workspace:*"
   },
+  "devDependencies": {
+    "vitest": "^4.1.11"
+  },
   "scripts": {
     "build": "tsc --noEmit",
     "clean": "rm -rf .turbo",
-    "lint": "eslint src --max-warnings=0",
+    "lint": "eslint src test --max-warnings=0",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   }
 }

@@ -23,20 +23,6 @@ export async function POST(request: Request) {
     );
   }
 
-  if (parsed.data.thumbnailAssetId) {
-    const thumbnail = await db.asset.findFirst({
-      where: {
-        id: parsed.data.thumbnailAssetId,
-        status: "READY",
-        mediaKind: "IMAGE",
-      },
-      select: { id: true },
-    });
-    if (!thumbnail) {
-      return NextResponse.json({ error: "Thumbnail asset is unavailable." }, { status: 400 });
-    }
-  }
-
   try {
     const template = await db.$transaction(async (tx) => {
       const created = await tx.generationTemplate.create({ data: parsed.data });

@@ -108,7 +108,10 @@ describe("Generation Job Reconciliation", () => {
       {
         id: "asset-1",
         objectKey: "job-123.png",
+        generationOutputIndex: 0,
         status: "PENDING",
+        mediaKind: "IMAGE",
+        sourceType: "GENERATED",
         mimeType: "image/png",
         byteSize: 26214400n,
         sha256: null,

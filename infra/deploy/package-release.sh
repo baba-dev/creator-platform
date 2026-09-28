@@ -57,6 +57,10 @@ mkdir -p "$release_root/apps/worker/node_modules/@img"
 cp -a "$sharp_runtime" "$release_root/apps/worker/node_modules/sharp"
 cp -aL "$(dirname "$sharp_runtime")/@img/." \
   "$release_root/apps/worker/node_modules/@img/"
+cp -aL "$(dirname "$sharp_runtime")/detect-libc" \
+  "$release_root/apps/worker/node_modules/detect-libc"
+cp -aL "$(dirname "$sharp_runtime")/semver" \
+  "$release_root/apps/worker/node_modules/semver"
 node -e 'require(process.argv[1])({create:{width:1,height:1,channels:3,background:"white"}}).jpeg().toBuffer().catch(()=>process.exit(1))' \
   "$release_root/apps/worker/node_modules/sharp"
 

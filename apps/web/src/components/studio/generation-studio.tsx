@@ -414,126 +414,137 @@ export function GenerationStudio({
     }
 
     consumedTemplateHandoff.current = handoffId;
-    const storageKey = `aiwa-template-handoff:${handoffId}`;
-    const raw = sessionStorage.getItem(storageKey);
-    sessionStorage.removeItem(storageKey);
-    if (!raw) {
-      setError("This template handoff expired. Open the template again.");
-      return;
-    }
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
 
-    try {
-      const resolved = JSON.parse(raw) as {
-        templateId?: unknown;
-        templateSlug?: unknown;
-        templateName?: unknown;
-        mediaKind?: unknown;
-        prompt?: unknown;
-        modelId?: unknown;
-        referenceAssetIds?: unknown;
-        defaults?: {
-          aspectRatio?: unknown;
-          resolution?: unknown;
-          outputCount?: unknown;
-          durationSeconds?: unknown;
-          generateAudio?: unknown;
-          voiceKey?: unknown;
-          speechRate?: unknown;
-        };
-      };
-      if (
-        typeof resolved.templateId !== "string" ||
-        typeof resolved.templateSlug !== "string" ||
-        typeof resolved.templateName !== "string" ||
-        !["IMAGE", "VIDEO", "VOICE"].includes(String(resolved.mediaKind)) ||
-        typeof resolved.prompt !== "string" ||
-        typeof resolved.modelId !== "string"
-      ) {
-        throw new Error("Invalid template handoff.");
+      const storageKey = `aiwa-template-handoff:${handoffId}`;
+      const raw = sessionStorage.getItem(storageKey);
+      sessionStorage.removeItem(storageKey);
+      if (!raw) {
+        setError("This template handoff expired. Open the template again.");
+        return;
       }
 
-      const mediaKind = resolved.mediaKind as MediaKind;
-      const selectedModel = data.models.find(
-        (candidate) =>
-          candidate.id === resolved.modelId &&
-          candidate.mediaKind === mediaKind,
-      );
-      if (!selectedModel) {
-        throw new Error(
-          "The model selected for this template is no longer available.",
+      try {
+        const resolved = JSON.parse(raw) as {
+          templateId?: unknown;
+          templateSlug?: unknown;
+          templateName?: unknown;
+          mediaKind?: unknown;
+          prompt?: unknown;
+          modelId?: unknown;
+          referenceAssetIds?: unknown;
+          defaults?: {
+            aspectRatio?: unknown;
+            resolution?: unknown;
+            outputCount?: unknown;
+            durationSeconds?: unknown;
+            generateAudio?: unknown;
+            voiceKey?: unknown;
+            speechRate?: unknown;
+          };
+        };
+        if (
+          typeof resolved.templateId !== "string" ||
+          typeof resolved.templateSlug !== "string" ||
+          typeof resolved.templateName !== "string" ||
+          !["IMAGE", "VIDEO", "VOICE"].includes(String(resolved.mediaKind)) ||
+          typeof resolved.prompt !== "string" ||
+          typeof resolved.modelId !== "string"
+        ) {
+          throw new Error("Invalid template handoff.");
+        }
+
+        const mediaKind = resolved.mediaKind as MediaKind;
+        const selectedModel = data.models.find(
+          (candidate) =>
+            candidate.id === resolved.modelId &&
+            candidate.mediaKind === mediaKind,
+        );
+        if (!selectedModel) {
+          throw new Error(
+            "The model selected for this template is no longer available.",
+          );
+        }
+
+        setActiveMode(mediaKind);
+        setModelId(selectedModel.id);
+        setTemplateContext({
+          id: resolved.templateId,
+          slug: resolved.templateSlug,
+          name: resolved.templateName,
+        });
+
+        if (mediaKind === "VOICE") {
+          setVoiceText(resolved.prompt);
+        } else {
+          setPrompt(resolved.prompt);
+        }
+
+        const defaults = resolved.defaults ?? {};
+        if (typeof defaults.aspectRatio === "string") {
+          setRatio(defaults.aspectRatio);
+        }
+        if (typeof defaults.resolution === "string") {
+          setResolution(defaults.resolution);
+        }
+        if (
+          typeof defaults.outputCount === "number" &&
+          Number.isInteger(defaults.outputCount)
+        ) {
+          setOutputCount(Math.max(1, Math.min(15, defaults.outputCount)));
+        }
+        if (
+          typeof defaults.durationSeconds === "number" &&
+          Number.isInteger(defaults.durationSeconds)
+        ) {
+          setDuration(String(defaults.durationSeconds));
+        }
+        if (typeof defaults.generateAudio === "boolean") {
+          setGenerateAudio(defaults.generateAudio);
+        }
+        if (typeof defaults.voiceKey === "string") {
+          setVoiceKey(defaults.voiceKey);
+        }
+        if (
+          typeof defaults.speechRate === "number" &&
+          defaults.speechRate >= 0.5 &&
+          defaults.speechRate <= 2
+        ) {
+          setSpeechRate(defaults.speechRate);
+        }
+        if (
+          Array.isArray(resolved.referenceAssetIds) &&
+          resolved.referenceAssetIds.every(
+            (value) => typeof value === "string",
+          )
+        ) {
+          setReferenceAssetIds(resolved.referenceAssetIds);
+        } else {
+          setReferenceAssetIds([]);
+        }
+
+        setError(null);
+        window.history.replaceState(
+          null,
+          "",
+          `${window.location.pathname}#create`,
+        );
+      } catch (reason) {
+        setTemplateContext(null);
+        setReferenceAssetIds([]);
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "Template could not be opened in Studio.",
         );
       }
+    });
 
-      setActiveMode(mediaKind);
-      setModelId(selectedModel.id);
-      setTemplateContext({
-        id: resolved.templateId,
-        slug: resolved.templateSlug,
-        name: resolved.templateName,
-      });
-
-      if (mediaKind === "VOICE") {
-        setVoiceText(resolved.prompt);
-      } else {
-        setPrompt(resolved.prompt);
-      }
-
-      const defaults = resolved.defaults ?? {};
-      if (typeof defaults.aspectRatio === "string") {
-        setRatio(defaults.aspectRatio);
-      }
-      if (typeof defaults.resolution === "string") {
-        setResolution(defaults.resolution);
-      }
-      if (
-        typeof defaults.outputCount === "number" &&
-        Number.isInteger(defaults.outputCount)
-      ) {
-        setOutputCount(Math.max(1, Math.min(15, defaults.outputCount)));
-      }
-      if (
-        typeof defaults.durationSeconds === "number" &&
-        Number.isInteger(defaults.durationSeconds)
-      ) {
-        setDuration(String(defaults.durationSeconds));
-      }
-      if (typeof defaults.generateAudio === "boolean") {
-        setGenerateAudio(defaults.generateAudio);
-      }
-      if (typeof defaults.voiceKey === "string") {
-        setVoiceKey(defaults.voiceKey);
-      }
-      if (
-        typeof defaults.speechRate === "number" &&
-        defaults.speechRate >= 0.5 &&
-        defaults.speechRate <= 2
-      ) {
-        setSpeechRate(defaults.speechRate);
-      }
-      if (
-        Array.isArray(resolved.referenceAssetIds) &&
-        resolved.referenceAssetIds.every((value) => typeof value === "string")
-      ) {
-        setReferenceAssetIds(resolved.referenceAssetIds);
-      } else {
-        setReferenceAssetIds([]);
-      }
-
-      setError(null);
-      window.history.replaceState(
-        null,
-        "",
-        `${window.location.pathname}#create`,
-      );
-    } catch (reason) {
-      setTemplateContext(null);
-      setReferenceAssetIds([]);
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Template could not be opened in Studio.",
-      );
-    }
+    return () => {
+      cancelled = true;
+    };
   }, [data]);
   async function generate() {
     if (!model || busy || isEnhancing) return;

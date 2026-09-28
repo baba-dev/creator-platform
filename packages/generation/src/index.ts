@@ -216,6 +216,7 @@ export async function createImageJob(userId: string, raw: unknown) {
       if (existing) {
         if (
           existing.projectId !== (input.projectId ?? null) ||
+          existing.templateId !== templateId ||
           existing.providerModelId !== input.modelId ||
           existing.priceVersionId !== input.priceVersionId ||
           JSON.stringify(existing.requestPayload) !== JSON.stringify(payload)
@@ -230,6 +231,7 @@ export async function createImageJob(userId: string, raw: unknown) {
             );
           if (
             existing.projectId !== (input.projectId ?? null) ||
+            existing.templateId !== templateId ||
             existing.providerModelId !== input.modelId ||
             existing.priceVersionId !== input.priceVersionId ||
             old.prompt !== payload.prompt ||
@@ -530,6 +532,7 @@ export async function createVideoJob(userId: string, raw: unknown) {
       if (existing) {
         if (
           existing.projectId !== (input.projectId ?? null) ||
+          existing.templateId !== templateId ||
           existing.providerModelId !== input.modelId ||
           existing.priceVersionId !== input.priceVersionId ||
           JSON.stringify(existing.requestPayload) !== JSON.stringify(payload)
@@ -537,6 +540,7 @@ export async function createVideoJob(userId: string, raw: unknown) {
           const old = existing.requestPayload as typeof payload;
           if (
             existing.projectId !== (input.projectId ?? null) ||
+            existing.templateId !== templateId ||
             existing.providerModelId !== input.modelId ||
             existing.priceVersionId !== input.priceVersionId ||
             Object.entries(payload).some(
@@ -778,6 +782,7 @@ export async function createVoiceJob(userId: string, raw: unknown) {
       if (existing) {
         if (
           existing.projectId !== (input.projectId ?? null) ||
+          existing.templateId !== templateId ||
           existing.providerModelId !== input.modelId ||
           existing.priceVersionId !== input.priceVersionId ||
           JSON.stringify(existing.requestPayload) !== JSON.stringify(payload)
@@ -785,6 +790,7 @@ export async function createVoiceJob(userId: string, raw: unknown) {
           const old = existing.requestPayload as typeof payload;
           if (
             existing.projectId !== (input.projectId ?? null) ||
+            existing.templateId !== templateId ||
             existing.providerModelId !== input.modelId ||
             existing.priceVersionId !== input.priceVersionId ||
             Object.entries(payload).some(

@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import { captureCreditsForJob, releaseOrRefundCredits } from "@aiwa/credits";
 import { db, type Prisma } from "@aiwa/db";
+import {
+  finalizeAssetStorage,
+  releaseAssetStorage,
+} from "@aiwa/assets";
 import { parseServerEnv } from "@aiwa/config";
 import { type MediaGenerationProvider } from "@aiwa/providers";
 import { createBytePlusProvider } from "@aiwa/providers/byteplus";
@@ -856,6 +860,17 @@ export async function recoverGeneratedOutput(
         idempotencyKey: "generation-capture-" + current.id,
       });
 
+      const pendingAsset = await tx.asset.findUniqueOrThrow({
+        where: { objectKey },
+        select: { byteSize: true, status: true },
+      });
+      if (pendingAsset.status === "PENDING") {
+        await finalizeAssetStorage(tx, {
+          organizationId: job.organizationId,
+          reservedBytes: pendingAsset.byteSize,
+          actualBytes: stored.byteSize,
+        });
+      }
       await tx.asset.update({
         where: { objectKey },
         data: { ...stored, status: "READY" },
@@ -1005,9 +1020,25 @@ export async function releaseJobReservation(
       },
     });
 
+    const pendingAssets = await tx.asset.aggregate({
+      where: { generationJobId: job.id, status: "PENDING" },
+      _sum: { byteSize: true },
+    });
+    const reservedAssetBytes = pendingAssets._sum.byteSize ?? 0n;
+    if (reservedAssetBytes > 0n) {
+      await releaseAssetStorage(tx, {
+        organizationId: job.organizationId,
+        reservedBytes: reservedAssetBytes,
+      });
+    }
     await tx.asset.updateMany({
       where: { generationJobId: job.id, status: "PENDING" },
-      data: { status: "DELETED", byteSize: 0n },
+      data: {
+        status: "DELETED",
+        byteSize: 0n,
+        deletedAt: new Date(),
+        purgeAfter: new Date(),
+      },
     });
 
     await tx.generationJob.update({

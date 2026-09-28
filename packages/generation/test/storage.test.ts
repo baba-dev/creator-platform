@@ -147,9 +147,7 @@ describe("private image storage", () => {
     })
       .png()
       .toBuffer();
-    await expect(validateReferenceImage(tooWide)).rejects.toThrow(
-      "dimensions",
-    );
+    await expect(validateReferenceImage(tooWide)).rejects.toThrow("dimensions");
   });
 
   it.each([

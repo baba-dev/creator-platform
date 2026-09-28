@@ -109,22 +109,34 @@ const imageAspectRatioSchema = z.enum([
   "21:9",
 ]);
 
-export const bytePlusImageInputSchema = z.object({
-  prompt: z.string().trim().min(1),
-  aspectRatio: imageAspectRatioSchema.default("1:1"),
-  resolution: z.enum(["2K", "3K", "4K"]).default("2K"),
-  outputFormat: z.enum(["jpeg", "png"]).default("png"),
-  watermark: z.boolean().default(false),
-  referenceImages: z
-    .array(
-      z
-        .string()
-        .startsWith("data:image/")
-        .max(42 * 1024 * 1024),
-    )
-    .max(14)
-    .default([]),
-});
+export const bytePlusImageInputSchema = z
+  .object({
+    prompt: z.string().trim().min(1),
+    aspectRatio: imageAspectRatioSchema.default("1:1"),
+    resolution: z.enum(["2K", "3K", "4K"]).default("2K"),
+    outputFormat: z.enum(["jpeg", "png"]).default("png"),
+    watermark: z.boolean().default(false),
+    outputCount: z.number().int().min(1).max(15).default(1),
+    referenceImages: z
+      .array(
+        z
+          .string()
+          .startsWith("data:image/")
+          .max(42 * 1024 * 1024),
+      )
+      .max(14)
+      .default([]),
+  })
+  .superRefine((input, ctx) => {
+    if (input.referenceImages.length + input.outputCount > 15) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["outputCount"],
+        message:
+          "Reference image count plus generated image count must not exceed 15.",
+      });
+    }
+  });
 
 export const bytePlusVideoInputSchema = z.object({
   prompt: z.string().trim().min(1),
@@ -178,6 +190,9 @@ export const VERIFIED_BYTEPLUS_MODELS: readonly ProviderModelDescriptor[] = [
       "resolution:3K": true,
       "resolution:4K": true,
       referenceImages: true,
+      sequentialImages: true,
+      maxGeneratedImages: 15,
+      maxTotalInputOutputImages: 15,
       maxReferenceImages: 14,
     },
   },
@@ -200,6 +215,9 @@ export const VERIFIED_BYTEPLUS_MODELS: readonly ProviderModelDescriptor[] = [
       "resolution:2K": true,
       "resolution:4K": true,
       referenceImages: true,
+      sequentialImages: true,
+      maxGeneratedImages: 15,
+      maxTotalInputOutputImages: 15,
       maxReferenceImages: 14,
     },
   },
@@ -689,6 +707,15 @@ export function createBytePlusProvider(
                         input.data.referenceImages.length === 1
                           ? input.data.referenceImages[0]
                           : input.data.referenceImages,
+                    }
+                  : {}),
+                sequential_image_generation:
+                  input.data.outputCount > 1 ? "auto" : "disabled",
+                ...(input.data.outputCount > 1
+                  ? {
+                      sequential_image_generation_options: {
+                        max_images: input.data.outputCount,
+                      },
                     }
                   : {}),
                 response_format: "url",

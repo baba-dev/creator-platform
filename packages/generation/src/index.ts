@@ -287,6 +287,7 @@ export async function createImageJob(userId: string, raw: unknown) {
                 organizationId: input.organizationId,
                 status: "READY",
                 mimeType: { in: ["image/jpeg", "image/png", "image/webp"] },
+                OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
               },
               select: { id: true },
             });

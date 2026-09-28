@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
       findFirst: vi.fn(),
     },
     asset: {
+      findUniqueOrThrow: vi.fn(),
+      aggregate: vi.fn(),
       update: vi.fn(),
       updateMany: vi.fn(),
     },
@@ -35,12 +37,18 @@ const mocks = vi.hoisted(() => ({
   readStoredAsset: vi.fn(),
   validateMp3Bytes: vi.fn(),
   deleteStoredAsset: vi.fn(),
+  finalizeAssetStorage: vi.fn(),
+  releaseAssetStorage: vi.fn(),
 }));
 
 vi.mock("@aiwa/db", () => ({ db: mocks.db }));
 vi.mock("@aiwa/credits", () => ({
   captureCreditsForJob: mocks.capture,
   releaseOrRefundCredits: mocks.releaseOrRefund,
+}));
+vi.mock("@aiwa/assets", () => ({
+  finalizeAssetStorage: mocks.finalizeAssetStorage,
+  releaseAssetStorage: mocks.releaseAssetStorage,
 }));
 vi.mock("../src/storage", () => ({
   downloadImage: mocks.downloadImage,
@@ -118,6 +126,13 @@ describe("Generation Job Reconciliation", () => {
     mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue(baseJob);
     mocks.db.generationJob.update.mockResolvedValue(baseJob);
     mocks.db.generationJob.updateMany.mockResolvedValue({ count: 1 });
+    mocks.db.asset.findUniqueOrThrow.mockResolvedValue({
+      byteSize: 25_000_000n,
+      status: "PENDING",
+    });
+    mocks.db.asset.aggregate.mockResolvedValue({
+      _sum: { byteSize: 25_000_000n },
+    });
     mocks.db.asset.update.mockResolvedValue({ id: "asset-1" });
     mocks.db.asset.updateMany.mockResolvedValue({ count: 1 });
     mocks.db.wallet.findUnique.mockResolvedValue({
@@ -149,6 +164,9 @@ describe("Generation Job Reconciliation", () => {
     });
     mocks.readStoredAsset.mockResolvedValue(Buffer.from("valid-mp3"));
     mocks.validateMp3Bytes.mockReturnValue({ durationMs: null });
+    mocks.deleteStoredAsset.mockResolvedValue(undefined);
+    mocks.finalizeAssetStorage.mockResolvedValue(undefined);
+    mocks.releaseAssetStorage.mockResolvedValue(undefined);
     mocks.capture.mockResolvedValue({ id: "entry-capture", type: "CAPTURE" });
     mocks.releaseOrRefund.mockResolvedValue({
       id: "entry-release",

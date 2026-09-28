@@ -46,6 +46,19 @@ These rules apply to every contributor and coding agent.
 - Bound bulk asset mutations to 100 IDs per request and keep generated
   provenance immutable during project/folder/tag changes.
 
+## Generation templates
+
+- Templates are an orchestration/configuration layer only; never submit provider
+  work or reserve credits from a template route.
+- Resolve template placeholders server-side using inert declared variables.
+  Never introduce executable template expressions or eval-like behavior.
+- A GenerationJob may reference only a PUBLISHED template whose media kind
+  matches the job.
+- Validate template defaults against the current enabled ProviderModel
+  capabilities and active price rather than assuming seeded provider support.
+- Reference-image template inputs remain Asset IDs and must pass the existing
+  organization/user/reference-purpose authorization checks.
+
 ## Quality and security
 
 - Validate every external boundary with Zod or an equally explicit schema.

@@ -102,3 +102,5 @@ export function defaultAssetName(
       ? `Uploaded ${kind}`
       : `${kind[0]!.toUpperCase()}${kind.slice(1)}`;
 }
+
+export * from "./service";

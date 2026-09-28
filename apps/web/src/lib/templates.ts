@@ -1,4 +1,4 @@
-import type { MediaKind, Prisma } from "@prisma/client";
+import type { MediaKind, Prisma } from "@aiwa/db";
 import {
   templateDefaultInputSchema,
   templateVariableDefinitionSchema,

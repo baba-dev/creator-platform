@@ -477,7 +477,22 @@ export async function processImageJob(
     }
     job = await db.generationJob.findUniqueOrThrow({
       where: { id },
-      include: { providerModel: true },
+      include: {
+        providerModel: true,
+        inputAssets: {
+          orderBy: { position: "asc" },
+          include: {
+            asset: {
+              select: {
+                organizationId: true,
+                objectKey: true,
+                mimeType: true,
+                status: true,
+              },
+            },
+          },
+        },
+      },
     });
   }
   if (job.status !== "PROCESSING") return;

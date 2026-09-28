@@ -1,10 +1,7 @@
 import { createHash } from "node:crypto";
 import { captureCreditsForJob, releaseOrRefundCredits } from "@aiwa/credits";
 import { db, type Prisma } from "@aiwa/db";
-import {
-  finalizeAssetStorage,
-  releaseAssetStorage,
-} from "@aiwa/assets";
+import { finalizeAssetStorage, releaseAssetStorage } from "@aiwa/assets";
 import { parseServerEnv } from "@aiwa/config";
 import { type MediaGenerationProvider } from "@aiwa/providers";
 import { createBytePlusProvider } from "@aiwa/providers/byteplus";

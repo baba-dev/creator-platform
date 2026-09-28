@@ -11,12 +11,14 @@ import {
   readStoredAsset,
   readStoredAssetRange,
   readStoredImage,
+  referenceImageDataUri,
   storagePath,
   storeAudio,
   storeImage,
   storeVideo,
   storedAssetSize,
   validateMp3Bytes,
+  validateAndStoreReferenceImage,
   validateJpegImage,
 } from "../src/storage";
 
@@ -88,6 +90,60 @@ describe("private image storage", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+
+  it("validates, normalizes, stores, and rehydrates a private reference image", async () => {
+    const root = await mkdtemp(join(tmpdir(), "creator-reference-storage-"));
+    vi.stubEnv("ASSET_STORAGE_ROOT", root);
+    try {
+      const original = await sharp({
+        create: {
+          width: 640,
+          height: 480,
+          channels: 3,
+          background: "#123456",
+        },
+      })
+        .jpeg()
+        .withMetadata({ orientation: 6 })
+        .toBuffer();
+
+      const stored = await validateAndStoreReferenceImage(original);
+      expect(stored.mimeType).toBe("image/jpeg");
+      // EXIF orientation is applied before storage; persisted dimensions describe
+      // the bytes the provider will actually receive.
+      expect(stored.width).toBe(480);
+      expect(stored.height).toBe(640);
+      expect(stored.objectKey).toMatch(/^ref-[a-f0-9-]+\.jpg$/);
+      expect(stored.sha256).toMatch(/^[a-f0-9]{64}$/);
+
+      const dataUri = await referenceImageDataUri(stored);
+      expect(dataUri).toMatch(/^data:image\/jpeg;base64,/);
+      const bytes = Buffer.from(dataUri.split(",", 2)[1]!, "base64");
+      expect((await sharp(bytes).metadata()).format).toBe("jpeg");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects unsupported or unsafe reference image payloads", async () => {
+    await expect(
+      validateAndStoreReferenceImage(Buffer.from("<svg></svg>")),
+    ).rejects.toMatchObject({ code: "IMAGE_OUTPUT_INVALID_PNG" });
+
+    const tooWide = await sharp({
+      create: {
+        width: 1600,
+        height: 50,
+        channels: 3,
+        background: "#ffffff",
+      },
+    })
+      .png()
+      .toBuffer();
+    await expect(validateAndStoreReferenceImage(tooWide)).rejects.toThrow(
+      "dimensions",
+    );
   });
 
   it.each([

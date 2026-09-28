@@ -21,11 +21,15 @@ export {
   ReasoningJobStatus,
   MembershipRole,
   PlatformRole,
+  MediaKind,
+  GenerationTemplateStatus,
 } from "@prisma/client";
 
 export type {
   AuditEvent,
   GenerationJob,
+  GenerationTemplate,
+  TemplateFavorite,
   ReasoningJob,
   LedgerEntry,
   ManualPayment,

@@ -19,6 +19,8 @@ const MAX_REDIRECTS = 3;
 const DOWNLOAD_TIMEOUT_MS = 120_000;
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const JPEG_SIGNATURE = Buffer.from([0xff, 0xd8, 0xff]);
+export const MAX_REFERENCE_IMAGE_BYTES = 4 * 1024 * 1024;
+const MAX_REFERENCE_PIXELS = 36_000_000;
 
 const trustedImageDomainSuffixes = [
   "bytepluscdn.com",
@@ -303,7 +305,7 @@ async function downloadTrustedImage(
 }
 
 export function storagePath(key: string) {
-  if (!/^[a-zA-Z0-9_-]+\.(png|jpg|mp4|mp3)$/.test(key))
+  if (!/^[a-zA-Z0-9_-]+\.(png|jpg|webp|mp4|mp3)$/.test(key))
     throw new Error("Invalid storage key");
   const root =
     process.env.ASSET_STORAGE_ROOT ?? "/var/www/creator-platform/shared/assets";
@@ -403,6 +405,133 @@ export async function normalizeImageToPng(bytes: Buffer): Promise<Buffer> {
     );
   }
   return png;
+}
+
+export type ReferenceImageMimeType =
+  | "image/jpeg"
+  | "image/png"
+  | "image/webp";
+
+export async function validateAndNormalizeReferenceImage(
+  bytes: Buffer,
+  claimedContentType: string,
+) {
+  if (bytes.byteLength === 0 || bytes.byteLength > MAX_REFERENCE_IMAGE_BYTES) {
+    throw new ImageStorageError(
+      "IMAGE_OUTPUT_TOO_LARGE",
+      "Reference image exceeds the upload size limit.",
+    );
+  }
+
+  const normalizedClaim = claimedContentType.split(";", 1)[0]!.trim().toLowerCase();
+  const image = sharp(bytes, {
+    failOn: "error",
+    limitInputPixels: MAX_REFERENCE_PIXELS,
+  });
+  let metadata: Awaited<ReturnType<typeof image.metadata>>;
+  try {
+    metadata = await image.metadata();
+  } catch (error) {
+    throw new ImageStorageError(
+      "IMAGE_OUTPUT_INVALID_PNG",
+      "Reference image could not be decoded.",
+      { cause: error },
+    );
+  }
+
+  const mimeByFormat: Record<string, ReferenceImageMimeType | undefined> = {
+    jpeg: "image/jpeg",
+    png: "image/png",
+    webp: "image/webp",
+  };
+  const mimeType = metadata.format ? mimeByFormat[metadata.format] : undefined;
+  if (!mimeType || normalizedClaim !== mimeType) {
+    throw new ImageStorageError(
+      "IMAGE_OUTPUT_CONTENT_TYPE",
+      "Reference image format does not match its content type.",
+    );
+  }
+
+  const width = metadata.width ?? 0;
+  const height = metadata.height ?? 0;
+  const pixels = width * height;
+  const ratio = height > 0 ? width / height : 0;
+  if (
+    width <= 14 ||
+    height <= 14 ||
+    width > 6000 ||
+    height > 6000 ||
+    pixels < 196 ||
+    pixels > MAX_REFERENCE_PIXELS ||
+    ratio < 1 / 16 ||
+    ratio > 16
+  ) {
+    throw new ImageStorageError(
+      "IMAGE_OUTPUT_INVALID_PNG",
+      "Reference image dimensions are outside the supported range.",
+    );
+  }
+
+  let normalized: Buffer;
+  try {
+    const oriented = sharp(bytes, {
+      failOn: "error",
+      limitInputPixels: MAX_REFERENCE_PIXELS,
+    }).rotate();
+    normalized =
+      mimeType === "image/jpeg"
+        ? await oriented.jpeg({ quality: 92 }).toBuffer()
+        : mimeType === "image/png"
+          ? await oriented.png({ compressionLevel: 9 }).toBuffer()
+          : await oriented.webp({ quality: 92 }).toBuffer();
+  } catch (error) {
+    throw new ImageStorageError(
+      "IMAGE_OUTPUT_INVALID_PNG",
+      "Reference image normalization failed.",
+      { cause: error },
+    );
+  }
+
+  if (normalized.byteLength > MAX_REFERENCE_IMAGE_BYTES) {
+    throw new ImageStorageError(
+      "IMAGE_OUTPUT_TOO_LARGE",
+      "Normalized reference image exceeds the upload size limit.",
+    );
+  }
+
+  const normalizedMetadata = await sharp(normalized, {
+    failOn: "error",
+    limitInputPixels: MAX_REFERENCE_PIXELS,
+  }).metadata();
+
+  return {
+    bytes: normalized,
+    mimeType,
+    extension:
+      mimeType === "image/jpeg" ? "jpg" : mimeType === "image/png" ? "png" : "webp",
+    width: normalizedMetadata.width ?? width,
+    height: normalizedMetadata.height ?? height,
+    byteSize: BigInt(normalized.byteLength),
+    sha256: createHash("sha256").update(normalized).digest("hex"),
+  } as const;
+}
+
+export async function storeReferenceImage(key: string, bytes: Buffer) {
+  return storeImage(key, bytes);
+}
+
+export async function referenceImageDataUrl(
+  key: string,
+  mimeType: ReferenceImageMimeType,
+): Promise<string> {
+  const bytes = await readStoredAsset(key);
+  if (bytes.byteLength > MAX_REFERENCE_IMAGE_BYTES) {
+    throw new ImageStorageError(
+      "IMAGE_OUTPUT_TOO_LARGE",
+      "Stored reference image exceeds the provider request limit.",
+    );
+  }
+  return `data:${mimeType};base64,${bytes.toString("base64")}`;
 }
 
 export async function storeImage(key: string, bytes: Buffer) {

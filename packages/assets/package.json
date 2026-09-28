@@ -1,0 +1,16 @@
+{
+  "name": "@aiwa/assets",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./storage": "./src/storage.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "clean": "rm -rf .turbo",
+    "lint": "eslint src --max-warnings=0",
+    "typecheck": "tsc --noEmit"
+  }
+}

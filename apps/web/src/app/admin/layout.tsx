@@ -50,6 +50,12 @@ const navigation: readonly (AdminNavigationItem & {
     permission: "jobs:read",
   },
   {
+    href: "/admin/templates",
+    label: "Templates",
+    icon: "wand",
+    permission: "templates:read",
+  },
+  {
     href: "/admin/audit",
     label: "Audit log",
     icon: "assets",

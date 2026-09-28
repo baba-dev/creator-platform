@@ -12,11 +12,13 @@ import {
 import { get } from "node:https";
 import { BlockList, isIP } from "node:net";
 import { isAbsolute, resolve } from "node:path";
+import sharp from "sharp";
 import { MAX_AUDIO_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES } from "./index";
 
 const MAX_REDIRECTS = 3;
 const DOWNLOAD_TIMEOUT_MS = 120_000;
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+const JPEG_SIGNATURE = Buffer.from([0xff, 0xd8, 0xff]);
 
 const trustedImageDomainSuffixes = [
   "bytepluscdn.com",
@@ -37,6 +39,8 @@ const trustedExactImageHosts = new Set([
 
 const allowedContentTypes = new Set([
   "image/png",
+  "image/jpeg",
+  "image/jpg",
   "application/octet-stream",
   "binary/octet-stream",
 ]);
@@ -299,7 +303,7 @@ async function downloadTrustedImage(
 }
 
 export function storagePath(key: string) {
-  if (!/^[a-zA-Z0-9_-]+\.(png|mp4|mp3)$/.test(key))
+  if (!/^[a-zA-Z0-9_-]+\.(png|jpg|mp4|mp3)$/.test(key))
     throw new Error("Invalid storage key");
   const root =
     process.env.ASSET_STORAGE_ROOT ?? "/var/www/creator-platform/shared/assets";
@@ -340,18 +344,65 @@ export async function readStoredAssetRange(
 // Kept for compatibility with callers introduced by the image-only milestone.
 export const readStoredImage = readStoredAsset;
 
-export async function downloadImage(urlString: string) {
+export async function downloadImage(
+  urlString: string,
+  expectedFormat: "png" | "jpeg" = "png",
+) {
   const url = parseTrustedImageUrl(urlString);
   const bytes = await downloadTrustedImage(url, MAX_REDIRECTS);
 
-  if (!bytes.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)) {
+  return expectedFormat === "jpeg"
+    ? validateJpegImage(bytes)
+    : normalizeImageToPng(bytes);
+}
+
+export async function validateJpegImage(bytes: Buffer): Promise<Buffer> {
+  if (!bytes.subarray(0, JPEG_SIGNATURE.length).equals(JPEG_SIGNATURE)) {
     throw new ImageStorageError(
       "IMAGE_OUTPUT_INVALID_PNG",
-      "Generated image failed PNG validation.",
+      "Generated output was not a JPEG image.",
     );
   }
-
+  try {
+    await sharp(bytes, { failOn: "error" }).stats();
+  } catch (error) {
+    throw new ImageStorageError(
+      "IMAGE_OUTPUT_INVALID_PNG",
+      "Generated JPEG could not be decoded.",
+      { cause: error },
+    );
+  }
   return bytes;
+}
+
+/** Seedream 4.5 does not accept output_format and may return JPEG instead of PNG. */
+export async function normalizeImageToPng(bytes: Buffer): Promise<Buffer> {
+  if (bytes.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)) {
+    return bytes;
+  }
+  await validateJpegImage(bytes);
+
+  let png: Buffer;
+  try {
+    // Decode the image instead of trusting the response header or extension.
+    // Sharp's pixel limit protects the worker from oversized decompression.
+    png = await sharp(bytes, { failOn: "error" })
+      .png({ compressionLevel: 9 })
+      .toBuffer();
+  } catch (error) {
+    throw new ImageStorageError(
+      "IMAGE_OUTPUT_INVALID_PNG",
+      "Generated JPEG could not be decoded.",
+      { cause: error },
+    );
+  }
+  if (png.length > MAX_IMAGE_BYTES) {
+    throw new ImageStorageError(
+      "IMAGE_OUTPUT_TOO_LARGE",
+      "Generated PNG exceeded the storage size limit.",
+    );
+  }
+  return png;
 }
 
 export async function storeImage(key: string, bytes: Buffer) {

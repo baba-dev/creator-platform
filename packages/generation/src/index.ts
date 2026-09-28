@@ -310,8 +310,11 @@ export async function createImageJob(userId: string, raw: unknown) {
           projectId: input.projectId ?? null,
           storageOwnerUserId: userId,
           generationJobId: job.id,
-          objectKey: `${job.id}.png`,
-          mimeType: "image/png",
+          objectKey: `${job.id}.${model.providerModelId === "seedream-4-5-251128" ? "jpg" : "png"}`,
+          mimeType:
+            model.providerModelId === "seedream-4-5-251128"
+              ? "image/jpeg"
+              : "image/png",
           byteSize: BigInt(MAX_IMAGE_BYTES),
           status: "PENDING",
         },

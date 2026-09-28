@@ -259,6 +259,36 @@ describe("Generation Job Reconciliation", () => {
   });
 
   describe("recoverGeneratedOutput", () => {
+    it("recovers a Seedream 4.5 JPEG without changing the asset format", async () => {
+      mocks.db.generationJob.findUnique.mockResolvedValue({
+        ...baseJob,
+        providerModel: {
+          ...baseJob.providerModel,
+          providerModelId: "seedream-4-5-251128",
+        },
+        assets: [
+          {
+            ...baseJob.assets[0],
+            objectKey: "job-123.jpg",
+            mimeType: "image/jpeg",
+          },
+        ],
+      });
+      await recoverGeneratedOutput({
+        jobId: "job-123",
+        actorUserId: "operator-1",
+        reason: "Recover verified output",
+        idempotencyKey: "jpeg-recover-key",
+      });
+      expect(mocks.downloadImage).toHaveBeenCalledWith(
+        "https://trusted.bytepluscdn.com/test.png",
+        "jpeg",
+      );
+      expect(mocks.storeImage).toHaveBeenCalledWith(
+        "job-123.jpg",
+        expect.any(Buffer),
+      );
+    });
     it("recovers image output immediately, captures credits, and marks job SUCCEEDED", async () => {
       const result = await recoverGeneratedOutput({
         jobId: "job-123",
@@ -271,6 +301,7 @@ describe("Generation Job Reconciliation", () => {
       expect(result.success).toBe(true);
       expect(mocks.downloadImage).toHaveBeenCalledWith(
         "https://trusted.bytepluscdn.com/test.png",
+        "png",
       );
       expect(mocks.storeImage).toHaveBeenCalledWith(
         "job-123.png",

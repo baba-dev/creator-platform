@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
     providerModel: {
       findUnique: vi.fn(),
     },
+    asset: { findFirstOrThrow: vi.fn() },
     $transaction: vi.fn(),
   },
   capture: vi.fn(),
@@ -96,6 +97,10 @@ beforeEach(() => {
   vi.resetAllMocks();
   mocks.db.generationJob.updateMany.mockResolvedValue({ count: 1 });
   mocks.db.providerModel.findUnique.mockResolvedValue({ enabled: true });
+  mocks.db.asset.findFirstOrThrow.mockResolvedValue({
+    objectKey: "job1.png",
+    mimeType: "image/png",
+  });
   mocks.store.mockResolvedValue({ byteSize: 100n, sha256: "hash" });
   mocks.download.mockResolvedValue(Buffer.from("png"));
   mocks.downloadVideo.mockResolvedValue(Buffer.from("mp4"));
@@ -241,6 +246,29 @@ describe("image processing", () => {
         data: expect.objectContaining({ status: "SUCCEEDED" }),
       }),
     );
+  });
+  it("saves Seedream 4.5 output as its reserved JPEG asset", async () => {
+    const p = provider();
+    mocks.db.asset.findFirstOrThrow.mockResolvedValue({
+      objectKey: "job1.jpg",
+      mimeType: "image/jpeg",
+    });
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+      ...base,
+      status: "PROCESSING",
+      outputPayload: { url: "https://cdn.bytepluscdn.com/output.jpeg" },
+    });
+    const tx = transaction();
+    await processImageJob("job1", p);
+    expect(mocks.download).toHaveBeenCalledWith(
+      "https://cdn.bytepluscdn.com/output.jpeg",
+      "jpeg",
+    );
+    expect(mocks.store).toHaveBeenCalledWith("job1.jpg", expect.any(Buffer));
+    expect(tx.asset.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { objectKey: "job1.jpg" } }),
+    );
+    expect(mocks.capture).toHaveBeenCalledTimes(1);
   });
   it("releases credits on definite provider rejection", async () => {
     const p = provider();

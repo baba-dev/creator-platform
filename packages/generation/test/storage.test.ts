@@ -2,10 +2,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import sharp from "sharp";
 import {
   downloadImage,
   downloadVideo,
   isTrustedImageHostname,
+  normalizeImageToPng,
   readStoredAsset,
   readStoredAssetRange,
   readStoredImage,
@@ -15,10 +17,33 @@ import {
   storeVideo,
   storedAssetSize,
   validateMp3Bytes,
+  validateJpegImage,
 } from "../src/storage";
 
 afterEach(() => vi.unstubAllEnvs());
 describe("private image storage", () => {
+  it("normalizes Seedream 4.5 JPEG output to the reserved PNG format", async () => {
+    const jpeg = await sharp({
+      create: { width: 3, height: 2, channels: 3, background: "#cd1234" },
+    })
+      .jpeg()
+      .toBuffer();
+    const png = await normalizeImageToPng(jpeg);
+    expect(await validateJpegImage(jpeg)).toEqual(jpeg);
+    expect((await sharp(png).metadata()).format).toBe("png");
+    expect((await sharp(png).metadata()).width).toBe(3);
+    expect(await normalizeImageToPng(png)).toEqual(png);
+  });
+
+  it("rejects non-image and truncated JPEG responses", async () => {
+    await expect(
+      normalizeImageToPng(Buffer.from("<html>error</html>")),
+    ).rejects.toMatchObject({ code: "IMAGE_OUTPUT_INVALID_PNG" });
+    await expect(
+      normalizeImageToPng(Buffer.from([0xff, 0xd8, 0xff, 0x00])),
+    ).rejects.toMatchObject({ code: "IMAGE_OUTPUT_INVALID_PNG" });
+  });
+
   it("accepts only explicit BytePlus image storage service domains", () => {
     expect(
       isTrustedImageHostname(

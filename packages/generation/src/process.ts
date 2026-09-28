@@ -443,7 +443,21 @@ export async function processImageJob(
   if (job.status !== "PROCESSING") return;
 
   let stored: Awaited<ReturnType<typeof storeImage>>;
+  let objectKey: string;
   try {
+    const asset = await db.asset.findFirstOrThrow({
+      where: { generationJobId: id, status: "PENDING" },
+      select: { objectKey: true, mimeType: true },
+    });
+    if (!(
+      (asset.mimeType === "image/png" && asset.objectKey === `${id}.png`) ||
+      (asset.mimeType === "image/jpeg" && asset.objectKey === `${id}.jpg`)
+    )) {
+      throw new ImageStorageError(
+        "IMAGE_OUTPUT_URL_INVALID",
+        "Reserved image asset has an invalid format.",
+      );
+    }
     const output = job.outputPayload as { url?: unknown } | null;
     if (!output || typeof output.url !== "string" || !output.url) {
       throw new ImageStorageError(
@@ -451,8 +465,12 @@ export async function processImageJob(
         "Provider image output metadata was unavailable.",
       );
     }
-    const bytes = await downloadImage(output.url);
-    stored = await storeImage(`${id}.png`, bytes);
+    const bytes = await downloadImage(
+      output.url,
+      asset.mimeType === "image/jpeg" ? "jpeg" : "png",
+    );
+    objectKey = asset.objectKey;
+    stored = await storeImage(objectKey, bytes);
   } catch (error) {
     await recordStorageFailure(id, error);
     throw error;
@@ -472,7 +490,7 @@ export async function processImageJob(
       idempotencyKey: `generation-capture-${id}`,
     });
     const asset = await tx.asset.update({
-      where: { objectKey: `${id}.png` },
+      where: { objectKey },
       data: { ...stored, status: "READY" },
     });
     await tx.generationJob.update({

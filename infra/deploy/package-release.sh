@@ -48,6 +48,18 @@ fi
 cp -a apps/worker/dist "$release_root/apps/worker/dist"
 test -f "$release_root/apps/worker/dist/byteplus-smoke.cjs"
 
+# The bundled image pipeline loads Sharp's platform native modules at runtime.
+# Copy the deploy-resolved packages rather than relying on the server's pnpm store.
+generation_runtime="$staging_root/generation-runtime"
+pnpm --filter @aiwa/generation deploy --legacy "$generation_runtime"
+sharp_runtime="$(readlink -f "$generation_runtime/node_modules/sharp")"
+mkdir -p "$release_root/apps/worker/node_modules/@img"
+cp -a "$sharp_runtime" "$release_root/apps/worker/node_modules/sharp"
+cp -aL "$(dirname "$sharp_runtime")/@img/." \
+  "$release_root/apps/worker/node_modules/@img/"
+node -e 'require(process.argv[1])({create:{width:1,height:1,channels:3,background:"white"}}).jpeg().toBuffer().catch(()=>process.exit(1))' \
+  "$release_root/apps/worker/node_modules/sharp"
+
 # Build a portable Prisma/operations package in CI. It has its own node_modules
 # and can be executed on the server without pnpm touching the web runtime.
 pnpm --filter @aiwa/db deploy --legacy "$operations_root"

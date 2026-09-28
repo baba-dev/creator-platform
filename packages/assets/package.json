@@ -7,6 +7,9 @@
     ".": "./src/index.ts",
     "./storage": "./src/storage.ts"
   },
+  "dependencies": {
+    "@aiwa/db": "workspace:*"
+  },
   "scripts": {
     "build": "tsc --noEmit",
     "clean": "rm -rf .turbo",

@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => ({
   storeVideo: vi.fn(),
   storeAudio: vi.fn(),
   storedAssetSize: vi.fn(),
+  referenceImageDataUrl: vi.fn(),
   membership: vi.fn(),
 }));
 vi.mock("@aiwa/db", () => ({ db: mocks.db }));
@@ -45,6 +46,7 @@ vi.mock("../src/storage", () => ({
   storeVideo: mocks.storeVideo,
   storeAudio: mocks.storeAudio,
   storedAssetSize: mocks.storedAssetSize,
+  referenceImageDataUrl: mocks.referenceImageDataUrl,
 }));
 import {
   ProviderConfigurationError,
@@ -107,6 +109,7 @@ beforeEach(() => {
   mocks.storeVideo.mockResolvedValue({ byteSize: 200n, sha256: "video-hash" });
   mocks.storeAudio.mockResolvedValue({ byteSize: 300n, sha256: "audio-hash" });
   mocks.storedAssetSize.mockResolvedValue(300);
+  mocks.referenceImageDataUrl.mockResolvedValue("data:image/png;base64,AAAA");
 });
 
 describe("video processing", () => {
@@ -247,6 +250,73 @@ describe("image processing", () => {
       }),
     );
   });
+  it("loads ordered private references and passes only provider-ready data URLs", async () => {
+    const p = provider();
+    vi.mocked(p.submit).mockResolvedValue({
+      status: "succeeded",
+      providerRequestId: "request1",
+      outputUrls: ["https://example.bytepluscdn.com/image.png"],
+    });
+    mocks.db.generationJob.findUniqueOrThrow
+      .mockResolvedValueOnce({
+        ...base,
+        status: "QUEUED",
+        inputAssets: [
+          {
+            position: 0,
+            asset: {
+              organizationId: "org1",
+              objectKey: "ref-a.png",
+              mimeType: "image/png",
+              status: "READY",
+            },
+          },
+          {
+            position: 1,
+            asset: {
+              organizationId: "org1",
+              objectKey: "ref-b.jpg",
+              mimeType: "image/jpeg",
+              status: "READY",
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ...base,
+        status: "PROCESSING",
+        outputPayload: { url: "https://example.bytepluscdn.com/image.png" },
+        inputAssets: [],
+      });
+    mocks.referenceImageDataUrl
+      .mockResolvedValueOnce("data:image/png;base64,AAAA")
+      .mockResolvedValueOnce("data:image/jpeg;base64,/9j/");
+    transaction();
+
+    await processImageJob("job1", p);
+
+    expect(mocks.referenceImageDataUrl).toHaveBeenNthCalledWith(
+      1,
+      "ref-a.png",
+      "image/png",
+    );
+    expect(mocks.referenceImageDataUrl).toHaveBeenNthCalledWith(
+      2,
+      "ref-b.jpg",
+      "image/jpeg",
+    );
+    expect(p.submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: expect.objectContaining({
+          referenceImages: [
+            "data:image/png;base64,AAAA",
+            "data:image/jpeg;base64,/9j/",
+          ],
+        }),
+      }),
+    );
+  });
+
   it("saves Seedream 4.5 output as its reserved JPEG asset", async () => {
     const p = provider();
     mocks.db.asset.findFirstOrThrow.mockResolvedValue({

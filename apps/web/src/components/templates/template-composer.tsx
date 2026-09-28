@@ -49,7 +49,7 @@ export function TemplateComposer({
     setValues((current) => ({ ...current, [key]: value }));
   }
 
-  async function useTemplate() {
+  async function openTemplate() {
     setBusy(true);
     setError(null);
     try {
@@ -244,7 +244,7 @@ export function TemplateComposer({
 
       <Button
         type="button"
-        onClick={() => void useTemplate()}
+        onClick={() => void openTemplate()}
         disabled={busy}
         aria-busy={busy}
         className="mt-5 w-full"

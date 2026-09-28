@@ -27,14 +27,14 @@ The request reserves the worst case before provider dispatch:
 - storage reservation = maximum image bytes × requested output count; and
 - one PENDING generated Asset row is created for every possible output.
 
-Each generated Asset has an immutable zero-based `generationOutputIndex`.
-This is the canonical ordering key for a related set. The provider response
-order maps directly to these indices.
+Each generated Asset has an immutable zero-based `generationOutputIndex`. This
+is the canonical ordering key for a related set. The provider response order
+maps directly to these indices.
 
 ## Provider result and partial success
 
-The provider may return fewer successful images than the requested maximum.
-This is a valid partial success because billing is per successful output.
+The provider may return fewer successful images than the requested maximum. This
+is a valid partial success because billing is per successful output.
 
 The worker persists the ordered provider URL manifest before downloading any
 output. It then stores each successful image independently:
@@ -47,13 +47,13 @@ output. It then stores each successful image independently:
    provider generation request.
 
 Provider output greater than the reserved maximum fails closed into
-MANUAL_REVIEW because the financial reservation may no longer cover the
-provider charge.
+MANUAL_REVIEW because the financial reservation may no longer cover the provider
+charge.
 
 ## Settlement
 
-Financial settlement happens only after every provider-success output is
-durably stored.
+Financial settlement happens only after every provider-success output is durably
+stored.
 
 The transaction:
 

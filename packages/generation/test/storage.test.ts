@@ -16,6 +16,7 @@ import {
   storeImage,
   storeVideo,
   storedAssetSize,
+  validateAndNormalizeReferenceImage,
   validateMp3Bytes,
   validateJpegImage,
 } from "../src/storage";
@@ -41,6 +42,42 @@ describe("private image storage", () => {
     ).rejects.toMatchObject({ code: "IMAGE_OUTPUT_INVALID_PNG" });
     await expect(
       normalizeImageToPng(Buffer.from([0xff, 0xd8, 0xff, 0x00])),
+    ).rejects.toMatchObject({ code: "IMAGE_OUTPUT_INVALID_PNG" });
+  });
+
+  it("validates and normalizes private reference uploads", async () => {
+    const jpeg = await sharp({
+      create: { width: 640, height: 480, channels: 3, background: "#123456" },
+    })
+      .jpeg()
+      .withMetadata({ orientation: 1 })
+      .toBuffer();
+
+    const normalized = await validateAndNormalizeReferenceImage(
+      jpeg,
+      "image/jpeg",
+    );
+
+    expect(normalized.mimeType).toBe("image/jpeg");
+    expect(normalized.extension).toBe("jpg");
+    expect(normalized.width).toBe(640);
+    expect(normalized.height).toBe(480);
+    expect(normalized.byteSize).toBe(BigInt(normalized.bytes.length));
+    expect(normalized.sha256).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it("rejects spoofed and unsupported reference uploads", async () => {
+    const png = await sharp({
+      create: { width: 64, height: 64, channels: 4, background: "#abcdef" },
+    })
+      .png()
+      .toBuffer();
+
+    await expect(
+      validateAndNormalizeReferenceImage(png, "image/jpeg"),
+    ).rejects.toMatchObject({ code: "IMAGE_OUTPUT_CONTENT_TYPE" });
+    await expect(
+      validateAndNormalizeReferenceImage(Buffer.from("<svg/>"), "image/png"),
     ).rejects.toMatchObject({ code: "IMAGE_OUTPUT_INVALID_PNG" });
   });
 

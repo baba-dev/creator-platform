@@ -418,6 +418,37 @@ describe("image processing", () => {
     );
   });
 
+  it("does not resurrect a cancelled image job after the provider responds", async () => {
+    const p = provider();
+    vi.mocked(p.submit).mockResolvedValue({
+      status: "succeeded",
+      providerRequestId: "request-after-cancel",
+      outputUrls: ["https://cdn.bytepluscdn.com/image.png"],
+    });
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+      ...base,
+      status: "QUEUED",
+    });
+    mocks.db.generationJob.updateMany
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValueOnce({ count: 0 });
+
+    await processImageJob("job1", p);
+
+    expect(p.submit).toHaveBeenCalledTimes(1);
+    expect(mocks.db.generationJob.updateMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: { id: "job1", status: "SUBMITTED" },
+        data: expect.objectContaining({
+          status: "PROCESSING",
+          providerRequestId: "request-after-cancel",
+        }),
+      }),
+    );
+    expect(mocks.store).not.toHaveBeenCalled();
+    expect(mocks.capture).not.toHaveBeenCalled();
+  });
+
   it("releases credits on definite provider rejection", async () => {
     const p = provider();
     vi.mocked(p.submit).mockRejectedValue(

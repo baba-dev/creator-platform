@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { generationCompletedEmail, mailJobId, senderForKind } from "../src/index";
+import {
+  generationCompletedEmail,
+  mailJobId,
+  senderForKind,
+} from "../src/index";
 import { classifySmtpFailure } from "../src/transport";
 
 describe("mail helpers", () => {

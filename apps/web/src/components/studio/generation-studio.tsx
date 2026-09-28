@@ -1067,7 +1067,9 @@ export function GenerationStudio({
                         ? "MP4"
                         : asset.mimeType.startsWith("audio/")
                           ? "MP3"
-                          : "PNG"}
+                          : asset.mimeType === "image/jpeg"
+                            ? "JPEG"
+                            : "PNG"}
                     </a>
                   </div>
                 ))}

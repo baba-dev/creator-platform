@@ -94,6 +94,34 @@ describe("BytePlus provider adapter", () => {
     });
   });
 
+  it.each([
+    ["16:9", "5504x3040"],
+    ["9:16", "3040x5504"],
+    ["4:3", "4704x3520"],
+    ["3:4", "3520x4704"],
+    ["21:9", "6240x2656"],
+  ])("uses the documented 4K dimensions for %s", async (aspectRatio, size) => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse({ data: [{ url: "https://cdn.example.com/image.png" }] }),
+      );
+    const provider = createBytePlusProvider({
+      ...validConfig,
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await provider.submit({
+      idempotencyKey: `image-4k-${aspectRatio}`,
+      modelId: "seedream-5-0-260128",
+      mediaKind: "image",
+      input: { prompt: "A studio photograph", aspectRatio, resolution: "4K" },
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string).size).toBe(size);
+  });
+
   it("omits output_format for Seedream 4.5 because the live API rejects it", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({

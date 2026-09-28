@@ -27,7 +27,7 @@ export function senderForKind(env: ServerEnv, kind: MailKind): string {
 }
 
 export function mailJobId(id: string): string {
-  return `mail:${id}`;
+  return `mail-${id}`;
 }
 
 export function normalizeRecipient(value: string): string {

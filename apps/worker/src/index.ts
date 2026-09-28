@@ -6,6 +6,7 @@ import {
   processVideoSubmitJob,
   processVoiceJob,
 } from "@aiwa/generation/process";
+import { mailJobId } from "@aiwa/mail";
 import {
   closeSmtpTransport,
   processMailMessage,
@@ -222,7 +223,7 @@ async function dispatchMail() {
 
     for (const row of rows) {
       if (isShuttingDown) break;
-      const jobId = `mail:${row.id}`;
+      const jobId = mailJobId(row.id);
       const existing = await mailQueue.getJob(jobId);
       if (existing) {
         const state = await existing.getState();

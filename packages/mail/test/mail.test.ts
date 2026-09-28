@@ -1,8 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { generationCompletedEmail, senderForKind } from "../src/index";
+import {
+  generationCompletedEmail,
+  mailJobId,
+  senderForKind,
+} from "../src/index";
 import { classifySmtpFailure } from "../src/transport";
 
 describe("mail helpers", () => {
+  it("uses a BullMQ-safe stable job ID for outbox delivery", () => {
+    expect(mailJobId("cm123")).toBe("mail-cm123");
+    expect(mailJobId("cm123")).not.toContain(":");
+  });
+
   it("keeps sender identities separated", () => {
     const env = {
       MAIL_SECURITY_FROM_ADDRESS: "security@aiwamediagroup.com",

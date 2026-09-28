@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { LocalAssetStorage } from "@aiwa/assets/storage";
 import { lookup } from "node:dns/promises";
 import {
   mkdir,
@@ -408,18 +409,19 @@ export async function normalizeImageToPng(bytes: Buffer): Promise<Buffer> {
   return png;
 }
 
-export type StoredReferenceImage = {
-  objectKey: string;
+export type ValidatedReferenceImage = {
+  bytes: Buffer;
   mimeType: "image/jpeg" | "image/png" | "image/webp";
+  extension: "jpg" | "png" | "webp";
   byteSize: bigint;
   sha256: string;
   width: number;
   height: number;
 };
 
-export async function validateAndStoreReferenceImage(
+export async function validateReferenceImage(
   bytes: Buffer,
-): Promise<StoredReferenceImage> {
+): Promise<ValidatedReferenceImage> {
   if (bytes.byteLength <= 0 || bytes.byteLength > MAX_REFERENCE_IMAGE_BYTES) {
     throw new ImageStorageError(
       "IMAGE_OUTPUT_TOO_LARGE",
@@ -495,6 +497,7 @@ export async function validateAndStoreReferenceImage(
       { cause: error },
     );
   }
+
   const normalized = normalizedResult.data;
   if (normalized.byteLength > MAX_REFERENCE_IMAGE_BYTES) {
     throw new ImageStorageError(
@@ -510,12 +513,11 @@ export async function validateAndStoreReferenceImage(
       : format === "png"
         ? "image/png"
         : "image/webp";
-  const objectKey = `ref-${randomUUID()}.${extension}`;
-  await storeImage(objectKey, normalized);
 
   return {
-    objectKey,
+    bytes: normalized,
     mimeType,
+    extension,
     byteSize: BigInt(normalized.byteLength),
     sha256: createHash("sha256").update(normalized).digest("hex"),
     width: normalizedResult.info.width,
@@ -526,6 +528,7 @@ export async function validateAndStoreReferenceImage(
 export async function referenceImageDataUri(input: {
   objectKey: string;
   mimeType: string;
+  storageProvider: string;
 }): Promise<string> {
   if (!["image/jpeg", "image/png", "image/webp"].includes(input.mimeType)) {
     throw new ImageStorageError(
@@ -533,8 +536,30 @@ export async function referenceImageDataUri(input: {
       "Reference asset has an unsupported media type.",
     );
   }
-  const bytes = await readStoredAsset(input.objectKey);
-  if (bytes.byteLength > MAX_REFERENCE_IMAGE_BYTES) {
+  if (input.storageProvider !== "LOCAL") {
+    throw new ImageStorageError(
+      "IMAGE_OUTPUT_CONTENT_TYPE",
+      "Reference asset storage provider is not supported for generation yet.",
+    );
+  }
+  const root = process.env.ASSET_STORAGE_ROOT;
+  if (!root) {
+    throw new ImageStorageError(
+      "STORAGE_WRITE_FAILED",
+      "Asset storage root is not configured.",
+    );
+  }
+  let bytes: Buffer;
+  try {
+    bytes = await new LocalAssetStorage(root).read(input.objectKey);
+  } catch (error) {
+    throw new ImageStorageError(
+      "STORAGE_WRITE_FAILED",
+      "Reference asset could not be read from private storage.",
+      { cause: error },
+    );
+  }
+  if (bytes.byteLength <= 0 || bytes.byteLength > MAX_REFERENCE_IMAGE_BYTES) {
     throw new ImageStorageError(
       "IMAGE_OUTPUT_TOO_LARGE",
       "Reference asset exceeds the provider input limit.",

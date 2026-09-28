@@ -1,6 +1,7 @@
--- Reference inputs are first-class private assets. Existing rows remain generated outputs.
+-- Reference inputs are first-class private assets. Existing rows retain their
+-- general-purpose classification and source provenance from the asset foundation.
 ALTER TABLE `Asset`
-  ADD COLUMN `purpose` ENUM('GENERATED', 'REFERENCE_INPUT') NOT NULL DEFAULT 'GENERATED';
+  ADD COLUMN `purpose` ENUM('GENERAL', 'REFERENCE_INPUT') NOT NULL DEFAULT 'GENERAL';
 
 CREATE TABLE `GenerationInputAsset` (
   `generationJobId` VARCHAR(191) NOT NULL,
@@ -24,7 +25,9 @@ CREATE TABLE `GenerationInputAsset` (
 -- Normalize persisted capabilities so existing environments expose the same
 -- contract as the verified provider descriptors without requiring a seed run.
 UPDATE `ProviderModel`
-SET `capabilities` = JSON_OBJECT(
+SET `capabilities` = JSON_MERGE_PATCH(
+  COALESCE(`capabilities`, JSON_OBJECT()),
+  JSON_OBJECT(
   'aspectRatio:1:1', TRUE,
   'aspectRatio:4:3', TRUE,
   'aspectRatio:3:4', TRUE,
@@ -38,13 +41,17 @@ SET `capabilities` = JSON_OBJECT(
   'resolution:4K', TRUE,
   'referenceImages', TRUE,
   'maxReferenceImages', 14
+  )
 )
 WHERE `provider` = 'BYTEPLUS'
   AND `providerModelId` = 'seedream-5-0-260128'
   AND `mediaKind` = 'IMAGE';
 
 UPDATE `ProviderModel`
-SET `capabilities` = JSON_OBJECT(
+SET `capabilities` = JSON_REMOVE(
+  JSON_MERGE_PATCH(
+    COALESCE(`capabilities`, JSON_OBJECT()),
+    JSON_OBJECT(
   'aspectRatio:1:1', TRUE,
   'aspectRatio:4:3', TRUE,
   'aspectRatio:3:4', TRUE,
@@ -57,6 +64,9 @@ SET `capabilities` = JSON_OBJECT(
   'resolution:4K', TRUE,
   'referenceImages', TRUE,
   'maxReferenceImages', 14
+    )
+  ),
+  '$."resolution:3K"'
 )
 WHERE `provider` = 'BYTEPLUS'
   AND `providerModelId` = 'seedream-4-5-251128'

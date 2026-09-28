@@ -272,7 +272,9 @@ describe("image processing", () => {
         status: "PROCESSING",
         outputPayload: {
           requestedCount: 1,
-          outputs: [{ index: 0, url: "https://example.bytepluscdn.com/image.png" }],
+          outputs: [
+            { index: 0, url: "https://example.bytepluscdn.com/image.png" },
+          ],
         },
       });
     const tx = transaction();
@@ -311,9 +313,7 @@ describe("image processing", () => {
       status: "PROCESSING",
       outputPayload: {
         requestedCount: 1,
-        outputs: [
-          { index: 0, url: "https://cdn.bytepluscdn.com/output.jpeg" },
-        ],
+        outputs: [{ index: 0, url: "https://cdn.bytepluscdn.com/output.jpeg" }],
       },
     });
     const tx = transaction();

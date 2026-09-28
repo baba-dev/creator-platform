@@ -14,7 +14,7 @@ import {
 import { db, type Prisma } from "@aiwa/db";
 import {
   assertAssignableProject,
-    muscatCalendarMonth,
+  muscatCalendarMonth,
 } from "@aiwa/organizations";
 import { VERIFIED_BYTEPLUS_MODELS } from "@aiwa/providers/byteplus";
 import { z } from "zod";

@@ -79,12 +79,16 @@ export function TemplateManager({
   templates: AdminTemplateRow[];
   canManage: boolean;
 }) {
-  const [selectedId, setSelectedId] = useState<string | null>(templates[0]?.id ?? null);
+  const [selectedId, setSelectedId] = useState<string | null>(
+    templates[0]?.id ?? null,
+  );
   const selected = useMemo(
     () => templates.find((template) => template.id === selectedId) ?? null,
     [selectedId, templates],
   );
-  const [draft, setDraft] = useState<Draft>(() => selected ? toDraft(selected) : blank);
+  const [draft, setDraft] = useState<Draft>(() =>
+    selected ? toDraft(selected) : blank,
+  );
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -129,11 +133,14 @@ export function TemplateManager({
           body: JSON.stringify(payload),
         },
       );
-      const body = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(body.error ?? "Template could not be saved.");
+      const body = (await response.json()) as { error?: string };
+      if (!response.ok)
+        throw new Error(body.error ?? "Template could not be saved.");
       window.location.reload();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Template could not be saved.");
+      setMessage(
+        error instanceof Error ? error.message : "Template could not be saved.",
+      );
       setBusy(false);
     }
   }
@@ -180,7 +187,9 @@ export function TemplateManager({
                   />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-xs font-semibold">{template.name}</span>
+                  <span className="block truncate text-xs font-semibold">
+                    {template.name}
+                  </span>
                   <span className="mt-1 block text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
                     {template.status} · {template.category}
                   </span>
@@ -208,61 +217,139 @@ export function TemplateManager({
           </div>
           {selected ? (
             <p className="text-[10px] text-muted-foreground">
-              {selected.usageCount.toLocaleString("en-US")} generations · updated{" "}
-              {new Date(selected.updatedAt).toLocaleDateString("en-GB")}
+              {selected.usageCount.toLocaleString("en-US")} generations ·
+              updated {new Date(selected.updatedAt).toLocaleDateString("en-GB")}
             </p>
           ) : null}
         </div>
 
-        <fieldset disabled={!canManage || busy} className="mt-6 space-y-5 disabled:opacity-70">
+        <fieldset
+          disabled={!canManage || busy}
+          className="mt-6 space-y-5 disabled:opacity-70"
+        >
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Name">
-              <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} className="field" />
+              <input
+                value={draft.name}
+                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                className="field"
+              />
             </Field>
             <Field label="Slug">
-              <input value={draft.slug} onChange={(e) => setDraft({ ...draft, slug: e.target.value })} className="field font-mono" />
+              <input
+                value={draft.slug}
+                onChange={(e) => setDraft({ ...draft, slug: e.target.value })}
+                className="field font-mono"
+              />
             </Field>
             <Field label="Category">
-              <input value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })} className="field" />
+              <input
+                value={draft.category}
+                onChange={(e) =>
+                  setDraft({ ...draft, category: e.target.value })
+                }
+                className="field"
+              />
             </Field>
             <Field label="Media kind">
-              <select value={draft.mediaKind} onChange={(e) => setDraft({ ...draft, mediaKind: e.target.value as Draft["mediaKind"] })} className="field">
+              <select
+                value={draft.mediaKind}
+                onChange={(e) =>
+                  setDraft({
+                    ...draft,
+                    mediaKind: e.target.value as Draft["mediaKind"],
+                  })
+                }
+                className="field"
+              >
                 <option value="IMAGE">Image</option>
                 <option value="VIDEO">Video</option>
                 <option value="VOICE">Voice</option>
               </select>
             </Field>
             <Field label="Status">
-              <select value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value as Draft["status"] })} className="field">
+              <select
+                value={draft.status}
+                onChange={(e) =>
+                  setDraft({
+                    ...draft,
+                    status: e.target.value as Draft["status"],
+                  })
+                }
+                className="field"
+              >
                 <option value="DRAFT">Draft</option>
                 <option value="PUBLISHED">Published</option>
                 <option value="ARCHIVED">Archived</option>
               </select>
             </Field>
             <Field label="Sort order">
-              <input type="number" value={draft.sortOrder} onChange={(e) => setDraft({ ...draft, sortOrder: Number(e.target.value) })} className="field" />
+              <input
+                type="number"
+                value={draft.sortOrder}
+                onChange={(e) =>
+                  setDraft({ ...draft, sortOrder: Number(e.target.value) })
+                }
+                className="field"
+              />
             </Field>
           </div>
 
           <Field label="Description">
-            <textarea value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} className="field min-h-24 py-3" />
+            <textarea
+              value={draft.description}
+              onChange={(e) =>
+                setDraft({ ...draft, description: e.target.value })
+              }
+              className="field min-h-24 py-3"
+            />
           </Field>
-          <Field label="Prompt template" hint="Use {{variableName}} placeholders only. No executable template language is supported.">
-            <textarea value={draft.promptTemplate} onChange={(e) => setDraft({ ...draft, promptTemplate: e.target.value })} className="field min-h-36 py-3 font-mono text-xs" />
+          <Field
+            label="Prompt template"
+            hint="Use {{variableName}} placeholders only. No executable template language is supported."
+          >
+            <textarea
+              value={draft.promptTemplate}
+              onChange={(e) =>
+                setDraft({ ...draft, promptTemplate: e.target.value })
+              }
+              className="field min-h-36 py-3 font-mono text-xs"
+            />
           </Field>
 
           <div className="grid gap-4 lg:grid-cols-2">
             <Field label="Variables JSON">
-              <textarea value={draft.variables} onChange={(e) => setDraft({ ...draft, variables: e.target.value })} className="field min-h-60 py-3 font-mono text-[11px]" />
+              <textarea
+                value={draft.variables}
+                onChange={(e) =>
+                  setDraft({ ...draft, variables: e.target.value })
+                }
+                className="field min-h-60 py-3 font-mono text-[11px]"
+              />
             </Field>
             <Field label="Default input JSON">
-              <textarea value={draft.defaultInput} onChange={(e) => setDraft({ ...draft, defaultInput: e.target.value })} className="field min-h-60 py-3 font-mono text-[11px]" />
+              <textarea
+                value={draft.defaultInput}
+                onChange={(e) =>
+                  setDraft({ ...draft, defaultInput: e.target.value })
+                }
+                className="field min-h-60 py-3 font-mono text-[11px]"
+              />
             </Field>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Preferred provider model ID" hint="Preference only; the resolver still enforces live compatibility.">
-              <input value={draft.preferredModelId} onChange={(e) => setDraft({ ...draft, preferredModelId: e.target.value })} className="field font-mono text-xs" />
+            <Field
+              label="Preferred provider model ID"
+              hint="Preference only; the resolver still enforces live compatibility."
+            >
+              <input
+                value={draft.preferredModelId}
+                onChange={(e) =>
+                  setDraft({ ...draft, preferredModelId: e.target.value })
+                }
+                className="field font-mono text-xs"
+              />
             </Field>
           </div>
 
@@ -270,7 +357,9 @@ export function TemplateManager({
             <input
               type="checkbox"
               checked={draft.featured}
-              onChange={(e) => setDraft({ ...draft, featured: e.target.checked })}
+              onChange={(e) =>
+                setDraft({ ...draft, featured: e.target.checked })
+              }
               className="size-4 accent-primary"
             />
             Feature this template in discovery
@@ -278,16 +367,25 @@ export function TemplateManager({
         </fieldset>
 
         {message ? (
-          <p role="alert" className="mt-5 rounded-xl border border-destructive/25 bg-destructive/5 p-3 text-sm text-destructive">
+          <p
+            role="alert"
+            className="mt-5 rounded-xl border border-destructive/25 bg-destructive/5 p-3 text-sm text-destructive"
+          >
             {message}
           </p>
         ) : null}
 
         <div className="mt-6 flex items-center justify-end gap-3 border-t border-border pt-5">
           {!canManage ? (
-            <p className="mr-auto text-xs text-muted-foreground">Read-only access</p>
+            <p className="mr-auto text-xs text-muted-foreground">
+              Read-only access
+            </p>
           ) : null}
-          <Button type="button" onClick={() => void save()} disabled={!canManage || busy}>
+          <Button
+            type="button"
+            onClick={() => void save()}
+            disabled={!canManage || busy}
+          >
             <Icon name="check" className="size-4" />
             {busy ? "Saving…" : draft.id ? "Save changes" : "Create template"}
           </Button>
@@ -327,7 +425,11 @@ function Field({
   return (
     <label className="block">
       <span className="text-xs font-semibold">{label}</span>
-      {hint ? <span className="ml-2 text-[9px] font-normal text-muted-foreground">{hint}</span> : null}
+      {hint ? (
+        <span className="ml-2 text-[9px] font-normal text-muted-foreground">
+          {hint}
+        </span>
+      ) : null}
       <span className="mt-2 block">{children}</span>
     </label>
   );

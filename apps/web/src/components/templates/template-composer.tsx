@@ -7,7 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import type { TemplateVariable } from "@/lib/templates";
 
-type ReferenceAsset = { id: string; name: string | null; originalFilename: string | null };
+type ReferenceAsset = {
+  id: string;
+  name: string | null;
+  originalFilename: string | null;
+};
 
 export function TemplateComposer({
   organizationId,
@@ -57,7 +61,7 @@ export function TemplateComposer({
           body: JSON.stringify({ organizationId, values }),
         },
       );
-      const body = await response.json() as {
+      const body = (await response.json()) as {
         error?: string;
         resolved?: Record<string, unknown>;
       };
@@ -73,7 +77,11 @@ export function TemplateComposer({
         `/app/${organizationSlug}?templateHandoff=${encodeURIComponent(handoffId)}#create`,
       );
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Template could not be prepared.");
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Template could not be prepared.",
+      );
       setBusy(false);
     }
   }
@@ -87,7 +95,8 @@ export function TemplateComposer({
         <div>
           <h2 className="font-display text-xl font-semibold">Make it yours</h2>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            Fill the creative brief. Creator will resolve the prompt and select a compatible live model.
+            Fill the creative brief. Creator will resolve the prompt and select
+            a compatible live model.
           </p>
         </div>
       </div>
@@ -100,17 +109,23 @@ export function TemplateComposer({
             <div key={variable.key}>
               <label htmlFor={id} className="text-sm font-semibold">
                 {variable.label}
-                {variable.required ? <span className="ml-1 text-primary">*</span> : null}
+                {variable.required ? (
+                  <span className="ml-1 text-primary">*</span>
+                ) : null}
               </label>
               {variable.helpText ? (
-                <p className="mt-1 text-[11px] text-muted-foreground">{variable.helpText}</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {variable.helpText}
+                </p>
               ) : null}
 
               {variable.type === "textarea" ? (
                 <textarea
                   id={id}
                   value={String(value)}
-                  onChange={(event) => setValue(variable.key, event.target.value)}
+                  onChange={(event) =>
+                    setValue(variable.key, event.target.value)
+                  }
                   placeholder={variable.placeholder}
                   maxLength={2000}
                   className="mt-2 min-h-28 w-full rounded-2xl border border-input bg-background px-4 py-3 text-sm outline-none transition focus:border-primary/45 focus:ring-4 focus:ring-primary/10"
@@ -119,11 +134,15 @@ export function TemplateComposer({
                 <select
                   id={id}
                   value={String(value)}
-                  onChange={(event) => setValue(variable.key, event.target.value)}
+                  onChange={(event) =>
+                    setValue(variable.key, event.target.value)
+                  }
                   className="mt-2 min-h-12 w-full rounded-xl border border-input bg-background px-3 text-sm"
                 >
                   {(variable.options ?? []).map((option) => (
-                    <option key={option} value={option}>{option}</option>
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
                   ))}
                 </select>
               ) : variable.type === "toggle" ? (
@@ -132,7 +151,9 @@ export function TemplateComposer({
                     id={id}
                     type="checkbox"
                     checked={Boolean(value)}
-                    onChange={(event) => setValue(variable.key, event.target.checked)}
+                    onChange={(event) =>
+                      setValue(variable.key, event.target.checked)
+                    }
                     className="size-4 accent-primary"
                   />
                   Enabled
@@ -142,20 +163,26 @@ export function TemplateComposer({
                   id={id}
                   type="number"
                   value={typeof value === "number" ? value : String(value)}
-                  onChange={(event) => setValue(variable.key, Number(event.target.value))}
+                  onChange={(event) =>
+                    setValue(variable.key, Number(event.target.value))
+                  }
                   className="mt-2 min-h-12 w-full rounded-xl border border-input bg-background px-4 text-sm"
                 />
               ) : variable.type === "reference-image" ? (
                 <select
                   id={id}
                   value={String(value)}
-                  onChange={(event) => setValue(variable.key, event.target.value)}
+                  onChange={(event) =>
+                    setValue(variable.key, event.target.value)
+                  }
                   className="mt-2 min-h-12 w-full rounded-xl border border-input bg-background px-3 text-sm"
                 >
                   <option value="">Choose a reference image</option>
                   {referenceAssets.map((asset) => (
                     <option key={asset.id} value={asset.id}>
-                      {asset.name ?? asset.originalFilename ?? "Reference image"}
+                      {asset.name ??
+                        asset.originalFilename ??
+                        "Reference image"}
                     </option>
                   ))}
                 </select>
@@ -163,7 +190,9 @@ export function TemplateComposer({
                 <input
                   id={id}
                   value={String(value)}
-                  onChange={(event) => setValue(variable.key, event.target.value)}
+                  onChange={(event) =>
+                    setValue(variable.key, event.target.value)
+                  }
                   placeholder={variable.placeholder}
                   maxLength={2000}
                   className="mt-2 min-h-12 w-full rounded-xl border border-input bg-background px-4 text-sm outline-none transition focus:border-primary/45 focus:ring-4 focus:ring-primary/10"
@@ -180,22 +209,35 @@ export function TemplateComposer({
         </p>
         <div className="mt-3 flex flex-wrap gap-2 text-xs">
           <span className="rounded-lg bg-card px-2.5 py-1.5 font-semibold">
-            {template.mediaKind === "IMAGE" ? "Image" : template.mediaKind === "VIDEO" ? "Video" : "Voice"}
+            {template.mediaKind === "IMAGE"
+              ? "Image"
+              : template.mediaKind === "VIDEO"
+                ? "Video"
+                : "Voice"}
           </span>
           {typeof template.defaultInput.aspectRatio === "string" ? (
-            <span className="rounded-lg bg-card px-2.5 py-1.5">{template.defaultInput.aspectRatio}</span>
+            <span className="rounded-lg bg-card px-2.5 py-1.5">
+              {template.defaultInput.aspectRatio}
+            </span>
           ) : null}
           {typeof template.defaultInput.resolution === "string" ? (
-            <span className="rounded-lg bg-card px-2.5 py-1.5">{template.defaultInput.resolution}</span>
+            <span className="rounded-lg bg-card px-2.5 py-1.5">
+              {template.defaultInput.resolution}
+            </span>
           ) : null}
           {typeof template.defaultInput.durationSeconds === "number" ? (
-            <span className="rounded-lg bg-card px-2.5 py-1.5">{template.defaultInput.durationSeconds}s</span>
+            <span className="rounded-lg bg-card px-2.5 py-1.5">
+              {template.defaultInput.durationSeconds}s
+            </span>
           ) : null}
         </div>
       </div>
 
       {error ? (
-        <p role="alert" className="mt-4 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+        <p
+          role="alert"
+          className="mt-4 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+        >
           {error}
         </p>
       ) : null}

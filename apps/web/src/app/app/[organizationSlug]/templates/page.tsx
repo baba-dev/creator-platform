@@ -117,9 +117,21 @@ export default async function TemplatesPage({
             </p>
           </div>
           <div className="grid grid-cols-3 gap-2 rounded-2xl border border-border bg-card/75 p-2 shadow-xs backdrop-blur">
-            <FormatStat icon="image" label="Images" value={cards.filter((item) => item.mediaKind === "IMAGE").length} />
-            <FormatStat icon="video" label="Video" value={cards.filter((item) => item.mediaKind === "VIDEO").length} />
-            <FormatStat icon="voice" label="Voice" value={cards.filter((item) => item.mediaKind === "VOICE").length} />
+            <FormatStat
+              icon="image"
+              label="Images"
+              value={cards.filter((item) => item.mediaKind === "IMAGE").length}
+            />
+            <FormatStat
+              icon="video"
+              label="Video"
+              value={cards.filter((item) => item.mediaKind === "VIDEO").length}
+            />
+            <FormatStat
+              icon="voice"
+              label="Voice"
+              value={cards.filter((item) => item.mediaKind === "VOICE").length}
+            />
           </div>
         </section>
 

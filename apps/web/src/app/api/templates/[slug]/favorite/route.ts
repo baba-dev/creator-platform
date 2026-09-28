@@ -5,12 +5,24 @@ import { getRequestSession } from "@/lib/request-auth";
 async function requestContext(request: Request, slug: string) {
   const session = await getRequestSession(request.headers);
   if (!session) {
-    return { error: NextResponse.json({ error: "Authentication required." }, { status: 401 }) } as const;
+    return {
+      error: NextResponse.json(
+        { error: "Authentication required." },
+        { status: 401 },
+      ),
+    } as const;
   }
 
-  const body = await request.json().catch(() => null) as { organizationId?: string } | null;
+  const body = (await request.json().catch(() => null)) as {
+    organizationId?: string;
+  } | null;
   if (!body?.organizationId) {
-    return { error: NextResponse.json({ error: "Organization is required." }, { status: 400 }) } as const;
+    return {
+      error: NextResponse.json(
+        { error: "Organization is required." },
+        { status: 400 },
+      ),
+    } as const;
   }
 
   const [membership, template] = await Promise.all([
@@ -30,10 +42,20 @@ async function requestContext(request: Request, slug: string) {
   ]);
 
   if (!membership) {
-    return { error: NextResponse.json({ error: "Workspace access denied." }, { status: 403 }) } as const;
+    return {
+      error: NextResponse.json(
+        { error: "Workspace access denied." },
+        { status: 403 },
+      ),
+    } as const;
   }
   if (!template) {
-    return { error: NextResponse.json({ error: "Template not found." }, { status: 404 }) } as const;
+    return {
+      error: NextResponse.json(
+        { error: "Template not found." },
+        { status: 404 },
+      ),
+    } as const;
   }
   return { session, template } as const;
 }

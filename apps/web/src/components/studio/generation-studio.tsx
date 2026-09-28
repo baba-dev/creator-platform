@@ -409,11 +409,7 @@ export function GenerationStudio({
     const handoffId = new URLSearchParams(window.location.search).get(
       "templateHandoff",
     );
-    if (
-      !handoffId ||
-      !data ||
-      consumedTemplateHandoff.current === handoffId
-    ) {
+    if (!handoffId || !data || consumedTemplateHandoff.current === handoffId) {
       return;
     }
 
@@ -1163,10 +1159,10 @@ export function GenerationStudio({
                         model?.pricingDimension === "SECOND"
                       ? (videoQuotedCredits ?? "—")
                       : activeMode === "IMAGE" && model
-                      ? (
-                          BigInt(model.credits) * BigInt(selectedOutputCount)
-                        ).toString()
-                      : (model?.credits ?? "—")
+                        ? (
+                            BigInt(model.credits) * BigInt(selectedOutputCount)
+                          ).toString()
+                        : (model?.credits ?? "—")
                 } credits`}
           </Button>
           <p className="text-xs text-muted-foreground">

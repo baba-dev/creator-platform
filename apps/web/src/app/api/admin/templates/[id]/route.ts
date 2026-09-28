@@ -14,15 +14,26 @@ export async function PATCH(
     return NextResponse.json({ error: "Origin not allowed." }, { status: 403 });
   }
   const session = await getRequestSession(request.headers);
-  if (!session || !hasPlatformPermission(session.user.platformRole, "templates:manage")) {
-    return NextResponse.json({ error: "Template administration denied." }, { status: 403 });
+  if (
+    !session ||
+    !hasPlatformPermission(session.user.platformRole, "templates:manage")
+  ) {
+    return NextResponse.json(
+      { error: "Template administration denied." },
+      { status: 403 },
+    );
   }
 
   const { id } = await params;
-  const parsed = updateTemplateSchema.safeParse(await request.json().catch(() => null));
+  const parsed = updateTemplateSchema.safeParse(
+    await request.json().catch(() => null),
+  );
   if (!parsed.success || Object.keys(parsed.data).length === 0) {
     return NextResponse.json(
-      { error: "Invalid template update.", issues: parsed.success ? undefined : parsed.error.flatten() },
+      {
+        error: "Invalid template update.",
+        issues: parsed.success ? undefined : parsed.error.flatten(),
+      },
       { status: 400 },
     );
   }
@@ -31,7 +42,8 @@ export async function PATCH(
     where: { id },
     select: { id: true, status: true, slug: true },
   });
-  if (!existing) return NextResponse.json({ error: "Template not found." }, { status: 404 });
+  if (!existing)
+    return NextResponse.json({ error: "Template not found." }, { status: 404 });
 
   try {
     const template = await db.$transaction(async (tx) => {
@@ -57,7 +69,10 @@ export async function PATCH(
     return NextResponse.json({ template });
   } catch {
     return NextResponse.json(
-      { error: "Template could not be updated. Check the slug and referenced assets." },
+      {
+        error:
+          "Template could not be updated. Check the slug and referenced assets.",
+      },
       { status: 409 },
     );
   }

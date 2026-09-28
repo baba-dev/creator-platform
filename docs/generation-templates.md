@@ -13,8 +13,8 @@ submit provider work directly and they do not create a second billing path.
 4. `POST /api/templates/[slug]/resolve` validates workspace membership,
    variables, reference-image ownership, published state, current model
    availability, active pricing, and live provider capabilities.
-5. The browser stores the short-lived resolved handoff in `sessionStorage`
-   and opens Studio. Raw prompts and reference IDs are not placed in the URL.
+5. The browser stores the short-lived resolved handoff in `sessionStorage` and
+   opens Studio. Raw prompts and reference IDs are not placed in the URL.
 6. Studio applies the resolved prompt/defaults, visibly identifies the active
    template, and still allows the user to change normal Studio controls.
 7. The ordinary `POST /api/generations` endpoint creates the durable job.
@@ -33,21 +33,21 @@ P0 deliberately supports only inert placeholders:
 ```
 
 There is no Handlebars/Jinja/JavaScript expression execution. Variables are
-schema-validated and unknown request keys are rejected. Supported variable
-types are text, textarea, select, toggle, number, and reference-image.
+schema-validated and unknown request keys are rejected. Supported variable types
+are text, textarea, select, toggle, number, and reference-image.
 
-Reference-image variables resolve to asset IDs separately from prompt text.
-The resolver verifies the asset is READY, belongs to the active organization,
-is owned by the current user for reference-input storage, and is an image.
-Those IDs continue through the existing GenerationInputAsset security path.
+Reference-image variables resolve to asset IDs separately from prompt text. The
+resolver verifies the asset is READY, belongs to the active organization, is
+owned by the current user for reference-input storage, and is an image. Those
+IDs continue through the existing GenerationInputAsset security path.
 
 ## Model compatibility
 
 Templates store output preferences, not provider commands. The resolver checks
 current `ProviderModel.capabilities` for aspect ratio, resolution, duration,
-audio, and reference-image support. `preferredModelId` is only a preference:
-if that model is disabled, unpriced, or incompatible, another compatible
-enabled model may be selected.
+audio, and reference-image support. `preferredModelId` is only a preference: if
+that model is disabled, unpriced, or incompatible, another compatible enabled
+model may be selected.
 
 This keeps templates valid across provider catalog changes and avoids binding
 the product UX to one provider implementation.

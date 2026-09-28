@@ -11,11 +11,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Origin not allowed." }, { status: 403 });
   }
   const session = await getRequestSession(request.headers);
-  if (!session || !hasPlatformPermission(session.user.platformRole, "templates:manage")) {
-    return NextResponse.json({ error: "Template administration denied." }, { status: 403 });
+  if (
+    !session ||
+    !hasPlatformPermission(session.user.platformRole, "templates:manage")
+  ) {
+    return NextResponse.json(
+      { error: "Template administration denied." },
+      { status: 403 },
+    );
   }
 
-  const parsed = createTemplateSchema.safeParse(await request.json().catch(() => null));
+  const parsed = createTemplateSchema.safeParse(
+    await request.json().catch(() => null),
+  );
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Invalid template.", issues: parsed.error.flatten() },
@@ -44,7 +52,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ template }, { status: 201 });
   } catch {
     return NextResponse.json(
-      { error: "Template could not be created. The slug may already be in use." },
+      {
+        error: "Template could not be created. The slug may already be in use.",
+      },
       { status: 409 },
     );
   }

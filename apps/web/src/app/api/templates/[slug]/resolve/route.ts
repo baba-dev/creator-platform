@@ -15,11 +15,21 @@ export async function POST(
   context: { params: Promise<{ slug: string }> },
 ) {
   const session = await getRequestSession(request.headers);
-  if (!session) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+  if (!session)
+    return NextResponse.json(
+      { error: "Authentication required." },
+      { status: 401 },
+    );
 
   const { slug } = await context.params;
-  const parsed = resolveTemplateSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Invalid template input." }, { status: 400 });
+  const parsed = resolveTemplateSchema.safeParse(
+    await request.json().catch(() => null),
+  );
+  if (!parsed.success)
+    return NextResponse.json(
+      { error: "Invalid template input." },
+      { status: 400 },
+    );
 
   const membership = await db.membership.findUnique({
     where: {
@@ -30,7 +40,11 @@ export async function POST(
     },
     select: { id: true },
   });
-  if (!membership) return NextResponse.json({ error: "Workspace access denied." }, { status: 403 });
+  if (!membership)
+    return NextResponse.json(
+      { error: "Workspace access denied." },
+      { status: 403 },
+    );
 
   const template = await db.generationTemplate.findFirst({
     where: {
@@ -39,7 +53,8 @@ export async function POST(
       mediaKind: { in: ["IMAGE", "VIDEO", "VOICE"] },
     },
   });
-  if (!template) return NextResponse.json({ error: "Template not found." }, { status: 404 });
+  if (!template)
+    return NextResponse.json({ error: "Template not found." }, { status: 404 });
 
   try {
     const variables = parseTemplateVariables(template.variables);
@@ -120,23 +135,32 @@ export async function POST(
         ? (priceCredits(price) * BigInt(outputCount)).toString()
         : null;
 
-    return NextResponse.json({
-      resolved: {
-        templateId: template.id,
-        templateSlug: template.slug,
-        templateName: template.name,
-        mediaKind: template.mediaKind,
-        prompt: resolved.prompt,
-        referenceAssetIds: resolved.referenceAssetIds,
-        defaults,
-        modelId: model.id,
-        priceVersionId: price.id,
-        estimatedCredits,
+    return NextResponse.json(
+      {
+        resolved: {
+          templateId: template.id,
+          templateSlug: template.slug,
+          templateName: template.name,
+          mediaKind: template.mediaKind,
+          prompt: resolved.prompt,
+          referenceAssetIds: resolved.referenceAssetIds,
+          defaults,
+          modelId: model.id,
+          priceVersionId: price.id,
+          estimatedCredits,
+        },
       },
-    }, { headers: { "Cache-Control": "no-store" } });
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (error) {
-    return NextResponse.json({
-      error: error instanceof Error ? error.message : "Template could not be resolved.",
-    }, { status: 400 });
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Template could not be resolved.",
+      },
+      { status: 400 },
+    );
   }
 }

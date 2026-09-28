@@ -8,10 +8,7 @@ import { Brand } from "@/components/ui/brand";
 import { Eyebrow } from "@/components/ui/creative";
 import { Icon } from "@/components/ui/icon";
 import { requireOrganizationPermission } from "@/lib/request-auth";
-import {
-  parseTemplateDefaults,
-  parseTemplateVariables,
-} from "@/lib/templates";
+import { parseTemplateDefaults, parseTemplateVariables } from "@/lib/templates";
 
 export default async function TemplateDetailPage({
   params,
@@ -134,19 +131,40 @@ export default async function TemplateDetailPage({
                 </p>
 
                 <div className="mt-6 flex flex-wrap gap-2">
-                  {defaults.aspectRatio ? <MetaPill>{defaults.aspectRatio}</MetaPill> : null}
-                  {defaults.resolution ? <MetaPill>{defaults.resolution}</MetaPill> : null}
+                  {defaults.aspectRatio ? (
+                    <MetaPill>{defaults.aspectRatio}</MetaPill>
+                  ) : null}
+                  {defaults.resolution ? (
+                    <MetaPill>{defaults.resolution}</MetaPill>
+                  ) : null}
                   {defaults.outputCount && defaults.outputCount > 1 ? (
                     <MetaPill>{defaults.outputCount} outputs</MetaPill>
                   ) : null}
-                  {defaults.durationSeconds ? <MetaPill>{defaults.durationSeconds}s</MetaPill> : null}
-                  <MetaPill>{variables.length} brief field{variables.length === 1 ? "" : "s"}</MetaPill>
+                  {defaults.durationSeconds ? (
+                    <MetaPill>{defaults.durationSeconds}s</MetaPill>
+                  ) : null}
+                  <MetaPill>
+                    {variables.length} brief field
+                    {variables.length === 1 ? "" : "s"}
+                  </MetaPill>
                 </div>
 
                 <div className="mt-8 grid gap-3 sm:grid-cols-3">
-                  <TrustPoint icon="wand" title="Guided brief" body="No prompt-engineering syntax required." />
-                  <TrustPoint icon="sparkles" title="Live compatibility" body="Only an enabled compatible model is selected." />
-                  <TrustPoint icon="credits" title="No instant charge" body="Review everything in Studio before generation." />
+                  <TrustPoint
+                    icon="wand"
+                    title="Guided brief"
+                    body="No prompt-engineering syntax required."
+                  />
+                  <TrustPoint
+                    icon="sparkles"
+                    title="Live compatibility"
+                    body="Only an enabled compatible model is selected."
+                  />
+                  <TrustPoint
+                    icon="credits"
+                    title="No instant charge"
+                    body="Review everything in Studio before generation."
+                  />
                 </div>
               </div>
             </div>
@@ -156,9 +174,21 @@ export default async function TemplateDetailPage({
                 How this template works
               </p>
               <ol className="mt-4 grid gap-3 sm:grid-cols-3">
-                <Step number="01" title="Answer the brief" body="Provide only the creative context this recipe needs." />
-                <Step number="02" title="Open Studio" body="Creator resolves the prompt and compatible model settings." />
-                <Step number="03" title="Review & generate" body="Adjust anything you want, then confirm the paid generation." />
+                <Step
+                  number="01"
+                  title="Answer the brief"
+                  body="Provide only the creative context this recipe needs."
+                />
+                <Step
+                  number="02"
+                  title="Open Studio"
+                  body="Creator resolves the prompt and compatible model settings."
+                />
+                <Step
+                  number="03"
+                  title="Review & generate"
+                  body="Adjust anything you want, then confirm the paid generation."
+                />
               </ol>
             </section>
           </div>

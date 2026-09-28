@@ -11,7 +11,12 @@ import { requirePlatformPermission } from "@/lib/request-auth";
 export default async function AdminTemplatesPage() {
   const session = await requirePlatformPermission("templates:read");
   const templates = await db.generationTemplate.findMany({
-    orderBy: [{ status: "asc" }, { featured: "desc" }, { sortOrder: "asc" }, { name: "asc" }],
+    orderBy: [
+      { status: "asc" },
+      { featured: "desc" },
+      { sortOrder: "asc" },
+      { name: "asc" },
+    ],
     select: {
       id: true,
       slug: true,
@@ -31,12 +36,14 @@ export default async function AdminTemplatesPage() {
     },
   });
 
-  const rows: AdminTemplateRow[] = templates.map(({ _count, updatedAt, ...template }) => ({
-    ...template,
-    mediaKind: template.mediaKind as "IMAGE" | "VIDEO" | "VOICE",
-    usageCount: _count.generationJobs,
-    updatedAt: updatedAt.toISOString(),
-  }));
+  const rows: AdminTemplateRow[] = templates.map(
+    ({ _count, updatedAt, ...template }) => ({
+      ...template,
+      mediaKind: template.mediaKind as "IMAGE" | "VIDEO" | "VOICE",
+      usageCount: _count.generationJobs,
+      updatedAt: updatedAt.toISOString(),
+    }),
+  );
 
   return (
     <div className="px-4 py-7 sm:px-7 lg:px-9 lg:py-9">

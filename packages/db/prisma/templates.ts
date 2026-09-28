@@ -12,40 +12,552 @@ export type SeedGenerationTemplate = {
   sortOrder: number;
 };
 
-const text = (key: string, label: string, placeholder: string, required = true) => ({
-  key, label, type: "text", placeholder, required,
+const text = (
+  key: string,
+  label: string,
+  placeholder: string,
+  required = true,
+) => ({
+  key,
+  label,
+  type: "text",
+  placeholder,
+  required,
 });
-const area = (key: string, label: string, placeholder: string, required = true) => ({
-  key, label, type: "textarea", placeholder, required,
+const area = (
+  key: string,
+  label: string,
+  placeholder: string,
+  required = true,
+) => ({
+  key,
+  label,
+  type: "textarea",
+  placeholder,
+  required,
 });
-const select = (key: string, label: string, options: string[], defaultValue = options[0]) => ({
-  key, label, type: "select", options, defaultValue, required: true,
+const select = (
+  key: string,
+  label: string,
+  options: string[],
+  defaultValue = options[0],
+) => ({
+  key,
+  label,
+  type: "select",
+  options,
+  defaultValue,
+  required: true,
 });
 
 export const curatedGenerationTemplates: SeedGenerationTemplate[] = [
-  { slug:"youtube-thumbnail", name:"YouTube Thumbnail", description:"High-contrast, instantly readable thumbnail composition with a single decisive visual idea.", category:"Social", mediaKind:"IMAGE", promptTemplate:"Create a high-impact YouTube thumbnail about {{topic}}. Main subject: {{subject}}. Mood: {{mood}}. Use dramatic lighting, strong subject separation, clean negative space for optional title text, and a clear focal hierarchy. Avoid clutter and tiny details.", variables:[text("topic","Video topic","e.g. I built an AI studio in 30 days"),text("subject","Main subject","e.g. futuristic creator desk"),select("mood","Mood",["Energetic","Dramatic","Curious","Premium"])], defaultInput:{aspectRatio:"16:9",resolution:"2K",outputCount:2}, preferredModelId:"seedream-5-0-260128", featured:true, sortOrder:10 },
-  { slug:"instagram-post", name:"Instagram Post", description:"Polished square social visual designed for a clean feed and strong mobile readability.", category:"Social", mediaKind:"IMAGE", promptTemplate:"Create a polished Instagram post for {{brand}} about {{message}}. Visual direction: {{style}}. Keep the composition editorial, mobile-first, balanced, and brand-ready with one clear focal point.", variables:[text("brand","Brand","Brand or creator name"),area("message","Message","What should the post communicate?"),select("style","Style",["Editorial","Minimal","Bold","Playful"])], defaultInput:{aspectRatio:"1:1",resolution:"2K"}, featured:true, sortOrder:20 },
-  { slug:"instagram-story", name:"Instagram Story", description:"Vertical story artwork with strong upper/lower safe zones and a mobile-first focal composition.", category:"Social", mediaKind:"IMAGE", promptTemplate:"Design a vertical Instagram Story for {{brand}} promoting {{offer}}. Style: {{style}}. Preserve clean safe space near the top and bottom for UI overlays, use strong visual hierarchy and premium mobile composition.", variables:[text("brand","Brand","Brand name"),area("offer","Offer / message","Launch, event or message"),select("style","Style",["Premium","Vibrant","Minimal","Lifestyle"])], defaultInput:{aspectRatio:"9:16",resolution:"2K"}, featured:true, sortOrder:30 },
-  { slug:"facebook-ad", name:"Facebook Ad", description:"Campaign-ready ad creative built around one product benefit and a clear visual focal point.", category:"Marketing", mediaKind:"IMAGE", promptTemplate:"Create a conversion-focused Facebook advertisement for {{product}}. Primary benefit: {{benefit}}. Audience: {{audience}}. Art direction: {{style}}. Use clear hierarchy, product prominence and generous negative space for campaign copy.", variables:[text("product","Product / service","What are you advertising?"),text("benefit","Primary benefit","Main reason to care"),text("audience","Audience","Who is this for?"),select("style","Style",["Commercial","Luxury","Friendly","Modern"])], defaultInput:{aspectRatio:"4:3",resolution:"2K"}, sortOrder:40 },
-  { slug:"linkedin-post", name:"LinkedIn Post", description:"Professional editorial visual for announcements, thought leadership and business updates.", category:"Business", mediaKind:"IMAGE", promptTemplate:"Create a refined LinkedIn editorial visual about {{topic}} for {{company}}. Tone: {{tone}}. Use sophisticated business art direction, restrained detail, modern composition and clear hierarchy without looking like generic stock art.", variables:[text("company","Company","Company or personal brand"),area("topic","Topic","What is the post about?"),select("tone","Tone",["Authoritative","Optimistic","Innovative","Human"])], defaultInput:{aspectRatio:"1:1",resolution:"2K"}, sortOrder:50 },
-  { slug:"product-photography", name:"Product Photography", description:"Studio-grade commercial product shot with controlled lighting and premium material rendering.", category:"Product", mediaKind:"IMAGE", promptTemplate:"Create premium commercial product photography of {{product}}. Surface/material cues: {{material}}. Background: {{background}}. Lighting: {{lighting}}. Photorealistic, precise reflections, clean edges, realistic shadows, advertising-grade finish.", variables:[text("product","Product","Describe the product"),text("material","Material","e.g. matte black aluminum"),text("background","Background","e.g. warm stone pedestal"),select("lighting","Lighting",["Soft studio","Dramatic rim","Daylight","Luxury spotlight"])], defaultInput:{aspectRatio:"1:1",resolution:"4K"}, preferredModelId:"seedream-4-5-251128", featured:true, sortOrder:60 },
-  { slug:"product-white-background", name:"Product on White", description:"Clean e-commerce packshot with realistic contact shadow and distraction-free white background.", category:"Product", mediaKind:"IMAGE", promptTemplate:"Create a clean e-commerce packshot of {{product}} on a seamless pure white background. Preserve realistic proportions and material detail, soft contact shadow, centered framing, neutral color rendering, no props, no text.", variables:[text("product","Product","Describe the product precisely")], defaultInput:{aspectRatio:"1:1",resolution:"4K"}, sortOrder:70 },
-  { slug:"luxury-product-ad", name:"Luxury Product Ad", description:"High-end campaign key visual for fragrance, jewellery, fashion or premium consumer products.", category:"Marketing", mediaKind:"IMAGE", promptTemplate:"Create a luxury campaign key visual for {{product}}. Brand mood: {{mood}}. Setting: {{setting}}. Premium art direction, cinematic controlled lighting, sophisticated materials, restrained composition and high-end advertising finish.", variables:[text("product","Product","e.g. black glass perfume bottle"),select("mood","Brand mood",["Opulent","Quiet luxury","Dark cinematic","Modern minimal"]),text("setting","Setting","e.g. polished obsidian with mist")], defaultInput:{aspectRatio:"4:3",resolution:"4K"}, featured:true, sortOrder:80 },
-  { slug:"food-photography", name:"Food Photography", description:"Appetising editorial food photography with realistic texture, plating and natural detail.", category:"Photography", mediaKind:"IMAGE", promptTemplate:"Create appetising editorial food photography of {{dish}}. Setting: {{setting}}. Lighting: {{lighting}}. Realistic food texture, natural imperfections, authentic plating, subtle depth of field and premium restaurant photography.", variables:[text("dish","Dish","Describe the dish"),text("setting","Setting","e.g. rustic dark table"),select("lighting","Lighting",["Window light","Warm restaurant","Moody side light","Bright editorial"])], defaultInput:{aspectRatio:"4:3",resolution:"4K"}, sortOrder:90 },
-  { slug:"realistic-portrait", name:"Realistic Portrait", description:"Natural, characterful portrait with realistic skin, lens behaviour and controlled lighting.", category:"Photography", mediaKind:"IMAGE", promptTemplate:"Create a photorealistic portrait of {{subject}}. Expression: {{expression}}. Environment: {{environment}}. Natural skin texture, realistic hair detail, flattering lens perspective, believable light falloff and subtle depth of field.", variables:[text("subject","Subject","Describe the person"),text("expression","Expression","e.g. thoughtful confidence"),text("environment","Environment","e.g. modern studio")], defaultInput:{aspectRatio:"3:4",resolution:"4K"}, sortOrder:100 },
-  { slug:"cinematic-portrait", name:"Cinematic Portrait", description:"Film-inspired portrait with expressive lighting, atmosphere and deliberate colour separation.", category:"Photography", mediaKind:"IMAGE", promptTemplate:"Create a cinematic portrait of {{subject}} in {{scene}}. Mood: {{mood}}. Filmic lighting, atmospheric depth, realistic texture, purposeful colour contrast, subtle grain and a strong narrative frame.", variables:[text("subject","Subject","Describe the subject"),text("scene","Scene","Where are they?"),select("mood","Mood",["Noir","Hopeful","Epic","Intimate"])], defaultInput:{aspectRatio:"2:3",resolution:"4K"}, sortOrder:110 },
-  { slug:"logo-concept", name:"Logo Concept", description:"Focused identity exploration for a brand mark before vector refinement.", category:"Design", mediaKind:"IMAGE", promptTemplate:"Explore a distinctive logo concept for {{brand}}, a {{industry}} brand. Personality: {{personality}}. Create a simple memorable symbol with strong silhouette, balanced geometry and minimal visual language. Present on a neutral background without mockup clutter.", variables:[text("brand","Brand","Brand name"),text("industry","Industry","What does the brand do?"),select("personality","Personality",["Premium","Friendly","Technical","Bold"])], defaultInput:{aspectRatio:"1:1",resolution:"2K"}, sortOrder:120 },
-  { slug:"event-poster", name:"Event Poster", description:"Expressive poster artwork with intentional hierarchy and room for final typography.", category:"Design", mediaKind:"IMAGE", promptTemplate:"Create expressive poster artwork for {{event}}. Theme: {{theme}}. Visual style: {{style}}. Strong central composition, striking contrast and intentional empty zones for final typography. Do not render small illegible text.", variables:[text("event","Event","Event or campaign name"),text("theme","Theme","Core idea"),select("style","Style",["Contemporary","Editorial","Experimental","Elegant"])], defaultInput:{aspectRatio:"2:3",resolution:"4K"}, sortOrder:130 },
-  { slug:"character-concept", name:"Character Concept", description:"Distinctive character exploration with readable silhouette, materials and personality.", category:"Design", mediaKind:"IMAGE", promptTemplate:"Design a character concept for {{character}}. Role: {{role}}. Personality: {{personality}}. Style: {{style}}. Clear silhouette, coherent costume/material language, expressive posture and production-ready visual detail.", variables:[text("character","Character","Who or what is the character?"),text("role","Role","Their role in the story"),text("personality","Personality","Key personality traits"),select("style","Style",["Cinematic realism","Stylized 3D","Graphic illustration","Anime-inspired"])], defaultInput:{aspectRatio:"3:4",resolution:"4K"}, sortOrder:140 },
-  { slug:"cinematic-landscape", name:"Cinematic Landscape", description:"Wide establishing image with depth, atmosphere and a film-ready sense of place.", category:"Photography", mediaKind:"IMAGE", promptTemplate:"Create a cinematic landscape of {{location}} during {{time}}. Atmosphere: {{atmosphere}}. Expansive composition, layered depth, realistic environmental detail, dramatic but believable light and filmic colour.", variables:[text("location","Location","Describe the environment"),select("time","Time of day",["Golden hour","Blue hour","Night","Overcast day"]),text("atmosphere","Atmosphere","e.g. light desert haze")], defaultInput:{aspectRatio:"21:9",resolution:"4K"}, sortOrder:150 },
-  { slug:"product-promo-video", name:"Product Promo Video", description:"Short commercial product sequence built for social campaigns and landing pages.", category:"Video", mediaKind:"VIDEO", promptTemplate:"Create a polished product promo video for {{product}}. Opening shot: {{opening}}. Motion direction: {{motion}}. Mood: {{mood}}. Premium commercial lighting, clear product continuity, deliberate camera movement and a confident final hero frame.", variables:[text("product","Product","Describe the product"),text("opening","Opening shot","How should it begin?"),text("motion","Motion","Camera/product movement"),select("mood","Mood",["Premium","Energetic","Minimal","Cinematic"])], defaultInput:{aspectRatio:"16:9",resolution:"1080p",durationSeconds:10,generateAudio:true}, featured:true, sortOrder:160 },
-  { slug:"instagram-reel", name:"Instagram Reel", description:"Vertical social video concept with immediate visual hook and mobile-first pacing.", category:"Video", mediaKind:"VIDEO", promptTemplate:"Create a vertical Instagram Reel about {{topic}}. Hook: {{hook}}. Visual style: {{style}}. Start with immediate motion, maintain a clear subject, social-first pacing, visually satisfying transitions and a strong closing frame.", variables:[text("topic","Topic","What is the Reel about?"),text("hook","Opening hook","First visual idea"),select("style","Style",["Lifestyle","Bold commercial","Cinematic","Playful"])], defaultInput:{aspectRatio:"9:16",resolution:"1080p",durationSeconds:10,generateAudio:true}, featured:true, sortOrder:170 },
-  { slug:"youtube-short", name:"YouTube Short", description:"Vertical short-form sequence with fast comprehension and strong opening movement.", category:"Video", mediaKind:"VIDEO", promptTemplate:"Create a vertical YouTube Short about {{topic}}. Main action: {{action}}. Tone: {{tone}}. Deliver a clear visual hook in the first moment, readable action, smooth continuity and a memorable final beat.", variables:[text("topic","Topic","What is the Short about?"),text("action","Main action","What happens?"),select("tone","Tone",["Funny","Dramatic","Informative","Heartwarming"])], defaultInput:{aspectRatio:"9:16",resolution:"1080p",durationSeconds:10,generateAudio:true}, sortOrder:180 },
-  { slug:"cinematic-product-reveal", name:"Cinematic Product Reveal", description:"Slow, controlled hero reveal with dramatic materials, light and camera motion.", category:"Video", mediaKind:"VIDEO", promptTemplate:"Create a cinematic reveal of {{product}} emerging from {{environment}}. Camera move: {{camera}}. Lighting: {{lighting}}. Controlled pacing, realistic materials, elegant motion, premium reflections and a final hero composition.", variables:[text("product","Product","Describe the product"),text("environment","Environment","e.g. dark misty studio"),select("camera","Camera move",["Slow push-in","Orbit","Macro pull-back","Low-angle rise"]),select("lighting","Lighting",["Rim light","Soft luxury","Neon contrast","Warm spotlight"])], defaultInput:{aspectRatio:"16:9",resolution:"1080p",durationSeconds:10,generateAudio:true}, sortOrder:190 },
-  { slug:"social-video-ad", name:"Social Video Ad", description:"Compact product/service advertisement designed to communicate one benefit quickly.", category:"Marketing", mediaKind:"VIDEO", promptTemplate:"Create a concise social video advertisement for {{offer}} aimed at {{audience}}. Core benefit: {{benefit}}. Style: {{style}}. Open with a visual hook, demonstrate the benefit clearly and finish with a clean campaign-ready hero frame.", variables:[text("offer","Offer","Product, service or campaign"),text("audience","Audience","Who is this for?"),text("benefit","Core benefit","One main advantage"),select("style","Style",["Commercial","Lifestyle","Luxury","Tech"])], defaultInput:{aspectRatio:"9:16",resolution:"1080p",durationSeconds:10,generateAudio:true}, sortOrder:200 },
-  { slug:"corporate-narration", name:"Corporate Narration", description:"Clear, confident spoken narration for company films, presentations and explainers.", category:"Voice", mediaKind:"VOICE", promptTemplate:"{{script}}", variables:[area("script","Narration script","Paste the final narration copy")], defaultInput:{voiceKey:"jasper",speechRate:1}, featured:true, sortOrder:210 },
-  { slug:"social-voiceover", name:"Social Voice-over", description:"Natural, energetic delivery for Reels, Shorts and fast social content.", category:"Voice", mediaKind:"VOICE", promptTemplate:"{{script}}", variables:[area("script","Voice-over script","Write the social voice-over")], defaultInput:{voiceKey:"jasper",speechRate:1.1}, sortOrder:220 },
-  { slug:"product-ad-voice", name:"Product Ad Voice", description:"Confident commercial read for product launches and short campaign spots.", category:"Marketing", mediaKind:"VOICE", promptTemplate:"{{script}}", variables:[area("script","Ad script","Paste the final advertisement copy")], defaultInput:{voiceKey:"jasper",speechRate:1}, sortOrder:230 },
-  { slug:"podcast-intro", name:"Podcast Intro", description:"Warm, concise opening voice for podcasts, series and recurring shows.", category:"Voice", mediaKind:"VOICE", promptTemplate:"Welcome to {{show}}, {{tagline}}. {{intro}}", variables:[text("show","Show name","Podcast name"),text("tagline","Tagline","Short positioning line"),area("intro","Intro copy","Opening message")], defaultInput:{voiceKey:"jasper",speechRate:1}, sortOrder:240 },
-  { slug:"documentary-narration", name:"Documentary Narration", description:"Measured narration setup for documentary, heritage and long-form storytelling.", category:"Voice", mediaKind:"VOICE", promptTemplate:"{{script}}", variables:[area("script","Narration script","Paste documentary narration")], defaultInput:{voiceKey:"jasper",speechRate:0.9}, sortOrder:250 },
+  {
+    slug: "youtube-thumbnail",
+    name: "YouTube Thumbnail",
+    description:
+      "High-contrast, instantly readable thumbnail composition with a single decisive visual idea.",
+    category: "Social",
+    mediaKind: "IMAGE",
+    promptTemplate:
+      "Create a high-impact YouTube thumbnail about {{topic}}. Main subject: {{subject}}. Mood: {{mood}}. Use dramatic lighting, strong subject separation, clean negative space for optional title text, and a clear focal hierarchy. Avoid clutter and tiny details.",
+    variables: [
+      text("topic", "Video topic", "e.g. I built an AI studio in 30 days"),
+      text("subject", "Main subject", "e.g. futuristic creator desk"),
+      select("mood", "Mood", ["Energetic", "Dramatic", "Curious", "Premium"]),
+    ],
+    defaultInput: { aspectRatio: "16:9", resolution: "2K", outputCount: 2 },
+    preferredModelId: "seedream-5-0-260128",
+    featured: true,
+    sortOrder: 10,
+  },
+  {
+    slug: "instagram-post",
+    name: "Instagram Post",
+    description:
+      "Polished square social visual designed for a clean feed and strong mobile readability.",
+    category: "Social",
+    mediaKind: "IMAGE",
+    promptTemplate:
+      "Create a polished Instagram post for {{brand}} about {{message}}. Visual direction: {{style}}. Keep the composition editorial, mobile-first, balanced, and brand-ready with one clear focal point.",
+    variables: [
+      text("brand", "Brand", "Brand or creator name"),
+      area("message", "Message", "What should the post communicate?"),
+      select("style", "Style", ["Editorial", "Minimal", "Bold", "Playful"]),
+    ],
+    defaultInput: { aspectRatio: "1:1", resolution: "2K" },
+    featured: true,
+    sortOrder: 20,
+  },
+  {
+    slug: "instagram-story",
+    name: "Instagram Story",
+    description:
+      "Vertical story artwork with strong upper/lower safe zones and a mobile-first focal composition.",
+    category: "Social",
+    mediaKind: "IMAGE",
+    promptTemplate:
+      "Design a vertical Instagram Story for {{brand}} promoting {{offer}}. Style: {{style}}. Preserve clean safe space near the top and bottom for UI overlays, use strong visual hierarchy and premium mobile composition.",
+    variables: [
+      text("brand", "Brand", "Brand name"),
+      area("offer", "Offer / message", "Launch, event or message"),
+      select("style", "Style", ["Premium", "Vibrant", "Minimal", "Lifestyle"]),
+    ],
+    defaultInput: { aspectRatio: "9:16", resolution: "2K" },
+    featured: true,
+    sortOrder: 30,
+  },
+  {
+    slug: "facebook-ad",
+    name: "Facebook Ad",
+    description:
+      "Campaign-ready ad creative built around one product benefit and a clear visual focal point.",
+    category: "Marketing",
+    mediaKind: "IMAGE",
+    promptTemplate:
+      "Create a conversion-focused Facebook advertisement for {{product}}. Primary benefit: {{benefit}}. Audience: {{audience}}. Art direction: {{style}}. Use clear hierarchy, product prominence and generous negative space for campaign copy.",
+    variables: [
+      text("product", "Product / service", "What are you advertising?"),
+      text("benefit", "Primary benefit", "Main reason to care"),
+      text("audience", "Audience", "Who is this for?"),
+      select("style", "Style", ["Commercial", "Luxury", "Friendly", "Modern"]),
+    ],
+    defaultInput: { aspectRatio: "4:3", resolution: "2K" },
+    sortOrder: 40,
+  },
+  {
+    slug: "linkedin-post",
+    name: "LinkedIn Post",
+    description:
+      "Professional editorial visual for announcements, thought leadership and business updates.",
+    category: "Business",
+    mediaKind: "IMAGE",
+    promptTemplate:
+      "Create a refined LinkedIn editorial visual about {{topic}} for {{company}}. Tone: {{tone}}. Use sophisticated business art direction, restrained detail, modern composition and clear hierarchy without looking like generic stock art.",
+    variables: [
+      text("company", "Company", "Company or personal brand"),
+      area("topic", "Topic", "What is the post about?"),
+      select("tone", "Tone", [
+        "Authoritative",
+        "Optimistic",
+        "Innovative",
+        "Human",
+      ]),
+    ],
+    defaultInput: { aspectRatio: "1:1", resolution: "2K" },
+    sortOrder: 50,
+  },
+  {
+    slug: "product-photography",
+    name: "Product Photography",
+    description:
+      "Studio-grade commercial product shot with controlled lighting and premium material rendering.",
+    category: "Product",
+    mediaKind: "IMAGE",
+    promptTemplate:
+      "Create premium commercial product photography of {{product}}. Surface/material cues: {{material}}. Background: {{background}}. Lighting: {{lighting}}. Photorealistic, precise reflections, clean edges, realistic shadows, advertising-grade finish.",
+    variables: [
+      text("product", "Product", "Describe the product"),
+      text("material", "Material", "e.g. matte black aluminum"),
+      text("background", "Background", "e.g. warm stone pedestal"),
+      select("lighting", "Lighting", [
+        "Soft studio",
+        "Dramatic rim",
+        "Daylight",
+        "Luxury spotlight",
+      ]),
+    ],
+    defaultInput: { aspectRatio: "1:1", resolution: "4K" },
+    preferredModelId: "seedream-4-5-251128",
+    featured: true,
+    sortOrder: 60,
+  },
+  {
+    slug: "product-white-background",
+    name: "Product on White",
+    description:
+      "Clean e-commerce packshot with realistic contact shadow and distraction-free white background.",
+    category: "Product",
+    mediaKind: "IMAGE",
+    promptTemplate:
+      "Create a clean e-commerce packshot of {{product}} on a seamless pure white background. Preserve realistic proportions and material detail, soft contact shadow, centered framing, neutral color rendering, no props, no text.",
+    variables: [text("product", "Product", "Describe the product precisely")],
+    defaultInput: { aspectRatio: "1:1", resolution: "4K" },
+    sortOrder: 70,
+  },
+  {
+    slug: "luxury-product-ad",
+    name: "Luxury Product Ad",
+    description:
+      "High-end campaign key visual for fragrance, jewellery, fashion or premium consumer products.",
+    category: "Marketing",
+    mediaKind: "IMAGE",
+    promptTemplate:
+      "Create a luxury campaign key visual for {{product}}. Brand mood: {{mood}}. Setting: {{setting}}. Premium art direction, cinematic controlled lighting, sophisticated materials, restrained composition and high-end advertising finish.",
+    variables: [
+      text("product", "Product", "e.g. black glass perfume bottle"),
+      select("mood", "Brand mood", [
+        "Opulent",
+        "Quiet luxury",
+        "Dark cinematic",
+        "Modern minimal",
+      ]),
+      text("setting", "Setting", "e.g. polished obsidian with mist"),
+    ],
+    defaultInput: { aspectRatio: "4:3", resolution: "4K" },
+    featured: true,
+    sortOrder: 80,
+  },
+  {
+    slug: "food-photography",
+    name: "Food Photography",
+    description:
+      "Appetising editorial food photography with realistic texture, plating and natural detail.",
+    category: "Photography",
+    mediaKind: "IMAGE",
+    promptTemplate:
+      "Create appetising editorial food photography of {{dish}}. Setting: {{setting}}. Lighting: {{lighting}}. Realistic food texture, natural imperfections, authentic plating, subtle depth of field and premium restaurant photography.",
+    variables: [
+      text("dish", "Dish", "Describe the dish"),
+      text("setting", "Setting", "e.g. rustic dark table"),
+      select("lighting", "Lighting", [
+        "Window light",
+        "Warm restaurant",
+        "Moody side light",
+        "Bright editorial",
+      ]),
+    ],
+    defaultInput: { aspectRatio: "4:3", resolution: "4K" },
+    sortOrder: 90,
+  },
+  {
+    slug: "realistic-portrait",
+    name: "Realistic Portrait",
+    description:
+      "Natural, characterful portrait with realistic skin, lens behaviour and controlled lighting.",
+    category: "Photography",
+    mediaKind: "IMAGE",
+    promptTemplate:
+      "Create a photorealistic portrait of {{subject}}. Expression: {{expression}}. Environment: {{environment}}. Natural skin texture, realistic hair detail, flattering lens perspective, believable light falloff and subtle depth of field.",
+    variables: [
+      text("subject", "Subject", "Describe the person"),
+      text("expression", "Expression", "e.g. thoughtful confidence"),
+      text("environment", "Environment", "e.g. modern studio"),
+    ],
+    defaultInput: { aspectRatio: "3:4", resolution: "4K" },
+    sortOrder: 100,
+  },
+  {
+    slug: "cinematic-portrait",
+    name: "Cinematic Portrait",
+    description:
+      "Film-inspired portrait with expressive lighting, atmosphere and deliberate colour separation.",
+    category: "Photography",
+    mediaKind: "IMAGE",
+    promptTemplate:
+      "Create a cinematic portrait of {{subject}} in {{scene}}. Mood: {{mood}}. Filmic lighting, atmospheric depth, realistic texture, purposeful colour contrast, subtle grain and a strong narrative frame.",
+    variables: [
+      text("subject", "Subject", "Describe the subject"),
+      text("scene", "Scene", "Where are they?"),
+      select("mood", "Mood", ["Noir", "Hopeful", "Epic", "Intimate"]),
+    ],
+    defaultInput: { aspectRatio: "2:3", resolution: "4K" },
+    sortOrder: 110,
+  },
+  {
+    slug: "logo-concept",
+    name: "Logo Concept",
+    description:
+      "Focused identity exploration for a brand mark before vector refinement.",
+    category: "Design",
+    mediaKind: "IMAGE",
+    promptTemplate:
+      "Explore a distinctive logo concept for {{brand}}, a {{industry}} brand. Personality: {{personality}}. Create a simple memorable symbol with strong silhouette, balanced geometry and minimal visual language. Present on a neutral background without mockup clutter.",
+    variables: [
+      text("brand", "Brand", "Brand name"),
+      text("industry", "Industry", "What does the brand do?"),
+      select("personality", "Personality", [
+        "Premium",
+        "Friendly",
+        "Technical",
+        "Bold",
+      ]),
+    ],
+    defaultInput: { aspectRatio: "1:1", resolution: "2K" },
+    sortOrder: 120,
+  },
+  {
+    slug: "event-poster",
+    name: "Event Poster",
+    description:
+      "Expressive poster artwork with intentional hierarchy and room for final typography.",
+    category: "Design",
+    mediaKind: "IMAGE",
+    promptTemplate:
+      "Create expressive poster artwork for {{event}}. Theme: {{theme}}. Visual style: {{style}}. Strong central composition, striking contrast and intentional empty zones for final typography. Do not render small illegible text.",
+    variables: [
+      text("event", "Event", "Event or campaign name"),
+      text("theme", "Theme", "Core idea"),
+      select("style", "Style", [
+        "Contemporary",
+        "Editorial",
+        "Experimental",
+        "Elegant",
+      ]),
+    ],
+    defaultInput: { aspectRatio: "2:3", resolution: "4K" },
+    sortOrder: 130,
+  },
+  {
+    slug: "character-concept",
+    name: "Character Concept",
+    description:
+      "Distinctive character exploration with readable silhouette, materials and personality.",
+    category: "Design",
+    mediaKind: "IMAGE",
+    promptTemplate:
+      "Design a character concept for {{character}}. Role: {{role}}. Personality: {{personality}}. Style: {{style}}. Clear silhouette, coherent costume/material language, expressive posture and production-ready visual detail.",
+    variables: [
+      text("character", "Character", "Who or what is the character?"),
+      text("role", "Role", "Their role in the story"),
+      text("personality", "Personality", "Key personality traits"),
+      select("style", "Style", [
+        "Cinematic realism",
+        "Stylized 3D",
+        "Graphic illustration",
+        "Anime-inspired",
+      ]),
+    ],
+    defaultInput: { aspectRatio: "3:4", resolution: "4K" },
+    sortOrder: 140,
+  },
+  {
+    slug: "cinematic-landscape",
+    name: "Cinematic Landscape",
+    description:
+      "Wide establishing image with depth, atmosphere and a film-ready sense of place.",
+    category: "Photography",
+    mediaKind: "IMAGE",
+    promptTemplate:
+      "Create a cinematic landscape of {{location}} during {{time}}. Atmosphere: {{atmosphere}}. Expansive composition, layered depth, realistic environmental detail, dramatic but believable light and filmic colour.",
+    variables: [
+      text("location", "Location", "Describe the environment"),
+      select("time", "Time of day", [
+        "Golden hour",
+        "Blue hour",
+        "Night",
+        "Overcast day",
+      ]),
+      text("atmosphere", "Atmosphere", "e.g. light desert haze"),
+    ],
+    defaultInput: { aspectRatio: "21:9", resolution: "4K" },
+    sortOrder: 150,
+  },
+  {
+    slug: "product-promo-video",
+    name: "Product Promo Video",
+    description:
+      "Short commercial product sequence built for social campaigns and landing pages.",
+    category: "Video",
+    mediaKind: "VIDEO",
+    promptTemplate:
+      "Create a polished product promo video for {{product}}. Opening shot: {{opening}}. Motion direction: {{motion}}. Mood: {{mood}}. Premium commercial lighting, clear product continuity, deliberate camera movement and a confident final hero frame.",
+    variables: [
+      text("product", "Product", "Describe the product"),
+      text("opening", "Opening shot", "How should it begin?"),
+      text("motion", "Motion", "Camera/product movement"),
+      select("mood", "Mood", ["Premium", "Energetic", "Minimal", "Cinematic"]),
+    ],
+    defaultInput: {
+      aspectRatio: "16:9",
+      resolution: "1080p",
+      durationSeconds: 10,
+      generateAudio: true,
+    },
+    featured: true,
+    sortOrder: 160,
+  },
+  {
+    slug: "instagram-reel",
+    name: "Instagram Reel",
+    description:
+      "Vertical social video concept with immediate visual hook and mobile-first pacing.",
+    category: "Video",
+    mediaKind: "VIDEO",
+    promptTemplate:
+      "Create a vertical Instagram Reel about {{topic}}. Hook: {{hook}}. Visual style: {{style}}. Start with immediate motion, maintain a clear subject, social-first pacing, visually satisfying transitions and a strong closing frame.",
+    variables: [
+      text("topic", "Topic", "What is the Reel about?"),
+      text("hook", "Opening hook", "First visual idea"),
+      select("style", "Style", [
+        "Lifestyle",
+        "Bold commercial",
+        "Cinematic",
+        "Playful",
+      ]),
+    ],
+    defaultInput: {
+      aspectRatio: "9:16",
+      resolution: "1080p",
+      durationSeconds: 10,
+      generateAudio: true,
+    },
+    featured: true,
+    sortOrder: 170,
+  },
+  {
+    slug: "youtube-short",
+    name: "YouTube Short",
+    description:
+      "Vertical short-form sequence with fast comprehension and strong opening movement.",
+    category: "Video",
+    mediaKind: "VIDEO",
+    promptTemplate:
+      "Create a vertical YouTube Short about {{topic}}. Main action: {{action}}. Tone: {{tone}}. Deliver a clear visual hook in the first moment, readable action, smooth continuity and a memorable final beat.",
+    variables: [
+      text("topic", "Topic", "What is the Short about?"),
+      text("action", "Main action", "What happens?"),
+      select("tone", "Tone", [
+        "Funny",
+        "Dramatic",
+        "Informative",
+        "Heartwarming",
+      ]),
+    ],
+    defaultInput: {
+      aspectRatio: "9:16",
+      resolution: "1080p",
+      durationSeconds: 10,
+      generateAudio: true,
+    },
+    sortOrder: 180,
+  },
+  {
+    slug: "cinematic-product-reveal",
+    name: "Cinematic Product Reveal",
+    description:
+      "Slow, controlled hero reveal with dramatic materials, light and camera motion.",
+    category: "Video",
+    mediaKind: "VIDEO",
+    promptTemplate:
+      "Create a cinematic reveal of {{product}} emerging from {{environment}}. Camera move: {{camera}}. Lighting: {{lighting}}. Controlled pacing, realistic materials, elegant motion, premium reflections and a final hero composition.",
+    variables: [
+      text("product", "Product", "Describe the product"),
+      text("environment", "Environment", "e.g. dark misty studio"),
+      select("camera", "Camera move", [
+        "Slow push-in",
+        "Orbit",
+        "Macro pull-back",
+        "Low-angle rise",
+      ]),
+      select("lighting", "Lighting", [
+        "Rim light",
+        "Soft luxury",
+        "Neon contrast",
+        "Warm spotlight",
+      ]),
+    ],
+    defaultInput: {
+      aspectRatio: "16:9",
+      resolution: "1080p",
+      durationSeconds: 10,
+      generateAudio: true,
+    },
+    sortOrder: 190,
+  },
+  {
+    slug: "social-video-ad",
+    name: "Social Video Ad",
+    description:
+      "Compact product/service advertisement designed to communicate one benefit quickly.",
+    category: "Marketing",
+    mediaKind: "VIDEO",
+    promptTemplate:
+      "Create a concise social video advertisement for {{offer}} aimed at {{audience}}. Core benefit: {{benefit}}. Style: {{style}}. Open with a visual hook, demonstrate the benefit clearly and finish with a clean campaign-ready hero frame.",
+    variables: [
+      text("offer", "Offer", "Product, service or campaign"),
+      text("audience", "Audience", "Who is this for?"),
+      text("benefit", "Core benefit", "One main advantage"),
+      select("style", "Style", ["Commercial", "Lifestyle", "Luxury", "Tech"]),
+    ],
+    defaultInput: {
+      aspectRatio: "9:16",
+      resolution: "1080p",
+      durationSeconds: 10,
+      generateAudio: true,
+    },
+    sortOrder: 200,
+  },
+  {
+    slug: "corporate-narration",
+    name: "Corporate Narration",
+    description:
+      "Clear, confident spoken narration for company films, presentations and explainers.",
+    category: "Voice",
+    mediaKind: "VOICE",
+    promptTemplate: "{{script}}",
+    variables: [
+      area("script", "Narration script", "Paste the final narration copy"),
+    ],
+    defaultInput: { voiceKey: "jasper", speechRate: 1 },
+    featured: true,
+    sortOrder: 210,
+  },
+  {
+    slug: "social-voiceover",
+    name: "Social Voice-over",
+    description:
+      "Natural, energetic delivery for Reels, Shorts and fast social content.",
+    category: "Voice",
+    mediaKind: "VOICE",
+    promptTemplate: "{{script}}",
+    variables: [
+      area("script", "Voice-over script", "Write the social voice-over"),
+    ],
+    defaultInput: { voiceKey: "jasper", speechRate: 1.1 },
+    sortOrder: 220,
+  },
+  {
+    slug: "product-ad-voice",
+    name: "Product Ad Voice",
+    description:
+      "Confident commercial read for product launches and short campaign spots.",
+    category: "Marketing",
+    mediaKind: "VOICE",
+    promptTemplate: "{{script}}",
+    variables: [
+      area("script", "Ad script", "Paste the final advertisement copy"),
+    ],
+    defaultInput: { voiceKey: "jasper", speechRate: 1 },
+    sortOrder: 230,
+  },
+  {
+    slug: "podcast-intro",
+    name: "Podcast Intro",
+    description:
+      "Warm, concise opening voice for podcasts, series and recurring shows.",
+    category: "Voice",
+    mediaKind: "VOICE",
+    promptTemplate: "Welcome to {{show}}, {{tagline}}. {{intro}}",
+    variables: [
+      text("show", "Show name", "Podcast name"),
+      text("tagline", "Tagline", "Short positioning line"),
+      area("intro", "Intro copy", "Opening message"),
+    ],
+    defaultInput: { voiceKey: "jasper", speechRate: 1 },
+    sortOrder: 240,
+  },
+  {
+    slug: "documentary-narration",
+    name: "Documentary Narration",
+    description:
+      "Measured narration setup for documentary, heritage and long-form storytelling.",
+    category: "Voice",
+    mediaKind: "VOICE",
+    promptTemplate: "{{script}}",
+    variables: [
+      area("script", "Narration script", "Paste documentary narration"),
+    ],
+    defaultInput: { voiceKey: "jasper", speechRate: 0.9 },
+    sortOrder: 250,
+  },
 ];

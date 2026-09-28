@@ -394,7 +394,6 @@ export const jobResolutionActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("refund") }).merge(refundSettledJobSchema),
 ]);
 
-
 export const templateVariableTypeSchema = z.enum([
   "text",
   "textarea",
@@ -417,7 +416,10 @@ export const templateVariableDefinitionSchema = z
   })
   .strict()
   .superRefine((value, context) => {
-    if (value.type === "select" && (!value.options || value.options.length === 0)) {
+    if (
+      value.type === "select" &&
+      (!value.options || value.options.length === 0)
+    ) {
       context.addIssue({
         code: "custom",
         path: ["options"],
@@ -440,7 +442,12 @@ export const templateDefaultInputSchema = z
 
 export const createTemplateSchema = z
   .object({
-    slug: z.string().trim().min(2).max(80).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+    slug: z
+      .string()
+      .trim()
+      .min(2)
+      .max(80)
+      .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
     name: z.string().trim().min(2).max(100),
     description: z.string().trim().min(10).max(800),
     category: z.string().trim().min(2).max(40),

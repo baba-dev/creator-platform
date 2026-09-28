@@ -38,14 +38,23 @@ export function TemplateLibrary({
   recentTemplateIds: string[];
 }) {
   const [query, setQuery] = useState("");
-  const [kind, setKind] = useState<"ALL" | TemplateCardData["mediaKind"]>("ALL");
+  const [kind, setKind] = useState<"ALL" | TemplateCardData["mediaKind"]>(
+    "ALL",
+  );
   const [category, setCategory] = useState("All");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [favoriteState, setFavoriteState] = useState<Record<string, boolean>>(
-    Object.fromEntries(templates.map((template) => [template.id, template.favorite])),
+    Object.fromEntries(
+      templates.map((template) => [template.id, template.favorite]),
+    ),
   );
   const categories = useMemo(
-    () => ["All", ...Array.from(new Set(templates.map((template) => template.category))).sort()],
+    () => [
+      "All",
+      ...Array.from(
+        new Set(templates.map((template) => template.category)),
+      ).sort(),
+    ],
     [templates],
   );
   const recent = useMemo(
@@ -62,7 +71,12 @@ export function TemplateLibrary({
       if (category !== "All" && template.category !== category) return false;
       if (favoritesOnly && !favoriteState[template.id]) return false;
       if (!q) return true;
-      return [template.name, template.description, template.category, mediaLabel(template.mediaKind)]
+      return [
+        template.name,
+        template.description,
+        template.category,
+        mediaLabel(template.mediaKind),
+      ]
         .join(" ")
         .toLowerCase()
         .includes(q);
@@ -96,7 +110,10 @@ export function TemplateLibrary({
               <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary">
                 Pick up where you left off
               </p>
-              <h2 id="recent-templates" className="font-display mt-2 text-2xl font-semibold">
+              <h2
+                id="recent-templates"
+                className="font-display mt-2 text-2xl font-semibold"
+              >
                 Recently used
               </h2>
             </div>
@@ -110,15 +127,23 @@ export function TemplateLibrary({
               >
                 <div className="flex items-center gap-3">
                   <span className="grid size-10 place-items-center rounded-xl bg-primary/10 text-primary">
-                    <Icon name={mediaIcon(template.mediaKind)} className="size-5" />
+                    <Icon
+                      name={mediaIcon(template.mediaKind)}
+                      className="size-5"
+                    />
                   </span>
                   <span className="min-w-0">
-                    <span className="block truncate text-sm font-semibold">{template.name}</span>
+                    <span className="block truncate text-sm font-semibold">
+                      {template.name}
+                    </span>
                     <span className="mt-0.5 block text-[10px] text-muted-foreground">
                       {mediaLabel(template.mediaKind)} · {template.category}
                     </span>
                   </span>
-                  <Icon name="arrow" className="ml-auto size-4 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary" />
+                  <Icon
+                    name="arrow"
+                    className="ml-auto size-4 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-primary"
+                  />
                 </div>
               </Link>
             ))}
@@ -129,7 +154,10 @@ export function TemplateLibrary({
       <section aria-labelledby="template-library">
         <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
           <div className="relative max-w-2xl">
-            <Icon name="search" className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Icon
+              name="search"
+              className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            />
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
@@ -188,7 +216,8 @@ export function TemplateLibrary({
               {visible.length.toLocaleString("en-US")} creative recipes
             </p>
             <p className="mt-1 text-[11px] text-muted-foreground">
-              Structured starting points. You stay in control of the final generation.
+              Structured starting points. You stay in control of the final
+              generation.
             </p>
           </div>
         </div>
@@ -209,7 +238,10 @@ export function TemplateLibrary({
                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,hsl(var(--primary)/.22),transparent_34%),radial-gradient(circle_at_82%_82%,hsl(var(--info)/.14),transparent_34%)]" />
                     <div className="absolute inset-0 flex items-center justify-center">
                       <span className="grid size-16 place-items-center rounded-[22px] border border-white/10 bg-background/70 text-primary shadow-sketch backdrop-blur-xl transition group-hover:rotate-2 group-hover:scale-105">
-                        <Icon name={mediaIcon(template.mediaKind)} className="size-7" />
+                        <Icon
+                          name={mediaIcon(template.mediaKind)}
+                          className="size-7"
+                        />
                       </span>
                     </div>
                     <div className="absolute left-4 top-4 flex gap-2">
@@ -235,10 +267,14 @@ export function TemplateLibrary({
                     </p>
                     <div className="mt-4 flex items-center gap-2 text-[10px] text-muted-foreground">
                       {typeof template.defaultInput.aspectRatio === "string" ? (
-                        <span className="rounded-lg bg-muted px-2 py-1">{template.defaultInput.aspectRatio}</span>
+                        <span className="rounded-lg bg-muted px-2 py-1">
+                          {template.defaultInput.aspectRatio}
+                        </span>
                       ) : null}
                       {typeof template.defaultInput.resolution === "string" ? (
-                        <span className="rounded-lg bg-muted px-2 py-1">{template.defaultInput.resolution}</span>
+                        <span className="rounded-lg bg-muted px-2 py-1">
+                          {template.defaultInput.resolution}
+                        </span>
                       ) : null}
                       <span className="ml-auto font-semibold text-primary">
                         Use template →
@@ -249,7 +285,11 @@ export function TemplateLibrary({
                 <button
                   type="button"
                   onClick={() => void toggleFavorite(template)}
-                  aria-label={favoriteState[template.id] ? "Remove from favourites" : "Add to favourites"}
+                  aria-label={
+                    favoriteState[template.id]
+                      ? "Remove from favourites"
+                      : "Add to favourites"
+                  }
                   aria-pressed={favoriteState[template.id]}
                   className={`absolute right-4 top-4 z-10 grid size-9 place-items-center rounded-full border backdrop-blur transition ${
                     favoriteState[template.id]
@@ -269,7 +309,9 @@ export function TemplateLibrary({
             <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-muted text-muted-foreground">
               <Icon name="search" className="size-5" />
             </span>
-            <h3 className="mt-4 font-display text-xl font-semibold">No matching templates</h3>
+            <h3 className="mt-4 font-display text-xl font-semibold">
+              No matching templates
+            </h3>
             <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
               Try another format, category, or a shorter search phrase.
             </p>

@@ -252,7 +252,9 @@ async function main(): Promise<void> {
     });
   }
 
-  console.info(`Seeded ${curatedGenerationTemplates.length} generation templates.`);
+  console.info(
+    `Seeded ${curatedGenerationTemplates.length} generation templates.`,
+  );
   console.info("Seeding completed successfully.");
 }
 

@@ -7,9 +7,9 @@ P0 establishes the invariants those features must use.
 ## Core invariant
 
 `Asset` is the canonical media record for generated output, user uploads,
-derived previews, future imports and externally stored media. Features must pass
-asset IDs across domain boundaries rather than raw customer-controlled file
-paths or arbitrary URLs.
+derived previews, future imports and externally stored media. Features must
+pass asset IDs across domain boundaries rather than raw customer-controlled
+file paths or arbitrary URLs.
 
 A generation job records historical provenance. Reorganizing an asset later
 must not rewrite the generation job that created it.

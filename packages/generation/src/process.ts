@@ -15,6 +15,7 @@ import {
   downloadImage,
   downloadVideo,
   ImageStorageError,
+  referenceImageDataUrl,
   storeAudio,
   storeImage,
   storeVideo,
@@ -357,7 +358,22 @@ export async function processImageJob(
 ) {
   let job = await db.generationJob.findUniqueOrThrow({
     where: { id },
-    include: { providerModel: true },
+    include: {
+      providerModel: true,
+      inputAssets: {
+        orderBy: { position: "asc" },
+        include: {
+          asset: {
+            select: {
+              organizationId: true,
+              objectKey: true,
+              mimeType: true,
+              status: true,
+            },
+          },
+        },
+      },
+    },
   });
   if (job.status === "QUEUED") {
     if (job.providerModel.enabled === false) return;
@@ -391,11 +407,32 @@ export async function processImageJob(
       return;
     }
     try {
+      const referenceImages = await Promise.all(
+        job.inputAssets.map(async ({ asset }) => {
+          if (
+            asset.organizationId !== job.organizationId ||
+            asset.status !== "READY" ||
+            !["image/jpeg", "image/png", "image/webp"].includes(asset.mimeType)
+          ) {
+            throw new ImageStorageError(
+              "IMAGE_OUTPUT_URL_INVALID",
+              "Reference image is no longer available.",
+            );
+          }
+          return referenceImageDataUrl(
+            asset.objectKey,
+            asset.mimeType as "image/jpeg" | "image/png" | "image/webp",
+          );
+        }),
+      );
       const result = await provider.submit({
         idempotencyKey: job.idempotencyKey,
         modelId: job.providerModel.providerModelId,
         mediaKind: "image",
-        input: job.requestPayload as Record<string, unknown>,
+        input: {
+          ...(job.requestPayload as Record<string, unknown>),
+          referenceImages,
+        },
       });
       if (result.status !== "succeeded" || result.outputUrls?.length !== 1)
         throw new Error("Unexpected provider result");
@@ -412,13 +449,16 @@ export async function processImageJob(
     } catch (error) {
       if (
         error instanceof ProviderConfigurationError ||
+        error instanceof ImageStorageError ||
         (error instanceof ProviderRequestError && !error.retryable)
       ) {
         await failJob(
           id,
           error instanceof ProviderConfigurationError
             ? "Generation provider is unavailable. Credits released."
-            : "Provider rejected the image request. Credits released.",
+            : error instanceof ImageStorageError
+              ? "Reference image is unavailable. Credits released."
+              : "Provider rejected the image request. Credits released.",
           "SUBMITTED",
         );
         return;

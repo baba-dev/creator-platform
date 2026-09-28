@@ -33,6 +33,7 @@ export const imageRequestSchema = z
     modelId: z.string().min(1).max(100),
     priceVersionId: z.string().min(1).max(100),
     idempotencyKey: z.uuid(),
+    templateId: z.string().min(1).max(100).optional(),
     prompt: z.string().trim().min(1).max(2000),
     aspectRatio: z.enum([
       "1:1",
@@ -63,6 +64,7 @@ export const videoRequestSchema = z
     modelId: z.string().min(1).max(100),
     priceVersionId: z.string().min(1).max(100),
     idempotencyKey: z.uuid(),
+    templateId: z.string().min(1).max(100).optional(),
     prompt: z.string().trim().min(1).max(2000),
     aspectRatio: z.enum(["16:9", "9:16", "1:1", "4:3", "3:4"]),
     resolution: z.enum(["720p", "1080p"]).default("1080p"),
@@ -78,6 +80,7 @@ export const voiceRequestSchema = z
     modelId: z.string().min(1).max(100),
     priceVersionId: z.string().min(1).max(100),
     idempotencyKey: z.uuid(),
+    templateId: z.string().min(1).max(100).optional(),
     text: z.string().trim().min(1).max(4096),
     voiceKey: z.string().trim().min(1).max(100),
     speechRate: z.number().min(0.5).max(2.0).default(1.0),
@@ -108,6 +111,25 @@ export function hasModelCapability(
   )
     return false;
   return (capabilities as Record<string, unknown>)[capability] === true;
+}
+
+async function resolveGenerationTemplateId(
+  tx: Prisma.TransactionClient,
+  templateId: string | undefined,
+  mediaKind: "IMAGE" | "VIDEO" | "VOICE",
+): Promise<string | null> {
+  if (!templateId) return null;
+  const template = await tx.generationTemplate.findFirst({
+    where: { id: templateId, mediaKind, status: "PUBLISHED" },
+    select: { id: true },
+  });
+  if (!template) {
+    throw new GenerationError(
+      "Template is unavailable or no longer published.",
+      409,
+    );
+  }
+  return template.id;
 }
 
 export class GenerationError extends Error {
@@ -182,6 +204,11 @@ export async function createImageJob(userId: string, raw: unknown) {
         input.organizationId,
         userId,
         true,
+      );
+      const templateId = await resolveGenerationTemplateId(
+        tx,
+        input.templateId,
+        "IMAGE",
       );
       const existing = await tx.generationJob.findUnique({
         where: { idempotencyKey: key },
@@ -387,6 +414,7 @@ export async function createImageJob(userId: string, raw: unknown) {
         data: {
           organizationId: input.organizationId,
           projectId: input.projectId ?? null,
+          templateId,
           createdById: userId,
           providerModelId: model.id,
           priceVersionId: price.id,
@@ -490,6 +518,11 @@ export async function createVideoJob(userId: string, raw: unknown) {
         input.organizationId,
         userId,
         true,
+      );
+      const templateId = await resolveGenerationTemplateId(
+        tx,
+        input.templateId,
+        "VIDEO",
       );
       const existing = await tx.generationJob.findUnique({
         where: { idempotencyKey: key },
@@ -639,6 +672,7 @@ export async function createVideoJob(userId: string, raw: unknown) {
         data: {
           organizationId: input.organizationId,
           projectId: input.projectId ?? null,
+          templateId,
           createdById: userId,
           providerModelId: model.id,
           priceVersionId: price.id,
@@ -732,6 +766,11 @@ export async function createVoiceJob(userId: string, raw: unknown) {
         input.organizationId,
         userId,
         true,
+      );
+      const templateId = await resolveGenerationTemplateId(
+        tx,
+        input.templateId,
+        "VOICE",
       );
       const existing = await tx.generationJob.findUnique({
         where: { idempotencyKey: key },
@@ -838,6 +877,7 @@ export async function createVoiceJob(userId: string, raw: unknown) {
         data: {
           organizationId: input.organizationId,
           projectId: input.projectId ?? null,
+          templateId,
           createdById: userId,
           providerModelId: model.id,
           priceVersionId: price.id,

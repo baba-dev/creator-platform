@@ -7,25 +7,12 @@
  * classification and naming deterministic at every ingestion boundary.
  */
 
-export type AssetMediaKind =
-  | "IMAGE"
-  | "VIDEO"
-  | "AUDIO"
-  | "DOCUMENT"
-  | "OTHER";
+export type AssetMediaKind = "IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT" | "OTHER";
 
 export type AssetSourceType =
-  | "GENERATED"
-  | "UPLOADED"
-  | "IMPORTED"
-  | "DERIVED"
-  | "EXTERNAL";
+  "GENERATED" | "UPLOADED" | "IMPORTED" | "DERIVED" | "EXTERNAL";
 
-export type AssetStorageProvider =
-  | "LOCAL"
-  | "S3"
-  | "GOOGLE_DRIVE"
-  | "ONEDRIVE";
+export type AssetStorageProvider = "LOCAL" | "S3" | "GOOGLE_DRIVE" | "ONEDRIVE";
 
 const DOCUMENT_MIME_TYPES = new Set([
   "application/pdf",
@@ -33,6 +20,15 @@ const DOCUMENT_MIME_TYPES = new Set([
   "text/csv",
   "application/json",
 ]);
+
+function stripAsciiControlCharacters(value: string): string {
+  let output = "";
+  for (const character of value) {
+    const codePoint = character.codePointAt(0)!;
+    if (codePoint > 0x1f && codePoint !== 0x7f) output += character;
+  }
+  return output;
+}
 
 /**
  * Classify a verified MIME type into the stable asset media categories used by
@@ -56,8 +52,7 @@ export function normalizeAssetName(
   value: string | null | undefined,
   fallback = "Untitled asset",
 ): string {
-  const cleaned = (value ?? "")
-    .replace(/[\u0000-\u001f\u007f]/g, "")
+  const cleaned = stripAsciiControlCharacters(value ?? "")
     .trim()
     .replace(/\s+/g, " ");
   return (cleaned || fallback).slice(0, 191);
@@ -72,8 +67,7 @@ export function normalizeOriginalFilename(
 ): string | null {
   if (!value) return null;
   const basename = value.replace(/\\/g, "/").split("/").at(-1) ?? "";
-  const cleaned = basename
-    .replace(/[\u0000-\u001f\u007f]/g, "")
+  const cleaned = stripAsciiControlCharacters(basename)
     .trim()
     .replace(/\s+/g, " ");
   return cleaned ? cleaned.slice(0, 191) : null;

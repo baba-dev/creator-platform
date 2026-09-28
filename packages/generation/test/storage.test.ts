@@ -1,3 +1,4 @@
+import { createAssetObjectKey, LocalAssetStorage } from "@aiwa/assets/storage";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -18,7 +19,7 @@ import {
   storeVideo,
   storedAssetSize,
   validateMp3Bytes,
-  validateAndStoreReferenceImage,
+  validateReferenceImage,
   validateJpegImage,
 } from "../src/storage";
 
@@ -108,16 +109,21 @@ describe("private image storage", () => {
         .withMetadata({ orientation: 6 })
         .toBuffer();
 
-      const stored = await validateAndStoreReferenceImage(original);
-      expect(stored.mimeType).toBe("image/jpeg");
+      const validated = await validateReferenceImage(original);
+      expect(validated.mimeType).toBe("image/jpeg");
       // EXIF orientation is applied before storage; persisted dimensions describe
       // the bytes the provider will actually receive.
-      expect(stored.width).toBe(480);
-      expect(stored.height).toBe(640);
-      expect(stored.objectKey).toMatch(/^ref-[a-f0-9-]+\.jpg$/);
-      expect(stored.sha256).toMatch(/^[a-f0-9]{64}$/);
+      expect(validated.width).toBe(480);
+      expect(validated.height).toBe(640);
+      expect(validated.sha256).toMatch(/^[a-f0-9]{64}$/);
 
-      const dataUri = await referenceImageDataUri(stored);
+      const objectKey = createAssetObjectKey("org_test", validated.extension);
+      await new LocalAssetStorage(root).put(objectKey, validated.bytes);
+      const dataUri = await referenceImageDataUri({
+        objectKey,
+        mimeType: validated.mimeType,
+        storageProvider: "LOCAL",
+      });
       expect(dataUri).toMatch(/^data:image\/jpeg;base64,/);
       const bytes = Buffer.from(dataUri.split(",", 2)[1]!, "base64");
       expect((await sharp(bytes).metadata()).format).toBe("jpeg");
@@ -128,7 +134,7 @@ describe("private image storage", () => {
 
   it("rejects unsupported or unsafe reference image payloads", async () => {
     await expect(
-      validateAndStoreReferenceImage(Buffer.from("<svg></svg>")),
+      validateReferenceImage(Buffer.from("<svg></svg>")),
     ).rejects.toMatchObject({ code: "IMAGE_OUTPUT_INVALID_PNG" });
 
     const tooWide = await sharp({
@@ -141,7 +147,7 @@ describe("private image storage", () => {
     })
       .png()
       .toBuffer();
-    await expect(validateAndStoreReferenceImage(tooWide)).rejects.toThrow(
+    await expect(validateReferenceImage(tooWide)).rejects.toThrow(
       "dimensions",
     );
   });

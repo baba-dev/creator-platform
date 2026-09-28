@@ -1,5 +1,13 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  open,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 
 export interface StoredAssetObject {
@@ -89,7 +97,11 @@ export class LocalAssetStorage implements AssetStorage {
     return readFile(this.path(objectKey));
   }
 
-  async readRange(objectKey: string, start: number, end: number): Promise<Buffer> {
+  async readRange(
+    objectKey: string,
+    start: number,
+    end: number,
+  ): Promise<Buffer> {
     if (
       !Number.isSafeInteger(start) ||
       !Number.isSafeInteger(end) ||

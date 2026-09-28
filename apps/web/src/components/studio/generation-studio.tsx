@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Eyebrow } from "@/components/ui/creative";
 import { StatusDot, Tape } from "@/components/ui/sketch";
@@ -136,7 +135,6 @@ export function GenerationStudio({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEnhancing, setIsEnhancing] = useState(false);
-  const searchParams = useSearchParams();
   const consumedTemplateHandoff = useRef<string | null>(null);
   const attempt = useRef<{ fingerprint: string; key: string } | null>(null);
   const enhancementAttempt = useRef<{
@@ -203,6 +201,11 @@ export function GenerationStudio({
 
   const handleModeChange = useCallback(
     (mode: MediaKind) => {
+      if (mode !== activeMode) {
+        setTemplateContext(null);
+        setReferenceAssetIds([]);
+        setOutputCount(1);
+      }
       setActiveMode(mode);
       setError(null);
       const nextModel = data?.models.find((m) => m.mediaKind === mode);
@@ -210,7 +213,7 @@ export function GenerationStudio({
         setModelId(nextModel.id);
       }
     },
-    [data?.models],
+    [activeMode, data?.models],
   );
 
   const billableCharacters = Array.from(voiceText.replace(/\s/gu, "")).length;
@@ -403,7 +406,9 @@ export function GenerationStudio({
   }, [refresh]);
 
   useEffect(() => {
-    const handoffId = searchParams.get("templateHandoff");
+    const handoffId = new URLSearchParams(window.location.search).get(
+      "templateHandoff",
+    );
     if (
       !handoffId ||
       !data ||
@@ -533,7 +538,7 @@ export function GenerationStudio({
           : "Template could not be opened in Studio.",
       );
     }
-  }, [data, searchParams]);
+  }, [data]);
   async function generate() {
     if (!model || busy || isEnhancing) return;
     setBusy(true);

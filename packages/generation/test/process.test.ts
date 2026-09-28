@@ -324,7 +324,7 @@ describe("image processing", () => {
     );
     expect(mocks.store).toHaveBeenCalledWith("job1.jpg", expect.any(Buffer));
     expect(tx.asset.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { objectKey: "job1.jpg" } }),
+      expect.objectContaining({ where: { id: "asset1" } }),
     );
     expect(mocks.capture).toHaveBeenCalledTimes(1);
   });

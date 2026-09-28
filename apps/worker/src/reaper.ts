@@ -1,4 +1,5 @@
 import { db } from "@aiwa/db";
+import { deleteStoredAsset } from "@aiwa/generation/storage";
 
 export async function reapExpiredRecoveryJobs(now = new Date()) {
   const recoveryCutoff24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -81,4 +82,47 @@ export async function reapExpiredRecoveryJobs(now = new Date()) {
         "Video generation exceeded the recovery window. Credits remain reserved for review.",
     },
   });
+}
+
+
+export async function reapExpiredReferenceAssets(now = new Date()) {
+  const candidates = await db.asset.findMany({
+    where: {
+      expiresAt: { lt: now },
+      generationJobId: null,
+      status: { in: ["PENDING", "READY"] },
+      generationInputs: { none: {} },
+    },
+    select: {
+      id: true,
+      organizationId: true,
+      objectKey: true,
+    },
+    take: 100,
+    orderBy: { expiresAt: "asc" },
+  });
+
+  for (const candidate of candidates) {
+    const claimed = await db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM Organization WHERE id = ${candidate.organizationId} FOR UPDATE`;
+      const result = await tx.asset.updateMany({
+        where: {
+          id: candidate.id,
+          expiresAt: { lt: now },
+          generationJobId: null,
+          status: { in: ["PENDING", "READY"] },
+          generationInputs: { none: {} },
+        },
+        data: {
+          status: "DELETED",
+          byteSize: 0n,
+        },
+      });
+      return result.count === 1;
+    });
+
+    if (claimed) {
+      await deleteStoredAsset(candidate.objectKey).catch(() => undefined);
+    }
+  }
 }

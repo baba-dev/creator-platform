@@ -1,8 +1,5 @@
 import { captureCreditsForJob, releaseOrRefundCredits } from "@aiwa/credits";
-import {
-  finalizeAssetStorage,
-  releaseAssetStorage,
-} from "@aiwa/assets";
+import { finalizeAssetStorage, releaseAssetStorage } from "@aiwa/assets";
 import { db, type Prisma } from "@aiwa/db";
 import {
   enqueueMail,

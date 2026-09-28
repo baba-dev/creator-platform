@@ -1,10 +1,6 @@
+import { LocalAssetStorage } from "@aiwa/assets/storage";
 import { db } from "@aiwa/db";
 import { requireMembership } from "@aiwa/generation";
-import {
-  readStoredAsset,
-  readStoredAssetRange,
-  storedAssetSize,
-} from "@aiwa/generation/storage";
 import { getRequestSession } from "@/lib/request-auth";
 export async function GET(
   request: Request,
@@ -29,6 +25,12 @@ export async function GET(
     return new Response(null, { status: 404 });
   }
   try {
+    if (asset.storageProvider !== "LOCAL") {
+      return new Response(null, { status: 503 });
+    }
+    const storageRoot = process.env.ASSET_STORAGE_ROOT;
+    if (!storageRoot) return new Response(null, { status: 503 });
+    const storage = new LocalAssetStorage(storageRoot);
     const isVideo = asset.mimeType.startsWith("video/");
     const isAudio = asset.mimeType.startsWith("audio/");
     const isMedia = isVideo || isAudio;
@@ -52,7 +54,7 @@ export async function GET(
 
     if (isMedia) headers.set("Accept-Ranges", "bytes");
     if (range) {
-      const byteSize = await storedAssetSize(asset.objectKey);
+      const byteSize = Number((await storage.stat(asset.objectKey)).byteSize);
       const match = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
       if (!match) {
         headers.set("Content-Range", `bytes */${byteSize}`);
@@ -78,10 +80,10 @@ export async function GET(
         headers.set("Content-Range", `bytes */${byteSize}`);
         return new Response(null, { status: 416, headers });
       }
-      body = await readStoredAssetRange(asset.objectKey, start, end);
+      body = await storage.readRange(asset.objectKey, start, end);
       status = 206;
       headers.set("Content-Range", `bytes ${start}-${end}/${byteSize}`);
-    } else body = await readStoredAsset(asset.objectKey);
+    } else body = await storage.read(asset.objectKey);
 
     headers.set("Content-Length", String(body.length));
     return new Response(new Uint8Array(body), {

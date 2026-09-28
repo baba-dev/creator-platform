@@ -17,9 +17,9 @@
   },
   "dependencies": {
     "@aiwa/observability": "workspace:*",
-    "zod": "^4.6.5"
+    "zod": "^4.1.12"
   },
   "devDependencies": {
-    "vitest": "^5.0.2"
+    "vitest": "^4.1.11"
   }
 }

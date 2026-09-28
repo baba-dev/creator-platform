@@ -685,6 +685,21 @@ export async function recoverGeneratedOutput(
   let objectKey: string;
 
   if (mediaKind === "IMAGE") {
+    const asset = job.assets.find((item) => item.status === "PENDING");
+    if (
+      !asset ||
+      !(
+        (asset.mimeType === "image/png" &&
+          asset.objectKey === `${job.id}.png`) ||
+        (asset.mimeType === "image/jpeg" && asset.objectKey === `${job.id}.jpg`)
+      )
+    ) {
+      throw new JobReconciliationError(
+        "INVALID_ASSET_FORMAT",
+        "A matching pending image asset is required for recovery.",
+        409,
+      );
+    }
     const output = job.outputPayload as { url?: unknown } | null;
     outputUrl =
       outputUrl || (typeof output?.url === "string" ? output.url : undefined);
@@ -695,8 +710,11 @@ export async function recoverGeneratedOutput(
         400,
       );
     }
-    bytes = await downloadImage(outputUrl);
-    objectKey = job.id + ".png";
+    bytes = await downloadImage(
+      outputUrl,
+      asset.mimeType === "image/jpeg" ? "jpeg" : "png",
+    );
+    objectKey = asset.objectKey;
   } else if (mediaKind === "VIDEO") {
     const output = job.outputPayload as { url?: unknown } | null;
     outputUrl =

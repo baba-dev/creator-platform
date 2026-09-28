@@ -32,6 +32,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@aiwa/assets':
+        specifier: workspace:*
+        version: link:../../packages/assets
       '@aiwa/authz':
         specifier: workspace:*
         version: link:../../packages/authz

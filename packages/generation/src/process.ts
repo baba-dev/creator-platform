@@ -408,7 +408,7 @@ export async function processImageJob(
     }
     try {
       const referenceImages = await Promise.all(
-        job.inputAssets.map(async ({ asset }) => {
+        (job.inputAssets ?? []).map(async ({ asset }) => {
           if (
             asset.organizationId !== job.organizationId ||
             asset.status !== "READY" ||

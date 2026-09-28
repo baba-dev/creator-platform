@@ -449,7 +449,6 @@ export const createTemplateSchema = z
     variables: z.array(templateVariableDefinitionSchema).max(20),
     defaultInput: templateDefaultInputSchema,
     preferredModelId: z.string().trim().max(128).nullable().optional(),
-    thumbnailAssetId: cuidSchema.nullable().optional(),
     featured: z.boolean().default(false),
     sortOrder: z.number().int().min(-10000).max(10000).default(0),
     status: z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]).default("DRAFT"),

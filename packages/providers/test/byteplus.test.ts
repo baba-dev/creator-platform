@@ -38,6 +38,27 @@ describe("BytePlus provider adapter", () => {
       "seed-tts-2.0",
     ]);
     expect(
+      models.find((model) => model.id === "seedream-5-0-260128")?.capabilities,
+    ).toMatchObject({
+      "aspectRatio:3:2": true,
+      "aspectRatio:21:9": true,
+      "resolution:3K": true,
+      referenceImages: true,
+      maxReferenceImages: 14,
+    });
+    expect(
+      models.find((model) => model.id === "seedream-4-5-251128")?.capabilities,
+    ).toMatchObject({
+      "aspectRatio:2:3": true,
+      "resolution:2K": true,
+      "resolution:4K": true,
+      referenceImages: true,
+      maxReferenceImages: 14,
+    });
+    expect(
+      models.find((model) => model.id === "seedream-4-5-251128")?.capabilities,
+    ).not.toHaveProperty("resolution:3K");
+    expect(
       models.find((model) => model.mediaKind === "video")?.capabilities,
     ).toMatchObject({
       minimumDurationSeconds: 4,
@@ -120,6 +141,95 @@ describe("BytePlus provider adapter", () => {
 
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(JSON.parse(init.body as string).size).toBe(size);
+  });
+
+  it.each([
+    ["1:1", "3072x3072"],
+    ["4:3", "3456x2592"],
+    ["3:4", "2592x3456"],
+    ["16:9", "4096x2304"],
+    ["9:16", "2304x4096"],
+    ["3:2", "3744x2496"],
+    ["2:3", "2496x3744"],
+    ["21:9", "4704x2016"],
+  ])(
+    "uses the documented Lite 3K dimensions for %s",
+    async (aspectRatio, size) => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        jsonResponse({
+          data: [{ url: "https://cdn.example.com/image.png" }],
+        }),
+      );
+      const provider = createBytePlusProvider({
+        ...validConfig,
+        fetch: fetchMock as typeof fetch,
+      });
+
+      await provider.submit({
+        idempotencyKey: `image-3k-${aspectRatio}`,
+        modelId: "seedream-5-0-260128",
+        mediaKind: "image",
+        input: {
+          prompt: "A studio photograph",
+          aspectRatio,
+          resolution: "3K",
+        },
+      });
+
+      const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(JSON.parse(init.body as string).size).toBe(size);
+    },
+  );
+
+  it("rejects 3K for Seedream 4.5 before provider dispatch", async () => {
+    const fetchMock = vi.fn();
+    const provider = createBytePlusProvider({
+      ...validConfig,
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await expect(
+      provider.submit({
+        idempotencyKey: "image-45-3k",
+        modelId: "seedream-4-5-251128",
+        mediaKind: "image",
+        input: { prompt: "test", resolution: "3K" },
+      }),
+    ).rejects.toMatchObject({
+      code: "UNSUPPORTED_RESOLUTION",
+      retryable: false,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("submits one or multiple private reference images using BytePlus image input", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse({ data: [{ url: "https://cdn.example.com/image.png" }] }),
+      );
+    const provider = createBytePlusProvider({
+      ...validConfig,
+      fetch: fetchMock as typeof fetch,
+    });
+    const refs = [
+      "data:image/png;base64,aGVsbG8=",
+      "data:image/jpeg;base64,d29ybGQ=",
+    ];
+
+    await provider.submit({
+      idempotencyKey: "image-reference-set",
+      modelId: "seedream-5-0-260128",
+      mediaKind: "image",
+      input: {
+        prompt: "Use the reference images",
+        resolution: "2K",
+        referenceImages: refs,
+      },
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string).image).toEqual(refs);
   });
 
   it("omits output_format for Seedream 4.5 because the live API rejects it", async () => {

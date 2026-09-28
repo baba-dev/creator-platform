@@ -73,19 +73,6 @@ jobs:
           bash -n infra/deploy/creator-ops
           bash -n infra/deploy/package-release.sh
 
-      - name: Generate formatter patch (temporary diagnostic)
-        run: |
-          pnpm format
-          git diff --binary > prettier.patch
-
-      - name: Upload formatter patch (temporary diagnostic)
-        uses: actions/upload-artifact@v4
-        with:
-          name: prettier-patch-${{ github.sha }}
-          path: prettier.patch
-          if-no-files-found: error
-          retention-days: 1
-
       - name: Check formatting
         run: pnpm format:check
 

@@ -11,7 +11,9 @@ export class AssetQuotaExceededError extends Error {
     public readonly quotaBytes: bigint,
   ) {
     super(
-      `${scope === "member" ? "Member" : "Organization"} storage quota exceeded.`,
+      `${
+        scope === "member" ? "Member" : "Organization"
+      } storage quota exceeded.`,
     );
     this.name = "AssetQuotaExceededError";
   }
@@ -26,7 +28,12 @@ async function lockUsage(
     create: { organizationId },
     update: {},
   });
-  await tx.$queryRaw`SELECT organizationId FROM AssetStorageUsage WHERE organizationId = ${organizationId} FOR UPDATE`;
+  await tx.$queryRaw`
+    SELECT organizationId
+    FROM AssetStorageUsage
+    WHERE organizationId = ${organizationId}
+    FOR UPDATE
+  `;
   return tx.assetStorageUsage.findUniqueOrThrow({ where: { organizationId } });
 }
 

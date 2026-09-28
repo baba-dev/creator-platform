@@ -98,3 +98,4 @@ export function defaultAssetName(
 }
 
 export * from "./service";
+export * from "./library";

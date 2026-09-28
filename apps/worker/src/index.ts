@@ -16,6 +16,7 @@ import { createBytePlusProvider } from "@aiwa/providers/byteplus";
 import { createNvidiaProvider } from "@aiwa/providers/nvidia";
 import { Queue, Worker } from "bullmq";
 import Redis from "ioredis";
+import { processAssetDerivatives, purgeExpiredAssets } from "./assets";
 import { processReasoningJob } from "./reasoning";
 import { reapExpiredRecoveryJobs } from "./reaper";
 
@@ -154,6 +155,83 @@ generationWorker.on("failed", (job, error) =>
     errorMessage: error.message,
   }),
 );
+
+const assetQueue = new Queue("asset-ingestion", {
+  connection: redis,
+  prefix: "aiwa",
+});
+
+const assetWorker = new Worker(
+  "asset-ingestion",
+  async (job) => {
+    if (typeof job.data.assetId !== "string")
+      throw new Error("Invalid asset queue payload");
+    await processAssetDerivatives(job.data.assetId);
+  },
+  { connection: redis, prefix: "aiwa", concurrency: 2 },
+);
+
+assetWorker.on("error", () =>
+  log("error", "Asset ingestion queue connection failed"),
+);
+assetWorker.on("failed", (job, error) =>
+  log("error", "Asset derivative processing failed", {
+    assetId: job?.data?.assetId,
+    errorName: error.name,
+  }),
+);
+
+let assetDispatching = false;
+async function dispatchAssets() {
+  if (isShuttingDown || assetDispatching) return;
+  assetDispatching = true;
+  try {
+    await purgeExpiredAssets();
+    const assets = await db.asset.findMany({
+      where: {
+        status: "READY",
+        OR: [
+          {
+            mediaKind: "IMAGE",
+            variants: { none: { kind: "PREVIEW" } },
+          },
+          {
+            mediaKind: "VIDEO",
+            variants: { none: { kind: "POSTER" } },
+          },
+        ],
+      },
+      select: { id: true },
+      orderBy: { createdAt: "asc" },
+      take: 100,
+    });
+    for (const asset of assets) {
+      const queued = await assetQueue.getJob(asset.id);
+      if (queued) {
+        const state = await queued.getState();
+        if (["completed", "failed"].includes(state)) await queued.remove();
+        else continue;
+      }
+      await assetQueue.add(
+        "derive",
+        { assetId: asset.id },
+        {
+          jobId: asset.id,
+          attempts: 3,
+          backoff: { type: "exponential", delay: 5_000 },
+          removeOnComplete: true,
+          removeOnFail: 100,
+        },
+      );
+    }
+  } catch (error) {
+    log("error", "Asset derivative dispatch unavailable", {
+      errorName: error instanceof Error ? error.name : "UnknownError",
+    });
+  } finally {
+    assetDispatching = false;
+  }
+}
 
 const reasoningQueue = new Queue("reasoning", {
   connection: redis,
@@ -400,9 +478,11 @@ const reasoningDispatchTimer = setInterval(
   () => void dispatchReasoning(),
   2_000,
 );
+const assetDispatchTimer = setInterval(() => void dispatchAssets(), 15_000);
 void dispatchMail();
 void dispatchGeneration();
 void dispatchReasoning();
+void dispatchAssets();
 
 async function shutdown(signal: NodeJS.Signals): Promise<void> {
   log("info", "worker shutting down", { signal });
@@ -410,12 +490,14 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   clearInterval(mailDispatchTimer);
   clearInterval(generationDispatchTimer);
   clearInterval(reasoningDispatchTimer);
+  clearInterval(assetDispatchTimer);
 
   // Stop accepting new jobs from Redis queues immediately
   await Promise.allSettled([
     mailWorker.pause(true),
     generationWorker.pause(true),
     reasoningWorker.pause(true),
+    assetWorker.pause(true),
   ]);
 
   // Cover the configured provider request deadline, a worst-case 120s media
@@ -434,6 +516,8 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
     mailQueue.close(),
     generationQueue.close(),
     reasoningQueue.close(),
+    assetWorker.close(),
+    assetQueue.close(),
     maintenanceWorker.close(),
     closeSmtpTransport(),
   ]);
@@ -481,7 +565,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
 }
 
 log("info", "worker started", {
-  queues: ["maintenance", "mail", "generation", "reasoning"],
+  queues: ["maintenance", "mail", "generation", "reasoning", "asset-ingestion"],
   environment: env.APP_ENV,
   bytePlusConfigured: Boolean(bytePlusProvider),
   nvidiaConfigured: Boolean(nvidiaProvider),

@@ -7,12 +7,12 @@ P0 establishes the invariants those features must use.
 ## Core invariant
 
 `Asset` is the canonical media record for generated output, user uploads,
-derived previews, future imports and externally stored media. Features must
-pass asset IDs across domain boundaries rather than raw customer-controlled
-file paths or arbitrary URLs.
+derived previews, future imports and externally stored media. Features must pass
+asset IDs across domain boundaries rather than raw customer-controlled file
+paths or arbitrary URLs.
 
-A generation job records historical provenance. Reorganizing an asset later
-must not rewrite the generation job that created it.
+A generation job records historical provenance. Reorganizing an asset later must
+not rewrite the generation job that created it.
 
 ## Lifecycle
 
@@ -26,8 +26,8 @@ PENDING -> READY -> DELETED -> PURGED
 - **PENDING** reserves storage before provider or upload work starts.
 - **READY** means the object is durable and can be served.
 - **QUARANTINED** keeps bytes accounted while preventing normal customer use.
-- **DELETED** is a recoverable logical deletion; `deletedAt` and
-  `purgeAfter` control retention.
+- **DELETED** is a recoverable logical deletion; `deletedAt` and `purgeAfter`
+  control retention.
 - **PURGED** retains audit/provenance metadata after bytes have been removed.
 
 Generation failure currently sets `purgeAfter` immediately because a failed
@@ -69,8 +69,8 @@ org/{organizationId}/assets/{shard}/{random-id}.{ext}
 ```
 
 A customer filename is display metadata only and must never become an object
-key. Existing generation keys such as `{jobId}.png` remain supported during
-the compatibility migration.
+key. Existing generation keys such as `{jobId}.png` remain supported during the
+compatibility migration.
 
 Future S3, Google Drive and OneDrive implementations must satisfy the same
 interface. Provider-specific tokens and identifiers must not leak into client
@@ -82,8 +82,8 @@ components.
 objects. Variants are separate objects with their own checksum and dimensions
 but are cascade-owned by the canonical asset.
 
-P1 should use these variants for library grids so a 4K original or full video
-is not fetched merely to render a card.
+P1 should use these variants for library grids so a 4K original or full video is
+not fetched merely to render a card.
 
 ## Storage accounting
 
@@ -140,10 +140,9 @@ Reservation rules:
 
 ## API compatibility
 
-`GET /api/assets/:assetId` remains the authenticated binary endpoint during
-P0, including byte ranges for video/audio. P1 may introduce explicit
-`/content` and `/thumbnail` endpoints while retaining this route until all
-callers migrate.
+`GET /api/assets/:assetId` remains the authenticated binary endpoint during P0,
+including byte ranges for video/audio. P1 may introduce explicit `/content` and
+`/thumbnail` endpoints while retaining this route until all callers migrate.
 
 ## P1 handoff
 

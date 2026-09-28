@@ -19,7 +19,9 @@ const MAX_REDIRECTS = 3;
 const DOWNLOAD_TIMEOUT_MS = 120_000;
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const JPEG_SIGNATURE = Buffer.from([0xff, 0xd8, 0xff]);
-// Keep 14 references bounded after Base64 expansion (~56 MiB total before JSON overhead).\nexport const MAX_REFERENCE_IMAGE_BYTES = 3 * 1024 * 1024;\nconst MAX_REFERENCE_PIXELS = 36_000_000;
+// Keep 14 references bounded after Base64 expansion (~56 MiB total before JSON overhead).
+export const MAX_REFERENCE_IMAGE_BYTES = 3 * 1024 * 1024;
+const MAX_REFERENCE_PIXELS = 36_000_000;
 
 const trustedImageDomainSuffixes = [
   "bytepluscdn.com",

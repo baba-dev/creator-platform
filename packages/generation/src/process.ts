@@ -531,8 +531,8 @@ export async function processImageJob(
         });
         return;
       }
-      await db.generationJob.update({
-        where: { id },
+      const persistedProviderResult = await db.generationJob.updateMany({
+        where: { id, status: "SUBMITTED" },
         data: {
           status: "PROCESSING",
           providerRequestId: result.providerRequestId,
@@ -544,6 +544,7 @@ export async function processImageJob(
           errorMessage: null,
         },
       });
+      if (!persistedProviderResult.count) return;
     } catch (error) {
       if (
         error instanceof ProviderConfigurationError ||

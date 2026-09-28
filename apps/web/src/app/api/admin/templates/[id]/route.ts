@@ -27,20 +27,6 @@ export async function PATCH(
     );
   }
 
-  if (parsed.data.thumbnailAssetId) {
-    const thumbnail = await db.asset.findFirst({
-      where: {
-        id: parsed.data.thumbnailAssetId,
-        status: "READY",
-        mediaKind: "IMAGE",
-      },
-      select: { id: true },
-    });
-    if (!thumbnail) {
-      return NextResponse.json({ error: "Thumbnail asset is unavailable." }, { status: 400 });
-    }
-  }
-
   const existing = await db.generationTemplate.findUnique({
     where: { id },
     select: { id: true, status: true, slug: true },

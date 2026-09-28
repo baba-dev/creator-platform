@@ -63,7 +63,6 @@ Admin mutations:
 
 - enforce same-origin request checks;
 - use strict Zod schemas;
-- validate optional thumbnail assets;
 - create immutable AuditEvent records;
 - support DRAFT, PUBLISHED, and ARCHIVED lifecycle states.
 

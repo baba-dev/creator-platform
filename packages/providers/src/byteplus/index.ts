@@ -112,9 +112,18 @@ const imageAspectRatioSchema = z.enum([
 export const bytePlusImageInputSchema = z.object({
   prompt: z.string().trim().min(1),
   aspectRatio: imageAspectRatioSchema.default("1:1"),
-  resolution: z.enum(["2K", "4K"]).default("2K"),
+  resolution: z.enum(["2K", "3K", "4K"]).default("2K"),
   outputFormat: z.enum(["jpeg", "png"]).default("png"),
   watermark: z.boolean().default(false),
+  referenceImages: z
+    .array(
+      z
+        .string()
+        .startsWith("data:image/")
+        .max(42 * 1024 * 1024),
+    )
+    .max(14)
+    .default([]),
 });
 
 export const bytePlusVideoInputSchema = z.object({
@@ -158,10 +167,18 @@ export const VERIFIED_BYTEPLUS_MODELS: readonly ProviderModelDescriptor[] = [
     mediaKind: "image",
     capabilities: {
       "aspectRatio:1:1": true,
+      "aspectRatio:4:3": true,
+      "aspectRatio:3:4": true,
       "aspectRatio:16:9": true,
       "aspectRatio:9:16": true,
+      "aspectRatio:3:2": true,
+      "aspectRatio:2:3": true,
+      "aspectRatio:21:9": true,
       "resolution:2K": true,
+      "resolution:3K": true,
       "resolution:4K": true,
+      referenceImages: true,
+      maxReferenceImages: 14,
     },
   },
   {
@@ -173,10 +190,17 @@ export const VERIFIED_BYTEPLUS_MODELS: readonly ProviderModelDescriptor[] = [
     mediaKind: "image",
     capabilities: {
       "aspectRatio:1:1": true,
+      "aspectRatio:4:3": true,
+      "aspectRatio:3:4": true,
       "aspectRatio:16:9": true,
       "aspectRatio:9:16": true,
+      "aspectRatio:3:2": true,
+      "aspectRatio:2:3": true,
+      "aspectRatio:21:9": true,
       "resolution:2K": true,
       "resolution:4K": true,
+      referenceImages: true,
+      maxReferenceImages: 14,
     },
   },
   {
@@ -260,7 +284,7 @@ function trimTrailingSlashes(value: string): string {
 
 function mapAspectRatioToSize(
   aspectRatio: z.infer<typeof imageAspectRatioSchema>,
-  resolution: "2K" | "4K",
+  resolution: "2K" | "3K" | "4K",
 ): string {
   const sizes = {
     "2K": {
@@ -272,6 +296,16 @@ function mapAspectRatioToSize(
       "3:2": "2496x1664",
       "2:3": "1664x2496",
       "21:9": "3136x1344",
+    },
+    "3K": {
+      "1:1": "3072x3072",
+      "16:9": "4096x2304",
+      "9:16": "2304x4096",
+      "4:3": "3456x2592",
+      "3:4": "2592x3456",
+      "3:2": "3744x2496",
+      "2:3": "2496x3744",
+      "21:9": "4704x2016",
     },
     "4K": {
       "1:1": "4096x4096",
@@ -623,6 +657,16 @@ export function createBytePlusProvider(
               },
             );
           }
+          if (
+            input.data.resolution === "3K" &&
+            submission.modelId !== "seedream-5-0-260128"
+          ) {
+            throw new ProviderRequestError(
+              "3K output is only supported by Seedream 5.0 Lite",
+              false,
+              { code: "UNSUPPORTED_RESOLUTION" },
+            );
+          }
           const response = await safeFetch(
             fetchClient,
             `${baseUrl}/images/generations`,
@@ -638,6 +682,14 @@ export function createBytePlusProvider(
                 ),
                 ...(submission.modelId === "seedream-5-0-260128"
                   ? { output_format: input.data.outputFormat }
+                  : {}),
+                ...(input.data.referenceImages.length
+                  ? {
+                      image:
+                        input.data.referenceImages.length === 1
+                          ? input.data.referenceImages[0]
+                          : input.data.referenceImages,
+                    }
                   : {}),
                 response_format: "url",
                 watermark: input.data.watermark,

@@ -18,6 +18,8 @@ export function GET(): Response {
         process.env.SMTP_HOST &&
         process.env.SMTP_USER &&
         process.env.SMTP_PASSWORD &&
+        process.env.ROUTINE_USER &&
+        process.env.ROUTINE_USER_PASSWORD &&
         process.env.MAIL_SECURITY_FROM_ADDRESS &&
         process.env.MAIL_ROUTINE_FROM_ADDRESS,
       ),

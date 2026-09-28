@@ -55,6 +55,8 @@ export const serverEnvSchema = z.object({
   SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(465),
   SMTP_USER: z.string().min(1).default("local"),
   SMTP_PASSWORD: z.string().min(1).default("local"),
+  ROUTINE_USER: optionalString,
+  ROUTINE_USER_PASSWORD: optionalString,
   SMTP_EHLO_NAME: z.string().min(1).default("creator.aiwamediagroup.com"),
   SMTP_POOL_MAX_CONNECTIONS: z.coerce.number().int().min(1).max(20).default(3),
   SMTP_POOL_MAX_MESSAGES: z.coerce.number().int().min(1).max(1000).default(100),
@@ -118,6 +120,15 @@ export function parseServerEnv(
     throw new Error(`Invalid server environment variables: ${fields}`);
   }
 
+  if (
+    Boolean(result.data.ROUTINE_USER) !==
+    Boolean(result.data.ROUTINE_USER_PASSWORD)
+  ) {
+    throw new Error(
+      "Invalid server environment variables: ROUTINE_USER, ROUTINE_USER_PASSWORD must be configured together",
+    );
+  }
+
   if (result.data.APP_ENV === "production" && result.data.MAIL_ENABLED) {
     const requiredMailVariables = [
       "SMTP_HOST",
@@ -139,6 +150,17 @@ export function parseServerEnv(
         "Invalid server environment variables: SMTP_PORT (implicit TLS on port 465 is required in production)",
       );
     }
+  }
+
+  if (
+    result.data.MAIL_ENABLED &&
+    result.data.APP_ENV !== "local" &&
+    environment.SMTP_HOST?.trim() &&
+    (!result.data.ROUTINE_USER || !result.data.ROUTINE_USER_PASSWORD)
+  ) {
+    throw new Error(
+      "Invalid server environment variables: ROUTINE_USER, ROUTINE_USER_PASSWORD",
+    );
   }
 
   return result.data;

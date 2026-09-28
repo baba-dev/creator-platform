@@ -23,6 +23,8 @@ SMTP_HOST=mail.example.com
 SMTP_PORT=465
 SMTP_USER=
 SMTP_PASSWORD=
+ROUTINE_USER=creator-tool@aiwamediagroup.com
+ROUTINE_USER_PASSWORD=
 SMTP_EHLO_NAME=creator.aiwamediagroup.com
 SMTP_POOL_MAX_CONNECTIONS=3
 SMTP_POOL_MAX_MESSAGES=100
@@ -34,9 +36,14 @@ MAIL_ROUTINE_FROM_ADDRESS=creator-tool@aiwamediagroup.com
 ```
 
 When `APP_ENV=production` and `MAIL_ENABLED=true`, startup fails closed unless
-the SMTP host, username, password, both sender addresses, and port 465 are
-explicitly configured. This prevents a deployment from silently accepting
-security mail into an undeliverable queue.
+the SMTP host, security username/password, both sender addresses, and port 465
+are explicitly configured. Staging and production also require the routine
+username/password as a pair whenever SMTP is configured. The security identity
+uses `SMTP_USER` and `SMTP_PASSWORD`; the routine identity uses `ROUTINE_USER`
+and `ROUTINE_USER_PASSWORD`. Each mailbox must be authorized by the SMTP server
+to send from its corresponding address. Configure these four secrets in the
+root-owned `/etc/aiwa-creators/creator.env` before deploying this change. Do not
+paste passwords into a terminal transcript or issue.
 
 Apply database migrations before restarting services:
 
@@ -62,12 +69,12 @@ messages can be explicitly requeued by an authorized operator.
 ## Operational checks
 
 - `/api/health` exposes whether SMTP credentials and both sender identities are
-  configured.
+  configured. This checks configuration presence, not live SMTP delivery.
 - `/admin/email` shows queue state, delivery counts, masked recipients,
   attempts, and sanitized failure diagnostics.
 - **Verify SMTP** on `/admin/email` performs a live TLS/authentication handshake
-  without sending mail. The result is audited and only a sanitized failure code
-  is returned to the browser.
+  for both identities without sending mail. The result is audited and only a
+  sanitized failure code is returned to the browser.
 - SMTP credentials, reset links, verification links, and MFA secrets must never
   be logged.
 - Use the admin SMTP verification control after every credential or mail-server

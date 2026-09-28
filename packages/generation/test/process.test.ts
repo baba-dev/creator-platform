@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => ({
     providerModel: {
       findUnique: vi.fn(),
     },
-    asset: { findFirstOrThrow: vi.fn() },
+    asset: { findFirstOrThrow: vi.fn(), findMany: vi.fn() },
     $transaction: vi.fn(),
   },
   capture: vi.fn(),
@@ -71,6 +71,8 @@ const base = {
   idempotencyKey: "key1",
   requestPayload: { prompt: "test" },
   providerModel: { providerModelId: "seedream-5-0-260128" },
+  priceVersion: { providerCostMicroUsd: 54_000n },
+  quotedUnits: 1,
   reservedCredits: 28n,
 };
 function provider() {
@@ -103,6 +105,16 @@ function transaction(
       }),
       update: vi.fn(),
       updateMany: vi.fn(),
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: "asset1",
+          generationOutputIndex: 0,
+          objectKey: "job1.png",
+          mimeType: "image/png",
+          byteSize: 25_000_000n,
+          status: "READY",
+        },
+      ]),
     },
     auditEvent: { create: vi.fn() },
   };
@@ -117,6 +129,18 @@ beforeEach(() => {
     objectKey: "job1.png",
     mimeType: "image/png",
   });
+  mocks.db.asset.findMany.mockResolvedValue([
+    {
+      id: "asset1",
+      generationOutputIndex: 0,
+      objectKey: "job1.png",
+      mimeType: "image/png",
+      byteSize: 25_000_000n,
+      status: "PENDING",
+      sourceType: "GENERATED",
+      mediaKind: "IMAGE",
+    },
+  ]);
   mocks.store.mockResolvedValue({ byteSize: 100n, sha256: "hash" });
   mocks.download.mockResolvedValue(Buffer.from("png"));
   mocks.downloadVideo.mockResolvedValue(Buffer.from("mp4"));
@@ -246,7 +270,10 @@ describe("image processing", () => {
       .mockResolvedValueOnce({
         ...base,
         status: "PROCESSING",
-        outputPayload: { url: "url" },
+        outputPayload: {
+          requestedCount: 1,
+          outputs: [{ index: 0, url: "https://example.bytepluscdn.com/image.png" }],
+        },
       });
     const tx = transaction();
     await processImageJob("job1", p);
@@ -267,14 +294,27 @@ describe("image processing", () => {
   });
   it("saves Seedream 4.5 output as its reserved JPEG asset", async () => {
     const p = provider();
-    mocks.db.asset.findFirstOrThrow.mockResolvedValue({
-      objectKey: "job1.jpg",
-      mimeType: "image/jpeg",
-    });
+    mocks.db.asset.findMany.mockResolvedValue([
+      {
+        id: "asset1",
+        generationOutputIndex: 0,
+        objectKey: "job1.jpg",
+        mimeType: "image/jpeg",
+        byteSize: 25_000_000n,
+        status: "PENDING",
+        sourceType: "GENERATED",
+        mediaKind: "IMAGE",
+      },
+    ]);
     mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
       ...base,
       status: "PROCESSING",
-      outputPayload: { url: "https://cdn.bytepluscdn.com/output.jpeg" },
+      outputPayload: {
+        requestedCount: 1,
+        outputs: [
+          { index: 0, url: "https://cdn.bytepluscdn.com/output.jpeg" },
+        ],
+      },
     });
     const tx = transaction();
     await processImageJob("job1", p);
@@ -288,6 +328,96 @@ describe("image processing", () => {
     );
     expect(mocks.capture).toHaveBeenCalledTimes(1);
   });
+  it("settles only successful outputs and releases unused storage capacity", async () => {
+    const p = provider();
+    vi.mocked(p.submit).mockResolvedValue({
+      status: "succeeded",
+      providerRequestId: "request-multi",
+      outputUrls: [
+        "https://cdn.bytepluscdn.com/image-1.png",
+        "https://cdn.bytepluscdn.com/image-2.png",
+      ],
+    });
+    const multiBase = {
+      ...base,
+      requestPayload: { prompt: "related set", outputCount: 3 },
+      quotedUnits: 3,
+      reservedCredits: 84n,
+    };
+    mocks.db.generationJob.findUniqueOrThrow
+      .mockResolvedValueOnce({ ...multiBase, status: "QUEUED" })
+      .mockResolvedValueOnce({
+        ...multiBase,
+        status: "PROCESSING",
+        outputPayload: {
+          requestedCount: 3,
+          outputs: [
+            { index: 0, url: "https://cdn.bytepluscdn.com/image-1.png" },
+            { index: 1, url: "https://cdn.bytepluscdn.com/image-2.png" },
+          ],
+        },
+      });
+    const slots = [0, 1, 2].map((generationOutputIndex) => ({
+      id: `asset${generationOutputIndex + 1}`,
+      generationOutputIndex,
+      objectKey: `job1-${generationOutputIndex + 1}.png`,
+      mimeType: "image/png",
+      byteSize: 25_000_000n,
+      status: "PENDING",
+      sourceType: "GENERATED",
+      mediaKind: "IMAGE",
+    }));
+    mocks.db.asset.findMany.mockResolvedValue(slots);
+    const tx = transaction("PROCESSING", multiBase);
+    tx.asset.findMany.mockResolvedValue([
+      { ...slots[0], status: "READY", byteSize: 100n },
+      { ...slots[1], status: "READY", byteSize: 100n },
+      slots[2],
+    ]);
+
+    await processImageJob("job1", p);
+
+    expect(mocks.store).toHaveBeenCalledTimes(2);
+    expect(mocks.capture).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        amountCredits: 56n,
+        metadata: expect.objectContaining({
+          quotedOutputs: 3,
+          successfulOutputs: 2,
+          unusedOutputs: 1,
+        }),
+      }),
+    );
+    expect(mocks.releaseAssetStorage).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        organizationId: "org1",
+        reservedBytes: 25_000_000n,
+      }),
+    );
+    expect(tx.asset.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: { in: ["asset3"] } },
+        data: expect.objectContaining({ status: "DELETED", byteSize: 0n }),
+      }),
+    );
+    expect(tx.generationJob.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "SUCCEEDED",
+          actualUnits: 2,
+          billableQuantity: 2,
+          actualProviderCostMicroUsd: 108_000n,
+          outputPayload: expect.objectContaining({
+            successfulCount: 2,
+            partialSuccess: true,
+          }),
+        }),
+      }),
+    );
+  });
+
   it("releases credits on definite provider rejection", async () => {
     const p = provider();
     vi.mocked(p.submit).mockRejectedValue(
@@ -338,7 +468,10 @@ describe("image processing", () => {
     mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
       ...base,
       status: "PROCESSING",
-      outputPayload: { url: "url" },
+      outputPayload: {
+        requestedCount: 1,
+        outputs: [{ index: 0, url: "https://cdn.bytepluscdn.com/retry.png" }],
+      },
     });
     mocks.download.mockRejectedValue(new Error("storage offline"));
     await expect(processImageJob("job1", p)).rejects.toThrow();

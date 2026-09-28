@@ -1,9 +1,6 @@
 import { createHash } from "node:crypto";
 import { hasOrganizationPermission } from "@aiwa/authz";
-import {
-  defaultAssetName,
-  reserveAssetStorage,
-} from "@aiwa/assets";
+import { defaultAssetName, reserveAssetStorage } from "@aiwa/assets";
 import {
   calculateBillableUnits,
   calculateVideoPricing,

@@ -618,18 +618,37 @@ export async function recoverGeneratedOutput(
       };
 
       if (job.providerModel.mediaKind === "IMAGE") {
-        const output = current.outputPayload as { url?: unknown } | null;
-        const outputUrl =
-          params.outputUrl ||
-          (typeof output?.url === "string" ? output.url : undefined);
-        if (!outputUrl) {
-          throw new JobReconciliationError(
-            "MISSING_OUTPUT_URL",
-            "Image storage recovery requires the already-generated output URL.",
-            400,
-          );
+        const output =
+          current.outputPayload &&
+          typeof current.outputPayload === "object" &&
+          !Array.isArray(current.outputPayload)
+            ? (current.outputPayload as Record<string, unknown>)
+            : null;
+        const storedOutputs = Array.isArray(output?.outputs)
+          ? output.outputs
+          : null;
+        if (storedOutputs && storedOutputs.length > 0) {
+          updateData.outputPayload = current.outputPayload;
+        } else {
+          const outputUrl =
+            params.outputUrl ||
+            (typeof output?.url === "string" ? output.url : undefined);
+          if (!outputUrl) {
+            throw new JobReconciliationError(
+              "MISSING_OUTPUT_URL",
+              "Image storage recovery requires the already-generated output manifest or a verified single output URL.",
+              400,
+            );
+          }
+          if ((current.quotedUnits ?? 1) > 1) {
+            throw new JobReconciliationError(
+              "MISSING_OUTPUT_MANIFEST",
+              "Multi-image recovery requires the original ordered provider output manifest.",
+              409,
+            );
+          }
+          updateData.outputPayload = { url: outputUrl };
         }
-        updateData.outputPayload = { url: outputUrl };
       } else if (job.providerModel.mediaKind === "VIDEO") {
         if (!current.providerRequestId) {
           throw new JobReconciliationError(
@@ -686,7 +705,19 @@ export async function recoverGeneratedOutput(
   let objectKey: string;
 
   if (mediaKind === "IMAGE") {
-    const asset = job.assets.find((item) => item.status === "PENDING");
+    const generatedImageAssets = job.assets.filter(
+      (item) => item.sourceType === "GENERATED" && item.mediaKind === "IMAGE",
+    );
+    if ((job.quotedUnits ?? generatedImageAssets.length) > 1) {
+      throw new JobReconciliationError(
+        "MULTI_OUTPUT_RESUME_REQUIRED",
+        "Multi-image recovery must use resume_processing so already-stored outputs and partial settlement remain idempotent.",
+        409,
+      );
+    }
+    const asset = generatedImageAssets.find(
+      (item) => item.status === "PENDING",
+    );
     if (
       !asset ||
       !(

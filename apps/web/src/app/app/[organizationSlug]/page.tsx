@@ -156,9 +156,7 @@ export default async function OrganizationWorkspacePage({
               <a
                 key={item.label}
                 href={
-                  item.label === "Projects" ||
-                    item.label === "History" ||
-                    item.label === "Assets"
+                  ["Projects", "History", "Assets"].includes(item.label)
                     ? `/app/${organizationSlug}/${item.href}`
                     : item.href
                 }
@@ -319,9 +317,7 @@ export default async function OrganizationWorkspacePage({
                 <a
                   key={item.label}
                   href={
-                    item.label === "Projects" ||
-                    item.label === "History" ||
-                    item.label === "Assets"
+                    ["Projects", "History", "Assets"].includes(item.label)
                       ? `/app/${organizationSlug}/${item.href}`
                       : item.href
                   }

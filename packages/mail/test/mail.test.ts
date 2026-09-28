@@ -4,12 +4,32 @@ import {
   mailJobId,
   senderForKind,
 } from "../src/index";
-import { classifySmtpFailure } from "../src/transport";
+import {
+  classifySmtpFailure,
+  smtpCredentialsForKind,
+} from "../src/transport";
 
 describe("mail helpers", () => {
   it("uses a BullMQ-safe stable job ID for outbox delivery", () => {
     expect(mailJobId("cm123")).toBe("mail-cm123");
     expect(mailJobId("cm123")).not.toContain(":");
+  });
+
+  it("selects independent SMTP authentication for each sender", () => {
+    const env = {
+      SMTP_USER: "security@aiwamediagroup.com",
+      SMTP_PASSWORD: "security-secret",
+      ROUTINE_USER: "creator-tool@aiwamediagroup.com",
+      ROUTINE_USER_PASSWORD: "routine-secret",
+    } as never;
+    expect(smtpCredentialsForKind(env, "SECURITY")).toEqual({
+      user: "security@aiwamediagroup.com",
+      password: "security-secret",
+    });
+    expect(smtpCredentialsForKind(env, "ROUTINE")).toEqual({
+      user: "creator-tool@aiwamediagroup.com",
+      password: "routine-secret",
+    });
   });
 
   it("keeps sender identities separated", () => {

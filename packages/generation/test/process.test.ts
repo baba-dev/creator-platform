@@ -479,7 +479,12 @@ describe("voice processing", () => {
     expect(tx.asset.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { generationJobId: "job1", status: "PENDING" },
-        data: { status: "DELETED", byteSize: 0n },
+        data: expect.objectContaining({
+          status: "DELETED",
+          byteSize: 0n,
+          deletedAt: expect.any(Date),
+          purgeAfter: expect.any(Date),
+        }),
       }),
     );
   });

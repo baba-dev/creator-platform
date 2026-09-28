@@ -98,6 +98,11 @@ enum AssetStatus {
   PURGED
 }
 
+enum AssetPurpose {
+  GENERAL
+  REFERENCE_INPUT
+}
+
 enum AssetMediaKind {
   IMAGE
   VIDEO
@@ -434,6 +439,7 @@ model GenerationJob {
   providerModel              ProviderModel       @relation(fields: [providerModelId], references: [id], onDelete: Restrict)
   priceVersion               ModelPriceVersion   @relation(fields: [priceVersionId], references: [id], onDelete: Restrict)
   assets                     Asset[]
+  inputAssets                GenerationInputAsset[]
 
   @@unique([providerModelId, providerRequestId])
   @@index([organizationId, status, createdAt])
@@ -450,6 +456,7 @@ model Asset {
   createdById        String?
   uploadedById       String?
   status             AssetStatus          @default(PENDING)
+  purpose            AssetPurpose         @default(GENERAL)
   mediaKind          AssetMediaKind       @default(OTHER)
   sourceType         AssetSourceType      @default(GENERATED)
   storageProvider    AssetStorageProvider @default(LOCAL)
@@ -473,6 +480,7 @@ model Asset {
   createdBy          User?                @relation("AssetCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   uploadedBy         User?                @relation("AssetUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
   variants           AssetVariant[]
+  generationInputs   GenerationInputAsset[]
 
   @@index([organizationId, createdAt])
   @@index([organizationId, mediaKind, status, createdAt])
@@ -482,6 +490,19 @@ model Asset {
   @@index([status, purgeAfter])
   @@index([organizationId, storageOwnerUserId, status])
   @@index([organizationId, sha256])
+}
+
+model GenerationInputAsset {
+  generationJobId String
+  assetId         String
+  position        Int
+  createdAt       DateTime      @default(now())
+  generationJob   GenerationJob @relation(fields: [generationJobId], references: [id], onDelete: Cascade)
+  asset           Asset         @relation(fields: [assetId], references: [id], onDelete: Restrict)
+
+  @@id([generationJobId, assetId])
+  @@unique([generationJobId, position])
+  @@index([assetId])
 }
 
 model AssetVariant {

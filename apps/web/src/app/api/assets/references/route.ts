@@ -90,7 +90,11 @@ export async function POST(request: Request) {
     const validated = await validateReferenceImage(
       Buffer.from(await file.arrayBuffer()),
     );
-    objectKey = createAssetObjectKey(organizationId, validated.extension);
+    const referenceObjectKey = createAssetObjectKey(
+      organizationId,
+      validated.extension,
+    );
+    objectKey = referenceObjectKey;
 
     const pending = await db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM Organization WHERE id = ${organizationId} FOR UPDATE`;
@@ -113,7 +117,7 @@ export async function POST(request: Request) {
           storageProvider: "LOCAL",
           name: normalizeAssetName(file.name, "Reference image"),
           originalFilename: normalizeOriginalFilename(file.name),
-          objectKey,
+          objectKey: referenceObjectKey,
           mimeType: validated.mimeType,
           byteSize: validated.byteSize,
           width: validated.width,
@@ -191,11 +195,12 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     if (assetId) {
+      const pendingAssetId = assetId;
       await db
         .$transaction(async (tx) => {
-          await tx.$queryRaw`SELECT id FROM Asset WHERE id = ${assetId} FOR UPDATE`;
+          await tx.$queryRaw`SELECT id FROM Asset WHERE id = ${pendingAssetId} FOR UPDATE`;
           const current = await tx.asset.findUnique({
-            where: { id: assetId },
+            where: { id: pendingAssetId },
             select: {
               status: true,
               byteSize: true,
@@ -208,7 +213,7 @@ export async function POST(request: Request) {
             reservedBytes: current.byteSize,
           });
           await tx.asset.update({
-            where: { id: assetId },
+            where: { id: pendingAssetId },
             data: {
               status: "DELETED",
               byteSize: 0n,

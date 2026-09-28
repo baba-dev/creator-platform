@@ -7,6 +7,9 @@ import {
   defaultAssetName,
   normalizeAssetName,
   normalizeOriginalFilename,
+  inspectAssetUpload,
+  assertUploadSize,
+  normalizeTagName,
 } from "../src/index";
 import {
   createAssetObjectKey,
@@ -21,6 +24,34 @@ describe("asset metadata primitives", () => {
     expect(classifyAssetMediaKind("audio/mpeg")).toBe("AUDIO");
     expect(classifyAssetMediaKind("application/pdf")).toBe("DOCUMENT");
     expect(classifyAssetMediaKind("application/octet-stream")).toBe("OTHER");
+  });
+
+  it("validates common upload formats from binary signatures", () => {
+    expect(
+      inspectAssetUpload(
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+        "hero.png",
+      ),
+    ).toMatchObject({ mediaKind: "IMAGE", mimeType: "image/png" });
+    expect(
+      inspectAssetUpload(
+        Buffer.from([
+          0, 0, 0, 20, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d,
+        ]),
+        "clip.mp4",
+      ),
+    ).toMatchObject({ mediaKind: "VIDEO", mimeType: "video/mp4" });
+    expect(() =>
+      inspectAssetUpload(Buffer.from("not-media"), "x.bin"),
+    ).toThrow();
+    expect(() => assertUploadSize("IMAGE", 25_000_001n)).toThrow();
+  });
+
+  it("normalizes tag identity independently from display casing", () => {
+    expect(normalizeTagName("  Launch HERO  ")).toEqual({
+      name: "Launch HERO",
+      normalizedName: "launch hero",
+    });
   });
 
   it("keeps display names and filenames separate from storage paths", () => {

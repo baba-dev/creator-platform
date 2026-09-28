@@ -158,7 +158,10 @@ export async function reconcileAssetStorageUsage(
   await lockUsage(tx, organizationId);
   const [ready, pending] = await Promise.all([
     tx.asset.aggregate({
-      where: { organizationId, status: { in: ["READY", "QUARANTINED"] } },
+      where: {
+        organizationId,
+        status: { in: ["READY", "QUARANTINED", "DELETED"] },
+      },
       _sum: { byteSize: true },
       _count: { id: true },
     }),

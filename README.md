@@ -433,14 +433,20 @@ Before distributing the platform or sharing source with customers, the company s
 
 ## Asset management
 
-The P0 asset foundation makes `Asset` the canonical record for generated,
-uploaded, derived and future externally stored media. It includes explicit
-provenance/media metadata, provider-neutral storage interfaces, transactional
-quota reservation, cached/reconcilable organization usage, and derivative
-variant groundwork.
+The Asset Library is an organization-scoped DAM surface built on the canonical
+`Asset` domain. It supports secure direct uploads, generated media, private
+thumbnail/preview/poster variants, grid/list browsing, search/filtering,
+folders, normalized tags, per-user favourites, 30-day trash/restore, project
+assignment and bounded bulk operations.
+
+Uploads validate file signatures rather than browser MIME declarations, reserve
+storage before persistence, use opaque tenant-scoped object keys and finalize
+quota accounting transactionally. The background `asset-ingestion` queue
+creates bounded derivatives and permanently purges expired trash only after
+private objects have been removed.
 
 See [docs/architecture/assets.md](docs/architecture/assets.md) for lifecycle,
-security, accounting and P1 integration rules.
+security, quota and integration rules.
 
 ## Image generation
 

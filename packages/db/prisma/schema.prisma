@@ -150,6 +150,7 @@ model User {
   storageAssets          Asset[]                  @relation("AssetStorageOwner")
   createdAssets          Asset[]                  @relation("AssetCreatedBy")
   uploadedAssets         Asset[]                  @relation("AssetUploadedBy")
+  assetFavorites         AssetFavorite[]
   auditEvents            AuditEvent[]             @relation("AuditActor")
   createdInvitations     OrganizationInvitation[] @relation("InvitationCreatedBy")
   acceptedInvitations    OrganizationInvitation[] @relation("InvitationAcceptedBy")
@@ -255,6 +256,8 @@ model Organization {
   reasoningJobs          ReasoningJob[]
   auditEvents            AuditEvent[]
   assets                 Asset[]
+  assetFolders           AssetFolder[]
+  assetTags              AssetTag[]
   assetStorageUsage      AssetStorageUsage?
   invitations            OrganizationInvitation[]
 
@@ -447,6 +450,7 @@ model Asset {
   id                 String               @id @default(cuid())
   organizationId     String
   projectId          String?
+  folderId           String?
   generationJobId    String?
   storageOwnerUserId String?
   createdById        String?
@@ -470,20 +474,74 @@ model Asset {
   updatedAt          DateTime             @updatedAt
   organization       Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   project            Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  folder             AssetFolder?         @relation(fields: [folderId], references: [id], onDelete: SetNull)
   generationJob      GenerationJob?       @relation(fields: [generationJobId], references: [id], onDelete: SetNull)
   storageOwner       User?                @relation("AssetStorageOwner", fields: [storageOwnerUserId], references: [id], onDelete: SetNull)
   createdBy          User?                @relation("AssetCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   uploadedBy         User?                @relation("AssetUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
   variants           AssetVariant[]
+  tagAssignments      AssetTagAssignment[]
+  favorites           AssetFavorite[]
 
   @@index([organizationId, createdAt])
   @@index([organizationId, mediaKind, status, createdAt])
   @@index([organizationId, sourceType, status, createdAt])
   @@index([generationJobId])
   @@index([projectId, status, createdAt])
+  @@index([folderId, status, createdAt])
   @@index([status, purgeAfter])
   @@index([organizationId, storageOwnerUserId, status])
   @@index([organizationId, sha256])
+}
+
+model AssetFolder {
+  id             String        @id @default(cuid())
+  organizationId String
+  parentId       String?
+  name           String
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent         AssetFolder?  @relation("AssetFolderTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children       AssetFolder[] @relation("AssetFolderTree")
+  assets         Asset[]
+
+  @@index([organizationId, parentId, name])
+}
+
+model AssetTag {
+  id             String               @id @default(cuid())
+  organizationId String
+  name           String
+  normalizedName String
+  createdAt      DateTime             @default(now())
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignments    AssetTagAssignment[]
+
+  @@unique([organizationId, normalizedName])
+  @@index([organizationId, name])
+}
+
+model AssetTagAssignment {
+  assetId   String
+  tagId     String
+  createdAt DateTime @default(now())
+  asset     Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  tag       AssetTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([assetId, tagId])
+  @@index([tagId, assetId])
+}
+
+model AssetFavorite {
+  assetId   String
+  userId    String
+  createdAt DateTime @default(now())
+  asset     Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([assetId, userId])
+  @@index([userId, createdAt])
 }
 
 model AssetVariant {

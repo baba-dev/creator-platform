@@ -33,8 +33,9 @@ export interface AssetStorage {
  * The first two digest characters distribute objects across directories while
  * preserving deterministic organization scoping for operations.
  */
-export function createAssetObjectKey(
+function opaqueObjectKey(
   organizationId: string,
+  bucket: "assets" | "variants",
   extension: string,
 ): string {
   if (!/^[A-Za-z0-9_-]{1,100}$/.test(organizationId))
@@ -43,7 +44,21 @@ export function createAssetObjectKey(
   if (!safeExtension || safeExtension.length > 8)
     throw new Error("Invalid asset extension.");
   const id = randomUUID().replaceAll("-", "");
-  return `org/${organizationId}/assets/${id.slice(0, 2)}/${id}.${safeExtension}`;
+  return `org/${organizationId}/${bucket}/${id.slice(0, 2)}/${id}.${safeExtension}`;
+}
+
+export function createAssetObjectKey(
+  organizationId: string,
+  extension: string,
+): string {
+  return opaqueObjectKey(organizationId, "assets", extension);
+}
+
+export function createAssetVariantObjectKey(
+  organizationId: string,
+  extension: string,
+): string {
+  return opaqueObjectKey(organizationId, "variants", extension);
 }
 
 /**

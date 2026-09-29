@@ -73,9 +73,19 @@ Only PUBLISHED IMAGE/VIDEO/VOICE templates are customer-discoverable.
 The migration `20260929010000_generation_templates_p0` creates
 GenerationTemplate, TemplateFavorite, and GenerationJob.templateId.
 
-Run the standard deployment migration, then `pnpm db:seed`. Seeding uses
-slug-based upserts and publishes the curated MVP catalog, so it is safe to
-repeat and does not create duplicate templates.
+The standard production deployment now runs an isolated template-catalog seed
+immediately after Prisma migrations and before the release symlink is promoted.
+The operation creates only missing built-in templates; it does not overwrite
+administrator edits, ordering, featured state, or publish/archive decisions on
+templates that already exist.
+
+For operational recovery on an already packaged release, run:
+
+```bash
+sudo creator-ops seed-templates
+```
+
+For local development, `pnpm db:seed` also calls the same safe catalog seeder.
 
 ## P0 scope
 

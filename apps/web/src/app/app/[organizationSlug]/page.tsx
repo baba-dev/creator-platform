@@ -34,65 +34,80 @@ export default async function OrganizationWorkspacePage({
     "workspace:view",
   );
 
-  const [generationCount, projectCount, assetCount, recentJobs, mixCounts] =
-    await Promise.all([
-      db.generationJob.count({
-        where: {
-          organizationId: membership.organization.id,
-          ...(membership.role === "ORGANIZATION_OWNER"
-            ? {}
-            : { createdById: session.user.id }),
+  const [
+    generationCount,
+    projectCount,
+    assetCount,
+    recentJobs,
+    mixCounts,
+    topTemplates,
+  ] = await Promise.all([
+    db.generationJob.count({
+      where: {
+        organizationId: membership.organization.id,
+        ...(membership.role === "ORGANIZATION_OWNER"
+          ? {}
+          : { createdById: session.user.id }),
+      },
+    }),
+    db.project.count({
+      where: {
+        organizationId: membership.organization.id,
+        archivedAt: null,
+      },
+    }),
+    db.asset.count({
+      where: {
+        organizationId: membership.organization.id,
+        status: "READY",
+      },
+    }),
+    db.generationJob.findMany({
+      where: {
+        organizationId: membership.organization.id,
+        ...(membership.role === "ORGANIZATION_OWNER"
+          ? {}
+          : { createdById: session.user.id }),
+      },
+      select: {
+        id: true,
+        status: true,
+        chargedCredits: true,
+        reservedCredits: true,
+        requestPayload: true,
+        assets: {
+          where: { status: "READY", deletedAt: null },
+          select: { id: true, mimeType: true },
+          take: 1,
         },
-      }),
-      db.project.count({
-        where: {
-          organizationId: membership.organization.id,
-          archivedAt: null,
+        project: { select: { name: true } },
+        providerModel: {
+          select: { displayName: true, mediaKind: true },
         },
-      }),
-      db.asset.count({
-        where: {
-          organizationId: membership.organization.id,
-          status: "READY",
-        },
-      }),
-      db.generationJob.findMany({
-        where: {
-          organizationId: membership.organization.id,
-          ...(membership.role === "ORGANIZATION_OWNER"
-            ? {}
-            : { createdById: session.user.id }),
-        },
-        select: {
-          id: true,
-          status: true,
-          chargedCredits: true,
-          reservedCredits: true,
-          requestPayload: true,
-          assets: {
-            where: { status: "READY", deletedAt: null },
-            select: { id: true, mimeType: true },
-            take: 1,
-          },
-          project: { select: { name: true } },
-          providerModel: {
-            select: { displayName: true, mediaKind: true },
-          },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 5,
-      }),
-      db.generationJob.groupBy({
-        by: ["providerModelId"],
-        where: {
-          organizationId: membership.organization.id,
-          ...(membership.role === "ORGANIZATION_OWNER"
-            ? {}
-            : { createdById: session.user.id }),
-        },
-        _count: { _all: true },
-      }),
-    ]);
+      },
+      orderBy: { createdAt: "desc" },
+      take: 3,
+    }),
+    db.generationJob.groupBy({
+      by: ["providerModelId"],
+      where: {
+        organizationId: membership.organization.id,
+        ...(membership.role === "ORGANIZATION_OWNER"
+          ? {}
+          : { createdById: session.user.id }),
+      },
+      _count: { _all: true },
+    }),
+    db.generationTemplate.findMany({
+      where: {
+        status: "PUBLISHED",
+        mediaKind: { in: ["IMAGE", "VIDEO", "VOICE"] },
+      },
+      orderBy: [{ featured: "desc" }, { sortOrder: "asc" }, { name: "asc" }],
+      take: 4,
+      select: { slug: true, name: true, description: true, mediaKind: true },
+    }),
+  ]);
 
   const modelKinds = await db.providerModel.findMany({
     where: { id: { in: mixCounts.map((group) => group.providerModelId) } },
@@ -107,8 +122,6 @@ export default async function OrganizationWorkspacePage({
     if (kind && kind in mix) mix[kind as MediaKind] += group._count._all;
   }
   const mixTotal = mix.IMAGE + mix.VIDEO + mix.VOICE;
-  const imagePercent = mixTotal ? Math.round((mix.IMAGE * 100) / mixTotal) : 0;
-  const videoPercent = mixTotal ? Math.round((mix.VIDEO * 100) / mixTotal) : 0;
   const canGenerate = hasOrganizationPermission(
     membership.role,
     "generation:create",
@@ -188,6 +201,69 @@ export default async function OrganizationWorkspacePage({
             organizationSlug={organizationSlug}
           />
         </div>
+
+        <section
+          className="mt-6 rounded-[24px] border border-border bg-card/88 p-5 shadow-sm sm:p-6"
+          aria-labelledby="dashboard-templates"
+        >
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <Eyebrow>Ready-made starting points</Eyebrow>
+              <h2
+                id="dashboard-templates"
+                className="font-display mt-2 text-xl font-semibold text-foreground"
+              >
+                Start from a template
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Choose a brief, then make it your own in Studio.
+              </p>
+            </div>
+            <Link
+              href={`/app/${organizationSlug}/templates`}
+              className="inline-flex min-h-10 items-center text-sm font-semibold text-primary hover:underline"
+            >
+              Explore all templates →
+            </Link>
+          </div>
+          {topTemplates.length ? (
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {topTemplates.map((template) => (
+                <Link
+                  key={template.slug}
+                  href={`/app/${organizationSlug}/templates/${template.slug}`}
+                  className="group flex min-w-0 flex-col rounded-2xl border border-border bg-surface-sunken p-4 transition hover:border-primary/40 hover:bg-primary/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                >
+                  <span className="grid size-9 place-items-center rounded-xl bg-primary/10 text-primary">
+                    <Icon
+                      name={
+                        template.mediaKind === "VOICE"
+                          ? "voice"
+                          : template.mediaKind === "VIDEO"
+                            ? "video"
+                            : "image"
+                      }
+                      className="size-4"
+                    />
+                  </span>
+                  <span className="mt-4 text-sm font-semibold text-foreground">
+                    {template.name}
+                  </span>
+                  <span className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                    {template.description}
+                  </span>
+                  <span className="mt-auto pt-4 text-xs font-semibold text-primary">
+                    Use template →
+                  </span>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-5 rounded-xl border border-border bg-surface-sunken p-4 text-sm text-muted-foreground">
+              Published templates will appear here when available.
+            </p>
+          )}
+        </section>
 
         <section
           id="projects"
@@ -297,68 +373,61 @@ export default async function OrganizationWorkspacePage({
             id="usage"
             className="min-w-0 self-start rounded-[24px] border border-border bg-card/88 p-5 shadow-sm sm:p-6"
           >
-            <h2 className="font-display text-xl font-semibold text-foreground">
-              Creative mix
+            <Eyebrow>Explore your tools</Eyebrow>
+            <h2 className="font-display mt-2 text-xl font-semibold text-foreground">
+              Go further with Studio
             </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {mixTotal.toLocaleString("en-US")} generations across your
-              workspace
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
+              {mixTotal.toLocaleString("en-US")} generations made. Pick a
+              dedicated workspace for finer control.
             </p>
-            <div className="mt-6 flex flex-wrap items-center gap-6">
-              <div
-                className="relative grid size-32 shrink-0 place-items-center rounded-full"
-                style={{
-                  background: `conic-gradient(var(--primary) 0 ${imagePercent}%, var(--info) ${imagePercent}% ${imagePercent + videoPercent}%, var(--warning) ${imagePercent + videoPercent}% 100%)`,
-                }}
-              >
-                <div className="grid size-[92px] place-items-center rounded-full bg-card text-center">
-                  <div>
-                    <p className="text-xl font-semibold text-foreground">
-                      {mixTotal}
-                    </p>
-                    <p className="text-[9px] uppercase tracking-wider text-subtle-foreground">
-                      Creations
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <div className="min-w-[120px] flex-1 space-y-3">
-                <Legend
-                  color="bg-primary"
-                  label="Images"
-                  value={mix.IMAGE.toLocaleString("en-US")}
-                />
-                <Legend
-                  color="bg-info"
-                  label="Videos"
-                  value={mix.VIDEO.toLocaleString("en-US")}
-                />
-                <Legend
-                  color="bg-warning"
-                  label="Voices"
-                  value={mix.VOICE.toLocaleString("en-US")}
-                />
-              </div>
+            <div className="mt-5 space-y-2">
+              <StudioPath
+                slug={organizationSlug}
+                kind="image"
+                count={mix.IMAGE}
+                title="Image studio"
+                detail="References, variations and edits"
+                tone="bg-primary/10 text-primary"
+              />
+              <StudioPath
+                slug={organizationSlug}
+                kind="video"
+                count={mix.VIDEO}
+                title="Video studio"
+                detail="Frames, timing and composition"
+                tone="bg-info/10 text-info"
+              />
+              <StudioPath
+                slug={organizationSlug}
+                kind="speech"
+                count={mix.VOICE}
+                title="Speech studio"
+                detail="Voices, pacing and narration"
+                tone="bg-warning/10 text-warning"
+              />
             </div>
-            <div className="mt-6 grid gap-2 border-t border-border pt-5 text-sm">
-              <Link
-                href={`/app/${organizationSlug}/history`}
-                className="font-semibold text-primary hover:underline"
-              >
-                Explore generation history →
-              </Link>
-              <Link
-                href={`/app/${organizationSlug}/projects`}
-                className="font-semibold text-primary hover:underline"
-              >
-                Organize your projects →
-              </Link>
-              <Link
-                href={`/app/${organizationSlug}/assets`}
-                className="font-semibold text-primary hover:underline"
-              >
-                Browse ready assets →
-              </Link>
+            <div className="mt-5 rounded-2xl border border-border bg-surface-sunken p-4">
+              <p className="text-xs font-semibold text-foreground">
+                Keep your work together
+              </p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                {projectCount} active projects · {assetCount} ready assets
+              </p>
+              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs font-semibold text-primary">
+                <Link
+                  href={`/app/${organizationSlug}/projects`}
+                  className="hover:underline"
+                >
+                  Projects →
+                </Link>
+                <Link
+                  href={`/app/${organizationSlug}/assets`}
+                  className="hover:underline"
+                >
+                  Asset library →
+                </Link>
+              </div>
             </div>
           </div>
         </section>
@@ -406,20 +475,51 @@ function MetricCard({
   );
 }
 
-function Legend({
-  color,
-  label,
-  value,
+function StudioPath({
+  slug,
+  kind,
+  count,
+  title,
+  detail,
+  tone,
 }: {
-  color: string;
-  label: string;
-  value: string;
+  slug: string;
+  kind: "image" | "video" | "speech";
+  count: number;
+  title: string;
+  detail: string;
+  tone: string;
 }) {
   return (
-    <div className="flex items-center gap-2 text-xs">
-      <span className={`size-2 rounded-full ${color}`} />
-      <span className="text-muted-foreground">{label}</span>
-      <span className="ml-auto font-semibold text-foreground/90">{value}</span>
-    </div>
+    <Link
+      href={`/app/${slug}/${kind}`}
+      className="group flex min-w-0 items-center gap-3 rounded-2xl border border-border bg-card p-3 transition hover:border-primary/40 hover:bg-primary/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+    >
+      <span
+        className={`grid size-10 shrink-0 place-items-center rounded-xl ${tone}`}
+      >
+        <Icon name={kind === "speech" ? "voice" : kind} className="size-5" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-foreground">
+          {title}
+        </span>
+        <span className="mt-0.5 block text-xs text-muted-foreground">
+          {detail}
+        </span>
+      </span>
+      <span className="text-right">
+        <span className="block text-sm font-semibold tabular-nums text-foreground">
+          {count}
+        </span>
+        <span className="text-[10px] text-subtle-foreground">made</span>
+      </span>
+      <span
+        aria-hidden="true"
+        className="text-primary transition group-hover:translate-x-0.5"
+      >
+        →
+      </span>
+    </Link>
   );
 }

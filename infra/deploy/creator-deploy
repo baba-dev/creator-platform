@@ -200,8 +200,10 @@ systemctl restart creator-web.service creator-worker.service || rollback
 healthy=false
 for _ in {1..30}; do
   health_response="$(curl -fsS --max-time 3 http://127.0.0.1:3000/api/health 2>/dev/null || true)"
+  active_release_sha="$(cat "$current_link/RELEASE_SHA" 2>/dev/null || true)"
+
   if [[ "$health_response" == *'"status":"ok"'* \
-     && "$health_response" == *"\"version\":\"$release_sha\""* ]]; then
+     && "$active_release_sha" == "$release_sha" ]]; then
     healthy=true
     break
   fi

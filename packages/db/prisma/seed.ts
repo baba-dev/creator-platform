@@ -1,5 +1,5 @@
 import { type Prisma, PrismaClient } from "@prisma/client";
-import { curatedGenerationTemplates } from "./templates";
+import { seedTemplateCatalog } from "./template-catalog";
 
 const db = new PrismaClient();
 
@@ -225,35 +225,11 @@ async function main(): Promise<void> {
     },
   });
 
-  for (const template of curatedGenerationTemplates) {
-    await db.generationTemplate.upsert({
-      where: { slug: template.slug },
-      update: {
-        name: template.name,
-        description: template.description,
-        category: template.category,
-        mediaKind: template.mediaKind,
-        promptTemplate: template.promptTemplate,
-        variables: template.variables as Prisma.InputJsonValue,
-        defaultInput: template.defaultInput as Prisma.InputJsonValue,
-        preferredModelId: template.preferredModelId ?? null,
-        featured: template.featured ?? false,
-        sortOrder: template.sortOrder,
-        status: "PUBLISHED",
-      },
-      create: {
-        ...template,
-        variables: template.variables as Prisma.InputJsonValue,
-        defaultInput: template.defaultInput as Prisma.InputJsonValue,
-        preferredModelId: template.preferredModelId ?? null,
-        featured: template.featured ?? false,
-        status: "PUBLISHED",
-      },
-    });
-  }
-
+  const createdTemplates = await seedTemplateCatalog(db);
   console.info(
-    `Seeded ${curatedGenerationTemplates.length} generation templates.`,
+    createdTemplates > 0
+      ? `Created ${createdTemplates} missing generation templates.`
+      : "Generation template catalog is already present.",
   );
   console.info("Seeding completed successfully.");
 }

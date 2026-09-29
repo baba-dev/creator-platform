@@ -20,7 +20,8 @@
     "platform:promote-owner": "tsx prisma/promote-owner.ts",
     "seed": "prisma db seed",
     "test": "vitest run --passWithNoTests",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "seed:templates": "tsx prisma/seed-templates.ts"
   },
   "dependencies": {
     "@prisma/client": "6.19.3"

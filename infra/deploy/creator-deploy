@@ -49,11 +49,14 @@ validate_release() {
     && [[ -f "$directory/ops/db/prisma/schema.prisma" ]] \
     && [[ -d "$directory/ops/db/prisma/migrations" ]] \
     && [[ -f "$directory/ops/db/prisma/promote-owner.ts" ]] \
+    && [[ -f "$directory/ops/db/prisma/seed-templates.ts" ]] \
+    && [[ -f "$directory/ops/db/prisma/template-catalog.ts" ]] \
+    && [[ -f "$directory/ops/db/prisma/templates.ts" ]] \
     && [[ -x "$directory/ops/bin/creator-deploy" ]] \
     && [[ -x "$directory/ops/bin/creator-ops" ]]
 }
 
-load_environment_and_migrate() {
+load_environment_migrate_and_seed_templates() {
   local directory="$1"
 
   runuser --preserve-environment -u "$runtime_user" -- \
@@ -80,7 +83,8 @@ export XDG_CONFIG_HOME=/var/www/creator-platform/.config
 export XDG_STATE_HOME=/var/www/creator-platform/.local/state
 
 cd "$release_dir/ops/db"
-exec ./node_modules/.bin/prisma migrate deploy --schema prisma/schema.prisma
+./node_modules/.bin/prisma migrate deploy --schema prisma/schema.prisma
+./node_modules/.bin/tsx prisma/seed-templates.ts
 MIGRATE
 }
 
@@ -145,8 +149,8 @@ if [[ "$release_ready" != true ]]; then
     | gzip -1 >"$backup_path"
   chmod 0600 "$backup_path"
 
-  log "applying database migrations with isolated tooling"
-  load_environment_and_migrate "$temporary_dir"
+  log "applying database migrations and ensuring template catalog"
+  load_environment_migrate_and_seed_templates "$temporary_dir"
 
   if [[ "$replace_existing" == true ]]; then
     quarantine_dir="$releases_root/quarantine-${release_sha}-$(date -u +%Y%m%dT%H%M%SZ)"
@@ -160,7 +164,7 @@ if [[ "$release_ready" != true ]]; then
 
   mv -- "$temporary_dir" "$release_dir"
   temporary_dir=""
-  log "release extracted, verified, and migrated"
+  log "release extracted, verified, migrated, and template catalog ensured"
 fi
 
 new_link="$application_root/.current-$release_sha"

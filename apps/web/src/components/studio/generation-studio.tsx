@@ -1178,35 +1178,33 @@ export function GenerationStudio({
                   placeholder="A cinematic product photograph in warm Omani desert light…"
                   className="min-h-44 w-full rounded-2xl border border-input bg-card p-4 pb-14 text-foreground placeholder:text-muted-foreground"
                 />
-                {variant === "advanced" ? (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => void enhancePrompt()}
-                    disabled={
-                      busy ||
-                      isEnhancing ||
-                      !canGenerate ||
-                      !model ||
-                      !prompt.trim()
-                    }
-                    aria-busy={isEnhancing}
-                    className="absolute bottom-3 right-3"
-                  >
-                    {isEnhancing ? (
-                      <>
-                        <span
-                          aria-hidden="true"
-                          className="size-3 animate-spin rounded-full border-2 border-primary border-t-transparent"
-                        />
-                        Enhancing…
-                      </>
-                    ) : (
-                      <>✨ Enhance prompt</>
-                    )}
-                  </Button>
-                ) : null}
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => void enhancePrompt()}
+                  disabled={
+                    busy ||
+                    isEnhancing ||
+                    !canGenerate ||
+                    !model ||
+                    !prompt.trim()
+                  }
+                  aria-busy={isEnhancing}
+                  className="absolute bottom-3 right-3"
+                >
+                  {isEnhancing ? (
+                    <>
+                      <span
+                        aria-hidden="true"
+                        className="size-3 animate-spin rounded-full border-2 border-primary border-t-transparent"
+                      />
+                      Enhancing…
+                    </>
+                  ) : (
+                    <>✨ Enhance prompt</>
+                  )}
+                </Button>
               </div>
 
               {variant === "advanced" &&

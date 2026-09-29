@@ -35,6 +35,8 @@ export const metadata: Metadata = {
   ),
   manifest: "/manifest.webmanifest",
   icons: {
+    shortcut: "/brand/icons/compatibility/favicon.ico",
+    apple: "/brand/icons/compatibility/apple-touch-icon-180x180.png",
     icon: [
       {
         url: "/brand/icons/favicon/creators-favicon-32x32-transparent.webp",

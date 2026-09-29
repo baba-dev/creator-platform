@@ -4,6 +4,7 @@ import { defaultAssetName, reserveAssetStorage } from "@aiwa/assets";
 import {
   calculateBillableUnits,
   calculateVideoPricing,
+  quoteVideoInputReservation,
   countBillableCharacters,
   createCreditQuote,
   reserveCreditsForJob,
@@ -66,12 +67,35 @@ export const videoRequestSchema = z
     idempotencyKey: z.uuid(),
     templateId: z.string().min(1).max(100).optional(),
     prompt: z.string().trim().min(1).max(2000),
-    aspectRatio: z.enum(["16:9", "9:16", "1:1", "4:3", "3:4"]),
+    aspectRatio: z.enum(["16:9", "9:16", "1:1", "4:3", "3:4", "adaptive"]),
     resolution: z.enum(["720p", "1080p"]).default("1080p"),
     durationSeconds: z.number().int().min(1).max(30),
     generateAudio: z.boolean().default(false),
+    firstFrameAssetId: z.string().min(1).max(100).optional(),
+    lastFrameAssetId: z.string().min(1).max(100).optional(),
+    referenceVideoAssetId: z.string().min(1).max(100).optional(),
   })
-  .strict();
+  .strict()
+  .refine((value) => !value.lastFrameAssetId || value.firstFrameAssetId, {
+    path: ["lastFrameAssetId"],
+    message: "Choose a first frame before a last frame.",
+  })
+  .refine(
+    (value) =>
+      !value.referenceVideoAssetId ||
+      (!value.firstFrameAssetId && !value.lastFrameAssetId),
+    {
+      path: ["referenceVideoAssetId"],
+      message: "Choose reference video or image frames.",
+    },
+  )
+  .refine(
+    (value) => !value.firstFrameAssetId || value.aspectRatio === "adaptive",
+    {
+      path: ["aspectRatio"],
+      message: "Image-to-video uses the source image ratio.",
+    },
+  );
 
 export const voiceRequestSchema = z
   .object({
@@ -507,6 +531,15 @@ export async function createVideoJob(userId: string, raw: unknown) {
     durationSeconds: input.durationSeconds,
     generateAudio: input.generateAudio,
     watermark: false,
+    ...(input.firstFrameAssetId
+      ? { firstFrameAssetId: input.firstFrameAssetId }
+      : {}),
+    ...(input.lastFrameAssetId
+      ? { lastFrameAssetId: input.lastFrameAssetId }
+      : {}),
+    ...(input.referenceVideoAssetId
+      ? { referenceVideoAssetId: input.referenceVideoAssetId }
+      : {}),
   };
   const key = createHash("sha256")
     .update(`${input.organizationId}:${userId}:${input.idempotencyKey}`)
@@ -616,6 +649,68 @@ export async function createVideoJob(userId: string, raw: unknown) {
           "Audio generation is not supported by this model.",
         );
       }
+      const frameIds = [input.firstFrameAssetId, input.lastFrameAssetId].filter(
+        (id): id is string => Boolean(id),
+      );
+      const frames = frameIds.length
+        ? await tx.asset.findMany({
+            where: {
+              id: { in: frameIds },
+              organizationId: input.organizationId,
+              mediaKind: "IMAGE",
+              status: "READY",
+              storageProvider: "LOCAL",
+            },
+          })
+        : [];
+      if (
+        frames.length !== new Set(frameIds).size ||
+        frames.some(
+          (frame) =>
+            frame.purpose === "REFERENCE_INPUT" &&
+            frame.storageOwnerUserId !== userId,
+        )
+      )
+        throw new GenerationError("Source image is unavailable.", 404);
+
+      let referenceVideo: Awaited<ReturnType<typeof tx.asset.findFirst>> = null;
+      if (input.referenceVideoAssetId) {
+        if (!hasModelCapability(model.capabilities, "referenceVideo"))
+          throw new GenerationError(
+            "Video references are not supported by this model.",
+          );
+        referenceVideo = await tx.asset.findFirst({
+          where: {
+            id: input.referenceVideoAssetId,
+            organizationId: input.organizationId,
+            mediaKind: "VIDEO",
+            status: "READY",
+            storageProvider: "LOCAL",
+            mimeType: "video/mp4",
+          },
+        });
+        if (
+          !referenceVideo ||
+          (referenceVideo.purpose === "REFERENCE_INPUT" &&
+            referenceVideo.storageOwnerUserId !== userId) ||
+          referenceVideo.durationMs === null ||
+          referenceVideo.durationMs < 2_000 ||
+          referenceVideo.durationMs > 30_000 ||
+          referenceVideo.width === null ||
+          referenceVideo.height === null ||
+          referenceVideo.width < 300 ||
+          referenceVideo.height < 300 ||
+          referenceVideo.width * referenceVideo.height < 407_696 ||
+          referenceVideo.width * referenceVideo.height > 8_295_044 ||
+          referenceVideo.width / referenceVideo.height < 0.4 ||
+          referenceVideo.width / referenceVideo.height > 2.5 ||
+          referenceVideo.byteSize > 100_000_000n
+        )
+          throw new GenerationError(
+            "Reference video is unavailable or outside provider limits.",
+            400,
+          );
+      }
 
       if (
         price.pricingDimension !== "SECOND" &&
@@ -641,7 +736,29 @@ export async function createVideoJob(userId: string, raw: unknown) {
         targetGrossMarginBps: price.targetMarginBps,
         creditsPerBaisa: price.creditsPerBaisa,
       });
-      const credits = pricing.quote.customerCredits;
+      const referenceRate =
+        input.resolution === "1080p"
+          ? price.videoInputRate1080p
+          : price.videoInputRate720p;
+      if (referenceVideo && !referenceRate)
+        throw new GenerationError(
+          "Video-input pricing is unavailable for this model.",
+          409,
+        );
+      const credits =
+        referenceVideo && referenceRate
+          ? quoteVideoInputReservation({
+              inputDurationMs: referenceVideo.durationMs!,
+              resolution: input.resolution,
+              rateMicroUsdPerThousandTokens: referenceRate,
+              exchangeRate: {
+                baisaNumerator: price.fxBaisaNumerator,
+                baisaDenominator: price.fxBaisaDenominator,
+              },
+              targetGrossMarginBps: price.targetMarginBps,
+              creditsPerBaisa: price.creditsPerBaisa,
+            }).customerCredits
+          : pricing.quote.customerCredits;
       const { start, end } = muscatCalendarMonth(now);
       const jobs = await tx.generationJob.findMany({
         where: {
@@ -688,6 +805,21 @@ export async function createVideoJob(userId: string, raw: unknown) {
           quotedUnits: Number(pricing.durationUnits),
         },
       });
+      const sourceIds = [
+        ...new Set([
+          ...frameIds,
+          ...(referenceVideo ? [referenceVideo.id] : []),
+        ]),
+      ];
+      if (sourceIds.length)
+        await tx.generationInputAsset.createMany({
+          data: sourceIds.map((assetId, position) => ({
+            generationJobId: job.id,
+            assetId,
+            position,
+          })),
+          skipDuplicates: true,
+        });
       await reserveCreditsForJob(tx, {
         walletId: wallet.id,
         amountCredits: credits,
@@ -701,6 +833,13 @@ export async function createVideoJob(userId: string, raw: unknown) {
           storageOwnerUserId: userId,
           createdById: userId,
           generationJobId: job.id,
+          sourceAssetId:
+            input.referenceVideoAssetId ?? input.firstFrameAssetId ?? null,
+          purpose:
+            frames.some((frame) => frame.purpose === "REFERENCE_INPUT") ||
+            referenceVideo?.purpose === "REFERENCE_INPUT"
+              ? "REFERENCE_INPUT"
+              : "GENERAL",
           mediaKind: "VIDEO",
           sourceType: "GENERATED",
           storageProvider: "LOCAL",

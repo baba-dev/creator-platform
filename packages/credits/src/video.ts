@@ -135,6 +135,77 @@ export function calculateVideoPricing(
   };
 }
 
+/** BytePlus video-input rates are micro-USD per 1,000 completion tokens. */
+export function videoInputProviderCost(
+  completionTokens: bigint,
+  rateMicroUsdPerThousandTokens: bigint,
+): bigint {
+  requireNonNegativeInteger(completionTokens, "completionTokens");
+  requireNonNegativeInteger(
+    rateMicroUsdPerThousandTokens,
+    "rateMicroUsdPerThousandTokens",
+  );
+  if (rateMicroUsdPerThousandTokens === 0n)
+    throw new RangeError("video-input token rate must be positive");
+  return divideRoundUp(
+    completionTokens * rateMicroUsdPerThousandTokens,
+    1_000n,
+  );
+}
+
+/** Conservative 2.5:1 envelope; actual billed tokens come from provider usage. */
+export function estimateVideoInputTokens(
+  inputDurationMs: number,
+  outputDurationSeconds: number,
+  resolution: "720p" | "1080p",
+): bigint {
+  if (
+    !Number.isSafeInteger(inputDurationMs) ||
+    inputDurationMs < 2_000 ||
+    inputDurationMs > 30_000 ||
+    !Number.isSafeInteger(outputDurationSeconds) ||
+    outputDurationSeconds < 4 ||
+    outputDurationSeconds > 30
+  )
+    throw new RangeError("Invalid video-input or output duration");
+  // Adaptive framing can follow a source as wide as 2.5:1. Cover that area
+  // even when the user selects a narrower ratio.
+  const pixels = resolution === "1080p" ? 2700n * 1080n : 1800n * 720n;
+  // Round the source length upward; BytePlus's estimate uses 24 fps and
+  // (input + output) seconds * output pixels / 1024.
+  const seconds = BigInt(
+    Math.ceil(inputDurationMs / 1_000) + outputDurationSeconds,
+  );
+  return divideRoundUp(seconds * pixels * 24n, 1024n);
+}
+
+export function quoteVideoInputReservation(params: {
+  inputDurationMs: number;
+  resolution: "720p" | "1080p";
+  rateMicroUsdPerThousandTokens: bigint;
+  exchangeRate: ExchangeRateSnapshot;
+  targetGrossMarginBps: number;
+  creditsPerBaisa: bigint;
+}): CreditQuote {
+  // Reserve for the provider's full 30-second output envelope plus 25% for
+  // token-estimate variance/minimums. The final capture is capped at this
+  // disclosed reservation; any provider overrun is borne by the platform.
+  const tokens = estimateVideoInputTokens(
+    params.inputDurationMs,
+    30,
+    params.resolution,
+  );
+  return createCreditQuote({
+    providerCostMicroUsd: videoInputProviderCost(
+      divideRoundUp(tokens * 125n, 100n),
+      params.rateMicroUsdPerThousandTokens,
+    ),
+    exchangeRate: params.exchangeRate,
+    targetGrossMarginBps: params.targetGrossMarginBps,
+    creditsPerBaisa: params.creditsPerBaisa,
+  });
+}
+
 export interface WorstSupportedVideoCase {
   readonly maxDurationSeconds: number;
   readonly maxResolution: string;

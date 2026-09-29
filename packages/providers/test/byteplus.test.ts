@@ -410,6 +410,98 @@ describe("BytePlus provider adapter", () => {
     });
   });
 
+  it("submits a video reference with the explicit reference task type", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ id: "task-reference-1" }));
+    const provider = createBytePlusProvider({
+      ...validConfig,
+      fetch: fetchMock as typeof fetch,
+    });
+    await provider.submit({
+      idempotencyKey: "video-reference-1",
+      modelId: "dreamina-seedance-2-5-260628",
+      mediaKind: "video",
+      input: {
+        prompt: "Use the lighting and camera movement of this clip",
+        durationSeconds: 5,
+        resolution: "720p",
+        aspectRatio: "16:9",
+        referenceVideoUrl:
+          "https://creator.example.com/api/provider-media/asset1?jobId=job1&grant=token",
+      },
+    });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      omni_reference_task_type: "reference",
+      content: [
+        {
+          type: "text",
+          text: "Use the lighting and camera movement of this clip",
+        },
+        {
+          type: "video_url",
+          video_url: {
+            url: "https://creator.example.com/api/provider-media/asset1?jobId=job1&grant=token",
+          },
+          role: "reference_video",
+        },
+      ],
+    });
+    await expect(
+      provider.submit({
+        idempotencyKey: "mixed-reference-1",
+        modelId: "dreamina-seedance-2-5-260628",
+        mediaKind: "video",
+        input: {
+          prompt: "mixed",
+          referenceVideoUrl: "https://example.com/ref.mp4",
+          firstFrameImage: "data:image/png;base64,AAAA",
+        },
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT", retryable: false });
+  });
+
+  it("submits first and last frames with explicit BytePlus roles", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ id: "task-frame-1" }));
+    const provider = createBytePlusProvider({
+      ...validConfig,
+      fetch: fetchMock as typeof fetch,
+    });
+    await provider.submit({
+      idempotencyKey: "video-frame-1",
+      modelId: "dreamina-seedance-2-5-260628",
+      mediaKind: "video",
+      input: {
+        prompt: "The character turns",
+        aspectRatio: "adaptive",
+        resolution: "720p",
+        durationSeconds: 5,
+        firstFrameImage: "data:image/png;base64,AA==",
+        lastFrameImage: "data:image/png;base64,AQ==",
+      },
+    });
+    const body = JSON.parse(
+      (fetchMock.mock.calls[0]![1] as RequestInit).body as string,
+    );
+    expect(body.ratio).toBe("adaptive");
+    expect(body.content).toEqual([
+      { type: "text", text: "The character turns" },
+      {
+        type: "image_url",
+        image_url: { url: "data:image/png;base64,AA==" },
+        role: "first_frame",
+      },
+      {
+        type: "image_url",
+        image_url: { url: "data:image/png;base64,AQ==" },
+        role: "last_frame",
+      },
+    ]);
+  });
+
   it("polls running and successful video tasks", async () => {
     const fetchMock = vi
       .fn()

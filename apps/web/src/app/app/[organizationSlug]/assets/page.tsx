@@ -4,8 +4,6 @@ import { DEFAULT_ORGANIZATION_STORAGE_QUOTA_BYTES } from "@aiwa/assets";
 import { db } from "@aiwa/db";
 
 import { AssetLibrary } from "@/components/assets/asset-library";
-import { ThemeToggle } from "@/components/theme/theme-toggle";
-import { Brand } from "@/components/ui/brand";
 import { requireOrganizationPermission } from "@/lib/request-auth";
 
 export default async function AssetLibraryPage({
@@ -53,10 +51,6 @@ export default async function AssetLibraryPage({
   return (
     <main className="min-h-screen bg-background text-foreground">
       <div className="creative-glow pointer-events-none fixed inset-0" />
-      <header className="sticky top-0 z-30 flex min-h-[72px] items-center justify-between border-b border-border bg-background/85 px-4 backdrop-blur-xl sm:px-7 lg:px-10">
-        <Brand />
-        <ThemeToggle />
-      </header>
       <div className="relative mx-auto max-w-[1800px] px-4 py-7 sm:px-7 lg:px-9 lg:py-10">
         <Link
           href={`/app/${organizationSlug}`}

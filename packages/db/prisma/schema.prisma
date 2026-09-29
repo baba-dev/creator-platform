@@ -125,6 +125,13 @@ enum AssetSourceType {
   EXTERNAL
 }
 
+enum ImageOperationStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+}
+
 enum AssetStorageProvider {
   LOCAL
   S3
@@ -136,6 +143,8 @@ enum AssetVariantKind {
   THUMBNAIL
   PREVIEW
   POSTER
+  STORYBOARD
+  WAVEFORM
 }
 
 model User {
@@ -398,6 +407,8 @@ model ModelPriceVersion {
   id                   String           @id @default(cuid())
   providerModelId      String
   providerCostMicroUsd BigInt
+  videoInputRate720p   BigInt?
+  videoInputRate1080p  BigInt?
   customerCredits      BigInt
   fxBaisaNumerator     BigInt
   fxBaisaDenominator   BigInt
@@ -418,38 +429,38 @@ model ModelPriceVersion {
 }
 
 model GenerationJob {
-  id                         String              @id @default(cuid())
+  id                         String                 @id @default(cuid())
   organizationId             String
   projectId                  String?
   templateId                 String?
   createdById                String
   providerModelId            String
   priceVersionId             String
-  status                     GenerationJobStatus @default(DRAFT)
-  idempotencyKey             String              @unique
+  status                     GenerationJobStatus    @default(DRAFT)
+  idempotencyKey             String                 @unique
   requestPayload             Json
   outputPayload              Json?
   providerRequestId          String?
-  reservedCredits            BigInt              @default(0)
-  chargedCredits             BigInt              @default(0)
+  reservedCredits            BigInt                 @default(0)
+  chargedCredits             BigInt                 @default(0)
   actualProviderCostMicroUsd BigInt?
   quotedUnits                Int?
   actualUnits                Int?
   billableQuantity           Int?
   errorCode                  String?
-  errorMessage               String?             @db.Text
+  errorMessage               String?                @db.Text
   quotedAt                   DateTime?
   queuedAt                   DateTime?
   submittedAt                DateTime?
   completedAt                DateTime?
-  createdAt                  DateTime            @default(now())
-  updatedAt                  DateTime            @updatedAt
-  organization               Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  project                    Project?            @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  template                   GenerationTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  createdBy                  User                @relation("GenerationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  providerModel              ProviderModel       @relation(fields: [providerModelId], references: [id], onDelete: Restrict)
-  priceVersion               ModelPriceVersion   @relation(fields: [priceVersionId], references: [id], onDelete: Restrict)
+  createdAt                  DateTime               @default(now())
+  updatedAt                  DateTime               @updatedAt
+  organization               Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  project                    Project?               @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  template                   GenerationTemplate?    @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  createdBy                  User                   @relation("GenerationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  providerModel              ProviderModel          @relation(fields: [providerModelId], references: [id], onDelete: Restrict)
+  priceVersion               ModelPriceVersion      @relation(fields: [priceVersionId], references: [id], onDelete: Restrict)
   assets                     Asset[]
   inputAssets                GenerationInputAsset[]
 
@@ -497,55 +508,139 @@ model TemplateFavorite {
 }
 
 model Asset {
-  id                 String               @id @default(cuid())
-  organizationId     String
-  projectId          String?
-  folderId           String?
-  generationJobId    String?
+  id                    String                 @id @default(cuid())
+  organizationId        String
+  projectId             String?
+  folderId              String?
+  generationJobId       String?
+  sourceAssetId         String?
   generationOutputIndex Int?
-  storageOwnerUserId String?
-  createdById        String?
-  uploadedById       String?
-  status             AssetStatus          @default(PENDING)
-  purpose            AssetPurpose         @default(GENERAL)
-  mediaKind          AssetMediaKind       @default(OTHER)
-  sourceType         AssetSourceType      @default(GENERATED)
-  storageProvider    AssetStorageProvider @default(LOCAL)
-  name               String?
-  originalFilename   String?
-  objectKey          String               @unique
-  mimeType           String
-  byteSize           BigInt
-  sha256             String?
-  width              Int?
-  height             Int?
-  durationMs         Int?
-  deletedAt          DateTime?
-  purgeAfter         DateTime?
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
-  organization       Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  project            Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  folder             AssetFolder?         @relation(fields: [folderId], references: [id], onDelete: SetNull)
-  generationJob      GenerationJob?       @relation(fields: [generationJobId], references: [id], onDelete: SetNull)
-  storageOwner       User?                @relation("AssetStorageOwner", fields: [storageOwnerUserId], references: [id], onDelete: SetNull)
-  createdBy          User?                @relation("AssetCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  uploadedBy         User?                @relation("AssetUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
-  variants           AssetVariant[]
-  generationInputs   GenerationInputAsset[]
-  tagAssignments      AssetTagAssignment[]
-  favorites           AssetFavorite[]
+  storageOwnerUserId    String?
+  createdById           String?
+  uploadedById          String?
+  status                AssetStatus            @default(PENDING)
+  purpose               AssetPurpose           @default(GENERAL)
+  mediaKind             AssetMediaKind         @default(OTHER)
+  sourceType            AssetSourceType        @default(GENERATED)
+  storageProvider       AssetStorageProvider   @default(LOCAL)
+  name                  String?
+  originalFilename      String?
+  objectKey             String                 @unique
+  mimeType              String
+  byteSize              BigInt
+  sha256                String?
+  width                 Int?
+  height                Int?
+  durationMs            Int?
+  deletedAt             DateTime?
+  purgeAfter            DateTime?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  organization          Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  project               Project?               @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  folder                AssetFolder?           @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  generationJob         GenerationJob?         @relation(fields: [generationJobId], references: [id], onDelete: SetNull)
+  sourceAsset           Asset?                 @relation("AssetLineage", fields: [sourceAssetId], references: [id], onDelete: Restrict)
+  derivedAssets         Asset[]                @relation("AssetLineage")
+  imageOperation        ImageOperation?        @relation("ImageOperationOutput")
+  sourceOperations      ImageOperation[]       @relation("ImageOperationSource")
+  videoRenderOutputs    VideoRender[]          @relation("VideoRenderOutput")
+  videoRenderInputs     VideoRenderInput[]
+  storageOwner          User?                  @relation("AssetStorageOwner", fields: [storageOwnerUserId], references: [id], onDelete: SetNull)
+  createdBy             User?                  @relation("AssetCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  uploadedBy            User?                  @relation("AssetUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+  variants              AssetVariant[]
+  generationInputs      GenerationInputAsset[]
+  tagAssignments        AssetTagAssignment[]
+  favorites             AssetFavorite[]
 
+  @@unique([generationJobId, generationOutputIndex])
   @@index([organizationId, createdAt])
   @@index([organizationId, mediaKind, status, createdAt])
   @@index([organizationId, sourceType, status, createdAt])
   @@index([generationJobId])
-  @@unique([generationJobId, generationOutputIndex])
+  @@index([sourceAssetId])
   @@index([projectId, status, createdAt])
   @@index([folderId, status, createdAt])
   @@index([status, purgeAfter])
   @@index([organizationId, storageOwnerUserId, status])
   @@index([organizationId, sha256])
+}
+
+model ImageOperation {
+  id             String               @id @default(cuid())
+  organizationId String
+  createdById    String
+  sourceAssetId  String
+  outputAssetId  String               @unique
+  idempotencyKey String               @unique
+  requestPayload Json
+  status         ImageOperationStatus @default(PENDING)
+  errorMessage   String?
+  processingAt   DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  sourceAsset    Asset                @relation("ImageOperationSource", fields: [sourceAssetId], references: [id], onDelete: Restrict)
+  outputAsset    Asset                @relation("ImageOperationOutput", fields: [outputAssetId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, createdById, createdAt])
+  @@index([status, updatedAt])
+}
+
+enum VideoRenderStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+}
+
+model VideoEdit {
+  id             String        @id @default(cuid())
+  organizationId String
+  projectId      String?
+  createdById    String
+  title          String
+  revision       Int           @default(1)
+  document       Json
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  renders        VideoRender[]
+
+  @@index([organizationId, updatedAt])
+}
+
+model VideoRender {
+  id             String             @id @default(cuid())
+  editId         String
+  organizationId String
+  createdById    String
+  outputAssetId  String             @unique
+  idempotencyKey String             @unique
+  revision       Int
+  document       Json
+  status         VideoRenderStatus  @default(PENDING)
+  processingAt   DateTime?
+  completedAt    DateTime?
+  errorMessage   String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  edit           VideoEdit          @relation(fields: [editId], references: [id], onDelete: Restrict)
+  outputAsset    Asset              @relation("VideoRenderOutput", fields: [outputAssetId], references: [id], onDelete: Restrict)
+  inputs         VideoRenderInput[]
+
+  @@index([status, updatedAt])
+  @@index([organizationId, createdById, createdAt])
+}
+
+model VideoRenderInput {
+  renderId String
+  assetId  String
+  render   VideoRender @relation(fields: [renderId], references: [id], onDelete: Restrict)
+  asset    Asset       @relation(fields: [assetId], references: [id], onDelete: Restrict)
+
+  @@id([renderId, assetId])
+  @@index([assetId])
 }
 
 model GenerationInputAsset {
@@ -612,33 +707,33 @@ model AssetFavorite {
 }
 
 model AssetVariant {
-  id              String           @id @default(cuid())
+  id              String               @id @default(cuid())
   assetId         String
   kind            AssetVariantKind
   storageProvider AssetStorageProvider @default(LOCAL)
-  objectKey       String           @unique
+  objectKey       String               @unique
   mimeType        String
   byteSize        BigInt
   sha256          String?
   width           Int?
   height          Int?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  asset           Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  asset           Asset                @relation(fields: [assetId], references: [id], onDelete: Cascade)
 
   @@unique([assetId, kind])
   @@index([assetId])
 }
 
 model AssetStorageUsage {
-  organizationId String       @id
-  usedBytes      BigInt       @default(0)
-  reservedBytes  BigInt       @default(0)
-  readyAssetCount Int         @default(0)
-  version        Int          @default(0)
-  reconciledAt   DateTime?
-  updatedAt      DateTime     @updatedAt
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organizationId  String       @id
+  usedBytes       BigInt       @default(0)
+  reservedBytes   BigInt       @default(0)
+  readyAssetCount Int          @default(0)
+  version         Int          @default(0)
+  reconciledAt    DateTime?
+  updatedAt       DateTime     @updatedAt
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 }
 
 model AuditEvent {

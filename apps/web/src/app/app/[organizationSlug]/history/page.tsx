@@ -1,8 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@aiwa/db";
-import { Brand } from "@/components/ui/brand";
-import { ThemeToggle } from "@/components/theme/theme-toggle";
 import {
   historyQuerySchema,
   listGenerationHistory,
@@ -56,10 +54,6 @@ export default async function HistoryPage({
   const base = `/app/${organizationSlug}/history`;
   return (
     <main className="min-h-screen bg-background text-foreground">
-      <header className="flex min-h-[72px] items-center justify-between border-b border-border bg-background px-4 sm:px-8">
-        <Brand />
-        <ThemeToggle />
-      </header>
       <div className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-8">
         <Link
           href={`/app/${organizationSlug}`}

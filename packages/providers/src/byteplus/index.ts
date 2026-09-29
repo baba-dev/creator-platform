@@ -138,17 +138,38 @@ export const bytePlusImageInputSchema = z
     }
   });
 
-export const bytePlusVideoInputSchema = z.object({
-  prompt: z.string().trim().min(1),
-  aspectRatio: z
-    .enum(["16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "adaptive"])
-    .default("16:9"),
-  resolution: z.enum(["480p", "720p", "1080p"]).default("720p"),
-  durationSeconds: z.number().int().min(4).max(30).default(5),
-  generateAudio: z.boolean().default(false),
-  watermark: z.boolean().default(false),
-  seed: z.number().int().min(-1).max(2_147_483_647).optional(),
-});
+export const bytePlusVideoInputSchema = z
+  .object({
+    prompt: z.string().trim().min(1),
+    aspectRatio: z
+      .enum(["16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "adaptive"])
+      .default("16:9"),
+    resolution: z.enum(["480p", "720p", "1080p"]).default("720p"),
+    durationSeconds: z.number().int().min(4).max(30).default(5),
+    generateAudio: z.boolean().default(false),
+    watermark: z.boolean().default(false),
+    seed: z.number().int().min(-1).max(2_147_483_647).optional(),
+    firstFrameImage: z
+      .string()
+      .startsWith("data:image/")
+      .max(42 * 1024 * 1024)
+      .optional(),
+    lastFrameImage: z
+      .string()
+      .startsWith("data:image/")
+      .max(42 * 1024 * 1024)
+      .optional(),
+    referenceVideoUrl: z.url().startsWith("https://").optional(),
+  })
+  .refine(
+    (input) =>
+      !input.referenceVideoUrl ||
+      (!input.firstFrameImage && !input.lastFrameImage),
+    {
+      path: ["referenceVideoUrl"],
+      message: "Video reference cannot be combined with image frames.",
+    },
+  );
 
 export const bytePlusVoiceInputSchema = z.object({
   text: z.string().trim().min(1),
@@ -231,11 +252,15 @@ export const VERIFIED_BYTEPLUS_MODELS: readonly ProviderModelDescriptor[] = [
       "aspectRatio:16:9": true,
       "aspectRatio:9:16": true,
       "aspectRatio:1:1": true,
+      "aspectRatio:adaptive": true,
       "resolution:720p": true,
       "resolution:1080p": true,
       "durationSeconds:5": true,
       "durationSeconds:10": true,
       generateAudio: true,
+      firstFrame: true,
+      lastFrame: true,
+      referenceVideo: true,
       minimumDurationSeconds: 4,
       maximumDurationSeconds: 30,
       fps: 24,
@@ -765,7 +790,39 @@ export function createBytePlusProvider(
               headers: modelArkHeaders,
               body: JSON.stringify({
                 model: submission.modelId,
-                content: [{ type: "text", text: input.data.prompt }],
+                content: [
+                  { type: "text", text: input.data.prompt },
+                  ...(input.data.firstFrameImage
+                    ? [
+                        {
+                          type: "image_url",
+                          image_url: { url: input.data.firstFrameImage },
+                          role: "first_frame",
+                        },
+                      ]
+                    : []),
+                  ...(input.data.lastFrameImage
+                    ? [
+                        {
+                          type: "image_url",
+                          image_url: { url: input.data.lastFrameImage },
+                          role: "last_frame",
+                        },
+                      ]
+                    : []),
+                  ...(input.data.referenceVideoUrl
+                    ? [
+                        {
+                          type: "video_url",
+                          video_url: { url: input.data.referenceVideoUrl },
+                          role: "reference_video",
+                        },
+                      ]
+                    : []),
+                ],
+                ...(input.data.referenceVideoUrl
+                  ? { omni_reference_task_type: "reference" }
+                  : {}),
                 resolution: input.data.resolution,
                 ratio: input.data.aspectRatio,
                 duration: input.data.durationSeconds,

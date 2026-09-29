@@ -7,6 +7,7 @@
     ".": "./src/index.ts",
     "./process": "./src/process.ts",
     "./storage": "./src/storage.ts",
+    "./provider-media-grant": "./src/provider-media-grant.ts",
     "./reconciliation": "./src/reconciliation.ts"
   },
   "scripts": {

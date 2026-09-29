@@ -5,10 +5,15 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./image-operations": "./src/image-operations.ts",
+    "./video-edit": "./src/video-edit.ts",
+    "./video-captions": "./src/video-captions.ts",
+    "./media-probe": "./src/media-probe.ts",
     "./storage": "./src/storage.ts"
   },
   "dependencies": {
-    "@aiwa/db": "workspace:*"
+    "@aiwa/db": "workspace:*",
+    "zod": "^4.6.4"
   },
   "devDependencies": {
     "vitest": "^4.1.11"

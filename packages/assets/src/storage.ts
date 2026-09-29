@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
   mkdir,
+  copyFile,
   open,
   readFile,
   rename,
@@ -9,6 +10,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { createReadStream } from "node:fs";
 
 export interface StoredAssetObject {
   readonly byteSize: bigint;
@@ -106,6 +108,28 @@ export class LocalAssetStorage implements AssetStorage {
       byteSize: BigInt(bytes.byteLength),
       sha256: createHash("sha256").update(bytes).digest("hex"),
     };
+  }
+
+  async putFile(
+    objectKey: string,
+    sourcePath: string,
+  ): Promise<StoredAssetObject> {
+    const target = this.path(objectKey);
+    await mkdir(dirname(target), { recursive: true });
+    const temp = `${target}.${randomUUID()}.tmp`;
+    try {
+      await copyFile(sourcePath, temp);
+      const digest = createHash("sha256");
+      let bytes = 0;
+      for await (const chunk of createReadStream(temp)) {
+        digest.update(chunk);
+        bytes += chunk.length;
+      }
+      await rename(temp, target);
+      return { byteSize: BigInt(bytes), sha256: digest.digest("hex") };
+    } finally {
+      await rm(temp, { force: true }).catch(() => undefined);
+    }
   }
 
   async read(objectKey: string): Promise<Buffer> {

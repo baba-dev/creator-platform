@@ -5,9 +5,27 @@ import {
   getAudioMultiplierBps,
   getWorstSupportedVideoCase,
   assertFlatVideoPriceCoversWorstCase,
+  estimateVideoInputTokens,
+  quoteVideoInputReservation,
+  videoInputProviderCost,
 } from "../src/video";
 
 describe("video pricing policy", () => {
+  it("reserves a capped reference-video envelope and prices actual tokens separately", () => {
+    expect(estimateVideoInputTokens(5_000, 30, "720p")).toBe(1_063_125n);
+    const reserve = quoteVideoInputReservation({
+      inputDurationMs: 5_000,
+      resolution: "720p",
+      rateMicroUsdPerThousandTokens: 6_400n,
+      exchangeRate: { baisaNumerator: 769n, baisaDenominator: 2n },
+      targetGrossMarginBps: 2_500,
+      creditsPerBaisa: 1n,
+    });
+    expect(reserve.providerCostMicroUsd).toBe(8_505_005n);
+    expect(videoInputProviderCost(183_104n, 6_400n)).toBe(1_171_866n);
+    expect(() => estimateVideoInputTokens(30_001, 5, "720p")).toThrow();
+    expect(() => videoInputProviderCost(-1n, 6_400n)).toThrow();
+  });
   it("resolves resolution and audio basis points correctly", () => {
     expect(getResolutionMultiplierBps("720p")).toBe(10_000n);
     expect(getResolutionMultiplierBps("1080p")).toBe(15_000n);

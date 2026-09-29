@@ -1,7 +1,5 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Brand } from "@/components/ui/brand";
-import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { CancelJobButton } from "@/components/studio/cancel-job-button";
 import { JobRefresh } from "@/components/studio/job-refresh";
 import { getCustomerJob } from "@/lib/generation-history";
@@ -47,10 +45,6 @@ export default async function CustomerJobPage({
   ] as const;
   return (
     <main className="min-h-screen bg-background text-foreground">
-      <header className="flex min-h-[72px] items-center justify-between border-b border-border px-4 sm:px-8">
-        <Brand />
-        <ThemeToggle />
-      </header>
       <div className="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-8">
         <Link
           href={`/app/${organizationSlug}/history`}

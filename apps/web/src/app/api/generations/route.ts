@@ -186,7 +186,20 @@ export async function GET(request: Request) {
                   unitQuantity:
                     m.priceVersions[0].unitQuantity?.toString() ?? null,
                   credits: priceCredits(m.priceVersions[0]).toString(),
-                  capabilities: m.capabilities,
+                  capabilities:
+                    m.mediaKind === "VIDEO" &&
+                    m.capabilities &&
+                    typeof m.capabilities === "object" &&
+                    !Array.isArray(m.capabilities)
+                      ? {
+                          ...m.capabilities,
+                          referenceVideo:
+                            (m.capabilities as Record<string, unknown>)
+                              .referenceVideo === true &&
+                            m.priceVersions[0].videoInputRate720p !== null &&
+                            m.priceVersions[0].videoInputRate1080p !== null,
+                        }
+                      : m.capabilities,
                 },
               ]
             : [],

@@ -1,5 +1,7 @@
 import { captureCreditsForJob, releaseOrRefundCredits } from "@aiwa/credits";
+import { createCreditQuote, videoInputProviderCost } from "@aiwa/credits";
 import { finalizeAssetStorage, releaseAssetStorage } from "@aiwa/assets";
+import { parseServerEnv } from "@aiwa/config";
 import { db, type Prisma } from "@aiwa/db";
 import {
   enqueueMail,
@@ -12,6 +14,7 @@ import {
   type MediaGenerationProvider,
 } from "@aiwa/providers";
 import { requireMembership } from "./index";
+import { issueProviderMediaGrant } from "./provider-media-grant";
 import {
   downloadImage,
   downloadVideo,
@@ -213,11 +216,88 @@ export async function processVideoSubmitJob(
   }
 
   try {
+    const videoPayload = job.requestPayload as Record<string, unknown>;
+    const frameIds = [
+      videoPayload.firstFrameAssetId,
+      videoPayload.lastFrameAssetId,
+    ].filter((value): value is string => typeof value === "string");
+    const referenceVideoId =
+      typeof videoPayload.referenceVideoAssetId === "string"
+        ? videoPayload.referenceVideoAssetId
+        : null;
+    const inputs =
+      frameIds.length || referenceVideoId
+        ? await db.generationInputAsset.findMany({
+            where: { generationJobId: job.id },
+            include: { asset: true },
+            orderBy: { position: "asc" },
+          })
+        : [];
+    if (
+      inputs.length !==
+        new Set([...frameIds, ...(referenceVideoId ? [referenceVideoId] : [])])
+          .size ||
+      inputs.some(
+        ({ asset }) =>
+          asset.organizationId !== job.organizationId ||
+          asset.status !== "READY" ||
+          (asset.purpose === "REFERENCE_INPUT" &&
+            asset.storageOwnerUserId !== job.createdById) ||
+          (asset.id === referenceVideoId
+            ? asset.mediaKind !== "VIDEO" ||
+              asset.mimeType !== "video/mp4" ||
+              asset.storageProvider !== "LOCAL"
+            : asset.mediaKind !== "IMAGE"),
+      )
+    )
+      throw new ProviderRequestError("Source image is unavailable", false, {
+        code: "REFERENCE_IMAGE_UNAVAILABLE",
+      });
+    const frameImages = await Promise.all(
+      frameIds.map(async (assetId) => {
+        const asset = inputs.find((item) => item.assetId === assetId)?.asset;
+        if (!asset)
+          throw new ProviderRequestError("Source image is unavailable", false, {
+            code: "REFERENCE_IMAGE_UNAVAILABLE",
+          });
+        return referenceImageDataUri(asset);
+      }),
+    );
+    let referenceVideoUrl: string | undefined;
+    if (referenceVideoId) {
+      const env = parseServerEnv();
+      const base = new URL(env.APP_URL);
+      if (base.protocol !== "https:")
+        throw new ProviderRequestError(
+          "Provider source requires a public HTTPS app URL",
+          false,
+          { code: "INVALID_PROVIDER_SOURCE" },
+        );
+      const url = new URL(
+        `/api/provider-media/${encodeURIComponent(referenceVideoId)}`,
+        base,
+      );
+      url.searchParams.set("jobId", job.id);
+      url.searchParams.set(
+        "grant",
+        issueProviderMediaGrant({
+          secret: env.AUTH_SECRET,
+          jobId: job.id,
+          assetId: referenceVideoId,
+        }),
+      );
+      referenceVideoUrl = url.toString();
+    }
     const result = await provider.submit({
       idempotencyKey: job.idempotencyKey,
       modelId: job.providerModel.providerModelId,
       mediaKind: "video",
-      input: job.requestPayload as Record<string, unknown>,
+      input: {
+        ...videoPayload,
+        ...(frameImages[0] ? { firstFrameImage: frameImages[0] } : {}),
+        ...(frameImages[1] ? { lastFrameImage: frameImages[1] } : {}),
+        ...(referenceVideoUrl ? { referenceVideoUrl } : {}),
+      },
     });
     if (result.status !== "submitted" || !result.providerRequestId)
       throw new ProviderRequestError(
@@ -318,6 +398,35 @@ export async function processVideoPollJob(
     return;
   }
 
+  // Preserve the provider's billable measurement without trusting arbitrary
+  // response fields as persisted job data. A missing or malformed usage value
+  // remains unknown; it must never be inferred from the requested duration.
+  const rawCompletionTokens = result.rawUsage?.completion_tokens;
+  const completionTokens =
+    typeof rawCompletionTokens === "number" &&
+    Number.isSafeInteger(rawCompletionTokens) &&
+    rawCompletionTokens >= 0
+      ? rawCompletionTokens
+      : null;
+  const requestPayload = job.requestPayload as Record<string, unknown>;
+  const hasReferenceVideo =
+    typeof requestPayload.referenceVideoAssetId === "string";
+  if (
+    hasReferenceVideo &&
+    (completionTokens === null || completionTokens === 0)
+  ) {
+    await db.generationJob.updateMany({
+      where: { id, status: "PROCESSING" },
+      data: {
+        status: "MANUAL_REVIEW",
+        errorCode: "MISSING_PROVIDER_USAGE",
+        errorMessage:
+          "Provider succeeded without billable token usage. Credits remain reserved for review.",
+      },
+    });
+    return;
+  }
+
   let stored: Awaited<ReturnType<typeof storeVideo>>;
   try {
     const bytes = await downloadVideo(result.outputUrls[0]!);
@@ -329,16 +438,55 @@ export async function processVideoPollJob(
 
   await db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM GenerationJob WHERE id = ${id} FOR UPDATE`;
-    const current = await tx.generationJob.findUniqueOrThrow({ where: { id } });
+    const current = await tx.generationJob.findUniqueOrThrow({
+      where: { id },
+      include: { priceVersion: true },
+    });
     if (current.status !== "PROCESSING") return;
     const wallet = await tx.wallet.findUniqueOrThrow({
       where: { organizationId: job.organizationId },
     });
+    const resolution = requestPayload.resolution === "1080p" ? "1080p" : "720p";
+    const rate =
+      resolution === "1080p"
+        ? current.priceVersion.videoInputRate1080p
+        : current.priceVersion.videoInputRate720p;
+    if (hasReferenceVideo && !rate)
+      throw new Error(
+        "The reference-video price snapshot is missing its token rate.",
+      );
+    const actualCost = hasReferenceVideo
+      ? videoInputProviderCost(BigInt(completionTokens!), rate!)
+      : null;
+    const actualQuote =
+      actualCost === null
+        ? null
+        : createCreditQuote({
+            providerCostMicroUsd: actualCost,
+            exchangeRate: {
+              baisaNumerator: current.priceVersion.fxBaisaNumerator,
+              baisaDenominator: current.priceVersion.fxBaisaDenominator,
+            },
+            targetGrossMarginBps: current.priceVersion.targetMarginBps,
+            creditsPerBaisa: current.priceVersion.creditsPerBaisa,
+          });
+    const charge =
+      actualQuote && actualQuote.customerCredits < current.reservedCredits
+        ? actualQuote.customerCredits
+        : current.reservedCredits;
     await captureCreditsForJob(tx, {
       walletId: wallet.id,
       jobId: id,
-      amountCredits: current.reservedCredits,
+      amountCredits: charge,
       idempotencyKey: `generation-capture-${id}`,
+      ...(hasReferenceVideo
+        ? {
+            metadata: {
+              completionTokens,
+              cappedAtReservation: actualQuote!.customerCredits > charge,
+            },
+          }
+        : {}),
     });
     const pendingAsset = await tx.asset.findUniqueOrThrow({
       where: { objectKey: `${id}.mp4` },
@@ -359,8 +507,15 @@ export async function processVideoPollJob(
       where: { id },
       data: {
         status: "SUCCEEDED",
+        actualProviderCostMicroUsd: actualCost,
+        actualUnits: current.quotedUnits,
         completedAt: new Date(),
-        outputPayload: { stored: true },
+        outputPayload: {
+          stored: true,
+          ...(completionTokens === null
+            ? {}
+            : { providerUsage: { completionTokens } }),
+        },
         errorCode: null,
         errorMessage: null,
       },

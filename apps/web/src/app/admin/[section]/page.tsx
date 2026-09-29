@@ -454,6 +454,8 @@ async function renderSection(
             select: {
               customerCredits: true,
               providerCostMicroUsd: true,
+              videoInputRate720p: true,
+              videoInputRate1080p: true,
               targetMarginBps: true,
               pricingDimension: true,
               unitQuantity: true,
@@ -531,6 +533,8 @@ async function renderSection(
                         displayName={row.displayName}
                         enabled={row.enabled}
                         currentProviderCostMicroUsd={price?.providerCostMicroUsd.toString()}
+                        currentVideoInputRate720p={price?.videoInputRate720p?.toString()}
+                        currentVideoInputRate1080p={price?.videoInputRate1080p?.toString()}
                         currentCustomerCredits={price?.customerCredits.toString()}
                         currentTargetMarginBps={price?.targetMarginBps}
                         currentPricingDimension={price?.pricingDimension}

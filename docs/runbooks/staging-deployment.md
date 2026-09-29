@@ -95,6 +95,39 @@ sudo install -o root -g root -m 0755 \
 After the first successful layout-v2 deployment, each healthy release updates
 the root-owned deployment and operations entry points for subsequent runs.
 
+## Media editor preflight before merging PR #60
+
+The staging deploy job runs only after CI succeeds on `main`. Install FFmpeg and
+FFprobe on the bare-metal host before merging; `creator-deploy` checks both
+before it backs up or migrates the database:
+
+```bash
+sudo apt-get update
+sudo apt-get install --no-install-recommends -y ffmpeg fonts-noto-core
+command -v ffmpeg
+command -v ffprobe
+```
+
+The provider-media grant is carried in a URL query string. Install the updated
+Nginx location before publishing video-input rates, so origin access and error
+logs do not record the grant:
+
+```bash
+sudo install -o root -g root -m 0644 \
+  infra/nginx/creator.aiwamediagroup.com.conf \
+  /etc/nginx/sites-available/creator.aiwamediagroup.com
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+Confirm the active site enables that configuration, and review Cloudflare or
+other upstream logs for the same query string. The checked-in staging site uses
+the existing Cloudflare Origin Certificate at `/etc/nginx/certs/pubkey.pem` with
+private key `/etc/nginx/certs/privkey.key`; verify both files exist and that the
+certificate covers `creator.aiwamediagroup.com` before reloading Nginx. Keep
+Cloudflare SSL/TLS mode on **Full (strict)**. Keep both input rates unset until
+the provider contract and a live reference-video settlement are verified.
+
 ## Platform operations
 
 Grant complete platform-owner access only after the account exists:
@@ -117,28 +150,32 @@ The generated PNG is stored persistently under
 `/var/www/creator-platform/shared/byteplus-smoke/` and the command never prints
 the API key, prompt, or temporary provider output URL.
 
-## TLS activation
+## TLS / Cloudflare origin certificate
 
-Point the Cloudflare DNS record to `129.151.137.222` and temporarily use
-DNS-only mode. After the first release is healthy:
+Staging terminates TLS in Nginx with the existing Cloudflare Origin Certificate
+already provisioned on the host:
 
-```bash
-sudo apt-get update
-sudo apt-get install -y certbot
-sudo certbot certonly \
-  --webroot \
-  --webroot-path /var/www/letsencrypt \
-  --domain creator.aiwamediagroup.com
-
-sudo install -o root -g root -m 0644 \
-  infra/nginx/creator.aiwamediagroup.com.conf \
-  /etc/nginx/sites-available/creator.aiwamediagroup.com
-sudo nginx -t
-sudo systemctl reload nginx
+```text
+/etc/nginx/certs/pubkey.pem
+/etc/nginx/certs/privkey.key
 ```
 
-After HTTPS succeeds, Cloudflare proxying may be re-enabled with SSL/TLS mode
-set to **Full (strict)**.
+Do not install Certbot or switch to a Let's Encrypt certificate for this host.
+Before installing or reloading a repository Nginx configuration, verify that the
+certificate and private key exist, match, and cover
+`creator.aiwamediagroup.com`:
+
+```bash
+sudo test -r /etc/nginx/certs/pubkey.pem
+sudo test -r /etc/nginx/certs/privkey.key
+sudo openssl x509 -in /etc/nginx/certs/pubkey.pem -noout -subject -issuer -dates -ext subjectAltName
+sudo nginx -t
+```
+
+Cloudflare proxying should remain enabled with SSL/TLS mode set to **Full
+(strict)**. The origin certificate is intended for Cloudflare-to-origin TLS; do
+not expose the origin as a general public TLS endpoint or copy the private key
+into the repository.
 
 ## Verification
 

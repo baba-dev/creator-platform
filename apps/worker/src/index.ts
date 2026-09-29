@@ -17,6 +17,8 @@ import { createNvidiaProvider } from "@aiwa/providers/nvidia";
 import { Queue, Worker } from "bullmq";
 import Redis from "ioredis";
 import { processAssetDerivatives, purgeExpiredAssets } from "./assets";
+import { failImageOperation, processImageOperation } from "./image-operations";
+import { failVideoRender, processVideoRender } from "./video-renders";
 import { processReasoningJob } from "./reasoning";
 import { reapExpiredRecoveryJobs } from "./reaper";
 
@@ -164,6 +166,18 @@ const assetQueue = new Queue("asset-ingestion", {
 const assetWorker = new Worker(
   "asset-ingestion",
   async (job) => {
+    if (job.name === "image-edit") {
+      if (typeof job.data.operationId !== "string")
+        throw new Error("Invalid image operation payload");
+      await processImageOperation(job.data.operationId);
+      return;
+    }
+    if (job.name === "video-render") {
+      if (typeof job.data.renderId !== "string")
+        throw new Error("Invalid video render payload");
+      await processVideoRender(job.data.renderId);
+      return;
+    }
     if (typeof job.data.assetId !== "string")
       throw new Error("Invalid asset queue payload");
     await processAssetDerivatives(job.data.assetId);
@@ -174,12 +188,34 @@ const assetWorker = new Worker(
 assetWorker.on("error", () =>
   log("error", "Asset ingestion queue connection failed"),
 );
-assetWorker.on("failed", (job, error) =>
-  log("error", "Asset derivative processing failed", {
+assetWorker.on("failed", (job, error) => {
+  if (
+    job?.name === "image-edit" &&
+    typeof job.data.operationId === "string" &&
+    job.attemptsMade >= (job.opts.attempts ?? 1)
+  ) {
+    void failImageOperation(job.data.operationId).catch(() =>
+      log("error", "Image operation cleanup failed", {
+        operationId: job.data.operationId,
+      }),
+    );
+  }
+  if (
+    job?.name === "video-render" &&
+    typeof job.data.renderId === "string" &&
+    job.attemptsMade >= (job.opts.attempts ?? 1)
+  ) {
+    void failVideoRender(job.data.renderId).catch(() =>
+      log("error", "Video render cleanup failed", {
+        renderId: job.data.renderId,
+      }),
+    );
+  }
+  log("error", "Asset processing failed", {
     assetId: job?.data?.assetId,
     errorName: error.name,
-  }),
-);
+  });
+});
 
 let assetDispatching = false;
 async function dispatchAssets() {
@@ -187,6 +223,74 @@ async function dispatchAssets() {
   assetDispatching = true;
   try {
     await purgeExpiredAssets();
+    const operations = await db.imageOperation.findMany({
+      where: {
+        OR: [
+          { status: "PENDING" },
+          {
+            status: "PROCESSING",
+            processingAt: { lt: new Date(Date.now() - 5 * 60_000) },
+          },
+        ],
+      },
+      select: { id: true },
+      orderBy: { createdAt: "asc" },
+      take: 50,
+    });
+    for (const operation of operations) {
+      const jobId = `image-edit-${operation.id}`;
+      const queued = await assetQueue.getJob(jobId);
+      if (queued) {
+        const state = await queued.getState();
+        if (["completed", "failed"].includes(state)) await queued.remove();
+        else continue;
+      }
+      await assetQueue.add(
+        "image-edit",
+        { operationId: operation.id },
+        {
+          jobId,
+          attempts: 3,
+          backoff: { type: "exponential", delay: 5_000 },
+          removeOnComplete: true,
+          removeOnFail: 100,
+        },
+      );
+    }
+    const renders = await db.videoRender.findMany({
+      where: {
+        OR: [
+          { status: "PENDING" },
+          {
+            status: "PROCESSING",
+            processingAt: { lt: new Date(Date.now() - 6 * 60_000) },
+          },
+        ],
+      },
+      select: { id: true },
+      orderBy: { createdAt: "asc" },
+      take: 20,
+    });
+    for (const render of renders) {
+      const jobId = `video-render-${render.id}`;
+      const queued = await assetQueue.getJob(jobId);
+      if (queued) {
+        const state = await queued.getState();
+        if (["completed", "failed"].includes(state)) await queued.remove();
+        else continue;
+      }
+      await assetQueue.add(
+        "video-render",
+        { renderId: render.id },
+        {
+          jobId,
+          attempts: 3,
+          backoff: { type: "exponential", delay: 5_000 },
+          removeOnComplete: true,
+          removeOnFail: 100,
+        },
+      );
+    }
     const assets = await db.asset.findMany({
       where: {
         status: "READY",
@@ -197,8 +301,12 @@ async function dispatchAssets() {
           },
           {
             mediaKind: "VIDEO",
-            variants: { none: { kind: "POSTER" } },
+            OR: [
+              { variants: { none: { kind: "POSTER" } } },
+              { variants: { none: { kind: "STORYBOARD" } } },
+            ],
           },
+          { mediaKind: "AUDIO", variants: { none: { kind: "WAVEFORM" } } },
         ],
       },
       select: { id: true },

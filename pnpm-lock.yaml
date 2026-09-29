@@ -153,6 +153,9 @@ importers:
       sharp:
         specifier: 0.35.4
         version: 0.35.4(@types/node@24.13.4)
+      zod:
+        specifier: ^4.6.4
+        version: 4.6.4
     devDependencies:
       tsup:
         specifier: ^8.5.0
@@ -169,6 +172,9 @@ importers:
       '@aiwa/db':
         specifier: workspace:*
         version: link:../db
+      zod:
+        specifier: ^4.6.4
+        version: 4.6.4
     devDependencies:
       vitest:
         specifier: ^4.1.11

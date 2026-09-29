@@ -10,6 +10,8 @@ export function ModelActions({
   displayName,
   enabled,
   currentProviderCostMicroUsd,
+  currentVideoInputRate720p,
+  currentVideoInputRate1080p,
   currentCustomerCredits,
   currentTargetMarginBps,
   currentPricingDimension,
@@ -22,6 +24,8 @@ export function ModelActions({
   enabled: boolean;
   mediaKind?: "IMAGE" | "VIDEO" | "VOICE" | "REASONING";
   currentProviderCostMicroUsd?: string;
+  currentVideoInputRate720p?: string;
+  currentVideoInputRate1080p?: string;
   currentCustomerCredits?: string;
   currentTargetMarginBps?: number;
   currentPricingDimension?: "REQUEST" | "CHARACTER" | "SECOND";
@@ -38,6 +42,12 @@ export function ModelActions({
     ? (currentTargetMarginBps / 100).toString()
     : "25";
   const [costMicroUsd, setCostMicroUsd] = useState(defaultCost);
+  const [videoRate720p, setVideoRate720p] = useState(
+    currentVideoInputRate720p ?? "",
+  );
+  const [videoRate1080p, setVideoRate1080p] = useState(
+    currentVideoInputRate1080p ?? "",
+  );
   const [marginPercent, setMarginPercent] = useState(defaultMargin);
   const [pricingDimension, setPricingDimension] = useState<
     "REQUEST" | "CHARACTER" | "SECOND"
@@ -97,12 +107,23 @@ export function ModelActions({
       if (costBigInt <= 0n) {
         throw new Error("Provider cost must be positive.");
       }
+      if (
+        mediaKind === "VIDEO" &&
+        Boolean(videoRate720p) !== Boolean(videoRate1080p)
+      )
+        throw new Error("Set both video-input token rates together.");
 
       const res = await fetch(`/api/admin/models/${modelId}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           providerCostMicroUsd: costMicroUsd,
+          ...(mediaKind === "VIDEO" && videoRate720p && videoRate1080p
+            ? {
+                videoInputRate720p: videoRate720p,
+                videoInputRate1080p: videoRate1080p,
+              }
+            : {}),
           targetMarginBps: marginBps,
           pricingDimension,
           unitQuantity: pricingDimension === "REQUEST" ? "1" : unitQuantity,
@@ -254,6 +275,42 @@ export function ModelActions({
                   1 USD = 1,000,000 micro-USD (e.g. $0.054 = 54,000)
                 </p>
               </div>
+
+              {mediaKind === "VIDEO" ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {(
+                    [
+                      ["720p", videoRate720p, setVideoRate720p],
+                      ["1080p", videoRate1080p, setVideoRate1080p],
+                    ] as const
+                  ).map(([resolution, value, setter]) => (
+                    <div key={resolution}>
+                      <label
+                        htmlFor={`input-rate-${resolution}-${modelId}`}
+                        className="block text-xs font-semibold text-foreground"
+                      >
+                        Video input {resolution}: micro-USD / 1,000 tokens
+                      </label>
+                      <input
+                        id={`input-rate-${resolution}-${modelId}`}
+                        type="text"
+                        inputMode="numeric"
+                        value={value}
+                        onChange={(event) =>
+                          setter(event.target.value.replace(/\D/g, ""))
+                        }
+                        placeholder={resolution === "720p" ? "6400" : "7000"}
+                        className="mt-1 h-9 w-full rounded-lg border border-border bg-background px-3 font-mono text-sm"
+                      />
+                    </div>
+                  ))}
+                  <p className="text-[11px] text-muted-foreground sm:col-span-2">
+                    Publish both rates to price reference-video inputs. Leave
+                    both empty to keep that mode unavailable. Verify rates
+                    against your provider contract.
+                  </p>
+                </div>
+              ) : null}
 
               <div>
                 <label

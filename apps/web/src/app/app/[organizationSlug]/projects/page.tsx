@@ -6,8 +6,6 @@ import {
   ProjectManager,
   type ProjectRow,
 } from "@/components/projects/project-manager";
-import { ThemeToggle } from "@/components/theme/theme-toggle";
-import { Brand } from "@/components/ui/brand";
 import { requireOrganizationPermission } from "@/lib/request-auth";
 
 export default async function ProjectsPage({
@@ -46,10 +44,6 @@ export default async function ProjectsPage({
 
   return (
     <main className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-30 flex min-h-[72px] items-center justify-between border-b border-border bg-background/85 px-4 backdrop-blur-xl sm:px-7 lg:px-10">
-        <Brand />
-        <ThemeToggle />
-      </header>
       <div className="mx-auto max-w-[1500px] px-4 py-8 sm:px-7 lg:px-10">
         <Link
           href={`/app/${organizationSlug}`}

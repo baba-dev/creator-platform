@@ -5,6 +5,13 @@ export const cuidSchema = z
   .min(20)
   .max(40)
   .regex(/^[a-z0-9]+$/);
+// ProviderModel includes a legacy seeded NVIDIA row with a hyphenated ID.
+// Admin model routes must accept both it and Prisma-generated CUIDs.
+export const providerModelRecordIdSchema = z
+  .string()
+  .min(1)
+  .max(191)
+  .regex(/^[a-z0-9][a-z0-9_-]*$/);
 export const idempotencyKeySchema = z
   .string()
   .min(16)

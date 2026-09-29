@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { db } from "@aiwa/db";
 import { acceptOrganizationInvitation } from "@aiwa/organizations";
 import { revalidatePath } from "next/cache";
@@ -44,7 +45,11 @@ export async function POST(
     );
   }
 
-  const rateLimitKey = `${session.user.id}:${parsed.data.slice(0, 16)}`;
+  const tokenFingerprint = createHash("sha256")
+    .update(parsed.data)
+    .digest("hex")
+    .slice(0, 16);
+  const rateLimitKey = `${session.user.id}:${tokenFingerprint}`;
   const rateLimited = await invitationLimiter.check(rateLimitKey);
   if (rateLimited) return rateLimited;
 

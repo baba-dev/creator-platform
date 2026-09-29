@@ -20,6 +20,7 @@ const primaryNavigation: readonly {
 }[] = [
   { label: "Dashboard", href: "#dashboard", icon: "dashboard" },
   { label: "Create", href: "#create", icon: "sparkles" },
+  { label: "Templates", href: "templates", icon: "wand" },
   { label: "Projects", href: "projects", icon: "projects" },
   { label: "History", href: "history", icon: "activity" },
   { label: "Assets", href: "assets", icon: "assets" },
@@ -156,7 +157,9 @@ export default async function OrganizationWorkspacePage({
               <a
                 key={item.label}
                 href={
-                  ["Projects", "History", "Assets"].includes(item.label)
+                  ["Templates", "Projects", "History", "Assets"].includes(
+                    item.label,
+                  )
                     ? `/app/${organizationSlug}/${item.href}`
                     : item.href
                 }
@@ -184,7 +187,7 @@ export default async function OrganizationWorkspacePage({
             </p>
             <div className="mt-3 space-y-1">
               <a
-                href="#templates"
+                href={`/app/${organizationSlug}/templates`}
                 className="block rounded-lg py-2 text-xs font-medium text-subtle-foreground transition hover:text-foreground/90"
               >
                 Templates
@@ -317,7 +320,9 @@ export default async function OrganizationWorkspacePage({
                 <a
                   key={item.label}
                   href={
-                    ["Projects", "History", "Assets"].includes(item.label)
+                    ["Templates", "Projects", "History", "Assets"].includes(
+                      item.label,
+                    )
                       ? `/app/${organizationSlug}/${item.href}`
                       : item.href
                   }

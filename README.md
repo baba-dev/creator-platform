@@ -455,6 +455,17 @@ persistent PNG assets and authenticated downloads. See
 [the image-generation runbook](docs/image-generation.md) for deployment,
 recovery behavior and the live acceptance check.
 
+## Generation templates
+
+Templates are curated, platform-managed creative recipes for image, video and
+voice work. They resolve structured customer inputs against the live model
+catalog and then hand off into the ordinary Studio generation pipeline; opening
+a template never creates a provider request or charge. Template provenance is
+stored on GenerationJob for recent-use and product analytics.
+
+See [docs/generation-templates.md](docs/generation-templates.md) for security,
+administration, deployment and resolver behavior.
+
 
 ## Transactional email
 

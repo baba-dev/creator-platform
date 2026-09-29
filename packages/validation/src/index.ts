@@ -393,3 +393,91 @@ export const jobResolutionActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("release") }).merge(releaseJobReservationSchema),
   z.object({ action: z.literal("refund") }).merge(refundSettledJobSchema),
 ]);
+
+export const templateVariableTypeSchema = z.enum([
+  "text",
+  "textarea",
+  "select",
+  "toggle",
+  "number",
+  "reference-image",
+]);
+
+export const templateVariableDefinitionSchema = z
+  .object({
+    key: z.string().regex(/^[a-z][a-zA-Z0-9_]{0,39}$/),
+    label: z.string().trim().min(1).max(80),
+    type: templateVariableTypeSchema,
+    required: z.boolean().default(false),
+    placeholder: z.string().trim().max(160).optional(),
+    helpText: z.string().trim().max(240).optional(),
+    options: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
+    defaultValue: z.union([z.string(), z.number(), z.boolean()]).optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (
+      value.type === "select" &&
+      (!value.options || value.options.length === 0)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["options"],
+        message: "Select variables require at least one option.",
+      });
+    }
+  });
+
+export const templateDefaultInputSchema = z
+  .object({
+    aspectRatio: z.string().trim().max(20).optional(),
+    resolution: z.string().trim().max(20).optional(),
+    outputCount: z.number().int().min(1).max(15).optional(),
+    durationSeconds: z.number().int().min(1).max(30).optional(),
+    generateAudio: z.boolean().optional(),
+    voiceKey: z.string().trim().max(100).optional(),
+    speechRate: z.number().min(0.5).max(2).optional(),
+  })
+  .strict();
+
+export const createTemplateSchema = z
+  .object({
+    slug: z
+      .string()
+      .trim()
+      .min(2)
+      .max(80)
+      .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+    name: z.string().trim().min(2).max(100),
+    description: z.string().trim().min(10).max(800),
+    category: z.string().trim().min(2).max(40),
+    mediaKind: z.enum(["IMAGE", "VIDEO", "VOICE"]),
+    promptTemplate: z.string().trim().min(3).max(4000),
+    variables: z.array(templateVariableDefinitionSchema).max(20),
+    defaultInput: templateDefaultInputSchema,
+    preferredModelId: z.string().trim().max(128).nullable().optional(),
+    featured: z.boolean().default(false),
+    sortOrder: z.number().int().min(-10000).max(10000).default(0),
+    status: z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]).default("DRAFT"),
+  })
+  .strict();
+
+export const updateTemplateSchema = createTemplateSchema.partial().strict();
+
+export const resolveTemplateSchema = z
+  .object({
+    organizationId: cuidSchema,
+    values: z.record(
+      z.string(),
+      z.union([z.string().max(2000), z.number(), z.boolean()]),
+    ),
+  })
+  .strict();
+
+export const templateListQuerySchema = z.object({
+  organizationId: cuidSchema,
+  q: z.string().trim().max(120).default(""),
+  mediaKind: z.enum(["IMAGE", "VIDEO", "VOICE"]).optional(),
+  category: z.string().trim().max(40).optional(),
+  favorites: z.coerce.boolean().optional(),
+});

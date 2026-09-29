@@ -123,11 +123,19 @@ export function GenerationStudio({
   const [videoQuoteError, setVideoQuoteError] = useState<string | null>(null);
   const [ratio, setRatio] = useState("1:1");
   const [resolution, setResolution] = useState("2K");
+  const [outputCount, setOutputCount] = useState(1);
+  const [referenceAssetIds, setReferenceAssetIds] = useState<string[]>([]);
+  const [templateContext, setTemplateContext] = useState<{
+    id: string;
+    slug: string;
+    name: string;
+  } | null>(null);
   const [duration, setDuration] = useState("5");
   const [generateAudio, setGenerateAudio] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEnhancing, setIsEnhancing] = useState(false);
+  const consumedTemplateHandoff = useRef<string | null>(null);
   const attempt = useRef<{ fingerprint: string; key: string } | null>(null);
   const enhancementAttempt = useRef<{
     fingerprint: string;
@@ -182,9 +190,22 @@ export function GenerationStudio({
   const selectedDuration = availableDurations.includes(duration)
     ? duration
     : (availableDurations[0] ?? "5");
+  const maxGeneratedImages =
+    typeof model?.capabilities?.maxGeneratedImages === "number"
+      ? Math.max(1, Math.min(15, model.capabilities.maxGeneratedImages))
+      : 1;
+  const selectedOutputCount = Math.max(
+    1,
+    Math.min(outputCount, maxGeneratedImages),
+  );
 
   const handleModeChange = useCallback(
     (mode: MediaKind) => {
+      if (mode !== activeMode) {
+        setTemplateContext(null);
+        setReferenceAssetIds([]);
+        setOutputCount(1);
+      }
       setActiveMode(mode);
       setError(null);
       const nextModel = data?.models.find((m) => m.mediaKind === mode);
@@ -192,7 +213,7 @@ export function GenerationStudio({
         setModelId(nextModel.id);
       }
     },
-    [data?.models],
+    [activeMode, data?.models],
   );
 
   const billableCharacters = Array.from(voiceText.replace(/\s/gu, "")).length;
@@ -351,7 +372,7 @@ export function GenerationStudio({
           : model?.pricingDimension === "SECOND"
             ? null
             : BigInt(model?.credits ?? "0")
-        : BigInt(model?.credits ?? "0");
+        : BigInt(model?.credits ?? "0") * BigInt(selectedOutputCount);
 
   const isConfiguredForMode =
     activeMode === "VOICE"
@@ -383,6 +404,146 @@ export function GenerationStudio({
       clearInterval(timer);
     };
   }, [refresh]);
+
+  useEffect(() => {
+    const handoffId = new URLSearchParams(window.location.search).get(
+      "templateHandoff",
+    );
+    if (!handoffId || !data || consumedTemplateHandoff.current === handoffId) {
+      return;
+    }
+
+    consumedTemplateHandoff.current = handoffId;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+
+      const storageKey = `aiwa-template-handoff:${handoffId}`;
+      const raw = sessionStorage.getItem(storageKey);
+      sessionStorage.removeItem(storageKey);
+      if (!raw) {
+        setError("This template handoff expired. Open the template again.");
+        return;
+      }
+
+      try {
+        const resolved = JSON.parse(raw) as {
+          templateId?: unknown;
+          templateSlug?: unknown;
+          templateName?: unknown;
+          mediaKind?: unknown;
+          prompt?: unknown;
+          modelId?: unknown;
+          referenceAssetIds?: unknown;
+          defaults?: {
+            aspectRatio?: unknown;
+            resolution?: unknown;
+            outputCount?: unknown;
+            durationSeconds?: unknown;
+            generateAudio?: unknown;
+            voiceKey?: unknown;
+            speechRate?: unknown;
+          };
+        };
+        if (
+          typeof resolved.templateId !== "string" ||
+          typeof resolved.templateSlug !== "string" ||
+          typeof resolved.templateName !== "string" ||
+          !["IMAGE", "VIDEO", "VOICE"].includes(String(resolved.mediaKind)) ||
+          typeof resolved.prompt !== "string" ||
+          typeof resolved.modelId !== "string"
+        ) {
+          throw new Error("Invalid template handoff.");
+        }
+
+        const mediaKind = resolved.mediaKind as MediaKind;
+        const selectedModel = data.models.find(
+          (candidate) =>
+            candidate.id === resolved.modelId &&
+            candidate.mediaKind === mediaKind,
+        );
+        if (!selectedModel) {
+          throw new Error(
+            "The model selected for this template is no longer available.",
+          );
+        }
+
+        setActiveMode(mediaKind);
+        setModelId(selectedModel.id);
+        setTemplateContext({
+          id: resolved.templateId,
+          slug: resolved.templateSlug,
+          name: resolved.templateName,
+        });
+
+        if (mediaKind === "VOICE") {
+          setVoiceText(resolved.prompt);
+        } else {
+          setPrompt(resolved.prompt);
+        }
+
+        const defaults = resolved.defaults ?? {};
+        if (typeof defaults.aspectRatio === "string") {
+          setRatio(defaults.aspectRatio);
+        }
+        if (typeof defaults.resolution === "string") {
+          setResolution(defaults.resolution);
+        }
+        if (
+          typeof defaults.outputCount === "number" &&
+          Number.isInteger(defaults.outputCount)
+        ) {
+          setOutputCount(Math.max(1, Math.min(15, defaults.outputCount)));
+        }
+        if (
+          typeof defaults.durationSeconds === "number" &&
+          Number.isInteger(defaults.durationSeconds)
+        ) {
+          setDuration(String(defaults.durationSeconds));
+        }
+        if (typeof defaults.generateAudio === "boolean") {
+          setGenerateAudio(defaults.generateAudio);
+        }
+        if (typeof defaults.voiceKey === "string") {
+          setVoiceKey(defaults.voiceKey);
+        }
+        if (
+          typeof defaults.speechRate === "number" &&
+          defaults.speechRate >= 0.5 &&
+          defaults.speechRate <= 2
+        ) {
+          setSpeechRate(defaults.speechRate);
+        }
+        if (
+          Array.isArray(resolved.referenceAssetIds) &&
+          resolved.referenceAssetIds.every((value) => typeof value === "string")
+        ) {
+          setReferenceAssetIds(resolved.referenceAssetIds);
+        } else {
+          setReferenceAssetIds([]);
+        }
+
+        setError(null);
+        window.history.replaceState(
+          null,
+          "",
+          `${window.location.pathname}#create`,
+        );
+      } catch (reason) {
+        setTemplateContext(null);
+        setReferenceAssetIds([]);
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "Template could not be opened in Studio.",
+        );
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [data]);
   async function generate() {
     if (!model || busy || isEnhancing) return;
     setBusy(true);
@@ -398,6 +559,7 @@ export function GenerationStudio({
         voiceKey: selectedVoiceKey,
         speechRate,
         format: "mp3",
+        ...(templateContext ? { templateId: templateContext.id } : {}),
       };
     } else {
       input = {
@@ -408,6 +570,11 @@ export function GenerationStudio({
         prompt,
         aspectRatio: selectedRatio,
         resolution: selectedResolution,
+        ...(model.mediaKind === "IMAGE" && {
+          outputCount: selectedOutputCount,
+          referenceAssetIds,
+        }),
+        ...(templateContext ? { templateId: templateContext.id } : {}),
         ...(model.mediaKind === "VIDEO" && {
           durationSeconds: Number.parseInt(selectedDuration, 10),
           generateAudio,
@@ -533,6 +700,27 @@ export function GenerationStudio({
       <p className="mt-2 text-sm text-muted-foreground">
         Create image, video, and voice media with verified BytePlus models.
       </p>
+      {templateContext ? (
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-primary/20 bg-primary/[0.06] px-4 py-3">
+          <span className="grid size-8 place-items-center rounded-xl bg-primary/12 text-primary">
+            ✦
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-xs font-semibold text-foreground">
+              {templateContext.name}
+            </span>
+            <span className="mt-0.5 block text-[10px] text-muted-foreground">
+              Template applied · review or adjust anything before generation
+            </span>
+          </span>
+          <Link
+            href={`/app/${organizationSlug}/templates`}
+            className="text-xs font-semibold text-primary"
+          >
+            Change template
+          </Link>
+        </div>
+      ) : null}
       <div className="mt-4">
         <div
           role="tablist"
@@ -834,6 +1022,35 @@ export function GenerationStudio({
                 )}
               </select>
 
+              {model?.mediaKind === "IMAGE" && maxGeneratedImages > 1 ? (
+                <>
+                  <label
+                    htmlFor="image-output-count"
+                    className="block text-sm font-semibold text-foreground"
+                  >
+                    Number of images
+                  </label>
+                  <select
+                    id="image-output-count"
+                    value={selectedOutputCount}
+                    onChange={(event) =>
+                      setOutputCount(Number.parseInt(event.target.value, 10))
+                    }
+                    disabled={busy}
+                    className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
+                  >
+                    {Array.from(
+                      { length: Math.min(maxGeneratedImages, 4) },
+                      (_, index) => index + 1,
+                    ).map((count) => (
+                      <option key={count} value={count}>
+                        {count}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              ) : null}
+
               {model?.mediaKind === "VIDEO" && (
                 <>
                   <label
@@ -950,7 +1167,11 @@ export function GenerationStudio({
                     : activeMode === "VIDEO" &&
                         model?.pricingDimension === "SECOND"
                       ? (videoQuotedCredits ?? "—")
-                      : (model?.credits ?? "—")
+                      : activeMode === "IMAGE" && model
+                        ? (
+                            BigInt(model.credits) * BigInt(selectedOutputCount)
+                          ).toString()
+                        : (model?.credits ?? "—")
                 } credits`}
           </Button>
           <p className="text-xs text-muted-foreground">

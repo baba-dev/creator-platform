@@ -24,6 +24,17 @@ describe("platform RBAC", () => {
     expect(hasPlatformPermission("FINANCE_ADMIN", "credits:grant")).toBe(true);
   });
 
+  it("limits template administration to platform administrators and owners", () => {
+    expect(hasPlatformPermission("OPERATOR", "templates:read")).toBe(true);
+    expect(hasPlatformPermission("OPERATOR", "templates:manage")).toBe(false);
+    expect(hasPlatformPermission("PLATFORM_ADMIN", "templates:manage")).toBe(
+      true,
+    );
+    expect(hasPlatformPermission("PLATFORM_OWNER", "templates:manage")).toBe(
+      true,
+    );
+  });
+
   it("does not grant platform-console access to customer users", () => {
     expect(hasPlatformPermission("USER", "platform:access")).toBe(false);
   });

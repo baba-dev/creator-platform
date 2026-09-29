@@ -2,7 +2,8 @@
 
 Approved mark: **Creative Cursor (01-A)**.
 
-Static product branding lives in `apps/web/public/brand/` and is served from `/brand/...`.
+Static product branding lives in `apps/web/public/brand/` and is served from
+`/brand/...`.
 
 ```text
 brand/
@@ -20,6 +21,10 @@ brand/
         └── creators-pwa-maskable-512x512-dark.webp
 ```
 
-Use black artwork on light surfaces and white artwork on dark surfaces. PWA maskable icons intentionally use an opaque dark field so OS cropping preserves the mark's safe area.
+Use black artwork on light surfaces and white artwork on dark surfaces. PWA
+maskable icons intentionally use an opaque dark field so OS cropping preserves
+the mark's safe area.
 
-These files are application identity assets, not customer media. Customer uploads and generated outputs continue through the `Asset` domain and `@aiwa/assets`.
+These files are application identity assets, not customer media. Customer
+uploads and generated outputs continue through the `Asset` domain and
+`@aiwa/assets`.

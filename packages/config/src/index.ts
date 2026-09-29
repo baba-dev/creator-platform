@@ -73,6 +73,7 @@ export const serverEnvSchema = z.object({
     .default("creator-tool@aiwamediagroup.com"),
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.url().default("redis://127.0.0.1:6379/0"),
+  GENERATION_WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(10).default(3),
   ASSET_STORAGE_ROOT: optionalAbsolutePath.default(
     "/var/www/creator-platform/shared/assets",
   ),

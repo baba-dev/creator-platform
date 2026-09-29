@@ -30,9 +30,6 @@ export async function POST(
     );
   }
 
-  const rateLimited = adminCreditsLimiter.check(session.user.id);
-  if (rateLimited) return rateLimited;
-
   if (!hasPlatformPermission(session.user.platformRole, "credits:grant")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -44,6 +41,9 @@ export async function POST(
       { status: 404 },
     );
   }
+
+  const rateLimited = await adminCreditsLimiter.check(session.user.id);
+  if (rateLimited) return rateLimited;
 
   const body = (await request.json().catch(() => null)) as unknown;
   const parsed = grantAdminCreditsSchema.safeParse(body);

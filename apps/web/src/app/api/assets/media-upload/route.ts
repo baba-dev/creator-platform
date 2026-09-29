@@ -37,7 +37,7 @@ export async function POST(request: Request) {
       { status: 401 },
     );
 
-  const rateLimited = mediaUploadLimiter.check(session.user.id);
+  const rateLimited = await mediaUploadLimiter.check(session.user.id);
   if (rateLimited) return rateLimited;
   const organizationId = request.headers.get("x-organization-id") ?? "";
   if (!(await requireAssetMembership(session, organizationId, true)))

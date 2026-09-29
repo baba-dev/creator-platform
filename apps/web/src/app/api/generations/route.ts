@@ -36,7 +36,7 @@ export async function POST(request: Request) {
       { status: 401 },
     );
 
-  const rateLimited = generationLimiter.check(session.user.id);
+  const rateLimited = await generationLimiter.check(session.user.id);
   if (rateLimited) return rateLimited;
 
   try {

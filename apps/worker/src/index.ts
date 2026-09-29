@@ -119,6 +119,11 @@ const bytePlusProvider = hasBytePlus
     })
   : null;
 
+const generationWorkerConcurrency = Math.max(
+  1,
+  Number.parseInt(process.env.GENERATION_WORKER_CONCURRENCY ?? "3", 10) || 3,
+);
+
 const generationWorker = new Worker(
   "generation",
   async (job) => {
@@ -143,7 +148,11 @@ const generationWorker = new Worker(
         throw new Error("Unknown generation queue job");
     }
   },
-  { connection: redis, prefix: "aiwa", concurrency: 3 },
+  {
+    connection: redis,
+    prefix: "aiwa",
+    concurrency: generationWorkerConcurrency,
+  },
 );
 
 generationWorker.on("error", () =>

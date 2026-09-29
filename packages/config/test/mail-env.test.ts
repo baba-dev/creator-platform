@@ -72,23 +72,103 @@ describe("production mail configuration", () => {
     ).toThrow(/SMTP_PORT/);
   });
 
-  it("requires Redis authentication in production", () => {
-    expect(() =>
-      parseServerEnv({
+  describe("production Redis and APP_URL topology rules", () => {
+    it("permits unauthenticated Redis on loopback (127.0.0.1) in production", () => {
+      const env = parseServerEnv({
         ...productionBase,
         MAIL_ENABLED: "false",
         REDIS_URL: "redis://127.0.0.1:6379/0",
-      }),
-    ).toThrow(/REDIS_URL/);
-  });
+      });
+      expect(env.REDIS_URL).toBe("redis://127.0.0.1:6379/0");
+    });
 
-  it("requires non-localhost HTTPS APP_URL in production", () => {
-    expect(() =>
-      parseServerEnv({
+    it("permits unauthenticated Redis on localhost and ::1 in production", () => {
+      const envLocalhost = parseServerEnv({
         ...productionBase,
         MAIL_ENABLED: "false",
-        APP_URL: "http://localhost:3000",
-      }),
-    ).toThrow(/APP_URL/);
+        REDIS_URL: "redis://localhost:6379/0",
+      });
+      expect(envLocalhost.REDIS_URL).toBe("redis://localhost:6379/0");
+
+      const envIpv6 = parseServerEnv({
+        ...productionBase,
+        MAIL_ENABLED: "false",
+        REDIS_URL: "redis://[::1]:6379/0",
+      });
+      expect(envIpv6.REDIS_URL).toBe("redis://[::1]:6379/0");
+    });
+
+    it("requires authentication for non-loopback Redis in production", () => {
+      expect(() =>
+        parseServerEnv({
+          ...productionBase,
+          MAIL_ENABLED: "false",
+          REDIS_URL: "redis://redis.internal:6379/0",
+        }),
+      ).toThrow(/authentication is required for non-loopback Redis/);
+
+      expect(() =>
+        parseServerEnv({
+          ...productionBase,
+          MAIL_ENABLED: "false",
+          REDIS_URL: "redis://10.0.0.5:6379/0",
+        }),
+      ).toThrow(/authentication is required for non-loopback Redis/);
+    });
+
+    it("permits authenticated remote Redis and rediss:// in production", () => {
+      const env = parseServerEnv({
+        ...productionBase,
+        MAIL_ENABLED: "false",
+        REDIS_URL: "redis://:secret@redis.internal:6379/0",
+      });
+      expect(env.REDIS_URL).toBe("redis://:secret@redis.internal:6379/0");
+
+      const tlsEnv = parseServerEnv({
+        ...productionBase,
+        MAIL_ENABLED: "false",
+        REDIS_URL: "rediss://:secret@redis.internal:6379/0",
+      });
+      expect(tlsEnv.REDIS_URL).toBe("rediss://:secret@redis.internal:6379/0");
+    });
+
+    it("rejects non-redis protocol in REDIS_URL", () => {
+      expect(() =>
+        parseServerEnv({
+          ...productionBase,
+          MAIL_ENABLED: "false",
+          REDIS_URL: "http://127.0.0.1:6379/0",
+        }),
+      ).toThrow(/must use redis:\/\/ or rediss:\/\/ protocol/);
+    });
+
+    it("permits valid HTTPS public APP_URL in production", () => {
+      const env = parseServerEnv({
+        ...productionBase,
+        MAIL_ENABLED: "false",
+        APP_URL: "https://creator.aiwamediagroup.com",
+      });
+      expect(env.APP_URL).toBe("https://creator.aiwamediagroup.com");
+    });
+
+    it("rejects insecure http:// public APP_URL in production", () => {
+      expect(() =>
+        parseServerEnv({
+          ...productionBase,
+          MAIL_ENABLED: "false",
+          APP_URL: "http://creator.aiwamediagroup.com",
+        }),
+      ).toThrow(/HTTPS and non-localhost URL are required/);
+    });
+
+    it("rejects localhost APP_URL even with https in production", () => {
+      expect(() =>
+        parseServerEnv({
+          ...productionBase,
+          MAIL_ENABLED: "false",
+          APP_URL: "https://localhost:3000",
+        }),
+      ).toThrow(/HTTPS and non-localhost URL are required/);
+    });
   });
 });

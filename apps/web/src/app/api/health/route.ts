@@ -8,6 +8,18 @@ import { hasPlatformPermission } from "@aiwa/authz";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request): Promise<Response> {
+  const cookieHeader = request.headers.get("cookie") ?? "";
+  const authHeader = request.headers.get("authorization") ?? "";
+
+  // Fast path for anonymous probes (load balancers, uptime monitors, systemd).
+  // Immediately returns without touching session/database infrastructure when no auth credentials exist.
+  if (!cookieHeader && !authHeader) {
+    return Response.json(
+      { status: "ok" },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  }
+
   const session = await getRequestSession(request.headers);
 
   if (

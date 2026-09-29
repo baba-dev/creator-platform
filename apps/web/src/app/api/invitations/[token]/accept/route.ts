@@ -35,9 +35,6 @@ export async function POST(
     );
   }
 
-  const rateLimited = invitationLimiter.check(session.user.id);
-  if (rateLimited) return rateLimited;
-
   const { token } = await params;
   const parsed = invitationTokenSchema.safeParse(token);
   if (!parsed.success) {
@@ -46,6 +43,10 @@ export async function POST(
       { status: 400 },
     );
   }
+
+  const rateLimitKey = `${session.user.id}:${parsed.data.slice(0, 16)}`;
+  const rateLimited = await invitationLimiter.check(rateLimitKey);
+  if (rateLimited) return rateLimited;
 
   try {
     const result = await acceptOrganizationInvitation({

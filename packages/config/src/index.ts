@@ -156,10 +156,23 @@ export function parseServerEnv(
   }
 
   if (result.data.APP_ENV === "production") {
-    if (
-      result.data.APP_URL.includes("localhost") ||
-      result.data.APP_URL.startsWith("http://")
-    ) {
+    let parsedAppUrl: URL;
+    try {
+      parsedAppUrl = new URL(result.data.APP_URL);
+    } catch {
+      throw new Error(
+        "Invalid server environment variables: APP_URL (must be a valid URL)",
+      );
+    }
+
+    const appHost = parsedAppUrl.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    const isAppLoopback =
+      appHost === "127.0.0.1" ||
+      appHost === "localhost" ||
+      appHost === "::1" ||
+      appHost === "0.0.0.0";
+
+    if (parsedAppUrl.protocol !== "https:" || isAppLoopback) {
       throw new Error(
         "Invalid server environment variables: APP_URL (HTTPS and non-localhost URL are required in production)",
       );
@@ -167,9 +180,21 @@ export function parseServerEnv(
 
     try {
       const redisUrl = new URL(result.data.REDIS_URL);
-      if (!redisUrl.password) {
+      if (redisUrl.protocol !== "redis:" && redisUrl.protocol !== "rediss:") {
         throw new Error(
-          "Invalid server environment variables: REDIS_URL (authentication is required in production)",
+          "Invalid server environment variables: REDIS_URL (must use redis:// or rediss:// protocol)",
+        );
+      }
+
+      const redisHost = redisUrl.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+      const isRedisLoopback =
+        redisHost === "127.0.0.1" ||
+        redisHost === "localhost" ||
+        redisHost === "::1";
+
+      if (!isRedisLoopback && !redisUrl.password) {
+        throw new Error(
+          "Invalid server environment variables: REDIS_URL (authentication is required for non-loopback Redis in production)",
         );
       }
     } catch (error) {

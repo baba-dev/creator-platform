@@ -42,7 +42,7 @@ export async function POST(request: Request) {
       { status: 401 },
     );
 
-  const rateLimited = imageImportLimiter.check(session.user.id);
+  const rateLimited = await imageImportLimiter.check(session.user.id);
   if (rateLimited) return rateLimited;
   const text = await request.text();
   if (text.length > 4_096)

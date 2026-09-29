@@ -43,7 +43,7 @@ export async function POST(request: Request) {
       { status: 401 },
     );
 
-  const rateLimited = videoImportLimiter.check(session.user.id);
+  const rateLimited = await videoImportLimiter.check(session.user.id);
   if (rateLimited) return rateLimited;
   const text = await request.text();
   if (text.length > 4096)

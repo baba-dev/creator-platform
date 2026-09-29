@@ -7,7 +7,9 @@ type TemplateCatalogDb = Pick<PrismaClient, "generationTemplate">;
  * Ensures the built-in MVP template catalog exists without overwriting
  * administrator-managed edits or lifecycle state on subsequent deployments.
  */
-export async function seedTemplateCatalog(db: TemplateCatalogDb): Promise<number> {
+export async function seedTemplateCatalog(
+  db: TemplateCatalogDb,
+): Promise<number> {
   let created = 0;
 
   for (const template of curatedGenerationTemplates) {

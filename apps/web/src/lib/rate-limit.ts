@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { getRedisClient } from "./redis";
 import type Redis from "ioredis";
@@ -83,7 +84,6 @@ else
 end
 `;
 
-let requestNonce = 0;
 
 export function rateLimit(options: RateLimitOptions): RateLimiter {
   const {
@@ -99,8 +99,7 @@ export function rateLimit(options: RateLimitOptions): RateLimiter {
     const redis = options.redisClient ?? getRedisClient();
 
     try {
-      requestNonce = (requestNonce + 1) % Number.MAX_SAFE_INTEGER;
-      const nonce = `${process.pid}-${requestNonce}`;
+      const nonce = randomUUID();
 
       const result = (await redis.eval(
         SLIDING_WINDOW_LUA,

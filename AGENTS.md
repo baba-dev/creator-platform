@@ -71,9 +71,12 @@ These rules apply to every contributor and coding agent.
 
 ## Brand media
 
-- Product identity assets live only in `apps/web/public/brand/`; do not place them in `packages/assets` or the customer Asset Library.
-- Use the approved Creative Cursor mark. Prefer the horizontal logo for navigation and the symbol/PWA variants for compact surfaces.
-- Keep filenames stable because metadata and installed PWAs reference them directly.
+- Product identity assets live only in `apps/web/public/brand/`; do not place
+  them in `packages/assets` or the customer Asset Library.
+- Use the approved Creative Cursor mark. Prefer the horizontal logo for
+  navigation and the symbol/PWA variants for compact surfaces.
+- Keep filenames stable because metadata and installed PWAs reference them
+  directly.
 
 ## Interface and design system
 

@@ -102,6 +102,12 @@ expected_archive="$incoming_root/creator-platform-${release_sha}.tar.gz"
 [[ -f "$archive_path" ]] || fail "release archive does not exist"
 [[ -f "$environment_file" ]] || fail "environment file does not exist"
 
+# Web probes uploaded media and the worker renders edits. Check before migrations.
+for media_binary in ffmpeg ffprobe; do
+  command -v "$media_binary" >/dev/null 2>&1 \
+    || fail "$media_binary is required; install ffmpeg on the host before deployment"
+done
+
 exec 9>/run/lock/creator-platform-deploy.lock
 flock -n 9 || fail "another deployment is already running"
 

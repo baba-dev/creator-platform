@@ -108,7 +108,23 @@ export async function PATCH(
       fxBaisaNumerator = DEFAULT_FX_RATE.baisaNumerator,
       fxBaisaDenominator = DEFAULT_FX_RATE.baisaDenominator,
       creditsPerBaisa = 1n,
+      videoInputRate720p,
+      videoInputRate1080p,
     } = priceResult.data;
+
+    if (
+      (videoInputRate720p === undefined) !==
+      (videoInputRate1080p === undefined)
+    )
+      return NextResponse.json(
+        { error: "Set both video-input token rates together." },
+        { status: 400 },
+      );
+    if (model.mediaKind !== "VIDEO" && videoInputRate720p !== undefined)
+      return NextResponse.json(
+        { error: "Video-input rates require a video model." },
+        { status: 400 },
+      );
 
     const quote = createCreditQuote({
       providerCostMicroUsd,
@@ -201,6 +217,8 @@ export async function PATCH(
         data: {
           providerModelId: model.id,
           providerCostMicroUsd,
+          videoInputRate720p: videoInputRate720p ?? null,
+          videoInputRate1080p: videoInputRate1080p ?? null,
           customerCredits: quote.customerCredits,
           fxBaisaNumerator,
           fxBaisaDenominator,
@@ -225,6 +243,8 @@ export async function PATCH(
             displayName: model.displayName,
             customerCredits: quote.customerCredits.toString(),
             providerCostMicroUsd: providerCostMicroUsd.toString(),
+            videoInputRate720p: videoInputRate720p?.toString() ?? null,
+            videoInputRate1080p: videoInputRate1080p?.toString() ?? null,
             pricingDimension,
             unitQuantity: unitQuantity.toString(),
             targetMarginBps,
@@ -245,6 +265,10 @@ export async function PATCH(
         id: newPriceVersion.id,
         customerCredits: newPriceVersion.customerCredits.toString(),
         providerCostMicroUsd: newPriceVersion.providerCostMicroUsd.toString(),
+        videoInputRate720p:
+          newPriceVersion.videoInputRate720p?.toString() ?? null,
+        videoInputRate1080p:
+          newPriceVersion.videoInputRate1080p?.toString() ?? null,
         pricingDimension: newPriceVersion.pricingDimension,
         unitQuantity: newPriceVersion.unitQuantity?.toString() ?? null,
         targetMarginBps: newPriceVersion.targetMarginBps,

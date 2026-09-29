@@ -16,7 +16,11 @@ export async function GET(
   if (!session) return new Response(null, { status: 401 });
   const { assetId, kind } = await context.params;
   const normalizedKind = kind.toUpperCase();
-  if (!["THUMBNAIL", "PREVIEW", "POSTER"].includes(normalizedKind))
+  if (
+    !["THUMBNAIL", "PREVIEW", "POSTER", "STORYBOARD", "WAVEFORM"].includes(
+      normalizedKind,
+    )
+  )
     return new Response(null, { status: 404 });
 
   const asset = await db.asset.findUnique({
@@ -24,13 +28,23 @@ export async function GET(
     select: {
       organizationId: true,
       status: true,
+      purpose: true,
+      storageOwnerUserId: true,
       variants: {
-        where: { kind: normalizedKind as "THUMBNAIL" | "PREVIEW" | "POSTER" },
+        where: {
+          kind: normalizedKind as
+            "THUMBNAIL" | "PREVIEW" | "POSTER" | "STORYBOARD" | "WAVEFORM",
+        },
         take: 1,
       },
     },
   });
   if (!asset || asset.status === "PURGED")
+    return new Response(null, { status: 404 });
+  if (
+    asset.purpose === "REFERENCE_INPUT" &&
+    asset.storageOwnerUserId !== session.user.id
+  )
     return new Response(null, { status: 404 });
   const membership = await requireAssetMembership(
     session,
@@ -50,7 +64,7 @@ export async function GET(
         "Content-Length": String(body.byteLength),
         "Cache-Control": "private, max-age=3600",
         "X-Content-Type-Options": "nosniff",
-        "Content-Disposition": `inline; filename="${assetId}-${kind}.jpg"`,
+        "Content-Disposition": `inline; filename="${assetId}-${normalizedKind.toLowerCase()}.webp"`,
       },
     });
   } catch {

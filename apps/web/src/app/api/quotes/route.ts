@@ -2,6 +2,7 @@ import { hasOrganizationPermission, hasPlatformPermission } from "@aiwa/authz";
 import {
   calculateBillableUnits,
   calculateVideoPricing,
+  quoteVideoInputReservation,
   countBillableCharacters,
   createCreditQuote,
 } from "@aiwa/credits";
@@ -54,6 +55,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     durationSeconds,
     resolution,
     generateAudio,
+    referenceVideoAssetId,
   } = parsed.data;
 
   const membership = await db.membership.findUnique({
@@ -126,6 +128,11 @@ export async function POST(request: Request): Promise<NextResponse> {
       { status: 400 },
     );
   }
+  if (referenceVideoAssetId && model.mediaKind !== "VIDEO")
+    return NextResponse.json(
+      { error: "Video reference requires a video model." },
+      { status: 400 },
+    );
 
   let effectiveBillableQuantity: number | undefined;
   let effectiveUnits: number;
@@ -179,6 +186,83 @@ export async function POST(request: Request): Promise<NextResponse> {
     effectiveBillableQuantity = duration;
     effectiveUnits = Number(videoPricing.durationUnits);
     quote = videoPricing.quote;
+    if (referenceVideoAssetId) {
+      if (
+        model.mediaKind !== "VIDEO" ||
+        !(
+          model.capabilities &&
+          typeof model.capabilities === "object" &&
+          !Array.isArray(model.capabilities) &&
+          (model.capabilities as Record<string, unknown>).referenceVideo ===
+            true
+        )
+      )
+        return NextResponse.json(
+          { error: "Video references are not supported by this model." },
+          { status: 400 },
+        );
+      const source = await db.asset.findFirst({
+        where: {
+          id: referenceVideoAssetId,
+          organizationId,
+          mediaKind: "VIDEO",
+          status: "READY",
+          storageProvider: "LOCAL",
+          mimeType: "video/mp4",
+          OR: [
+            { purpose: "GENERAL" },
+            { purpose: "REFERENCE_INPUT", storageOwnerUserId: session.user.id },
+          ],
+        },
+        select: {
+          durationMs: true,
+          width: true,
+          height: true,
+          byteSize: true,
+        },
+      });
+      const rate =
+        resolution === "1080p"
+          ? activePriceVersion.videoInputRate1080p
+          : activePriceVersion.videoInputRate720p;
+      if (
+        !source?.durationMs ||
+        source.durationMs < 2_000 ||
+        source.durationMs > 30_000 ||
+        source.width === null ||
+        source.height === null ||
+        source.width < 300 ||
+        source.height < 300 ||
+        source.width * source.height < 407_696 ||
+        source.width * source.height > 8_295_044 ||
+        source.width / source.height < 0.4 ||
+        source.width / source.height > 2.5 ||
+        source.byteSize > 100_000_000n
+      )
+        return NextResponse.json(
+          {
+            error:
+              "Reference video is unavailable or outside the duration limit.",
+          },
+          { status: 400 },
+        );
+      if (!rate)
+        return NextResponse.json(
+          { error: "Video-input pricing is unavailable for this model." },
+          { status: 409 },
+        );
+      quote = quoteVideoInputReservation({
+        inputDurationMs: source.durationMs,
+        resolution: resolution === "1080p" ? "1080p" : "720p",
+        rateMicroUsdPerThousandTokens: rate,
+        exchangeRate: {
+          baisaNumerator: activePriceVersion.fxBaisaNumerator,
+          baisaDenominator: activePriceVersion.fxBaisaDenominator,
+        },
+        targetGrossMarginBps: activePriceVersion.targetMarginBps,
+        creditsPerBaisa: activePriceVersion.creditsPerBaisa,
+      });
+    }
   } else {
     effectiveBillableQuantity =
       activePriceVersion.pricingDimension === "CHARACTER" && text !== undefined

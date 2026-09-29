@@ -68,4 +68,21 @@ describe("project assignment request validation", () => {
       }),
     ).toThrow();
   });
+
+  it("keeps video reference mode separate from first and last frames", () => {
+    const video = {
+      ...common,
+      prompt: "Reference movement",
+      aspectRatio: "16:9" as const,
+      resolution: "720p" as const,
+      durationSeconds: 5,
+      referenceVideoAssetId: "asset-video-1",
+    };
+    expect(videoRequestSchema.parse(video).referenceVideoAssetId).toBe(
+      "asset-video-1",
+    );
+    expect(() =>
+      videoRequestSchema.parse({ ...video, firstFrameAssetId: "frame-1" }),
+    ).toThrow();
+  });
 });

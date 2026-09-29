@@ -7,6 +7,7 @@ import { getRequestSession } from "@/lib/request-auth";
 
 const querySchema = z.object({
   organizationId: z.string().min(1).max(100),
+  assetId: z.string().min(1).max(100).optional(),
   q: z.string().trim().max(120).optional(),
   mediaKind: z
     .enum(["IMAGE", "VIDEO", "AUDIO", "DOCUMENT", "OTHER"])
@@ -54,6 +55,18 @@ export async function GET(request: Request) {
   const trash = input.trash === "true";
   const where = {
     organizationId: input.organizationId,
+    ...(input.assetId ? { id: input.assetId } : {}),
+    AND: [
+      {
+        OR: [
+          { purpose: "GENERAL" as const },
+          {
+            purpose: "REFERENCE_INPUT" as const,
+            storageOwnerUserId: session.user.id,
+          },
+        ],
+      },
+    ],
     status: trash ? ("DELETED" as const) : ("READY" as const),
     ...(input.mediaKind ? { mediaKind: input.mediaKind } : {}),
     ...(input.sourceType ? { sourceType: input.sourceType } : {}),
@@ -110,7 +123,9 @@ export async function GET(request: Request) {
       project: { select: { id: true, name: true } },
       folder: { select: { id: true, name: true } },
       variants: {
-        where: { kind: { in: ["THUMBNAIL", "POSTER"] } },
+        where: {
+          kind: { in: ["THUMBNAIL", "POSTER", "STORYBOARD", "WAVEFORM"] },
+        },
         select: {
           id: true,
           kind: true,

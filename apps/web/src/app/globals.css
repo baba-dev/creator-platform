@@ -212,6 +212,7 @@
 
 html {
   min-width: 320px;
+  overflow-x: clip;
   background: var(--background);
   scroll-behavior: smooth;
   scrollbar-color: var(--subtle-foreground) var(--background);
@@ -219,6 +220,7 @@ html {
 
 body {
   min-height: 100vh;
+  overflow-x: clip;
   background: var(--gradient-hero), var(--background);
   color: var(--foreground);
   font-family: var(--font-aiwa-body), ui-sans-serif, system-ui, sans-serif;

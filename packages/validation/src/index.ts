@@ -202,6 +202,14 @@ export const publishPriceVersionSchema = z.object({
   providerCostMicroUsd: z
     .union([z.bigint(), z.string().regex(/^\d+$/).transform(BigInt)])
     .pipe(z.bigint().positive().max(MAX_SIGNED_BIGINT)),
+  videoInputRate720p: z
+    .union([z.bigint(), z.string().regex(/^\d+$/).transform(BigInt)])
+    .pipe(z.bigint().positive().max(MAX_SIGNED_BIGINT))
+    .optional(),
+  videoInputRate1080p: z
+    .union([z.bigint(), z.string().regex(/^\d+$/).transform(BigInt)])
+    .pipe(z.bigint().positive().max(MAX_SIGNED_BIGINT))
+    .optional(),
   targetMarginBps: z.number().int().min(0).max(9999),
   pricingDimension: pricingDimensionSchema.optional(),
   unitQuantity: z.coerce.number().int().positive().optional(),
@@ -233,6 +241,7 @@ export const quoteRequestSchema = z.object({
   durationSeconds: z.coerce.number().int().min(1).max(60).optional(),
   resolution: z.enum(["480p", "720p", "1080p", "2K", "4K"]).optional(),
   generateAudio: z.boolean().optional(),
+  referenceVideoAssetId: cuidSchema.optional(),
 });
 
 export const paymentMethodSchema = z.enum(["CASH", "CHEQUE"]);

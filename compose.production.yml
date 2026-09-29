@@ -12,6 +12,8 @@ services:
         condition: service_healthy
     expose:
       - "3000"
+    volumes:
+      - asset-data:/var/www/creator-platform/shared/assets
     ports:
       - "127.0.0.1:3000:3000"
     networks:
@@ -35,6 +37,8 @@ services:
       ghcr.io/baba-dev/creator-platform-worker:${APP_VERSION:?set APP_VERSION}
     restart: unless-stopped
     env_file: .env
+    volumes:
+      - asset-data:/var/www/creator-platform/shared/assets
     depends_on:
       mariadb:
         condition: service_healthy
@@ -89,5 +93,6 @@ networks:
     internal: true
 
 volumes:
+  asset-data:
   mariadb-data:
   redis-data:

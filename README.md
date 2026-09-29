@@ -455,6 +455,9 @@ persistent PNG assets and authenticated downloads. See
 [the image-generation runbook](docs/image-generation.md) for deployment,
 recovery behavior and the live acceptance check.
 
+Private image editing and approved-host link imports are described in
+[docs/image-editing.md](docs/image-editing.md).
+
 ## Generation templates
 
 Templates are curated, platform-managed creative recipes for image, video and

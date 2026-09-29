@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
     providerModel: {
       findUnique: vi.fn(),
     },
+    generationInputAsset: { findMany: vi.fn() },
     asset: { findFirstOrThrow: vi.fn(), findMany: vi.fn() },
     $transaction: vi.fn(),
   },
@@ -34,7 +35,14 @@ const mocks = vi.hoisted(() => ({
   releaseAssetStorage: vi.fn(),
 }));
 vi.mock("@aiwa/db", () => ({ db: mocks.db }));
-vi.mock("@aiwa/credits", () => ({
+vi.mock("@aiwa/config", () => ({
+  parseServerEnv: () => ({
+    APP_URL: "https://creator.example.com",
+    AUTH_SECRET: "a".repeat(48),
+  }),
+}));
+vi.mock("@aiwa/credits", async (importOriginal) => ({
+  ...((await importOriginal()) as object),
   captureCreditsForJob: mocks.capture,
   releaseOrRefundCredits: mocks.release,
 }));
@@ -204,6 +212,44 @@ describe("video processing", () => {
     );
   });
 
+  it("submits only a linked private source video through a scoped grant", async () => {
+    const p = provider();
+    vi.mocked(p.submit).mockResolvedValue({
+      status: "submitted",
+      providerRequestId: "video-reference-1",
+    });
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+      ...base,
+      status: "QUEUED",
+      requestPayload: { prompt: "test", referenceVideoAssetId: "source1" },
+    });
+    mocks.db.generationInputAsset.findMany.mockResolvedValue([
+      {
+        assetId: "source1",
+        asset: {
+          id: "source1",
+          organizationId: "org1",
+          status: "READY",
+          mediaKind: "VIDEO",
+          mimeType: "video/mp4",
+          storageProvider: "LOCAL",
+          purpose: "REFERENCE_INPUT",
+          storageOwnerUserId: "user1",
+        },
+      },
+    ]);
+    await processVideoSubmitJob("job1", p);
+    expect(p.submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: expect.objectContaining({
+          referenceVideoUrl: expect.stringMatching(
+            /^https:\/\/creator\.example\.com\/api\/provider-media\/source1\?jobId=job1&grant=v1\./,
+          ),
+        }),
+      }),
+    );
+  });
+
   it("keeps credits reserved while a video is still processing", async () => {
     const p = provider();
     vi.mocked(p.getJob).mockResolvedValue({
@@ -230,6 +276,7 @@ describe("video processing", () => {
       status: "succeeded",
       providerRequestId: "video-request-1",
       outputUrls: ["https://cdn.bytepluscdn.com/video.mp4"],
+      rawUsage: { completion_tokens: 183_104, ignored: "provider-data" },
     });
     mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
       ...base,
@@ -254,6 +301,160 @@ describe("video processing", () => {
     );
     expect(tx.asset.update).toHaveBeenCalledWith(
       expect.objectContaining({ where: { objectKey: "job1.mp4" } }),
+    );
+    expect(tx.generationJob.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          actualUnits: 1,
+          outputPayload: {
+            stored: true,
+            providerUsage: { completionTokens: 183_104 },
+          },
+        }),
+      }),
+    );
+  });
+
+  it("does not persist an invalid video token count as billing evidence", async () => {
+    const p = provider();
+    vi.mocked(p.getJob).mockResolvedValue({
+      status: "succeeded",
+      providerRequestId: "video-request-1",
+      outputUrls: ["https://cdn.bytepluscdn.com/video.mp4"],
+      rawUsage: { completion_tokens: -10 },
+    });
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+      ...base,
+      status: "PROCESSING",
+      providerRequestId: "video-request-1",
+    });
+    const tx = transaction();
+
+    await processVideoPollJob("job1", p);
+
+    expect(tx.generationJob.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          outputPayload: { stored: true },
+        }),
+      }),
+    );
+  });
+
+  it("settles a reference video using provider tokens and refunds the unused reservation", async () => {
+    const p = provider();
+    vi.mocked(p.getJob).mockResolvedValue({
+      status: "succeeded",
+      providerRequestId: "video-reference-1",
+      outputUrls: ["https://cdn.bytepluscdn.com/video.mp4"],
+      rawUsage: { completion_tokens: 183_104 },
+    });
+    const referenceJob = {
+      ...base,
+      requestPayload: {
+        prompt: "test",
+        referenceVideoAssetId: "source1",
+        resolution: "720p",
+      },
+      reservedCredits: 4_000n,
+      priceVersion: {
+        providerCostMicroUsd: 54_000n,
+        videoInputRate720p: 6_400n,
+        videoInputRate1080p: 7_000n,
+        fxBaisaNumerator: 769n,
+        fxBaisaDenominator: 2n,
+        targetMarginBps: 2_500,
+        creditsPerBaisa: 1n,
+      },
+    };
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+      ...referenceJob,
+      status: "PROCESSING",
+      providerRequestId: "video-reference-1",
+    });
+    const tx = transaction("PROCESSING", referenceJob);
+    await processVideoPollJob("job1", p);
+    expect(mocks.capture).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        amountCredits: expect.any(BigInt),
+        metadata: { completionTokens: 183_104, cappedAtReservation: false },
+      }),
+    );
+    expect(mocks.capture.mock.calls[0]?.[1].amountCredits).toBeLessThan(4_000n);
+    expect(tx.generationJob.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          actualProviderCostMicroUsd: 1_171_866n,
+        }),
+      }),
+    );
+  });
+
+  it("holds a completed reference video for review when provider usage is absent", async () => {
+    const p = provider();
+    vi.mocked(p.getJob).mockResolvedValue({
+      status: "succeeded",
+      providerRequestId: "video-reference-1",
+      outputUrls: ["https://cdn.bytepluscdn.com/video.mp4"],
+    });
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+      ...base,
+      status: "PROCESSING",
+      providerRequestId: "video-reference-1",
+      requestPayload: { prompt: "test", referenceVideoAssetId: "source1" },
+    });
+    await processVideoPollJob("job1", p);
+    expect(mocks.capture).not.toHaveBeenCalled();
+    expect(mocks.downloadVideo).not.toHaveBeenCalled();
+    expect(mocks.db.generationJob.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "MANUAL_REVIEW",
+          errorCode: "MISSING_PROVIDER_USAGE",
+        }),
+      }),
+    );
+  });
+
+  it("never captures more than the disclosed video reservation on a provider overrun", async () => {
+    const p = provider();
+    vi.mocked(p.getJob).mockResolvedValue({
+      status: "succeeded",
+      providerRequestId: "video-reference-1",
+      outputUrls: ["https://cdn.bytepluscdn.com/video.mp4"],
+      rawUsage: { completion_tokens: 9_000_000 },
+    });
+    const referenceJob = {
+      ...base,
+      requestPayload: {
+        prompt: "test",
+        referenceVideoAssetId: "source1",
+        resolution: "720p",
+      },
+      reservedCredits: 4_000n,
+      priceVersion: {
+        videoInputRate720p: 6_400n,
+        videoInputRate1080p: 7_000n,
+        fxBaisaNumerator: 769n,
+        fxBaisaDenominator: 2n,
+        targetMarginBps: 2_500,
+        creditsPerBaisa: 1n,
+      },
+    };
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+      ...referenceJob,
+      status: "PROCESSING",
+      providerRequestId: "video-reference-1",
+    });
+    const tx = transaction("PROCESSING", referenceJob);
+    await processVideoPollJob("job1", p);
+    expect(mocks.capture).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        amountCredits: 4_000n,
+        metadata: { completionTokens: 9_000_000, cappedAtReservation: true },
+      }),
     );
   });
 });

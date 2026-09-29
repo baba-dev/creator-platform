@@ -38,7 +38,7 @@ type Asset = {
   folder: { id: string; name: string } | null;
   variants: {
     id: string;
-    kind: "THUMBNAIL" | "PREVIEW" | "POSTER";
+    kind: "THUMBNAIL" | "PREVIEW" | "POSTER" | "STORYBOARD" | "WAVEFORM";
     mimeType: string;
   }[];
   tags: { id: string; name: string }[];
@@ -72,6 +72,11 @@ function previewUrl(asset: Asset, inspector = false): string | null {
     asset.variants.some((v) => v.kind === "POSTER")
   )
     return `/api/assets/${asset.id}/variant/poster`;
+  if (
+    asset.mediaKind === "AUDIO" &&
+    asset.variants.some((v) => v.kind === "WAVEFORM")
+  )
+    return `/api/assets/${asset.id}/variant/waveform`;
   return null;
 }
 
@@ -911,13 +916,52 @@ function AssetPreview({
   const image = previewUrl(asset, inspector);
   if (asset.mediaKind === "VIDEO" && inspector)
     return (
-      <video
-        className="aspect-video w-full rounded-2xl bg-surface-sunken object-contain"
-        controls
-        preload="metadata"
-        poster={image ?? undefined}
-        src={`/api/assets/${asset.id}`}
-      />
+      <div className="space-y-3">
+        <video
+          className="aspect-video w-full rounded-2xl bg-surface-sunken object-contain"
+          controls
+          preload="metadata"
+          poster={image ?? undefined}
+          src={`/api/assets/${asset.id}`}
+        />
+        {asset.variants.some((variant) => variant.kind === "STORYBOARD") ? (
+          <Image
+            unoptimized
+            src={`/api/assets/${asset.id}/variant/storyboard`}
+            alt="Four frames from the video timeline"
+            width={1280}
+            height={180}
+            className="w-full rounded-xl border border-border bg-surface-sunken"
+          />
+        ) : null}
+      </div>
+    );
+  if (asset.mediaKind === "AUDIO")
+    return (
+      <div className="space-y-3 rounded-2xl bg-surface-sunken p-3">
+        {image ? (
+          <Image
+            unoptimized
+            src={image}
+            alt="Audio waveform"
+            width={1200}
+            height={180}
+            className="w-full rounded-lg bg-foreground/90 object-contain"
+          />
+        ) : (
+          <p className="py-8 text-center text-xs text-muted-foreground">
+            Preparing waveform…
+          </p>
+        )}
+        {inspector ? (
+          <audio
+            className="w-full"
+            controls
+            preload="metadata"
+            src={`/api/assets/${asset.id}`}
+          />
+        ) : null}
+      </div>
     );
   if (image)
     return (
@@ -931,17 +975,6 @@ function AssetPreview({
         height={asset.height ?? 600}
       />
     );
-  if (asset.mediaKind === "AUDIO" && inspector)
-    return (
-      <div className="rounded-2xl bg-surface-sunken p-6">
-        <audio
-          className="w-full"
-          controls
-          preload="metadata"
-          src={`/api/assets/${asset.id}`}
-        />
-      </div>
-    );
   return (
     <div
       className={`${inspector ? "min-h-64" : "aspect-[4/3]"} grid place-items-center rounded-2xl bg-surface-sunken text-muted-foreground`}
@@ -949,13 +982,11 @@ function AssetPreview({
       <div className="text-center">
         <Icon
           name={
-            asset.mediaKind === "AUDIO"
-              ? "voice"
-              : asset.mediaKind === "VIDEO"
-                ? "video"
-                : asset.mediaKind === "IMAGE"
-                  ? "image"
-                  : "assets"
+            asset.mediaKind === "VIDEO"
+              ? "video"
+              : asset.mediaKind === "IMAGE"
+                ? "image"
+                : "assets"
           }
           className="mx-auto size-8"
         />

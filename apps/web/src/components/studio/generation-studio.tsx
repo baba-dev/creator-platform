@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import type { Route } from "next";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Eyebrow } from "@/components/ui/creative";
 import { StatusDot, Tape } from "@/components/ui/sketch";
@@ -32,6 +34,15 @@ type Model = {
 type ProjectOption = {
   id: string;
   name: string;
+};
+type ReferenceAsset = {
+  id: string;
+  name: string;
+  width: number | null;
+  height: number | null;
+  durationMs?: number | null;
+  mimeType?: string;
+  byteSize?: string;
 };
 type Job = {
   id: string;
@@ -90,13 +101,17 @@ export function GenerationStudio({
   canGenerate,
   organizationId,
   organizationSlug,
+  variant = "advanced",
+  initialMode = "IMAGE",
 }: {
   canGenerate: boolean;
   organizationId: string;
   organizationSlug: string;
+  variant?: "quick" | "advanced";
+  initialMode?: MediaKind;
 }) {
   const [data, setData] = useState<Studio | null>(null);
-  const [activeMode, setActiveMode] = useState<MediaKind>("IMAGE");
+  const [activeMode, setActiveMode] = useState<MediaKind>(initialMode);
   const [modelId, setModelId] = useState("");
   const [projectId, setProjectId] = useState("");
   const [prompt, setPrompt] = useState("");
@@ -118,13 +133,12 @@ export function GenerationStudio({
     priceVersionId: string;
     credits: string;
     generateAudio: boolean;
+    referenceVideoAssetId: string;
   } | null>(null);
   const [videoQuotePending, setVideoQuotePending] = useState(false);
   const [videoQuoteError, setVideoQuoteError] = useState<string | null>(null);
   const [ratio, setRatio] = useState("1:1");
   const [resolution, setResolution] = useState("2K");
-  const [outputCount, setOutputCount] = useState(1);
-  const [referenceAssetIds, setReferenceAssetIds] = useState<string[]>([]);
   const [templateContext, setTemplateContext] = useState<{
     id: string;
     slug: string;
@@ -132,6 +146,16 @@ export function GenerationStudio({
   } | null>(null);
   const [duration, setDuration] = useState("5");
   const [generateAudio, setGenerateAudio] = useState(false);
+  const [references, setReferences] = useState<ReferenceAsset[]>([]);
+  const [videoFrames, setVideoFrames] = useState<ReferenceAsset[]>([]);
+  const [videoReferences, setVideoReferences] = useState<ReferenceAsset[]>([]);
+  const [referenceVideoAssetId, setReferenceVideoAssetId] = useState("");
+  const [referenceAssetIds, setReferenceAssetIds] = useState<string[]>([]);
+  const [videoFirstFrameId, setVideoFirstFrameId] = useState("");
+  const [videoLastFrameId, setVideoLastFrameId] = useState("");
+  const [referenceBusy, setReferenceBusy] = useState(false);
+  const [referenceUrl, setReferenceUrl] = useState("");
+  const [outputCount, setOutputCount] = useState(1);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEnhancing, setIsEnhancing] = useState(false);
@@ -148,6 +172,15 @@ export function GenerationStudio({
   );
 
   const model = modelsForMode.find((m) => m.id === modelId) ?? modelsForMode[0];
+  const maxImageOutputs = Math.min(
+    Number(model?.capabilities?.maxGeneratedImages ?? 1),
+    Number(model?.capabilities?.maxTotalInputOutputImages ?? 15) -
+      referenceAssetIds.length,
+  );
+  const selectedOutputCount = Math.min(
+    outputCount,
+    Math.max(1, maxImageOutputs),
+  );
   const selectedProjectId = (data?.projects ?? []).some(
     (project) => project.id === projectId,
   )
@@ -181,24 +214,18 @@ export function GenerationStudio({
     [model?.capabilities],
   );
 
-  const selectedRatio = availableRatios.includes(ratio)
-    ? ratio
-    : (availableRatios[0] ?? "");
+  const selectedRatio =
+    activeMode === "VIDEO" && videoFirstFrameId
+      ? "adaptive"
+      : availableRatios.includes(ratio)
+        ? ratio
+        : (availableRatios[0] ?? "");
   const selectedResolution = availableResolutions.includes(resolution)
     ? resolution
     : (availableResolutions[0] ?? "");
   const selectedDuration = availableDurations.includes(duration)
     ? duration
     : (availableDurations[0] ?? "5");
-  const maxGeneratedImages =
-    typeof model?.capabilities?.maxGeneratedImages === "number"
-      ? Math.max(1, Math.min(15, model.capabilities.maxGeneratedImages))
-      : 1;
-  const selectedOutputCount = Math.max(
-    1,
-    Math.min(outputCount, maxGeneratedImages),
-  );
-
   const handleModeChange = useCallback(
     (mode: MediaKind) => {
       if (mode !== activeMode) {
@@ -235,7 +262,8 @@ export function GenerationStudio({
     videoQuotedCreditsInfo?.resolution === selectedResolution &&
     videoQuotedCreditsInfo?.modelId === activeModelId &&
     videoQuotedCreditsInfo?.priceVersionId === activePriceVersionId &&
-    videoQuotedCreditsInfo?.generateAudio === generateAudio
+    videoQuotedCreditsInfo?.generateAudio === generateAudio &&
+    videoQuotedCreditsInfo?.referenceVideoAssetId === referenceVideoAssetId
       ? videoQuotedCreditsInfo.credits
       : null;
 
@@ -317,6 +345,7 @@ export function GenerationStudio({
             durationSeconds: Number.parseInt(selectedDuration, 10),
             resolution: selectedResolution,
             generateAudio,
+            ...(referenceVideoAssetId ? { referenceVideoAssetId } : {}),
           }),
         });
         if (cancelled) return;
@@ -336,6 +365,7 @@ export function GenerationStudio({
             priceVersionId: resData.quote.priceVersionId,
             credits: String(resData.quote.customerCredits),
             generateAudio,
+            referenceVideoAssetId,
           });
           setVideoQuoteError(null);
         } else {
@@ -358,6 +388,7 @@ export function GenerationStudio({
     selectedDuration,
     selectedResolution,
     generateAudio,
+    referenceVideoAssetId,
     organizationId,
   ]);
 
@@ -378,6 +409,156 @@ export function GenerationStudio({
     activeMode === "VOICE"
       ? Boolean(data?.voiceConfigured)
       : Boolean(data?.mediaConfigured ?? data?.configured);
+
+  useEffect(() => {
+    if (
+      variant !== "advanced" ||
+      (activeMode !== "IMAGE" && activeMode !== "VIDEO")
+    )
+      return;
+    const controller = new AbortController();
+    void fetch(
+      `/api/assets/references?organizationId=${encodeURIComponent(organizationId)}`,
+      { signal: controller.signal },
+    )
+      .then(async (response) => {
+        if (!response.ok)
+          throw new Error("Reference library could not be loaded.");
+        return response.json() as Promise<{ assets: ReferenceAsset[] }>;
+      })
+      .then((body) => setReferences(body.assets))
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted)
+          setError(
+            error instanceof Error
+              ? error.message
+              : "Reference library unavailable.",
+          );
+      });
+    return () => controller.abort();
+  }, [activeMode, organizationId, variant]);
+  useEffect(() => {
+    if (
+      variant !== "advanced" ||
+      activeMode !== "VIDEO" ||
+      model?.capabilities?.referenceVideo !== true
+    )
+      return;
+    const controller = new AbortController();
+    void fetch(
+      `/api/assets?organizationId=${encodeURIComponent(organizationId)}&mediaKind=VIDEO&limit=100`,
+      { signal: controller.signal, cache: "no-store" },
+    )
+      .then((response) =>
+        response.ok
+          ? (response.json() as Promise<{ assets: ReferenceAsset[] }>)
+          : { assets: [] },
+      )
+      .then((body) =>
+        setVideoReferences(
+          body.assets.filter(
+            (asset) =>
+              asset.mimeType === "video/mp4" &&
+              asset.durationMs !== null &&
+              asset.durationMs !== undefined &&
+              asset.durationMs >= 2_000 &&
+              asset.durationMs <= 30_000 &&
+              asset.width !== null &&
+              asset.height !== null &&
+              asset.width >= 300 &&
+              asset.height >= 300 &&
+              asset.width * asset.height >= 407_696 &&
+              asset.width * asset.height <= 8_295_044 &&
+              asset.width / asset.height >= 0.4 &&
+              asset.width / asset.height <= 2.5 &&
+              Number(asset.byteSize) <= 100_000_000,
+          ),
+        ),
+      )
+      .catch(() => {
+        if (!controller.signal.aborted) setVideoReferences([]);
+      });
+    return () => controller.abort();
+  }, [
+    activeMode,
+    organizationId,
+    variant,
+    model?.capabilities?.referenceVideo,
+  ]);
+  useEffect(() => {
+    if (variant !== "advanced" || activeMode !== "VIDEO") return;
+    const controller = new AbortController();
+    void fetch(
+      `/api/assets?organizationId=${encodeURIComponent(organizationId)}&mediaKind=IMAGE&limit=100`,
+      { signal: controller.signal, cache: "no-store" },
+    )
+      .then((response) =>
+        response.ok
+          ? (response.json() as Promise<{ assets: ReferenceAsset[] }>)
+          : { assets: [] },
+      )
+      .then((body) => setVideoFrames(body.assets))
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [activeMode, organizationId, variant]);
+
+  async function uploadReference(file: File) {
+    if (referenceBusy || !canGenerate) return;
+    setReferenceBusy(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.set("organizationId", organizationId);
+      form.set("file", file);
+      const response = await fetch("/api/assets/references", {
+        method: "POST",
+        body: form,
+      });
+      const body = (await response.json()) as {
+        asset?: ReferenceAsset;
+        error?: string;
+      };
+      if (!response.ok || !body.asset)
+        throw new Error(body.error ?? "Reference upload failed.");
+      setReferences((previous) => [body.asset!, ...previous]);
+      if (activeMode === "VIDEO") {
+        setVideoFrames((previous) => [body.asset!, ...previous]);
+        setVideoFirstFrameId(body.asset.id);
+      } else setReferenceAssetIds((previous) => [...previous, body.asset!.id]);
+    } catch (error) {
+      setError(
+        error instanceof Error ? error.message : "Reference upload failed.",
+      );
+    } finally {
+      setReferenceBusy(false);
+    }
+  }
+
+  async function importReference() {
+    if (referenceBusy || !canGenerate || !referenceUrl.trim()) return;
+    setReferenceBusy(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/assets/image-import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organizationId, url: referenceUrl.trim() }),
+      });
+      const body = (await response.json()) as {
+        asset?: ReferenceAsset;
+        error?: string;
+      };
+      if (!response.ok || !body.asset)
+        throw new Error(body.error ?? "Image import failed.");
+      setReferences((previous) => [body.asset!, ...previous]);
+      setReferenceAssetIds((previous) => [...previous, body.asset!.id]);
+      setReferenceUrl("");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Image import failed.");
+    } finally {
+      setReferenceBusy(false);
+    }
+  }
 
   const refresh = useCallback(async () => {
     const response = await fetch(
@@ -578,6 +759,11 @@ export function GenerationStudio({
         ...(model.mediaKind === "VIDEO" && {
           durationSeconds: Number.parseInt(selectedDuration, 10),
           generateAudio,
+          ...(videoFirstFrameId
+            ? { firstFrameAssetId: videoFirstFrameId }
+            : {}),
+          ...(videoLastFrameId ? { lastFrameAssetId: videoLastFrameId } : {}),
+          ...(referenceVideoAssetId ? { referenceVideoAssetId } : {}),
         }),
       };
     }
@@ -693,12 +879,18 @@ export function GenerationStudio({
       className="paper-sheet relative rounded-[28px] border border-border p-5 sm:p-7"
     >
       <Tape className="-top-1 right-16 hidden rotate-6 sm:block" />
-      <Eyebrow>AI creation studio</Eyebrow>
+      <Eyebrow>
+        {variant === "quick"
+          ? "Quick create"
+          : `${activeMode.toLowerCase()} studio`}
+      </Eyebrow>
       <h2 className="font-display mt-2 text-2xl font-semibold text-foreground">
         Start with a rough idea.
       </h2>
       <p className="mt-2 text-sm text-muted-foreground">
-        Create image, video, and voice media with verified BytePlus models.
+        {variant === "quick"
+          ? "One idea, one click. Your model and settings are ready for you."
+          : "Shape every detail with verified BytePlus models."}
       </p>
       {templateContext ? (
         <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-primary/20 bg-primary/[0.06] px-4 py-3">
@@ -727,52 +919,59 @@ export function GenerationStudio({
           aria-label="Media format"
           className="inline-flex rounded-xl border border-border bg-card p-1"
         >
-          {mediaModes.map((mode, index) => (
-            <button
-              key={mode}
-              id={`media-tab-${mode.toLowerCase()}`}
-              type="button"
-              role="tab"
-              aria-selected={activeMode === mode}
-              aria-controls="media-creation-panel"
-              tabIndex={activeMode === mode ? 0 : -1}
-              onClick={() => handleModeChange(mode)}
-              onKeyDown={(event) => {
-                if (
-                  !["ArrowLeft", "ArrowRight", "Home", "End"].includes(
-                    event.key,
+          {(variant === "quick" ? mediaModes : [initialMode]).map(
+            (mode, index) => (
+              <button
+                key={mode}
+                id={`media-tab-${mode.toLowerCase()}`}
+                type="button"
+                role="tab"
+                aria-selected={activeMode === mode}
+                aria-controls="media-creation-panel"
+                tabIndex={activeMode === mode ? 0 : -1}
+                onClick={() => handleModeChange(mode)}
+                onKeyDown={(event) => {
+                  if (
+                    !["ArrowLeft", "ArrowRight", "Home", "End"].includes(
+                      event.key,
+                    )
                   )
-                )
-                  return;
-                event.preventDefault();
-                const nextIndex =
-                  event.key === "Home"
-                    ? 0
-                    : event.key === "End"
-                      ? mediaModes.length - 1
-                      : (index +
-                          (event.key === "ArrowRight" ? 1 : -1) +
-                          mediaModes.length) %
-                        mediaModes.length;
-                const nextMode = mediaModes[nextIndex]!;
-                handleModeChange(nextMode);
-                document
-                  .getElementById(`media-tab-${nextMode.toLowerCase()}`)
-                  ?.focus();
-              }}
-              className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
-                activeMode === mode
-                  ? "bg-primary text-primary-foreground shadow-xs"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {mode === "IMAGE"
-                ? "Image"
-                : mode === "VIDEO"
-                  ? "Video"
-                  : "Voice"}
-            </button>
-          ))}
+                    return;
+                  event.preventDefault();
+                  const nextIndex =
+                    event.key === "Home"
+                      ? 0
+                      : event.key === "End"
+                        ? (variant === "quick" ? mediaModes : [initialMode])
+                            .length - 1
+                        : (index +
+                            (event.key === "ArrowRight" ? 1 : -1) +
+                            (variant === "quick" ? mediaModes : [initialMode])
+                              .length) %
+                          (variant === "quick" ? mediaModes : [initialMode])
+                            .length;
+                  const nextMode = (
+                    variant === "quick" ? mediaModes : [initialMode]
+                  )[nextIndex]!;
+                  handleModeChange(nextMode);
+                  document
+                    .getElementById(`media-tab-${nextMode.toLowerCase()}`)
+                    ?.focus();
+                }}
+                className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+                  activeMode === mode
+                    ? "bg-primary text-primary-foreground shadow-xs"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {mode === "IMAGE"
+                  ? "Image"
+                  : mode === "VIDEO"
+                    ? "Video"
+                    : "Voice"}
+              </button>
+            ),
+          )}
         </div>
       </div>
       <div
@@ -782,72 +981,77 @@ export function GenerationStudio({
         className="mt-6 grid gap-6 lg:grid-cols-2"
       >
         <div className="space-y-4">
-          <label
-            className="block text-sm font-semibold text-foreground"
-            htmlFor="media-model"
-          >
-            Generation model
-          </label>
-          <select
-            id="media-model"
-            value={model?.id ?? ""}
-            onChange={(e) => setModelId(e.target.value)}
-            disabled={busy || isEnhancing}
-            className="min-h-11 w-full rounded-xl border border-input bg-card px-3 text-foreground"
-          >
-            {!modelsForMode.length ? (
-              <option>
-                No enabled {activeMode.toLowerCase()} models with active pricing
-              </option>
-            ) : null}
-            {modelsForMode.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name} ·{" "}
-                {m.pricingDimension === "CHARACTER"
-                  ? `${m.credits} credits / ${m.unitQuantity ?? 1000} chars`
-                  : m.pricingDimension === "SECOND"
-                    ? `${m.credits} credits / ${m.unitQuantity ?? 5}s`
-                    : `${m.credits} credits`}
-              </option>
-            ))}
-          </select>
-          {model?.description ? (
-            <p className="text-xs text-muted-foreground">{model.description}</p>
-          ) : null}
-
-          <div className="grid gap-2">
-            <div className="flex items-center justify-between gap-3">
-              <label
-                className="text-sm font-semibold text-foreground"
-                htmlFor="generation-project"
-              >
-                Project
-              </label>
-              <a
-                href={`/app/${organizationSlug}/projects`}
-                className="text-xs font-semibold text-primary"
-              >
-                Manage projects
-              </a>
-            </div>
+          <div className={variant === "quick" ? "hidden" : "space-y-4"}>
+            <label
+              className="block text-sm font-semibold text-foreground"
+              htmlFor="media-model"
+            >
+              Generation model
+            </label>
             <select
-              id="generation-project"
-              value={selectedProjectId}
-              onChange={(event) => setProjectId(event.target.value)}
+              id="media-model"
+              value={model?.id ?? ""}
+              onChange={(e) => setModelId(e.target.value)}
               disabled={busy || isEnhancing}
               className="min-h-11 w-full rounded-xl border border-input bg-card px-3 text-foreground"
             >
-              <option value="">No project</option>
-              {(data?.projects ?? []).map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
+              {!modelsForMode.length ? (
+                <option>
+                  No enabled {activeMode.toLowerCase()} models with active
+                  pricing
+                </option>
+              ) : null}
+              {modelsForMode.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name} ·{" "}
+                  {m.pricingDimension === "CHARACTER"
+                    ? `${m.credits} credits / ${m.unitQuantity ?? 1000} chars`
+                    : m.pricingDimension === "SECOND"
+                      ? `${m.credits} credits / ${m.unitQuantity ?? 5}s`
+                      : `${m.credits} credits`}
                 </option>
               ))}
             </select>
-            <p className="text-xs text-subtle-foreground">
-              Optional. The generation and its output asset stay linked to the
-              selected project.
-            </p>
+            {model?.description ? (
+              <p className="text-xs text-muted-foreground">
+                {model.description}
+              </p>
+            ) : null}
+
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between gap-3">
+                <label
+                  className="text-sm font-semibold text-foreground"
+                  htmlFor="generation-project"
+                >
+                  Project
+                </label>
+                <a
+                  href={`/app/${organizationSlug}/projects`}
+                  className="text-xs font-semibold text-primary"
+                >
+                  Manage projects
+                </a>
+              </div>
+              <select
+                id="generation-project"
+                value={selectedProjectId}
+                onChange={(event) => setProjectId(event.target.value)}
+                disabled={busy || isEnhancing}
+                className="min-h-11 w-full rounded-xl border border-input bg-card px-3 text-foreground"
+              >
+                <option value="">No project</option>
+                {(data?.projects ?? []).map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-subtle-foreground">
+                Optional. The generation and its output asset stay linked to the
+                selected project.
+              </p>
+            </div>
           </div>
 
           {activeMode === "VOICE" ? (
@@ -874,57 +1078,59 @@ export function GenerationStudio({
                 </div>
               </div>
 
-              <label
-                htmlFor="voice-preset"
-                className="block text-sm font-semibold text-foreground"
-              >
-                Preset voice
-              </label>
-              <select
-                id="voice-preset"
-                value={selectedVoiceKey}
-                onChange={(e) => setVoiceKey(e.target.value)}
-                disabled={busy || availableVoices.length === 0}
-                className="min-h-11 w-full rounded-xl border border-input bg-card px-3 text-foreground"
-              >
-                {availableVoices.length === 0 ? (
-                  <option>No verified voices available</option>
-                ) : null}
-                {availableVoices.map((v) => (
-                  <option key={v.key} value={v.key}>
-                    {v.displayName} ({v.gender ? `${v.gender} · ` : ""}
-                    {v.locale}){v.style ? ` — ${v.style}` : ""}
-                  </option>
-                ))}
-              </select>
-
-              <label
-                htmlFor="voice-speech-rate"
-                className="block text-sm font-semibold text-foreground"
-              >
-                Speech rate
-              </label>
-              <div className="flex items-center gap-3">
-                <input
-                  id="voice-speech-rate"
-                  type="range"
-                  min="0.5"
-                  max="2"
-                  step="0.1"
-                  value={speechRate}
-                  onChange={(e) =>
-                    setSpeechRate(Number.parseFloat(e.target.value))
-                  }
-                  disabled={busy}
-                  aria-valuetext={`${speechRate.toFixed(1)} times speed`}
-                  className="min-h-11 w-full accent-primary"
-                />
-                <output
-                  htmlFor="voice-speech-rate"
-                  className="min-w-12 text-right text-sm font-semibold tabular-nums text-foreground"
+              <div className={variant === "quick" ? "hidden" : "space-y-4"}>
+                <label
+                  htmlFor="voice-preset"
+                  className="block text-sm font-semibold text-foreground"
                 >
-                  {speechRate.toFixed(1)}×
-                </output>
+                  Preset voice
+                </label>
+                <select
+                  id="voice-preset"
+                  value={selectedVoiceKey}
+                  onChange={(e) => setVoiceKey(e.target.value)}
+                  disabled={busy || availableVoices.length === 0}
+                  className="min-h-11 w-full rounded-xl border border-input bg-card px-3 text-foreground"
+                >
+                  {availableVoices.length === 0 ? (
+                    <option>No verified voices available</option>
+                  ) : null}
+                  {availableVoices.map((v) => (
+                    <option key={v.key} value={v.key}>
+                      {v.displayName} ({v.gender ? `${v.gender} · ` : ""}
+                      {v.locale}){v.style ? ` — ${v.style}` : ""}
+                    </option>
+                  ))}
+                </select>
+
+                <label
+                  htmlFor="voice-speech-rate"
+                  className="block text-sm font-semibold text-foreground"
+                >
+                  Speech rate
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    id="voice-speech-rate"
+                    type="range"
+                    min="0.5"
+                    max="2"
+                    step="0.1"
+                    value={speechRate}
+                    onChange={(e) =>
+                      setSpeechRate(Number.parseFloat(e.target.value))
+                    }
+                    disabled={busy}
+                    aria-valuetext={`${speechRate.toFixed(1)} times speed`}
+                    className="min-h-11 w-full accent-primary"
+                  />
+                  <output
+                    htmlFor="voice-speech-rate"
+                    className="min-w-12 text-right text-sm font-semibold tabular-nums text-foreground"
+                  >
+                    {speechRate.toFixed(1)}×
+                  </output>
+                </div>
               </div>
             </>
           ) : (
@@ -945,156 +1151,404 @@ export function GenerationStudio({
                   placeholder="A cinematic product photograph in warm Omani desert light…"
                   className="min-h-44 w-full rounded-2xl border border-input bg-card p-4 pb-14 text-foreground placeholder:text-muted-foreground"
                 />
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => void enhancePrompt()}
-                  disabled={
-                    busy ||
-                    isEnhancing ||
-                    !canGenerate ||
-                    !model ||
-                    !prompt.trim()
-                  }
-                  aria-busy={isEnhancing}
-                  className="absolute bottom-3 right-3"
-                >
-                  {isEnhancing ? (
-                    <>
-                      <span
-                        aria-hidden="true"
-                        className="size-3 animate-spin rounded-full border-2 border-primary border-t-transparent"
-                      />
-                      Enhancing…
-                    </>
-                  ) : (
-                    <>✨ Enhance prompt</>
-                  )}
-                </Button>
+                {variant === "advanced" ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => void enhancePrompt()}
+                    disabled={
+                      busy ||
+                      isEnhancing ||
+                      !canGenerate ||
+                      !model ||
+                      !prompt.trim()
+                    }
+                    aria-busy={isEnhancing}
+                    className="absolute bottom-3 right-3"
+                  >
+                    {isEnhancing ? (
+                      <>
+                        <span
+                          aria-hidden="true"
+                          className="size-3 animate-spin rounded-full border-2 border-primary border-t-transparent"
+                        />
+                        Enhancing…
+                      </>
+                    ) : (
+                      <>✨ Enhance prompt</>
+                    )}
+                  </Button>
+                ) : null}
               </div>
 
-              <label
-                htmlFor="media-ratio"
-                className="block text-sm font-semibold text-foreground"
-              >
-                Aspect ratio
-              </label>
-              <select
-                id="media-ratio"
-                value={selectedRatio}
-                onChange={(e) => setRatio(e.target.value)}
-                disabled={busy || availableRatios.length === 0}
-                className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
-              >
-                {availableRatios.length ? (
-                  availableRatios.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))
-                ) : (
-                  <option>No supported aspect ratios advertised</option>
-                )}
-              </select>
-
-              <label
-                htmlFor="media-resolution"
-                className="block text-sm font-semibold text-foreground"
-              >
-                Resolution
-              </label>
-              <select
-                id="media-resolution"
-                value={selectedResolution}
-                onChange={(e) => setResolution(e.target.value)}
-                disabled={busy || availableResolutions.length === 0}
-                className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
-              >
-                {availableResolutions.length ? (
-                  availableResolutions.map((value) => (
-                    <option key={value} value={value}>
-                      {value}
-                    </option>
-                  ))
-                ) : (
-                  <option>No supported resolutions advertised</option>
-                )}
-              </select>
-
-              {model?.mediaKind === "IMAGE" && maxGeneratedImages > 1 ? (
-                <>
-                  <label
-                    htmlFor="image-output-count"
-                    className="block text-sm font-semibold text-foreground"
-                  >
-                    Number of images
-                  </label>
+              {variant === "advanced" &&
+              activeMode === "IMAGE" &&
+              model?.capabilities?.referenceImages === true ? (
+                <div className="space-y-3 rounded-2xl border border-border bg-card/75 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground">
+                        Reference images
+                      </h3>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Use private images to guide the next creation. Order
+                        matters.
+                      </p>
+                    </div>
+                    <label className="cursor-pointer rounded-xl border border-border px-3 py-2 text-xs font-semibold text-primary hover:border-primary/40">
+                      {referenceBusy ? "Uploading…" : "Upload image"}
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="sr-only"
+                        disabled={
+                          referenceBusy ||
+                          busy ||
+                          !canGenerate ||
+                          referenceAssetIds.length >= 14
+                        }
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) void uploadReference(file);
+                          event.target.value = "";
+                        }}
+                      />
+                    </label>
+                  </div>
+                  {referenceAssetIds.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {referenceAssetIds.map((id, index) => {
+                        const asset = references.find((item) => item.id === id);
+                        return (
+                          <div
+                            key={id}
+                            className="flex items-center gap-2 rounded-xl border border-border bg-background p-1.5 pr-2"
+                          >
+                            <Image
+                              src={`/api/assets/${id}`}
+                              alt=""
+                              width={48}
+                              height={48}
+                              unoptimized
+                              className="size-12 rounded-lg object-cover"
+                            />
+                            <span className="max-w-24 truncate text-xs text-foreground">
+                              {index + 1}. {asset?.name ?? "Reference"}
+                            </span>
+                            <button
+                              type="button"
+                              aria-label={`Remove ${asset?.name ?? "reference"}`}
+                              className="rounded px-1 text-muted-foreground hover:text-destructive"
+                              onClick={() =>
+                                setReferenceAssetIds((previous) =>
+                                  previous.filter((value) => value !== id),
+                                )
+                              }
+                            >
+                              ×
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : null}
                   <select
-                    id="image-output-count"
-                    value={selectedOutputCount}
+                    aria-label="Choose an existing reference"
+                    value=""
+                    disabled={busy || referenceAssetIds.length >= 14}
                     onChange={(event) =>
-                      setOutputCount(Number.parseInt(event.target.value, 10))
+                      setReferenceAssetIds((previous) =>
+                        previous.includes(event.target.value)
+                          ? previous
+                          : [...previous, event.target.value],
+                      )
                     }
-                    disabled={busy}
-                    className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
+                    className="min-h-10 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground"
                   >
-                    {Array.from(
-                      { length: Math.min(maxGeneratedImages, 4) },
-                      (_, index) => index + 1,
-                    ).map((count) => (
-                      <option key={count} value={count}>
-                        {count}
-                      </option>
-                    ))}
+                    <option value="">
+                      Choose from your reference library…
+                    </option>
+                    {references
+                      .filter((asset) => !referenceAssetIds.includes(asset.id))
+                      .map((asset) => (
+                        <option key={asset.id} value={asset.id}>
+                          {asset.name}
+                        </option>
+                      ))}
                   </select>
-                </>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <label htmlFor="reference-url" className="sr-only">
+                      Approved image link
+                    </label>
+                    <input
+                      id="reference-url"
+                      type="url"
+                      value={referenceUrl}
+                      onChange={(event) => setReferenceUrl(event.target.value)}
+                      placeholder="https://approved-host.example/image.jpg"
+                      maxLength={2048}
+                      className="min-h-11 min-w-0 flex-1 rounded-xl border border-input bg-background px-3 text-sm text-foreground"
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={
+                        !referenceUrl.trim() ||
+                        referenceBusy ||
+                        !canGenerate ||
+                        referenceAssetIds.length >= 14
+                      }
+                      onClick={() => void importReference()}
+                    >
+                      Import link
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Links are imported into your private reference library. Your
+                    administrator controls approved source hosts.
+                  </p>
+                </div>
               ) : null}
 
-              {model?.mediaKind === "VIDEO" && (
-                <>
-                  <label
-                    htmlFor="video-duration"
-                    className="block text-sm font-semibold text-foreground"
-                  >
-                    Duration
-                  </label>
-                  <select
-                    id="video-duration"
-                    value={selectedDuration}
-                    onChange={(e) => setDuration(e.target.value)}
-                    disabled={busy || availableDurations.length === 0}
-                    className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
-                  >
-                    {availableDurations.length ? (
-                      availableDurations.map((value) => (
-                        <option key={value} value={value}>
-                          {value} seconds
-                        </option>
-                      ))
-                    ) : (
-                      <option>No supported durations advertised</option>
-                    )}
-                  </select>
-
-                  {model.capabilities?.generateAudio === true ? (
-                    <label className="flex items-center gap-3 rounded-xl border border-border bg-card px-3 py-3 text-sm font-medium text-foreground">
-                      <input
-                        type="checkbox"
-                        checked={generateAudio}
-                        onChange={(event) =>
-                          setGenerateAudio(event.target.checked)
+              {variant === "advanced" &&
+              activeMode === "VIDEO" &&
+              model?.capabilities?.referenceVideo === true ? (
+                <div className="space-y-3 rounded-2xl border border-border bg-card/75 p-4">
+                  <h3 className="text-sm font-semibold">Reference video</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Guide a new clip with an eligible MP4 from your library. The
+                    displayed credits are the maximum reservation; unused
+                    credits return after provider usage is verified.
+                  </p>
+                  <label className="grid gap-2 text-xs font-semibold">
+                    Library clip
+                    <select
+                      value={referenceVideoAssetId}
+                      onChange={(event) => {
+                        setReferenceVideoAssetId(event.target.value);
+                        if (event.target.value) {
+                          setVideoFirstFrameId("");
+                          setVideoLastFrameId("");
                         }
-                        disabled={busy}
-                        className="size-4 accent-primary"
-                      />
-                      Generate synchronized audio
+                      }}
+                      className="min-h-11 rounded-xl border border-input bg-background px-3"
+                    >
+                      <option value="">No video reference</option>
+                      {videoReferences.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              ) : null}
+
+              {variant === "advanced" &&
+              activeMode === "VIDEO" &&
+              model?.capabilities?.firstFrame === true &&
+              !referenceVideoAssetId ? (
+                <div className="space-y-3 rounded-2xl border border-border bg-card/75 p-4">
+                  <h3 className="text-sm font-semibold">
+                    Guide your opening frame
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Select a private reference image. The output follows its
+                    aspect ratio.
+                  </p>
+                  <label className="grid gap-2 text-xs font-semibold">
+                    First frame
+                    <select
+                      value={videoFirstFrameId}
+                      onChange={(event) => {
+                        setVideoFirstFrameId(event.target.value);
+                        if (!event.target.value) setVideoLastFrameId("");
+                      }}
+                      className="min-h-11 rounded-xl border border-input bg-background px-3"
+                    >
+                      <option value="">Text to video</option>
+                      {videoFrames.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {videoFirstFrameId &&
+                  model?.capabilities?.lastFrame === true ? (
+                    <label className="grid gap-2 text-xs font-semibold">
+                      Last frame (optional)
+                      <select
+                        value={videoLastFrameId}
+                        onChange={(event) =>
+                          setVideoLastFrameId(event.target.value)
+                        }
+                        className="min-h-11 rounded-xl border border-input bg-background px-3"
+                      >
+                        <option value="">No fixed ending</option>
+                        {videoFrames.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.name}
+                          </option>
+                        ))}
+                      </select>
                     </label>
                   ) : null}
-                </>
-              )}
+                  <label className="inline-flex cursor-pointer rounded-xl border border-border px-3 py-2 text-xs font-semibold text-primary">
+                    {referenceBusy ? "Uploading…" : "Upload frame image"}
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      className="sr-only"
+                      disabled={busy || referenceBusy || !canGenerate}
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) void uploadReference(file);
+                        event.target.value = "";
+                      }}
+                    />
+                  </label>
+                </div>
+              ) : null}
+
+              <div className={variant === "quick" ? "hidden" : "space-y-4"}>
+                {activeMode === "IMAGE" &&
+                Number(model?.capabilities?.maxGeneratedImages ?? 1) > 1 ? (
+                  <label className="grid gap-2 text-sm font-semibold text-foreground">
+                    Images to generate
+                    <select
+                      value={selectedOutputCount}
+                      onChange={(event) =>
+                        setOutputCount(Number(event.target.value))
+                      }
+                      className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
+                    >
+                      {Array.from(
+                        { length: Math.max(1, maxImageOutputs) },
+                        (_, index) => index + 1,
+                      ).map((count) => (
+                        <option key={count} value={count}>
+                          {count}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="text-xs font-normal text-muted-foreground">
+                      Credits are reserved for the maximum and settled on
+                      successful outputs.
+                    </span>
+                  </label>
+                ) : null}
+
+                <label
+                  htmlFor="media-ratio"
+                  className="block text-sm font-semibold text-foreground"
+                >
+                  Aspect ratio
+                </label>
+                <select
+                  id="media-ratio"
+                  value={selectedRatio}
+                  onChange={(e) => setRatio(e.target.value)}
+                  disabled={busy || availableRatios.length === 0}
+                  className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
+                >
+                  {availableRatios.length ? (
+                    (activeMode === "VIDEO" && videoFirstFrameId
+                      ? ["adaptive"]
+                      : availableRatios
+                    ).map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))
+                  ) : (
+                    <option>No supported aspect ratios advertised</option>
+                  )}
+                </select>
+
+                <label
+                  htmlFor="media-resolution"
+                  className="block text-sm font-semibold text-foreground"
+                >
+                  Resolution
+                </label>
+                <select
+                  id="media-resolution"
+                  value={selectedResolution}
+                  onChange={(e) => setResolution(e.target.value)}
+                  disabled={busy || availableResolutions.length === 0}
+                  className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
+                >
+                  {availableResolutions.length ? (
+                    availableResolutions.map((value) => (
+                      <option key={value} value={value}>
+                        {value}
+                      </option>
+                    ))
+                  ) : (
+                    <option>No supported resolutions advertised</option>
+                  )}
+                </select>
+
+                {model?.mediaKind === "VIDEO" && (
+                  <>
+                    <label
+                      htmlFor="video-duration"
+                      className="block text-sm font-semibold text-foreground"
+                    >
+                      Duration
+                    </label>
+                    <select
+                      id="video-duration"
+                      value={selectedDuration}
+                      onChange={(e) => setDuration(e.target.value)}
+                      disabled={busy || availableDurations.length === 0}
+                      className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
+                    >
+                      {availableDurations.length ? (
+                        availableDurations.map((value) => (
+                          <option key={value} value={value}>
+                            {value} seconds
+                          </option>
+                        ))
+                      ) : (
+                        <option>No supported durations advertised</option>
+                      )}
+                    </select>
+
+                    {model.capabilities?.generateAudio === true ? (
+                      <label className="flex items-center gap-3 rounded-xl border border-border bg-card px-3 py-3 text-sm font-medium text-foreground">
+                        <input
+                          type="checkbox"
+                          checked={generateAudio}
+                          onChange={(event) =>
+                            setGenerateAudio(event.target.checked)
+                          }
+                          disabled={busy}
+                          className="size-4 accent-primary"
+                        />
+                        Generate synchronized audio
+                      </label>
+                    ) : null}
+                  </>
+                )}
+              </div>
             </>
           )}
+
+          {variant === "quick" ? (
+            <Link
+              href={
+                `/app/${organizationSlug}/${activeMode === "VOICE" ? "speech" : activeMode.toLowerCase()}` as Route
+              }
+              className="inline-flex min-h-10 items-center gap-2 text-sm font-semibold text-primary hover:underline"
+            >
+              Open advanced{" "}
+              {activeMode === "VOICE" ? "speech" : activeMode.toLowerCase()}{" "}
+              studio →
+            </Link>
+          ) : null}
 
           <p className="text-sm tabular-nums text-muted-foreground">
             Available balance: {data?.balance ?? "…"} credits
@@ -1307,6 +1761,26 @@ export function GenerationStudio({
                             ? "JPEG"
                             : "PNG"}
                     </a>
+                    {asset.mimeType.startsWith("image/") ? (
+                      <Link
+                        href={
+                          `/app/${organizationSlug}/image?assetId=${encodeURIComponent(asset.id)}#image-editor` as Route
+                        }
+                        className="ml-4 inline-flex min-h-10 items-center text-sm font-semibold text-primary"
+                      >
+                        Edit image →
+                      </Link>
+                    ) : null}
+                    {asset.mimeType.startsWith("video/") ? (
+                      <Link
+                        href={
+                          `/app/${organizationSlug}/video?assetId=${encodeURIComponent(asset.id)}#video-editor` as Route
+                        }
+                        className="ml-4 inline-flex min-h-10 items-center text-sm font-semibold text-primary"
+                      >
+                        Edit video →
+                      </Link>
+                    ) : null}
                   </div>
                 ))}
                 {job.errorMessage ? (

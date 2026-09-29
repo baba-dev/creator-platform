@@ -18,14 +18,15 @@
     "@aiwa/assets": "workspace:*",
     "@aiwa/config": "workspace:*",
     "@aiwa/core": "workspace:*",
-    "@aiwa/providers": "workspace:*",
-    "bullmq": "6.3.5",
-    "ioredis": "^5.8.1",
+    "@aiwa/db": "workspace:*",
     "@aiwa/generation": "workspace:*",
     "@aiwa/mail": "workspace:*",
-    "@aiwa/db": "workspace:*",
+    "@aiwa/providers": "workspace:*",
     "@prisma/client": "6.19.3",
-    "sharp": "0.35.4"
+    "bullmq": "6.3.5",
+    "ioredis": "^5.8.1",
+    "sharp": "0.35.4",
+    "zod": "^4.6.4"
   },
   "devDependencies": {
     "tsup": "^8.5.0",

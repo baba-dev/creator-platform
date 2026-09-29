@@ -18,7 +18,10 @@ ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
 WORKDIR /app
 
+RUN apt-get update && apt-get install --no-install-recommends -y ffmpeg ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 RUN groupadd --system --gid 1001 nodejs && useradd --system --uid 1001 --gid nodejs nextjs
+RUN mkdir -p /var/www/creator-platform/shared/assets && chown -R nextjs:nodejs /var/www/creator-platform/shared/assets
 COPY --from=build --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
 COPY --from=build --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
 USER nextjs

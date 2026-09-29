@@ -3,8 +3,11 @@ import {
   LocalAssetStorage,
 } from "@aiwa/assets/storage";
 import { parseServerEnv } from "@aiwa/config";
-import { db } from "@aiwa/db";
+import { db, Prisma } from "@aiwa/db";
 import sharp from "sharp";
+import { mediaCommand } from "./video-media";
+import { resolveLocalAssetPath } from "@aiwa/assets/storage";
+import { audioWaveform, videoStoryboard } from "./media-variants";
 
 const env = parseServerEnv();
 const storage = new LocalAssetStorage(env.ASSET_STORAGE_ROOT);
@@ -12,7 +15,7 @@ const storage = new LocalAssetStorage(env.ASSET_STORAGE_ROOT);
 async function saveVariant(input: {
   assetId: string;
   organizationId: string;
-  kind: "THUMBNAIL" | "PREVIEW" | "POSTER";
+  kind: "THUMBNAIL" | "PREVIEW" | "POSTER" | "STORYBOARD" | "WAVEFORM";
   bytes: Buffer;
   width: number;
   height: number;
@@ -20,9 +23,8 @@ async function saveVariant(input: {
   const objectKey = createAssetVariantObjectKey(input.organizationId, "webp");
   const stored = await storage.put(objectKey, input.bytes);
   try {
-    await db.assetVariant.upsert({
-      where: { assetId_kind: { assetId: input.assetId, kind: input.kind } },
-      create: {
+    await db.assetVariant.create({
+      data: {
         assetId: input.assetId,
         kind: input.kind,
         storageProvider: "LOCAL",
@@ -33,17 +35,15 @@ async function saveVariant(input: {
         width: input.width,
         height: input.height,
       },
-      update: {
-        objectKey,
-        mimeType: "image/webp",
-        byteSize: stored.byteSize,
-        sha256: stored.sha256,
-        width: input.width,
-        height: input.height,
-      },
     });
   } catch (error) {
     await storage.delete(objectKey).catch(() => undefined);
+    // A concurrent worker won the same variant. Preserve its object and row.
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    )
+      return;
     throw error;
   }
 }
@@ -99,13 +99,29 @@ export async function processAssetDerivatives(assetId: string): Promise<void> {
   }
 
   if (asset.mediaKind === "VIDEO" && !kinds.has("POSTER")) {
-    // libvips does not decode arbitrary MP4 frames. Generate a safe bounded
-    // poster immediately; the video itself remains available in the inspector.
-    // A future ffmpeg-backed extractor can replace this variant in place.
-    const svg = Buffer.from(
-      '<svg width="960" height="540" xmlns="http://www.w3.org/2000/svg"><rect width="960" height="540" fill="#18181b"/><circle cx="480" cy="270" r="72" fill="#ffffff" fill-opacity=".12"/><path d="M458 224 L458 316 L536 270 Z" fill="#ffffff" fill-opacity=".9"/><text x="480" y="410" text-anchor="middle" font-family="sans-serif" font-size="28" fill="#ffffff" fill-opacity=".72">VIDEO PREVIEW</text></svg>',
+    const frame = await mediaCommand(
+      "ffmpeg",
+      [
+        "-nostdin",
+        "-v",
+        "error",
+        "-ss",
+        "0.1",
+        "-i",
+        resolveLocalAssetPath(env.ASSET_STORAGE_ROOT, asset.objectKey),
+        "-frames:v",
+        "1",
+        "-vf",
+        "scale=960:-2:force_original_aspect_ratio=decrease",
+        "-f",
+        "image2pipe",
+        "-vcodec",
+        "mjpeg",
+        "pipe:1",
+      ],
+      15_000,
     );
-    const poster = await sharp(svg)
+    const poster = await sharp(frame)
       .webp({ quality: 82 })
       .toBuffer({ resolveWithObject: true });
     await saveVariant({
@@ -115,6 +131,35 @@ export async function processAssetDerivatives(assetId: string): Promise<void> {
       bytes: poster.data,
       width: poster.info.width,
       height: poster.info.height,
+    });
+  }
+  if (asset.mediaKind === "VIDEO" && !kinds.has("STORYBOARD")) {
+    const storyboard = await videoStoryboard(
+      env.ASSET_STORAGE_ROOT,
+      asset.objectKey,
+      asset.durationMs ?? 120_000,
+    );
+    await saveVariant({
+      assetId,
+      organizationId: asset.organizationId,
+      kind: "STORYBOARD",
+      bytes: storyboard.data,
+      width: storyboard.info.width,
+      height: storyboard.info.height,
+    });
+  }
+  if (asset.mediaKind === "AUDIO" && !kinds.has("WAVEFORM")) {
+    const waveform = await audioWaveform(
+      env.ASSET_STORAGE_ROOT,
+      asset.objectKey,
+    );
+    await saveVariant({
+      assetId,
+      organizationId: asset.organizationId,
+      kind: "WAVEFORM",
+      bytes: waveform.data,
+      width: waveform.info.width,
+      height: waveform.info.height,
     });
   }
 }

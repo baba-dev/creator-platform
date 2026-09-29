@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Button } from "@/components/ui/button";
+import { Brand } from "@/components/ui/brand";
 import { Annotation, CreativeSurface, Eyebrow } from "@/components/ui/creative";
 import { Icon } from "@/components/ui/icon";
 
@@ -69,12 +70,7 @@ export default function DesignSystemPage() {
       <div className="paper-grid pointer-events-none fixed inset-0 opacity-40 [mask-image:linear-gradient(to_bottom,black,transparent_80%)]" />
 
       <header className="relative z-20 mx-auto flex h-20 max-w-7xl items-center justify-between px-5 sm:px-7 lg:px-10">
-        <Link
-          href="/"
-          className="font-display text-sm font-bold tracking-[0.1em]"
-        >
-          AIWA CREATORS
-        </Link>
+        <Brand />
         <div className="flex items-center gap-3">
           <span className="hidden font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground sm:block">
             Pencil &amp; Pixel · v1.0

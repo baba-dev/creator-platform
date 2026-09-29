@@ -119,7 +119,7 @@ export default async function AdminLayout({
 
   return (
     <main className="relative min-h-screen bg-background text-foreground">
-      <div className="relative mx-auto grid min-h-screen max-w-[1800px] xl:grid-cols-[264px_1fr]">
+      <div className="relative mx-auto grid min-h-screen min-w-0 max-w-[1800px] xl:grid-cols-[264px_minmax(0,1fr)]">
         <aside className="hidden border-r border-border bg-sidebar/90 px-4 py-5 backdrop-blur-xl xl:flex xl:flex-col">
           <div className="px-2">
             <Brand />

@@ -194,6 +194,16 @@ Do not:
 
 ## Components and page anatomy
 
+### Brand identity
+
+- Use the approved Creative Cursor assets through `Brand`, which selects black
+  artwork on light surfaces and white artwork on dark surfaces.
+- Use the horizontal lockup at 160–176 px in full headers and the symbol in
+  compact navigation. Keep at least 8 px of clear space around the artwork.
+- Brand is a link with its own accessible name; never nest it in another link.
+- Browser and installed-app icons are configured in the root metadata and PWA
+  manifest. See [branding.md](branding.md) for exact asset paths.
+
 ### Global header
 
 - 72–80 px tall.

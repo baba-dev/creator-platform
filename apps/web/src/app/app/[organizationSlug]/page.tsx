@@ -6,32 +6,22 @@ import { GenerationStudio } from "@/components/studio/generation-studio";
 import { Button } from "@/components/ui/button";
 import { Annotation, Eyebrow } from "@/components/ui/creative";
 import { Icon, type IconName } from "@/components/ui/icon";
-import { DemoBadge } from "@/components/ui/sketch";
 import { requireOrganizationPermission } from "@/lib/request-auth";
 
-const sampleActivity = [
-  {
-    name: "Ramadan campaign visual",
-    model: "Seedream 5.0 Lite",
-    kind: "image",
-    status: "Ready",
-    cost: "28",
-  },
-  {
-    name: "Muscat launch film",
-    model: "Seedance 2.5",
-    kind: "video",
-    status: "Processing",
-    cost: "240",
-  },
-  {
-    name: "Arabic brand narration",
-    model: "Seed Speech TTS 2.0",
-    kind: "voice",
-    status: "Ready",
-    cost: "6",
-  },
-] as const;
+type MediaKind = "IMAGE" | "VIDEO" | "VOICE";
+
+function promptFor(payload: unknown): string {
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "prompt" in payload &&
+    typeof payload.prompt === "string" &&
+    payload.prompt.trim()
+  ) {
+    return payload.prompt.trim();
+  }
+  return "Prompt unavailable for this generation.";
+}
 
 export default async function OrganizationWorkspacePage({
   params,
@@ -44,7 +34,7 @@ export default async function OrganizationWorkspacePage({
     "workspace:view",
   );
 
-  const [generationCount, projectCount, assetCount, recentJobs] =
+  const [generationCount, projectCount, assetCount, recentJobs, mixCounts] =
     await Promise.all([
       db.generationJob.count({
         where: {
@@ -77,6 +67,13 @@ export default async function OrganizationWorkspacePage({
           id: true,
           status: true,
           chargedCredits: true,
+          reservedCredits: true,
+          requestPayload: true,
+          assets: {
+            where: { status: "READY", deletedAt: null },
+            select: { id: true, mimeType: true },
+            take: 1,
+          },
           project: { select: { name: true } },
           providerModel: {
             select: { displayName: true, mediaKind: true },
@@ -85,8 +82,33 @@ export default async function OrganizationWorkspacePage({
         orderBy: { createdAt: "desc" },
         take: 5,
       }),
+      db.generationJob.groupBy({
+        by: ["providerModelId"],
+        where: {
+          organizationId: membership.organization.id,
+          ...(membership.role === "ORGANIZATION_OWNER"
+            ? {}
+            : { createdById: session.user.id }),
+        },
+        _count: { _all: true },
+      }),
     ]);
 
+  const modelKinds = await db.providerModel.findMany({
+    where: { id: { in: mixCounts.map((group) => group.providerModelId) } },
+    select: { id: true, mediaKind: true },
+  });
+  const kindByModel = new Map(
+    modelKinds.map((model) => [model.id, model.mediaKind]),
+  );
+  const mix = { IMAGE: 0, VIDEO: 0, VOICE: 0 };
+  for (const group of mixCounts) {
+    const kind = kindByModel.get(group.providerModelId);
+    if (kind && kind in mix) mix[kind as MediaKind] += group._count._all;
+  }
+  const mixTotal = mix.IMAGE + mix.VIDEO + mix.VOICE;
+  const imagePercent = mixTotal ? Math.round((mix.IMAGE * 100) / mixTotal) : 0;
+  const videoPercent = mixTotal ? Math.round((mix.VIDEO * 100) / mixTotal) : 0;
   const canGenerate = hasOrganizationPermission(
     membership.role,
     "generation:create",
@@ -124,7 +146,7 @@ export default async function OrganizationWorkspacePage({
         </section>
 
         <section
-          className="mt-7 grid gap-3 sm:grid-cols-2 2xl:grid-cols-4"
+          className="mt-7 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
           aria-label="Workspace overview"
         >
           <MetricCard
@@ -169,101 +191,175 @@ export default async function OrganizationWorkspacePage({
 
         <section
           id="projects"
-          className="mt-6 grid gap-6 2xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,.6fr)]"
+          className="mt-6 grid min-w-0 gap-6 2xl:grid-cols-[minmax(0,1.5fr)_minmax(320px,.5fr)]"
         >
-          <div className="rounded-[24px] border border-border bg-card/88 p-5 shadow-sm sm:p-6">
-            <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0 rounded-[24px] border border-border bg-card/88 p-5 shadow-sm sm:p-6">
+            <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-foreground">
+                <h2 className="font-display text-xl font-semibold text-foreground">
                   Recent generations
-                </p>
-                <p className="mt-1 text-xs text-subtle-foreground">
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
                   Latest creative work in this organization
                 </p>
               </div>
               <Link
-                href={`/app/${organizationSlug}/projects`}
-                className="inline-flex min-h-10 items-center text-xs font-semibold text-primary transition hover:text-primary"
+                href={`/app/${organizationSlug}/history`}
+                className="inline-flex min-h-10 items-center text-sm font-semibold text-primary hover:underline"
               >
-                Manage projects
+                View all history →
               </Link>
             </div>
-
-            {recentJobs.length > 0 ? (
-              <div className="mt-5 divide-y divide-border">
-                {recentJobs.map((job) => (
-                  <ActivityRow
-                    key={job.id}
-                    name={
-                      job.project?.name ??
-                      `${job.providerModel.mediaKind.toLowerCase()} generation`
-                    }
-                    model={job.providerModel.displayName}
-                    kind={job.providerModel.mediaKind.toLowerCase()}
-                    status={job.status.replaceAll("_", " ").toLowerCase()}
-                    cost={job.chargedCredits.toLocaleString("en-US")}
-                  />
-                ))}
+            {recentJobs.length ? (
+              <div className="mt-5 space-y-3">
+                {recentJobs.map((job) => {
+                  const asset = job.assets[0];
+                  const pending = job.status === "MANUAL_REVIEW";
+                  return (
+                    <article
+                      key={job.id}
+                      className="min-w-0 rounded-[24px] border border-border bg-card p-4 sm:p-5"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <Link
+                            href={`/app/${organizationSlug}/history/${job.id}`}
+                            className="inline-flex min-h-8 items-center text-xs font-semibold text-primary hover:underline"
+                          >
+                            Job details →
+                          </Link>
+                          <h3 className="mt-1 text-base font-semibold text-foreground">
+                            {job.providerModel.displayName}
+                          </h3>
+                        </div>
+                        <span
+                          className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-wide ${pending ? "border-warning/40 bg-warning/10 text-warning" : job.status === "SUCCEEDED" ? "border-success/40 bg-success/10 text-success" : "border-border bg-surface-sunken text-muted-foreground"}`}
+                        >
+                          {job.status.replaceAll("_", " ")}
+                          {pending ? " · credits reserved" : ""}
+                        </span>
+                      </div>
+                      <p className="mt-3 line-clamp-3 break-words text-sm leading-6 text-foreground">
+                        {promptFor(job.requestPayload)}
+                      </p>
+                      {pending ? (
+                        <p className="mt-3 rounded-xl border border-warning/30 bg-warning/10 p-3 text-xs leading-5 text-foreground">
+                          An operator needs to check the provider result.
+                          Credits remain reserved; review this job in history
+                          before another attempt.
+                        </p>
+                      ) : null}
+                      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                        {asset ? (
+                          <a
+                            href={`/api/assets/${asset.id}?download=1`}
+                            className="inline-flex min-h-9 items-center font-semibold text-primary hover:underline"
+                          >
+                            Download asset
+                          </a>
+                        ) : null}
+                        {asset && asset.mimeType.startsWith("image/") ? (
+                          <Link
+                            href={`/app/${organizationSlug}/image?assetId=${encodeURIComponent(asset.id)}#image-editor`}
+                            className="inline-flex min-h-9 items-center font-semibold text-primary hover:underline"
+                          >
+                            Edit image →
+                          </Link>
+                        ) : null}
+                        {asset && asset.mimeType.startsWith("video/") ? (
+                          <Link
+                            href={`/app/${organizationSlug}/video?assetId=${encodeURIComponent(asset.id)}#video-editor`}
+                            className="inline-flex min-h-9 items-center font-semibold text-primary hover:underline"
+                          >
+                            Edit video →
+                          </Link>
+                        ) : null}
+                        <span className="text-muted-foreground">
+                          {job.status === "SUCCEEDED"
+                            ? `${job.chargedCredits} credits charged`
+                            : job.status === "FAILED"
+                              ? "No charge"
+                              : `${job.reservedCredits} credits reserved`}
+                        </span>
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
             ) : (
-              <div className="mt-4">
-                <div className="mb-2 flex items-center gap-2">
-                  <DemoBadge>Demo data</DemoBadge>
-                  <span className="text-[10px] text-subtle-foreground">
-                    Replaced automatically after your first generation
-                  </span>
-                </div>
-                <div className="divide-y divide-border">
-                  {sampleActivity.map((item) => (
-                    <ActivityRow key={item.name} {...item} />
-                  ))}
-                </div>
-              </div>
+              <p className="mt-5 rounded-xl border border-border bg-surface-sunken p-5 text-sm text-muted-foreground">
+                Your first generation will appear here. Start with Quick create
+                above.
+              </p>
             )}
           </div>
-
           <div
             id="usage"
-            className="rounded-[24px] border border-border bg-card/88 p-5 shadow-sm sm:p-6"
+            className="min-w-0 self-start rounded-[24px] border border-border bg-card/88 p-5 shadow-sm sm:p-6"
           >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-foreground">
-                  Creative mix
-                </p>
-                <p className="mt-1 text-xs text-subtle-foreground">
-                  Demo usage distribution
-                </p>
-              </div>
-              <DemoBadge>Illustrative</DemoBadge>
-            </div>
-            <div className="mt-8 flex items-center gap-6">
+            <h2 className="font-display text-xl font-semibold text-foreground">
+              Creative mix
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {mixTotal.toLocaleString("en-US")} generations across your
+              workspace
+            </p>
+            <div className="mt-6 flex flex-wrap items-center gap-6">
               <div
                 className="relative grid size-32 shrink-0 place-items-center rounded-full"
                 style={{
-                  background:
-                    "conic-gradient(var(--primary) 0 52%, var(--info) 52% 81%, var(--warning) 81% 100%)",
+                  background: `conic-gradient(var(--primary) 0 ${imagePercent}%, var(--info) ${imagePercent}% ${imagePercent + videoPercent}%, var(--warning) ${imagePercent + videoPercent}% 100%)`,
                 }}
               >
                 <div className="grid size-[92px] place-items-center rounded-full bg-card text-center">
                   <div>
-                    <p className="text-xl font-semibold text-foreground">24</p>
+                    <p className="text-xl font-semibold text-foreground">
+                      {mixTotal}
+                    </p>
                     <p className="text-[9px] uppercase tracking-wider text-subtle-foreground">
                       Creations
                     </p>
                   </div>
                 </div>
               </div>
-              <div className="min-w-0 flex-1 space-y-3">
-                <Legend color="bg-primary" label="Images" value="52%" />
-                <Legend color="bg-info" label="Videos" value="29%" />
-                <Legend color="bg-warning" label="Voices" value="19%" />
+              <div className="min-w-[120px] flex-1 space-y-3">
+                <Legend
+                  color="bg-primary"
+                  label="Images"
+                  value={mix.IMAGE.toLocaleString("en-US")}
+                />
+                <Legend
+                  color="bg-info"
+                  label="Videos"
+                  value={mix.VIDEO.toLocaleString("en-US")}
+                />
+                <Legend
+                  color="bg-warning"
+                  label="Voices"
+                  value={mix.VOICE.toLocaleString("en-US")}
+                />
               </div>
             </div>
-            <p className="mt-7 rounded-xl border border-border bg-surface-sunken px-3 py-2.5 text-[10px] leading-4 text-subtle-foreground">
-              Charts switch to live organization usage after generation billing
-              is connected.
-            </p>
+            <div className="mt-6 grid gap-2 border-t border-border pt-5 text-sm">
+              <Link
+                href={`/app/${organizationSlug}/history`}
+                className="font-semibold text-primary hover:underline"
+              >
+                Explore generation history →
+              </Link>
+              <Link
+                href={`/app/${organizationSlug}/projects`}
+                className="font-semibold text-primary hover:underline"
+              >
+                Organize your projects →
+              </Link>
+              <Link
+                href={`/app/${organizationSlug}/assets`}
+                className="font-semibold text-primary hover:underline"
+              >
+                Browse ready assets →
+              </Link>
+            </div>
           </div>
         </section>
       </div>
@@ -307,54 +403,6 @@ function MetricCard({
         <p className="mt-0.5 text-[10px] text-subtle-foreground">{detail}</p>
       </div>
     </article>
-  );
-}
-
-function ActivityRow({
-  name,
-  model,
-  kind,
-  status,
-  cost,
-}: {
-  name: string;
-  model: string;
-  kind: string;
-  status: string;
-  cost: string;
-}) {
-  const normalizedKind = kind.toLowerCase();
-  const icon: IconName = normalizedKind.includes("video")
-    ? "video"
-    : normalizedKind.includes("voice") || normalizedKind.includes("speech")
-      ? "voice"
-      : "image";
-  const successful =
-    status.toLowerCase() === "ready" || status.toLowerCase() === "succeeded";
-
-  return (
-    <div className="flex items-center gap-3 py-3.5 first:pt-1 last:pb-0">
-      <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-border bg-surface-sunken text-muted-foreground">
-        <Icon name={icon} className="size-[18px]" />
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-semibold capitalize text-foreground">
-          {name}
-        </p>
-        <p className="mt-1 truncate text-[10px] text-subtle-foreground">
-          {model}
-        </p>
-      </div>
-      <span
-        className={`hidden rounded-full px-2.5 py-1 text-[9px] font-bold capitalize sm:inline-flex ${successful ? "bg-success/10 text-success" : "bg-primary/10 text-primary"}`}
-      >
-        {status}
-      </span>
-      <div className="w-16 text-right">
-        <p className="text-xs font-semibold text-foreground/90">{cost}</p>
-        <p className="mt-0.5 text-[9px] text-subtle-foreground">credits</p>
-      </div>
-    </div>
   );
 }
 

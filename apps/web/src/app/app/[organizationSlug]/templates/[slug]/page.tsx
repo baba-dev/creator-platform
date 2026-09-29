@@ -3,8 +3,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { TemplateComposer } from "@/components/templates/template-composer";
-import { ThemeToggle } from "@/components/theme/theme-toggle";
-import { Brand } from "@/components/ui/brand";
 import { Eyebrow } from "@/components/ui/creative";
 import { Icon } from "@/components/ui/icon";
 import { requireOrganizationPermission } from "@/lib/request-auth";
@@ -83,14 +81,9 @@ export default async function TemplateDetailPage({
         : "voice";
 
   return (
-    <main className="relative min-h-screen overflow-x-hidden bg-background text-foreground">
+    <main className="relative min-w-0 bg-background text-foreground">
       <div className="creative-glow pointer-events-none fixed inset-0" />
       <div className="paper-grid pointer-events-none fixed inset-x-0 top-0 h-[620px] opacity-25 [mask-image:linear-gradient(to_bottom,black,transparent)]" />
-      <header className="sticky top-0 z-30 flex min-h-[72px] items-center justify-between border-b border-border bg-background/85 px-4 backdrop-blur-xl sm:px-7 lg:px-10">
-        <Brand />
-        <ThemeToggle />
-      </header>
-
       <div className="relative mx-auto max-w-[1320px] px-4 py-8 sm:px-7 lg:px-10 lg:py-10">
         <Link
           href={`/app/${organizationSlug}/templates`}

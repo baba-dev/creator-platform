@@ -892,6 +892,33 @@ export function GenerationStudio({
           ? "One idea, one click. Your model and settings are ready for you."
           : "Shape every detail with verified BytePlus models."}
       </p>
+      {variant === "quick" ? (
+        <p className="mt-3 text-xs leading-5 text-muted-foreground">
+          Need reference images, detailed settings, or editing? Open the
+          dedicated{" "}
+          <Link
+            href={`/app/${organizationSlug}/image`}
+            className="font-semibold text-primary hover:underline"
+          >
+            Image
+          </Link>
+          ,{" "}
+          <Link
+            href={`/app/${organizationSlug}/video`}
+            className="font-semibold text-primary hover:underline"
+          >
+            Video
+          </Link>
+          , or{" "}
+          <Link
+            href={`/app/${organizationSlug}/speech`}
+            className="font-semibold text-primary hover:underline"
+          >
+            Speech
+          </Link>{" "}
+          studio.
+        </p>
+      ) : null}
       {templateContext ? (
         <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-primary/20 bg-primary/[0.06] px-4 py-3">
           <span className="grid size-8 place-items-center rounded-xl bg-primary/12 text-primary">
@@ -978,7 +1005,7 @@ export function GenerationStudio({
         id="media-creation-panel"
         role="tabpanel"
         aria-labelledby={`media-tab-${activeMode.toLowerCase()}`}
-        className="mt-6 grid gap-6 lg:grid-cols-2"
+        className={`mt-6 grid gap-6 ${variant === "quick" ? "" : "lg:grid-cols-2"}`}
       >
         <div className="space-y-4">
           <div className={variant === "quick" ? "hidden" : "space-y-4"}>
@@ -1664,149 +1691,151 @@ export function GenerationStudio({
             </p>
           ) : null}
         </div>
-        <div>
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="font-display text-lg font-semibold text-foreground">
-              Recent creations
-            </h3>
-            <Link
-              href={`/app/${organizationSlug}/history`}
-              className="text-sm font-semibold text-primary"
-            >
-              View full history →
-            </Link>
-          </div>
-          <div className="mt-4 space-y-4" aria-live="polite">
-            {data?.jobs.length === 0 ? (
-              <p className="rounded-2xl border border-border p-6 text-muted-foreground">
-                Your first generated media will appear here.
-              </p>
-            ) : null}
-            {data?.jobs.map((job) => (
-              <article
-                key={job.id}
-                className="rounded-2xl border border-border bg-card p-4"
+        {variant === "advanced" ? (
+          <div>
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="font-display text-lg font-semibold text-foreground">
+                Recent creations
+              </h3>
+              <Link
+                href={`/app/${organizationSlug}/history`}
+                className="text-sm font-semibold text-primary"
               >
-                <Link
-                  href={`/app/${organizationSlug}/history/${job.id}`}
-                  className="mb-2 inline-flex text-xs font-semibold text-primary"
+                View full history →
+              </Link>
+            </div>
+            <div className="mt-4 space-y-4" aria-live="polite">
+              {data?.jobs.length === 0 ? (
+                <p className="rounded-2xl border border-border p-6 text-muted-foreground">
+                  Your first generated media will appear here.
+                </p>
+              ) : null}
+              {data?.jobs.map((job) => (
+                <article
+                  key={job.id}
+                  className="rounded-2xl border border-border bg-card p-4"
                 >
-                  Job details →
-                </Link>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-semibold text-foreground">
-                      {job.providerModel.displayName}
-                    </span>
-                    {job.project ? (
-                      <a
-                        href={`/app/${organizationSlug}/projects/${job.project.id}`}
-                        className="mt-1 block truncate text-xs font-semibold text-primary"
-                      >
-                        {job.project.name}
-                      </a>
-                    ) : null}
-                  </span>
-                  <StatusDot
-                    tone={
-                      job.status === "SUCCEEDED"
-                        ? "success"
-                        : ["FAILED", "MANUAL_REVIEW"].includes(job.status)
-                          ? "warning"
-                          : "info"
-                    }
+                  <Link
+                    href={`/app/${organizationSlug}/history/${job.id}`}
+                    className="mb-2 inline-flex text-xs font-semibold text-primary"
                   >
-                    {statusLabel(job.status, job.providerModel.mediaKind)}
-                  </StatusDot>
-                </div>
-                {job.assets.map((asset) => (
-                  <div key={asset.id} className="mt-3">
-                    {asset.mimeType.startsWith("video/") ? (
-                      <video
-                        src={`/api/assets/${asset.id}`}
-                        controls
-                        playsInline
-                        preload="metadata"
-                        aria-label={`Generated video from ${job.providerModel.displayName}`}
-                        className="max-h-96 w-full rounded-xl bg-muted object-contain"
-                      />
-                    ) : asset.mimeType.startsWith("audio/") ? (
-                      <div className="rounded-xl border border-border bg-surface-sunken p-3">
-                        <audio
+                    Job details →
+                  </Link>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold text-foreground">
+                        {job.providerModel.displayName}
+                      </span>
+                      {job.project ? (
+                        <a
+                          href={`/app/${organizationSlug}/projects/${job.project.id}`}
+                          className="mt-1 block truncate text-xs font-semibold text-primary"
+                        >
+                          {job.project.name}
+                        </a>
+                      ) : null}
+                    </span>
+                    <StatusDot
+                      tone={
+                        job.status === "SUCCEEDED"
+                          ? "success"
+                          : ["FAILED", "MANUAL_REVIEW"].includes(job.status)
+                            ? "warning"
+                            : "info"
+                      }
+                    >
+                      {statusLabel(job.status, job.providerModel.mediaKind)}
+                    </StatusDot>
+                  </div>
+                  {job.assets.map((asset) => (
+                    <div key={asset.id} className="mt-3">
+                      {asset.mimeType.startsWith("video/") ? (
+                        <video
                           src={`/api/assets/${asset.id}`}
                           controls
+                          playsInline
                           preload="metadata"
-                          aria-label={`Generated voice from ${job.providerModel.displayName}`}
-                          className="w-full"
+                          aria-label={`Generated video from ${job.providerModel.displayName}`}
+                          className="max-h-96 w-full rounded-xl bg-muted object-contain"
                         />
-                      </div>
-                    ) : (
-                      /* eslint-disable-next-line @next/next/no-img-element */
-                      <img
-                        src={`/api/assets/${asset.id}`}
-                        alt={`Generated image from ${job.providerModel.displayName}`}
-                        className="max-h-96 w-full rounded-xl bg-muted object-contain"
-                      />
-                    )}
-                    <a
-                      href={`/api/assets/${asset.id}?download=1`}
-                      className="mt-2 inline-flex min-h-10 items-center text-sm font-semibold text-primary"
-                    >
-                      Download{" "}
-                      {asset.mimeType.startsWith("video/")
-                        ? "MP4"
-                        : asset.mimeType.startsWith("audio/")
-                          ? "MP3"
-                          : asset.mimeType === "image/jpeg"
-                            ? "JPEG"
-                            : "PNG"}
-                    </a>
-                    {asset.mimeType.startsWith("image/") ? (
-                      <Link
-                        href={
-                          `/app/${organizationSlug}/image?assetId=${encodeURIComponent(asset.id)}#image-editor` as Route
-                        }
-                        className="ml-4 inline-flex min-h-10 items-center text-sm font-semibold text-primary"
+                      ) : asset.mimeType.startsWith("audio/") ? (
+                        <div className="rounded-xl border border-border bg-surface-sunken p-3">
+                          <audio
+                            src={`/api/assets/${asset.id}`}
+                            controls
+                            preload="metadata"
+                            aria-label={`Generated voice from ${job.providerModel.displayName}`}
+                            className="w-full"
+                          />
+                        </div>
+                      ) : (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img
+                          src={`/api/assets/${asset.id}`}
+                          alt={`Generated image from ${job.providerModel.displayName}`}
+                          className="max-h-96 w-full rounded-xl bg-muted object-contain"
+                        />
+                      )}
+                      <a
+                        href={`/api/assets/${asset.id}?download=1`}
+                        className="mt-2 inline-flex min-h-10 items-center text-sm font-semibold text-primary"
                       >
-                        Edit image →
-                      </Link>
-                    ) : null}
-                    {asset.mimeType.startsWith("video/") ? (
-                      <Link
-                        href={
-                          `/app/${organizationSlug}/video?assetId=${encodeURIComponent(asset.id)}#video-editor` as Route
-                        }
-                        className="ml-4 inline-flex min-h-10 items-center text-sm font-semibold text-primary"
-                      >
-                        Edit video →
-                      </Link>
-                    ) : null}
-                  </div>
-                ))}
-                {job.errorMessage ? (
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    {job.errorMessage}
+                        Download{" "}
+                        {asset.mimeType.startsWith("video/")
+                          ? "MP4"
+                          : asset.mimeType.startsWith("audio/")
+                            ? "MP3"
+                            : asset.mimeType === "image/jpeg"
+                              ? "JPEG"
+                              : "PNG"}
+                      </a>
+                      {asset.mimeType.startsWith("image/") ? (
+                        <Link
+                          href={
+                            `/app/${organizationSlug}/image?assetId=${encodeURIComponent(asset.id)}#image-editor` as Route
+                          }
+                          className="ml-4 inline-flex min-h-10 items-center text-sm font-semibold text-primary"
+                        >
+                          Edit image →
+                        </Link>
+                      ) : null}
+                      {asset.mimeType.startsWith("video/") ? (
+                        <Link
+                          href={
+                            `/app/${organizationSlug}/video?assetId=${encodeURIComponent(asset.id)}#video-editor` as Route
+                          }
+                          className="ml-4 inline-flex min-h-10 items-center text-sm font-semibold text-primary"
+                        >
+                          Edit video →
+                        </Link>
+                      ) : null}
+                    </div>
+                  ))}
+                  {job.errorMessage ? (
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      {job.errorMessage}
+                    </p>
+                  ) : null}
+                  {job.status === "MANUAL_REVIEW" ? (
+                    <p className="mt-2 rounded-xl border border-warning/40 bg-warning/10 p-3 text-sm text-foreground">
+                      This creation needs an operator to check the provider
+                      result. Your credits remain reserved. Keep this job in
+                      your history and ask support to review it before starting
+                      another attempt.
+                    </p>
+                  ) : null}
+                  <p className="mt-2 text-xs tabular-nums text-muted-foreground">
+                    {job.status === "SUCCEEDED"
+                      ? `${job.chargedCredits} credits charged`
+                      : job.status === "FAILED"
+                        ? "No charge"
+                        : `${job.reservedCredits} credits reserved`}
                   </p>
-                ) : null}
-                {job.status === "MANUAL_REVIEW" ? (
-                  <p className="mt-2 rounded-xl border border-warning/40 bg-warning/10 p-3 text-sm text-foreground">
-                    This creation needs an operator to check the provider
-                    result. Your credits remain reserved. Keep this job in your
-                    history and ask support to review it before starting another
-                    attempt.
-                  </p>
-                ) : null}
-                <p className="mt-2 text-xs tabular-nums text-muted-foreground">
-                  {job.status === "SUCCEEDED"
-                    ? `${job.chargedCredits} credits charged`
-                    : job.status === "FAILED"
-                      ? "No charge"
-                      : `${job.reservedCredits} credits reserved`}
-                </p>
-              </article>
-            ))}
+                </article>
+              ))}
+            </div>
           </div>
-        </div>
+        ) : null}
       </div>
     </section>
   );

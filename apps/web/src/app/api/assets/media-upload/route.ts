@@ -14,8 +14,16 @@ import { parseServerEnv } from "@aiwa/config";
 import { db } from "@aiwa/db";
 import { NextResponse } from "next/server";
 import { requireAssetMembership, serializeAsset } from "@/lib/asset-api";
+import { rateLimit } from "@/lib/rate-limit";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
+import { safeErrorMessage } from "@/lib/safe-error";
+
+const mediaUploadLimiter = rateLimit({
+  max: 20,
+  windowMs: 60_000,
+  prefix: "media-upload",
+});
 
 export const runtime = "nodejs";
 const LIMIT = 100_000_000;
@@ -28,6 +36,9 @@ export async function POST(request: Request) {
       { error: "Authentication required." },
       { status: 401 },
     );
+
+  const rateLimited = await mediaUploadLimiter.check(session.user.id);
+  if (rateLimited) return rateLimited;
   const organizationId = request.headers.get("x-organization-id") ?? "";
   if (!(await requireAssetMembership(session, organizationId, true)))
     return NextResponse.json(
@@ -144,7 +155,7 @@ export async function POST(request: Request) {
         .catch(() => undefined);
     }
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Upload failed." },
+      { error: safeErrorMessage(error, "Upload failed.") },
       { status: 400 },
     );
   } finally {

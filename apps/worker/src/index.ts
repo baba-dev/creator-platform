@@ -143,7 +143,11 @@ const generationWorker = new Worker(
         throw new Error("Unknown generation queue job");
     }
   },
-  { connection: redis, prefix: "aiwa", concurrency: 1 },
+  {
+    connection: redis,
+    prefix: "aiwa",
+    concurrency: env.GENERATION_WORKER_CONCURRENCY,
+  },
 );
 
 generationWorker.on("error", () =>

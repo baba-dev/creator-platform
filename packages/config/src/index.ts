@@ -73,6 +73,12 @@ export const serverEnvSchema = z.object({
     .default("creator-tool@aiwamediagroup.com"),
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.url().default("redis://127.0.0.1:6379/0"),
+  GENERATION_WORKER_CONCURRENCY: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(10)
+    .default(3),
   ASSET_STORAGE_ROOT: optionalAbsolutePath.default(
     "/var/www/creator-platform/shared/assets",
   ),
@@ -151,6 +157,57 @@ export function parseServerEnv(
     if (result.data.SMTP_PORT !== 465) {
       throw new Error(
         "Invalid server environment variables: SMTP_PORT (implicit TLS on port 465 is required in production)",
+      );
+    }
+  }
+
+  if (result.data.APP_ENV === "production") {
+    let parsedAppUrl: URL;
+    try {
+      parsedAppUrl = new URL(result.data.APP_URL);
+    } catch {
+      throw new Error(
+        "Invalid server environment variables: APP_URL (must be a valid URL)",
+      );
+    }
+
+    const appHost = parsedAppUrl.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    const isAppLoopback =
+      appHost === "127.0.0.1" ||
+      appHost === "localhost" ||
+      appHost === "::1" ||
+      appHost === "0.0.0.0";
+
+    if (parsedAppUrl.protocol !== "https:" || isAppLoopback) {
+      throw new Error(
+        "Invalid server environment variables: APP_URL (HTTPS and non-localhost URL are required in production)",
+      );
+    }
+
+    try {
+      const redisUrl = new URL(result.data.REDIS_URL);
+      if (redisUrl.protocol !== "redis:" && redisUrl.protocol !== "rediss:") {
+        throw new Error(
+          "Invalid server environment variables: REDIS_URL (must use redis:// or rediss:// protocol)",
+        );
+      }
+
+      const redisHost = redisUrl.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+      const isRedisLoopback =
+        redisHost === "127.0.0.1" ||
+        redisHost === "localhost" ||
+        redisHost === "::1";
+
+      if (!isRedisLoopback && !redisUrl.password) {
+        throw new Error(
+          "Invalid server environment variables: REDIS_URL (authentication is required for non-loopback Redis in production)",
+        );
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("REDIS_URL"))
+        throw error;
+      throw new Error(
+        "Invalid server environment variables: REDIS_URL (must be a valid Redis connection URL)",
       );
     }
   }

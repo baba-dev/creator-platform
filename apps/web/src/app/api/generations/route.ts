@@ -17,8 +17,15 @@ import {
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { generationError } from "@/lib/generation-api";
+import { rateLimit } from "@/lib/rate-limit";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
+
+const generationLimiter = rateLimit({
+  max: 10,
+  windowMs: 60_000,
+  prefix: "generation",
+});
 export async function POST(request: Request) {
   if (!hasTrustedMutationOrigin(request))
     return NextResponse.json({ error: "Origin not allowed." }, { status: 403 });
@@ -28,6 +35,10 @@ export async function POST(request: Request) {
       { error: "Authentication required." },
       { status: 401 },
     );
+
+  const rateLimited = await generationLimiter.check(session.user.id);
+  if (rateLimited) return rateLimited;
+
   try {
     const text = await request.text();
     if (text.length > 12000)

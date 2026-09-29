@@ -12,9 +12,17 @@ import {
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { approvedImageUrl, fetchApprovedImage } from "@/lib/image-import";
+import { rateLimit } from "@/lib/rate-limit";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
+import { safeErrorMessage } from "@/lib/safe-error";
 import { requireMembership } from "@aiwa/generation";
+
+const imageImportLimiter = rateLimit({
+  max: 10,
+  windowMs: 60_000,
+  prefix: "image-import",
+});
 
 export const runtime = "nodejs";
 const schema = z
@@ -33,6 +41,9 @@ export async function POST(request: Request) {
       { error: "Authentication required." },
       { status: 401 },
     );
+
+  const rateLimited = await imageImportLimiter.check(session.user.id);
+  if (rateLimited) return rateLimited;
   const text = await request.text();
   if (text.length > 4_096)
     return NextResponse.json({ error: "Request too large." }, { status: 413 });
@@ -67,7 +78,7 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Invalid URL." },
+      { error: safeErrorMessage(error, "Invalid URL.") },
       { status: 400 },
     );
   }

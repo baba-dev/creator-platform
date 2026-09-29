@@ -12,6 +12,7 @@ import { requireAssetMembership } from "@/lib/asset-api";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
 import { validateVideoSources } from "@/lib/video-edits";
+import { safeErrorMessage } from "@/lib/safe-error";
 
 type Context = { params: Promise<{ editId: string }> };
 const inputSchema = z
@@ -137,8 +138,7 @@ export async function POST(request: Request, context: Context) {
       { status: 202, headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Render unavailable.";
+    const message = safeErrorMessage(error, "Render unavailable.");
     const status = /quota|Request key|Save the latest/.test(message)
       ? 409
       : /unavailable/.test(message)

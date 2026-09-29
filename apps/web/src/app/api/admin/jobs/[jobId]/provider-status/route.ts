@@ -3,6 +3,7 @@ import { db } from "@aiwa/db";
 import { getDefaultGenerationProvider } from "@aiwa/generation";
 import { NextResponse } from "next/server";
 import { getRequestSession } from "@/lib/request-auth";
+import { safeErrorMessage } from "@/lib/safe-error";
 
 export async function GET(
   request: Request,
@@ -58,8 +59,7 @@ export async function GET(
       errorCode: result.errorCode,
     });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to query provider.";
+    const message = safeErrorMessage(error, "Failed to query provider.");
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }

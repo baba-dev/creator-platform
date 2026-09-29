@@ -217,6 +217,9 @@ export const auth = betterAuth({
           }
 
           if (ctx.path === "/two-factor/disable" && !user.twoFactorEnabled) {
+            await db.session.deleteMany({
+              where: { userId: user.id },
+            });
             await enqueueMail(
               securityEventEmail({
                 to: user.email,

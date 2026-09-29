@@ -12,8 +12,16 @@ import { NextResponse } from "next/server";
 import sharp from "sharp";
 
 import { requireAssetMembership, serializeAsset } from "@/lib/asset-api";
+import { rateLimit } from "@/lib/rate-limit";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
+
+const uploadLimiter = rateLimit({
+  max: 20,
+  windowMs: 60_000,
+  prefix: "upload",
+});
+import { safeErrorMessage } from "@/lib/safe-error";
 
 export const runtime = "nodejs";
 const env = parseServerEnv();
@@ -28,6 +36,8 @@ export async function POST(request: Request) {
       { status: 401 },
     );
 
+  const rateLimited = await uploadLimiter.check(session.user.id);
+  if (rateLimited) return rateLimited;
   let pending:
     | {
         id: string;
@@ -159,7 +169,7 @@ export async function POST(request: Request) {
         .catch(() => undefined);
     }
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Upload failed." },
+      { error: safeErrorMessage(error, "Upload failed.") },
       { status: 400 },
     );
   }

@@ -6,6 +6,7 @@ import { requireAssetMembership } from "@/lib/asset-api";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
 import { validateVideoSources } from "@/lib/video-edits";
+import { safeErrorMessage } from "@/lib/safe-error";
 
 const create = z
   .object({
@@ -95,7 +96,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ edit }, { status: 201 });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Edit unavailable." },
+      { error: safeErrorMessage(error, "Edit unavailable.") },
       { status: 400 },
     );
   }

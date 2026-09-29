@@ -156,6 +156,18 @@ creator-platform/
 └── package.json
 ```
 
+## Product branding
+
+Approved product identity is **Creators · Creative Cursor (01-A)**.
+
+- Runtime brand media: `apps/web/public/brand/`
+- Logos: `/brand/logos/`
+- Favicons: `/brand/icons/favicon/`
+- PWA icons: `/brand/icons/pwa/`
+- Brand usage notes: [docs/branding.md](docs/branding.md)
+
+Keep product-brand files separate from the customer/generated `Asset` domain.
+
 ## Financial model
 
 The platform uses an internal credit ledger. BytePlus provider units are never exposed as the customer's wallet currency.

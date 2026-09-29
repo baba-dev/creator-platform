@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requireAssetMembership } from "@/lib/asset-api";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
+import { safeErrorMessage } from "@/lib/safe-error";
 
 const schema = z
   .object({
@@ -80,7 +81,7 @@ export async function POST(request: Request) {
   } catch (error) {
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : "Unable to create tag.",
+        error: safeErrorMessage(error, "Unable to create tag."),
       },
       { status: 400 },
     );

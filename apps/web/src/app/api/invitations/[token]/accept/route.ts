@@ -2,9 +2,22 @@ import { db } from "@aiwa/db";
 import { acceptOrganizationInvitation } from "@aiwa/organizations";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { organizationError } from "@/lib/organization-api";
+import { rateLimit } from "@/lib/rate-limit";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
+
+const invitationTokenSchema = z
+  .string()
+  .trim()
+  .regex(/^[a-f0-9]{48}$/, "Invalid invitation token format.");
+
+const invitationLimiter = rateLimit({
+  max: 10,
+  windowMs: 60_000,
+  prefix: "invitation-accept",
+});
 
 export async function POST(
   request: Request,
@@ -22,10 +35,14 @@ export async function POST(
     );
   }
 
+  const rateLimited = invitationLimiter.check(session.user.id);
+  if (rateLimited) return rateLimited;
+
   const { token } = await params;
-  if (!token || typeof token !== "string") {
+  const parsed = invitationTokenSchema.safeParse(token);
+  if (!parsed.success) {
     return NextResponse.json(
-      { error: "Invitation token required." },
+      { error: "Invitation token is invalid or malformed." },
       { status: 400 },
     );
   }

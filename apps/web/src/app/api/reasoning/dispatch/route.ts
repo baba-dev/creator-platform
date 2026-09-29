@@ -7,7 +7,14 @@ import {
   admitReasoningJob,
   ReasoningAdmissionError,
 } from "@/lib/reasoning-admission";
+import { rateLimit } from "@/lib/rate-limit";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
+
+const reasoningLimiter = rateLimit({
+  max: 20,
+  windowMs: 60_000,
+  prefix: "reasoning",
+});
 
 const DEFAULT_NVIDIA_REASONING_MODEL =
   "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning";
@@ -95,6 +102,9 @@ export async function POST(request: Request) {
       { error: "Authentication required." },
       { status: 401 },
     );
+
+  const rateLimited = reasoningLimiter.check(session.user.id);
+  if (rateLimited) return rateLimited;
 
   if (!process.env.NVIDIA_API_KEY)
     return NextResponse.json(

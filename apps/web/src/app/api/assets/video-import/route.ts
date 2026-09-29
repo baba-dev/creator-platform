@@ -14,9 +14,17 @@ import { db } from "@aiwa/db";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAssetMembership, serializeAsset } from "@/lib/asset-api";
+import { rateLimit } from "@/lib/rate-limit";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
 import { approvedVideoUrl, downloadApprovedVideo } from "@/lib/video-import";
+import { safeErrorMessage } from "@/lib/safe-error";
+
+const videoImportLimiter = rateLimit({
+  max: 10,
+  windowMs: 60_000,
+  prefix: "video-import",
+});
 
 export const runtime = "nodejs";
 const schema = z
@@ -34,6 +42,9 @@ export async function POST(request: Request) {
       { error: "Authentication required." },
       { status: 401 },
     );
+
+  const rateLimited = videoImportLimiter.check(session.user.id);
+  if (rateLimited) return rateLimited;
   const text = await request.text();
   if (text.length > 4096)
     return NextResponse.json({ error: "Request too large." }, { status: 413 });
@@ -65,7 +76,7 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "URL unavailable." },
+      { error: safeErrorMessage(error, "URL unavailable.") },
       { status: 400 },
     );
   }
@@ -145,8 +156,7 @@ export async function POST(request: Request) {
         )
         .catch(() => undefined);
     }
-    const message =
-      error instanceof Error ? error.message : "Video import failed.";
+    const message = safeErrorMessage(error, "Video import failed.");
     return NextResponse.json(
       {
         error: /Video link|Linked file|MP4|duration|codec|dimensions/.test(

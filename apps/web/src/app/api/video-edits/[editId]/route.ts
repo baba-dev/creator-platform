@@ -6,6 +6,7 @@ import { requireAssetMembership } from "@/lib/asset-api";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
 import { validateVideoSources } from "@/lib/video-edits";
+import { safeErrorMessage } from "@/lib/safe-error";
 
 type Context = { params: Promise<{ editId: string }> };
 const update = z
@@ -74,7 +75,7 @@ export async function PATCH(request: Request, context: Context) {
     );
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Source unavailable." },
+      { error: safeErrorMessage(error, "Source unavailable.") },
       { status: 400 },
     );
   }

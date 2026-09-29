@@ -9,7 +9,7 @@ const productionBase = {
   AUTH_SECRET: "test-auth-secret-that-is-at-least-32-characters",
   SIGNUPS_ENABLED: "true",
   DATABASE_URL: "mysql://creator:test@127.0.0.1:3306/creator_platform",
-  REDIS_URL: "redis://127.0.0.1:6379/0",
+  REDIS_URL: "redis://:test-secret@127.0.0.1:6379/0",
 };
 
 describe("production mail configuration", () => {
@@ -70,5 +70,25 @@ describe("production mail configuration", () => {
         MAIL_ROUTINE_FROM_ADDRESS: "creator-tool@aiwamediagroup.com",
       }),
     ).toThrow(/SMTP_PORT/);
+  });
+
+  it("requires Redis authentication in production", () => {
+    expect(() =>
+      parseServerEnv({
+        ...productionBase,
+        MAIL_ENABLED: "false",
+        REDIS_URL: "redis://127.0.0.1:6379/0",
+      }),
+    ).toThrow(/REDIS_URL/);
+  });
+
+  it("requires non-localhost HTTPS APP_URL in production", () => {
+    expect(() =>
+      parseServerEnv({
+        ...productionBase,
+        MAIL_ENABLED: "false",
+        APP_URL: "http://localhost:3000",
+      }),
+    ).toThrow(/APP_URL/);
   });
 });

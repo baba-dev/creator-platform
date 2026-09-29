@@ -12,6 +12,7 @@ import { z } from "zod";
 import { requireAssetMembership } from "@/lib/asset-api";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
+import { safeErrorMessage } from "@/lib/safe-error";
 
 const base = {
   organizationId: z.string().min(1).max(100),
@@ -180,8 +181,7 @@ export async function POST(request: Request) {
   } catch (error) {
     return NextResponse.json(
       {
-        error:
-          error instanceof Error ? error.message : "Bulk operation failed.",
+        error: safeErrorMessage(error, "Bulk operation failed."),
       },
       { status: 400 },
     );

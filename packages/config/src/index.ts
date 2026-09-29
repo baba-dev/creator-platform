@@ -155,6 +155,32 @@ export function parseServerEnv(
     }
   }
 
+  if (result.data.APP_ENV === "production") {
+    if (
+      result.data.APP_URL.includes("localhost") ||
+      result.data.APP_URL.startsWith("http://")
+    ) {
+      throw new Error(
+        "Invalid server environment variables: APP_URL (HTTPS and non-localhost URL are required in production)",
+      );
+    }
+
+    try {
+      const redisUrl = new URL(result.data.REDIS_URL);
+      if (!redisUrl.password) {
+        throw new Error(
+          "Invalid server environment variables: REDIS_URL (authentication is required in production)",
+        );
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("REDIS_URL"))
+        throw error;
+      throw new Error(
+        "Invalid server environment variables: REDIS_URL (must be a valid Redis connection URL)",
+      );
+    }
+  }
+
   if (
     result.data.MAIL_ENABLED &&
     result.data.APP_ENV !== "local" &&

@@ -769,6 +769,12 @@ export async function setUserPlatformRole(input: {
       data: { platformRole: input.role },
     });
 
+    if (targetUser.platformRole !== input.role) {
+      await tx.session.deleteMany({
+        where: { userId: targetUser.id },
+      });
+    }
+
     await tx.auditEvent.create({
       data: {
         actorUserId: input.actor.userId,

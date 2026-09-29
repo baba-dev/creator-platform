@@ -4,8 +4,15 @@ import { cuidSchema, grantAdminCreditsSchema } from "@aiwa/validation";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { paymentError, serializeLedgerEntry } from "@/lib/payments-api";
+import { rateLimit } from "@/lib/rate-limit";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
+
+const adminCreditsLimiter = rateLimit({
+  max: 30,
+  windowMs: 60_000,
+  prefix: "admin-credits",
+});
 
 export async function POST(
   request: Request,
@@ -22,6 +29,9 @@ export async function POST(
       { status: 401 },
     );
   }
+
+  const rateLimited = adminCreditsLimiter.check(session.user.id);
+  if (rateLimited) return rateLimited;
 
   if (!hasPlatformPermission(session.user.platformRole, "credits:grant")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });

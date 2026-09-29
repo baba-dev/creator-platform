@@ -612,6 +612,7 @@ export async function recordPayment(
 ): Promise<ManualPayment> {
   return db.$transaction((tx) => _recordPaymentTx(tx, params), {
     isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    timeout: 15000,
   });
 }
 
@@ -620,6 +621,7 @@ export async function confirmPayment(
 ): Promise<{ payment: ManualPayment; ledgerEntry: LedgerEntry }> {
   return db.$transaction((tx) => _confirmPaymentTx(tx, params), {
     isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    timeout: 15000,
   });
 }
 
@@ -628,6 +630,7 @@ export async function rejectPayment(
 ): Promise<ManualPayment> {
   return db.$transaction((tx) => _rejectPaymentTx(tx, params), {
     isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    timeout: 15000,
   });
 }
 
@@ -636,6 +639,7 @@ export async function reversePayment(
 ): Promise<{ payment: ManualPayment; ledgerEntry: LedgerEntry }> {
   return db.$transaction((tx) => _reversePaymentTx(tx, params), {
     isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    timeout: 15000,
   });
 }
 
@@ -644,5 +648,6 @@ export async function grantAdminCredits(
 ): Promise<LedgerEntry> {
   return db.$transaction((tx) => _grantAdminCreditsTx(tx, params), {
     isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    timeout: 15000,
   });
 }

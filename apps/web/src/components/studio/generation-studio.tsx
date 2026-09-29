@@ -516,9 +516,7 @@ export function GenerationStudio({
         }
         if (
           Array.isArray(resolved.referenceAssetIds) &&
-          resolved.referenceAssetIds.every(
-            (value) => typeof value === "string",
-          )
+          resolved.referenceAssetIds.every((value) => typeof value === "string")
         ) {
           setReferenceAssetIds(resolved.referenceAssetIds);
         } else {

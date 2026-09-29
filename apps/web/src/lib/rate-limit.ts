@@ -84,14 +84,8 @@ else
 end
 `;
 
-
 export function rateLimit(options: RateLimitOptions): RateLimiter {
-  const {
-    max,
-    windowMs,
-    prefix,
-    failureMode = "memory",
-  } = options;
+  const { max, windowMs, prefix, failureMode = "memory" } = options;
 
   async function evaluate(identifier: string): Promise<RateLimitResult> {
     const key = `ratelimit:${prefix}:user:${identifier}`;

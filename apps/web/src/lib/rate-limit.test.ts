@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { rateLimit } from "./rate-limit";
+import type Redis from "ioredis";
 
 describe("rateLimit", () => {
   it("allows up to max requests within window and tracks remaining count", async () => {
@@ -107,5 +108,29 @@ describe("rateLimit", () => {
 
     expect(allowed.length).toBe(5);
     expect(blocked.length).toBe(5);
+  });
+  it("fails closed with 503 for sensitive operations when Redis is unavailable", async () => {
+    const unavailableRedis = {
+      eval: async () => {
+        throw new Error("Redis unavailable");
+      },
+    } as unknown as Redis;
+
+    const limiter = rateLimit({
+      max: 1,
+      windowMs: 60_000,
+      prefix: "test-fail-closed",
+      failureMode: "closed",
+      redisClient: unavailableRedis,
+    });
+
+    const result = await limiter.evaluate("admin-user");
+    expect(result.allowed).toBe(false);
+    expect(result.unavailable).toBe(true);
+
+    const response = await limiter.check("admin-user");
+    expect(response?.status).toBe(503);
+    expect(response?.headers.get("Retry-After")).toBe("1");
+    expect(response?.headers.get("Cache-Control")).toBe("no-store");
   });
 });

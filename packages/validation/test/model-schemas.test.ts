@@ -1,12 +1,29 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  providerModelRecordIdSchema,
   publishPriceVersionSchema,
   quoteRequestSchema,
   toggleModelEnabledSchema,
 } from "../src/index";
 
 describe("model validation schemas", () => {
+  it("accepts generated and seeded provider model record IDs", () => {
+    expect(
+      providerModelRecordIdSchema.safeParse("c12345678901234567890").success,
+    ).toBe(true);
+    expect(
+      providerModelRecordIdSchema.safeParse("nvidia-nemotron-3-nano-omni")
+        .success,
+    ).toBe(true);
+    expect(providerModelRecordIdSchema.safeParse("../models").success).toBe(
+      false,
+    );
+    expect(providerModelRecordIdSchema.safeParse("a".repeat(192)).success).toBe(
+      false,
+    );
+  });
+
   it("validates toggleModelEnabledSchema", () => {
     expect(toggleModelEnabledSchema.safeParse({ enabled: true }).success).toBe(
       true,

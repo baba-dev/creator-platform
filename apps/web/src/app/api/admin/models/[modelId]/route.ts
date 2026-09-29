@@ -7,7 +7,7 @@ import {
 import { db } from "@aiwa/db";
 import {
   assertPricingDimensionMatchesMediaKind,
-  cuidSchema,
+  providerModelRecordIdSchema,
   publishPriceVersionSchema,
   toggleModelEnabledSchema,
 } from "@aiwa/validation";
@@ -41,7 +41,7 @@ export async function PATCH(
   }
 
   const { modelId } = await params;
-  if (!cuidSchema.safeParse(modelId).success) {
+  if (!providerModelRecordIdSchema.safeParse(modelId).success) {
     return NextResponse.json({ error: "Model not found." }, { status: 404 });
   }
 

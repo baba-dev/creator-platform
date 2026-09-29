@@ -1,11 +1,10 @@
 import { createHash } from "node:crypto";
 import type { ServerEnv } from "@aiwa/config";
 import { db } from "@aiwa/db";
-import nodemailer, { type Transporter } from "nodemailer";
-import type SMTPPool from "nodemailer/lib/smtp-pool";
+import nodemailer from "nodemailer";
 import { senderForKind, type MailKind } from "./index";
 
-type SmtpTransport = Transporter<SMTPPool.SentMessageInfo, SMTPPool.Options>;
+type SmtpTransport = ReturnType<typeof nodemailer.createTransport>;
 type TransportEntry = { fingerprint: string; transport: SmtpTransport };
 const transporters = new Map<MailKind, TransportEntry>();
 

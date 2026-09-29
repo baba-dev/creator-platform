@@ -12,6 +12,7 @@ const adminCreditsLimiter = rateLimit({
   max: 30,
   windowMs: 60_000,
   prefix: "admin-credits",
+  failureMode: "closed",
 });
 
 export async function POST(

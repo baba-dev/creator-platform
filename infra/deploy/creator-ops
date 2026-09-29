@@ -16,6 +16,7 @@ usage() {
   cat >&2 <<'USAGE'
 Usage:
   creator-ops promote-owner <email>
+  creator-ops seed-templates
   creator-ops byteplus-smoke
 USAGE
   exit 64
@@ -34,6 +35,9 @@ case "$command_name" in
     [[ "$email" =~ ^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$ ]] \
       || fail "a valid email address is required"
     ;;
+  seed-templates)
+    [[ $# -eq 0 ]] || usage
+    ;;
   byteplus-smoke)
     [[ $# -eq 0 ]] || usage
     ;;
@@ -50,6 +54,12 @@ case "$command_name" in
       || fail "active release does not contain operations tooling"
     [[ -f "$release_dir/ops/db/prisma/promote-owner.ts" ]] \
       || fail "owner promotion command is unavailable"
+    ;;
+  seed-templates)
+    [[ -x "$release_dir/ops/db/node_modules/.bin/tsx" ]] \
+      || fail "active release does not contain operations tooling"
+    [[ -f "$release_dir/ops/db/prisma/seed-templates.ts" ]] \
+      || fail "template seed command is unavailable"
     ;;
   byteplus-smoke)
     [[ -f "$release_dir/apps/worker/dist/byteplus-smoke.cjs" ]] \
@@ -90,6 +100,10 @@ case "$command_name" in
   promote-owner)
     cd "$release_dir/ops/db"
     exec ./node_modules/.bin/tsx prisma/promote-owner.ts "$argument"
+    ;;
+  seed-templates)
+    cd "$release_dir/ops/db"
+    exec ./node_modules/.bin/tsx prisma/seed-templates.ts
     ;;
   byteplus-smoke)
     export BYTEPLUS_SMOKE_OUTPUT_DIR=/var/www/creator-platform/shared/byteplus-smoke

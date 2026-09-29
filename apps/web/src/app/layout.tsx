@@ -33,6 +33,21 @@ export const metadata: Metadata = {
   metadataBase: new URL(
     process.env.APP_URL ?? "https://creator.aiwamediagroup.com",
   ),
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [
+      {
+        url: "/brand/icons/favicon/creators-favicon-32x32-transparent.webp",
+        type: "image/webp",
+        sizes: "32x32",
+      },
+      {
+        url: "/brand/icons/favicon/creators-favicon-64x64-transparent.webp",
+        type: "image/webp",
+        sizes: "64x64",
+      },
+    ],
+  },
   robots: {
     index: false,
     follow: false,

@@ -171,4 +171,28 @@ describe("production mail configuration", () => {
       ).toThrow(/HTTPS and non-localhost URL are required/);
     });
   });
+  it("bounds generation worker concurrency", () => {
+    const valid = parseServerEnv({
+      ...productionBase,
+      MAIL_ENABLED: "false",
+      GENERATION_WORKER_CONCURRENCY: "10",
+    });
+    expect(valid.GENERATION_WORKER_CONCURRENCY).toBe(10);
+
+    expect(() =>
+      parseServerEnv({
+        ...productionBase,
+        MAIL_ENABLED: "false",
+        GENERATION_WORKER_CONCURRENCY: "0",
+      }),
+    ).toThrow(/GENERATION_WORKER_CONCURRENCY/);
+
+    expect(() =>
+      parseServerEnv({
+        ...productionBase,
+        MAIL_ENABLED: "false",
+        GENERATION_WORKER_CONCURRENCY: "11",
+      }),
+    ).toThrow(/GENERATION_WORKER_CONCURRENCY/);
+  });
 });

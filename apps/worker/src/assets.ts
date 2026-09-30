@@ -4,6 +4,10 @@ import {
   recordMediaOutput,
 } from "./media-tasks";
 import {
+  claimExpiredAssetForPurge,
+  completeAssetPurge,
+} from "@aiwa/assets";
+import {
   createAssetVariantObjectKey,
   LocalAssetStorage,
 } from "@aiwa/assets/storage";
@@ -191,52 +195,55 @@ export async function processAssetDerivatives(
 }
 
 /**
- * Permanently remove expired trash only after both the original and every
- * derivative have been deleted. A failed filesystem delete leaves database
- * state untouched so the next maintenance pass can retry safely.
+ * Permanently remove expired trash only after atomically claiming PURGING.
+ *
+ * Restore and purge contend on the same locked Asset row. Once PURGING is
+ * committed, the asset is no longer restorable and filesystem deletion may
+ * begin. Failed deletes leave PURGING + purgeAfter intact so a later pass can
+ * retry safely; LocalAssetStorage.delete is idempotent.
  */
 export async function purgeExpiredAssets(limit = 50): Promise<number> {
-  const assets = await db.asset.findMany({
-    where: { status: "DELETED", purgeAfter: { lte: new Date() } },
-    include: { variants: true },
+  const now = new Date();
+  const candidates = await db.asset.findMany({
+    where: {
+      status: { in: ["DELETED", "PURGING"] },
+      purgeAfter: { lte: now },
+    },
+    select: { id: true, organizationId: true },
     orderBy: { purgeAfter: "asc" },
     take: limit,
   });
+
   let purged = 0;
-  for (const asset of assets) {
-    for (const variant of asset.variants) {
-      await storage.delete(variant.objectKey);
+  for (const candidate of candidates) {
+    const claimed = await db.$transaction((tx) =>
+      claimExpiredAssetForPurge(tx, {
+        assetId: candidate.id,
+        organizationId: candidate.organizationId,
+        now,
+      }),
+    );
+    if (!claimed) continue;
+
+    try {
+      for (const variant of claimed.variants) {
+        await storage.delete(variant.objectKey);
+      }
+      await storage.delete(claimed.objectKey);
+    } catch {
+      // Keep PURGING so a later maintenance pass can retry idempotent deletes.
+      continue;
     }
-    await storage.delete(asset.objectKey);
-    await db.$transaction(async (tx) => {
-      const current = await tx.asset.findFirst({
-        where: {
-          id: asset.id,
-          status: "DELETED",
-          purgeAfter: { lte: new Date() },
-        },
-      });
-      if (!current) return;
-      await tx.assetVariant.deleteMany({ where: { assetId: current.id } });
-      await tx.asset.update({
-        where: { id: current.id },
-        data: {
-          status: "PURGED",
-          byteSize: 0n,
-          sha256: null,
-          purgeAfter: null,
-        },
-      });
-      await tx.assetStorageUsage.updateMany({
-        where: { organizationId: current.organizationId },
-        data: {
-          usedBytes: { decrement: current.byteSize },
-          version: { increment: 1 },
-        },
-      });
-      purged += 1;
-    });
+
+    const completed = await db.$transaction((tx) =>
+      completeAssetPurge(tx, {
+        assetId: claimed.id,
+        organizationId: claimed.organizationId,
+      }),
+    );
+    if (completed) purged += 1;
   }
+
   return purged;
 }
 

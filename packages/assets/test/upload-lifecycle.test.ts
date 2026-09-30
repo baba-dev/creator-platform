@@ -1,10 +1,7 @@
 import type { Prisma } from "@aiwa/db";
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  failPendingUpload,
-  finalizeUploadedAsset,
-} from "../src/library";
+import { failPendingUpload, finalizeUploadedAsset } from "../src/library";
 
 describe("uploaded asset lifecycle", () => {
   it("does not release storage when cleanup observes a published asset", async () => {

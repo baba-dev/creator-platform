@@ -1,3 +1,4 @@
+import { mediaDiagnostics } from "@aiwa/assets/media-diagnostics";
 import { parseServerEnv } from "@aiwa/config";
 import { db } from "@aiwa/db";
 import { Queue } from "bullmq";
@@ -37,28 +38,16 @@ async function main() {
     if (command === "status") {
       console.info(
         JSON.stringify({
+          ...(await mediaDiagnostics()),
+          queueCounts: await queue.getJobCounts(
+            "waiting",
+            "active",
+            "delayed",
+            "failed",
+          ),
           enabledInEnvironment: env.MEDIA_PROCESSING_ENABLED,
           paused: await queue.isPaused(),
           globalConcurrency: await queue.getGlobalConcurrency(),
-          tasks: await db.mediaTask.groupBy({ by: ["status"], _count: true }),
-          capacity: await db.mediaCapacity.findUnique({
-            where: { id: "native-media-v1" },
-            select: { fence: true, leaseUntil: true, owner: true },
-          }),
-          attention: await db.mediaTask.findMany({
-            where: { status: { in: ["REVIEW", "FAILED"] } },
-            select: {
-              id: true,
-              targetId: true,
-              kind: true,
-              status: true,
-              cycle: true,
-              attemptCount: true,
-              errorCode: true,
-            },
-            orderBy: { updatedAt: "desc" },
-            take: 50,
-          }),
         }),
       );
       return;

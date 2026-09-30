@@ -1,6 +1,8 @@
 "use client";
 
 import Image from "next/image";
+import { previewMessage, type PreviewStatus } from "@aiwa/assets/media-status";
+import { PreviewStatusPanel } from "./preview-status-panel";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -43,6 +45,7 @@ type Asset = {
   }[];
   tags: { id: string; name: string }[];
   favorite: boolean;
+  previews: PreviewStatus[];
 };
 
 function formatBytes(value: string): string {
@@ -61,7 +64,7 @@ function previewUrl(asset: Asset, inspector = false): string | null {
     if (inspector) {
       return asset.variants.some((variant) => variant.kind === "PREVIEW")
         ? `/api/assets/${asset.id}/variant/preview`
-        : `/api/assets/${asset.id}`;
+        : null;
     }
     return asset.variants.some((variant) => variant.kind === "THUMBNAIL")
       ? `/api/assets/${asset.id}/variant/thumbnail`
@@ -196,6 +199,57 @@ export function AssetLibrary({
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+
+  const pollOffset = useRef(0);
+  useEffect(() => {
+    const pending = assets.filter((asset) =>
+      asset.previews?.some((preview) =>
+        ["PENDING", "PROCESSING", "RETRY_WAIT"].includes(preview.state),
+      ),
+    );
+    if (!pending.length || trash) return;
+    const controller = new AbortController();
+    let polling = false;
+    const timer = window.setInterval(async () => {
+      if (polling) return;
+      if (document.visibilityState !== "visible") return;
+      const offset = pollOffset.current % pending.length;
+      const batch = [
+        ...pending.slice(offset),
+        ...pending.slice(0, offset),
+      ].slice(0, 100);
+      pollOffset.current = offset + batch.length;
+      const params = new URLSearchParams({ organizationId });
+      batch.forEach((asset) => params.append("id", asset.id));
+      polling = true;
+      try {
+        const response = await fetch(`/api/assets/preview-status?${params}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!response.ok) return;
+        const body = (await response.json()) as {
+          assets: Pick<Asset, "id" | "previews" | "variants">[];
+        };
+        if (controller.signal.aborted) return;
+        const updates = new Map(body.assets.map((asset) => [asset.id, asset]));
+        setAssets((current) =>
+          current.map((asset) => ({ ...asset, ...updates.get(asset.id) })),
+        );
+        setInspecting((current) =>
+          current ? { ...current, ...updates.get(current.id) } : null,
+        );
+      } catch {
+        /* Keep the original usable when status polling is unavailable. */
+      } finally {
+        polling = false;
+      }
+    }, 10_000);
+    return () => {
+      window.clearInterval(timer);
+      controller.abort();
+    };
+  }, [assets, organizationId, trash]);
 
   const usedPercent = useMemo(() => {
     const used = Number(storageUsedBytes);
@@ -744,7 +798,18 @@ export function AssetLibrary({
               </button>
             </div>
             <div className="p-5">
-              <AssetPreview asset={inspecting} inspector />
+              <AssetPreview
+                key={`${inspecting.id}-${inspecting.variants.map((v) => v.id).join("-")}`}
+                asset={inspecting}
+                inspector
+              />
+              <PreviewStatusPanel
+                assetId={inspecting.id}
+                organizationId={organizationId}
+                previews={inspecting.previews ?? []}
+                canManage={canManage && !trash}
+                onRetried={() => void load()}
+              />
               <div className="mt-5 grid gap-4">
                 <label className="grid gap-2 text-sm font-semibold">
                   Name
@@ -913,7 +978,24 @@ function AssetPreview({
   asset: Asset;
   inspector?: boolean;
 }) {
-  const image = previewUrl(asset, inspector);
+  const imageUrl = previewUrl(asset, inspector);
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const image = failedUrl === imageUrl ? null : imageUrl;
+  const primaryKind =
+    asset.mediaKind === "IMAGE"
+      ? inspector
+        ? "PREVIEW"
+        : "THUMBNAIL"
+      : asset.mediaKind === "VIDEO"
+        ? "POSTER"
+        : "WAVEFORM";
+  const state =
+    asset.previews?.find((preview) => preview.kind === primaryKind)?.state ??
+    "PENDING";
+  const message =
+    failedUrl && failedUrl === imageUrl
+      ? "Preview unavailable"
+      : previewMessage(state);
   if (asset.mediaKind === "VIDEO" && inspector)
     return (
       <div className="space-y-3">
@@ -943,6 +1025,7 @@ function AssetPreview({
           <Image
             unoptimized
             src={image}
+            onError={() => setFailedUrl(image)}
             alt="Audio waveform"
             width={1200}
             height={180}
@@ -950,7 +1033,7 @@ function AssetPreview({
           />
         ) : (
           <p className="py-8 text-center text-xs text-muted-foreground">
-            Preparing waveform…
+            {message}
           </p>
         )}
         {inspector ? (
@@ -968,6 +1051,7 @@ function AssetPreview({
       <Image
         unoptimized
         className={`${inspector ? "max-h-[60vh]" : "aspect-[4/3]"} h-auto w-full rounded-2xl bg-surface-sunken object-contain`}
+        onError={() => setFailedUrl(image)}
         alt=""
         loading="lazy"
         src={image}
@@ -991,7 +1075,7 @@ function AssetPreview({
           className="mx-auto size-8"
         />
         <p className="mt-2 text-xs font-semibold">
-          {kindLabel(asset.mediaKind)}
+          {asset.previews?.length ? message : kindLabel(asset.mediaKind)}
         </p>
       </div>
     </div>

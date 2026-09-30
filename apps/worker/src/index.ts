@@ -1,3 +1,6 @@
+import { randomUUID } from "node:crypto";
+import { hostPressure } from "./host-pressure";
+import { mediaAlerts } from "@aiwa/assets/worker-health";
 import { monitorEventLoopDelay } from "node:perf_hooks";
 import { workerQueues } from "./roles";
 import {
@@ -42,10 +45,12 @@ import { reapExpiredRecoveryJobs } from "./reaper";
 
 configureMediaCapacityGate(withDatabaseMediaCapacity);
 const env = parseServerEnv();
+const instanceId = randomUUID();
 sharp.concurrency(env.MEDIA_THREADS);
 sharp.cache({ memory: 32, files: 0, items: 32 });
 const selectedQueues = workerQueues(env.WORKER_ROLE);
 const owns = (queue: string) => selectedQueues.includes(queue);
+let stalledSinceStart = 0;
 const workers: Worker[] = [];
 const queues: Queue[] = [];
 function createWorker(
@@ -59,9 +64,10 @@ function createWorker(
   worker.on("error", () =>
     log("error", "Worker connection failed", { queue: name }),
   );
-  worker.on("stalled", (jobId) =>
-    log("error", "Queue lock lost; job stalled", { queue: name, jobId }),
-  );
+  worker.on("stalled", (jobId) => {
+    stalledSinceStart += 1;
+    log("error", "Queue lock lost; job stalled", { queue: name, jobId });
+  });
   return worker;
 }
 function createQueue(name: string): Queue | undefined {
@@ -89,6 +95,7 @@ function log(
     service: "creator-platform-worker",
     version: env.APP_VERSION,
     role: env.WORKER_ROLE,
+    instanceId,
     message,
     ...fields,
   });
@@ -755,22 +762,55 @@ schedule("reasoning", dispatchReasoning, 2_000);
 schedule("asset-ingestion", dispatchAssets, 15_000);
 const loopDelay = monitorEventLoopDelay({ resolution: 20 });
 loopDelay.enable();
-timers.push(
-  setInterval(() => {
-    const memory = process.memoryUsage();
-    log("info", "Worker health", {
+const healthRedis = new Redis(env.REDIS_URL, {
+  maxRetriesPerRequest: 1,
+  connectTimeout: 5000,
+  commandTimeout: 5000,
+  enableOfflineQueue: false,
+});
+healthRedis.on("error", () =>
+  log("error", "Worker telemetry connection unavailable"),
+);
+const healthKey = `aiwa:worker-health:${env.WORKER_ROLE}:${instanceId}`;
+let reportingHealth = false;
+async function reportHealth() {
+  if (reportingHealth || isShuttingDown) return;
+  reportingHealth = true;
+  try {
+    const health = {
+      instanceId,
+      role: env.WORKER_ROLE,
+      sampledAt: new Date().toISOString(),
+      rssBytes: process.memoryUsage().rss,
       eventLoopP99Ms: Math.round(loopDelay.percentile(99) / 1e6),
       eventLoopMaxMs: Math.round(loopDelay.max / 1e6),
-      rssBytes: memory.rss,
-      runningConsumers: workers.reduce(
-        (count, worker) => count + (worker.isRunning() ? 1 : 0),
-        0,
-      ),
-      queues: selectedQueues,
-    });
+      stalledSinceStart,
+      mediaEnabled: env.MEDIA_PROCESSING_ENABLED,
+      host: await hostPressure(),
+    };
     loopDelay.reset();
-  }, 30_000),
-);
+    log("info", "Worker health", { ...health, queues: selectedQueues });
+    const alerts = mediaAlerts({
+      workers: [health],
+      oldestQueueAgeSeconds: 0,
+      reviewCount: 0,
+      failedCount: 0,
+      capacityExpired: false,
+      telemetryAvailable: false,
+    }).filter(
+      (alert) =>
+        !["TELEMETRY_UNAVAILABLE", "MEDIA_PAUSED"].includes(alert.code),
+    );
+    if (alerts.length) log("error", "Worker resource alert", { alerts });
+    await healthRedis.set(healthKey, JSON.stringify(health), "EX", 90);
+  } catch {
+    log("error", "Worker health publication unavailable");
+  } finally {
+    reportingHealth = false;
+  }
+}
+timers.push(setInterval(() => void reportHealth(), 30_000));
+healthRedis.once("ready", () => void reportHealth());
 
 async function shutdown(signal: NodeJS.Signals): Promise<void> {
   log("info", "worker shutting down", { signal });
@@ -821,6 +861,8 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
     if (timeoutHandle) clearTimeout(timeoutHandle);
   }
 
+  await healthRedis.del(healthKey).catch(() => {});
+  healthRedis.disconnect();
   await db.$disconnect();
   await redis.quit();
 }

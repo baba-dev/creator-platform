@@ -375,65 +375,7 @@ export async function recoverMediaCapacity(): Promise<void> {
     });
   });
 }
-export async function retryMediaTask(
-  id: string,
-  stoppedConfirmed = false,
-): Promise<void> {
-  await db.$transaction(async (tx) => {
-    const task = await lockTask(tx, id);
-    const now = await databaseNow(tx);
-    const expired =
-      task.status === "PROCESSING" && task.leaseUntil && task.leaseUntil <= now;
-    if (task.status !== "FAILED" && task.status !== "REVIEW" && !expired)
-      throw new Error("Task is not eligible for recovery.");
-    if ((task.status === "REVIEW" || expired) && !stoppedConfirmed)
-      throw new Error("Confirm old processes stopped before recovery.");
-    if (["IMAGE_EDIT", "VIDEO_RENDER"].includes(task.kind))
-      throw new Error(
-        "Create a new edit/export after resolving its previous execution.",
-      );
-    const asset = await tx.asset.findUnique({ where: { id: task.targetId } });
-    if (
-      !asset ||
-      asset.organizationId !== task.organizationId ||
-      asset.status !== "READY" ||
-      asset.storageProvider !== "LOCAL"
-    )
-      throw new Error("Asset is unavailable.");
-    await tx.auditEvent.create({
-      data: {
-        organizationId: task.organizationId,
-        action: "media.task_retry_requested",
-        targetType: "MediaTask",
-        targetId: id,
-        metadata: {
-          source: "creator-ops",
-          previousCycle: task.cycle,
-          previousAttempts: task.attemptCount,
-          previousFence: task.fence,
-          stoppedConfirmed,
-        },
-      },
-    });
-    await tx.mediaTaskAttempt.updateMany({
-      where: { taskId: id, finishedAt: null },
-      data: { outcome: "REVOKED", finishedAt: now },
-    });
-    await tx.mediaTask.update({
-      where: { id },
-      data: {
-        cycle: { increment: 1 },
-        fence: { increment: 1 },
-        attemptCount: 0,
-        status: "PENDING",
-        owner: null,
-        leaseUntil: null,
-        nextAttemptAt: null,
-        errorCode: null,
-      },
-    });
-  });
-}
+export { retryMediaTask } from "@aiwa/assets/media-recovery";
 export async function abandonMediaTask(id: string): Promise<void> {
   await db.$transaction(async (tx) => {
     const task = await lockTask(tx, id);

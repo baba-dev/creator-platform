@@ -10,11 +10,16 @@
     "./video-captions": "./src/video-captions.ts",
     "./media-probe": "./src/media-probe.ts",
     "./storage": "./src/storage.ts",
-    "./media-capacity": "./src/media-capacity.ts"
+    "./media-capacity": "./src/media-capacity.ts",
+    "./media-status": "./src/media-status.ts",
+    "./media-recovery": "./src/media-recovery.ts",
+    "./media-diagnostics": "./src/media-diagnostics.ts",
+    "./worker-health": "./src/worker-health.ts"
   },
   "dependencies": {
     "@aiwa/db": "workspace:*",
-    "zod": "^4.6.4"
+    "zod": "^4.6.4",
+    "@aiwa/authz": "workspace:*"
   },
   "devDependencies": {
     "vitest": "^4.1.11"

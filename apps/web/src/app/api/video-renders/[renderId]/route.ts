@@ -22,9 +22,22 @@ export async function GET(
     where: { id: renderId, organizationId, createdById: session.user.id },
     select: { id: true, status: true, outputAssetId: true, errorMessage: true },
   });
-  return render
-    ? NextResponse.json(render, {
-        headers: { "Cache-Control": "private, no-store" },
+  const task = render
+    ? await db.mediaTask.findUnique({
+        where: { taskKey: `${render.id}:VIDEO_RENDER:v1` },
+        select: { status: true },
       })
+    : null;
+  const processingState =
+    render && ["PENDING", "PROCESSING"].includes(render.status)
+      ? (task?.status ?? "PENDING")
+      : render?.status;
+  return render
+    ? NextResponse.json(
+        { ...render, processingState },
+        {
+          headers: { "Cache-Control": "private, no-store" },
+        },
+      )
     : NextResponse.json({ error: "Render unavailable." }, { status: 404 });
 }

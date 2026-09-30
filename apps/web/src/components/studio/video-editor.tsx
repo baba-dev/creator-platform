@@ -115,6 +115,7 @@ export function VideoEditor({
         );
         const data = (await response.json()) as {
           status?: string;
+          processingState?: string;
           outputAssetId?: string;
           errorMessage?: string;
           error?: string;
@@ -127,7 +128,15 @@ export function VideoEditor({
           setBusy(false);
           setMessage("Your video is ready.");
           void loadAssets().catch(() => undefined);
-        } else if (data.status === "FAILED") {
+        } else if (data.processingState === "REVIEW") {
+          setMessage("Export needs support review.");
+          setError(
+            "Your source is safe. Contact support before retrying this export.",
+          );
+        } else if (
+          data.status === "FAILED" ||
+          data.processingState === "FAILED"
+        ) {
           setRenderId(null);
           setBusy(false);
           setError(data.errorMessage ?? "Render failed.");

@@ -107,6 +107,7 @@ export function ImageEditor({
         );
         const body = (await res.json()) as {
           status?: string;
+          processingState?: string;
           outputAssetId?: string;
           errorMessage?: string;
           error?: string;
@@ -119,7 +120,11 @@ export function ImageEditor({
           setBusy(false);
           setAttempt(null);
         }
-        if (body.status === "FAILED") {
+        if (body.processingState === "REVIEW")
+          setError(
+            "This edit needs support review. Your source is safe; contact support before retrying.",
+          );
+        if (body.status === "FAILED" || body.processingState === "FAILED") {
           setError(body.errorMessage ?? "Image edit failed.");
           setOperationId(null);
           setBusy(false);

@@ -68,6 +68,12 @@ These rules apply to every contributor and coding agent.
 - Expired native capacity requires audited operator recovery after confirming
   all old processes stopped; never reclaim it automatically.
 
+- Optional preview failures must not fail canonical originals or alter
+  generation settlement. Web retry must be tenant/actor checked, cycle bounded,
+  fenced and atomically audited; REVIEW/capacity recovery stays with
+  confirmed-stopped root operations. Telemetry is never lease authority. See
+  `docs/operations/media-visibility.md`.
+
 ## Generation templates
 
 - Templates are an orchestration/configuration layer only; never submit provider

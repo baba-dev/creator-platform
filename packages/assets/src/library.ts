@@ -135,7 +135,7 @@ export async function createPendingUpload(
   });
 }
 
-async function lockUploadAsset(
+async function lockAssetRow(
   tx: Prisma.TransactionClient,
   input: { assetId: string; organizationId: string },
 ) {
@@ -173,7 +173,7 @@ export async function finalizeUploadedAsset(
     durationMs?: number | null;
   },
 ) {
-  const asset = await lockUploadAsset(tx, input);
+  const asset = await lockAssetRow(tx, input);
   if (!asset || asset.status !== "PENDING")
     throw new Error("Pending asset no longer exists.");
 
@@ -226,7 +226,7 @@ export async function failPendingUpload(
     organizationId: string;
   },
 ): Promise<boolean> {
-  const asset = await lockUploadAsset(tx, input);
+  const asset = await lockAssetRow(tx, input);
   if (!asset || asset.status !== "PENDING") return false;
 
   await releaseAssetStorage(tx, {
@@ -289,24 +289,111 @@ export async function restoreAssets(
 ): Promise<number> {
   if (input.assetIds.length > MAX_ASSET_BULK_SELECTION)
     throw new Error("Too many assets selected.");
-  const result = await tx.asset.updateMany({
-    where: {
-      id: { in: input.assetIds },
+
+  let restored = 0;
+  const assetIds = [...new Set(input.assetIds)].sort();
+  for (const assetId of assetIds) {
+    const asset = await lockAssetRow(tx, {
+      assetId,
       organizationId: input.organizationId,
-      status: "DELETED",
-    },
-    data: { status: "READY", deletedAt: null, purgeAfter: null },
-  });
-  if (result.count > 0) {
+    });
+    if (!asset || asset.status !== "DELETED") continue;
+
+    await tx.asset.update({
+      where: { id: asset.id },
+      data: { status: "READY", deletedAt: null, purgeAfter: null },
+    });
+    restored += 1;
+  }
+
+  if (restored > 0) {
     await tx.assetStorageUsage.updateMany({
       where: { organizationId: input.organizationId },
       data: {
-        readyAssetCount: { increment: result.count },
+        readyAssetCount: { increment: restored },
         version: { increment: 1 },
       },
     });
   }
-  return result.count;
+  return restored;
+};
+
+/**
+ * Atomically claim expired trash before any bytes are deleted.
+ *
+ * PURGING is intentionally not restorable. A failed object deletion leaves the
+ * row in PURGING so a later maintenance pass can safely retry idempotent
+ * deletes without exposing a partially-deleted asset as READY.
+ */
+export async function claimExpiredAssetForPurge(
+  tx: Prisma.TransactionClient,
+  input: {
+    assetId: string;
+    organizationId: string;
+    now?: Date;
+  },
+) {
+  const asset = await lockAssetRow(tx, input);
+  const now = input.now ?? new Date();
+  if (
+    !asset ||
+    !asset.purgeAfter ||
+    asset.purgeAfter.getTime() > now.getTime() ||
+    (asset.status !== "DELETED" && asset.status !== "PURGING")
+  ) {
+    return null;
+  }
+
+  if (asset.status === "DELETED") {
+    await tx.asset.update({
+      where: { id: asset.id },
+      data: { status: "PURGING" },
+    });
+  }
+
+  const variants = await tx.assetVariant.findMany({
+    where: { assetId: asset.id },
+    select: { objectKey: true },
+  });
+
+  return {
+    id: asset.id,
+    organizationId: asset.organizationId,
+    objectKey: asset.objectKey,
+    byteSize: asset.byteSize,
+    variants,
+  };
+}
+
+/**
+ * Finalize a purge only after every stored object has been deleted.
+ */
+export async function completeAssetPurge(
+  tx: Prisma.TransactionClient,
+  input: { assetId: string; organizationId: string },
+): Promise<boolean> {
+  const asset = await lockAssetRow(tx, input);
+  if (!asset || asset.status !== "PURGING") return false;
+
+  await tx.assetVariant.deleteMany({ where: { assetId: asset.id } });
+  await tx.asset.update({
+    where: { id: asset.id },
+    data: {
+      status: "PURGED",
+      byteSize: 0n,
+      sha256: null,
+      purgeAfter: null,
+    },
+  });
+  await tx.assetStorageUsage.updateMany({
+    where: { organizationId: asset.organizationId },
+    data: {
+      usedBytes: { decrement: asset.byteSize },
+      version: { increment: 1 },
+    },
+  });
+
+  return true;
 }
 
 export async function assignAssets(

@@ -14,14 +14,18 @@ The staging environment runs directly on Ubuntu without Docker:
 ```text
 /var/www/creator-platform/
 ├── current -> releases/sha-<commit>
-├── incoming/
+├── incoming/                     # deploy-user upload only; hidden from services
+├── shared/                       # runtime-writable assets and durable outputs
+├── .cache/ .config/ .local/state/ # runtime-writable process state
 └── releases/
-    └── sha-<commit>/
+    └── sha-<commit>/             # root-owned; runtime-readable; never writable
         ├── apps/                 # immutable web and worker runtime
         ├── node_modules/         # Next.js standalone runtime
         ├── ops/
-        │   ├── bin/              # deployment and operations entry points
-        │   └── db/               # isolated Prisma CLI and dependencies
+        │   ├── bin/              # root-promoted deployment/operations entry points
+        │   ├── control-plane.sha256
+        │   ├── db/               # isolated Prisma CLI and dependencies
+        │   └── systemd/          # verified service definitions
         ├── RELEASE_LAYOUT        # release format version
         └── RELEASE_SHA
 ```
@@ -32,14 +36,24 @@ server never runs pnpm against a release. Prisma migrations execute from
 Next.js dependencies.
 
 Before activation, the deployment command validates the release identity, layout
-version, web and worker entry points, Next.js runtime, Prisma tools, and
-operations scripts. It then creates a database backup, applies migrations,
-atomically changes `current`, restarts both services, and checks `/api/health`.
-If the health check fails, it restores the previous valid runtime.
+version, web and worker entry points, Next.js runtime, Prisma tools, and a
+SHA-256 manifest covering every artifact that may be promoted into the root
+control plane. The extracted tree is recursively normalized to root ownership
+with no group/other write bits before migrations run as `aiwa-creator`. A second
+integrity check after migrations fails the deployment if runtime tooling changed
+the release tree.
 
-If a same-SHA release directory exists but fails integrity checks, deployment
-rebuilds it from the uploaded archive and quarantines the damaged directory. It
-never restarts a known-damaged extracted release.
+After the new application passes health checks, only the verified immutable
+release may update `creator-deploy`, `creator-ops`, or the systemd units. The
+services are then restarted once under `ProtectSystem=strict`; only `shared/`,
+`.cache/`, `.config/`, and `.local/state/` are writable, while releases are
+explicitly read-only and `incoming/` is inaccessible to application processes.
+
+If a same-SHA release directory exists but fails content, checksum, ownership, or
+permission checks, deployment rebuilds it from the uploaded archive and
+quarantines the damaged directory. A previous release is eligible for rollback
+only if it passes the same hardened checks; otherwise rollback fails closed
+instead of reactivating mutable code.
 
 ## Required GitHub staging secrets
 
@@ -80,20 +94,41 @@ SIGNUPS_ENABLED=true
 Keep `AUTH_SECRET`, `DATABASE_URL`, and other credentials only in that
 root-managed environment file.
 
-## Upgrading a release-layout v1 server
+## Upgrading a release-layout v2 server to hardened v3
 
-Release layout v2 removes server-side pnpm installation. Before merging the
-first layout-v2 release, install the reviewed deployment entry point from its
-checkout:
+The first v3 rollout has an explicit trust bootstrap. A layout-v2 deployment
+tool can extract a release as the runtime user, so it must **not** be allowed to
+self-upgrade from a runtime-writable release. The staging deploy workflow checks
+`creator-deploy --version` and refuses to upload or activate v3 until the host
+reports control-plane version `3`.
+
+From a trusted operator checkout of the exact reviewed or merged commit,
+reinstall both root entry points before rerunning the deploy workflow:
 
 ```bash
 sudo install -o root -g root -m 0755 \
   infra/deploy/creator-deploy \
   /usr/local/sbin/creator-deploy
+sudo install -o root -g root -m 0755 \
+  infra/deploy/creator-ops \
+  /usr/local/sbin/creator-ops
+sudo /usr/local/sbin/creator-deploy --version
+# expected: 3
 ```
 
-After the first successful layout-v2 deployment, each healthy release updates
-the root-owned deployment and operations entry points for subsequent runs.
+Do not source this bootstrap from
+`/var/www/creator-platform/current/ops/bin` or any existing release directory:
+layout-v2 releases were writable by `aiwa-creator` and are intentionally outside
+the v3 trust boundary. Once the trusted v3 deployer is installed, the next
+successful deployment rebuilds the active release as root-owned/read-only,
+verifies the control-plane manifest, installs the hardened systemd units, and
+restarts the services under the filesystem sandbox.
+
+For bare-metal local storage, keep `ASSET_STORAGE_ROOT` below
+`/var/www/creator-platform/shared`. If a future deployment deliberately uses a
+different local writable root, add that exact path to `ReadWritePaths=` as part
+of the same reviewed infrastructure change. Remote object storage does not need
+an additional local writable path.
 
 ## Media editor preflight before merging PR #60
 
@@ -183,6 +218,12 @@ into the repository.
 systemctl status creator-web creator-worker --no-pager
 curl -fsS http://127.0.0.1:3000/api/health
 curl -fsS https://creator.aiwamediagroup.com/api/health
-readlink -f /var/www/creator-platform/current
+release="$(readlink -f /var/www/creator-platform/current)"
+printf 'active release: %s\n' "$release"
+sudo -u aiwa-creator test ! -w "$release/apps/web/server.js"
+sudo find "$release" -xdev \( -type f -o -type d \) \
+  \( ! -user root -o -perm /022 \) -print
+sudo /usr/local/sbin/creator-deploy --version
+systemctl show creator-web.service -p ProtectSystem -p ReadWritePaths -p ReadOnlyPaths
 journalctl -u creator-web -u creator-worker -n 100 --no-pager
 ```

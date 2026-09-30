@@ -107,6 +107,35 @@ validate_release_path() {
     && validate_release "$directory" "$expected_sha"
 }
 
+validate_root_control_file() {
+  local path="$1"
+  local unsafe=""
+
+  [[ -f "$path" ]] || return 1
+  [[ "$(stat -c '%U' "$path" 2>/dev/null)" == root ]] || return 1
+  unsafe="$(find "$path" -maxdepth 0 -perm /022 -print -quit 2>/dev/null)"
+  [[ -z "$unsafe" ]]
+}
+
+validate_installed_control_plane() {
+  local directory="$1"
+  local source_path=""
+  local installed_path=""
+
+  while IFS='|' read -r source_path installed_path; do
+    [[ -n "$source_path" && -n "$installed_path" ]] || continue
+    validate_root_control_file "$installed_path" || return 1
+    cmp -s -- "$directory/$source_path" "$installed_path" || return 1
+  done <<'CONTROL_PLANE'
+ops/bin/creator-deploy|/usr/local/sbin/creator-deploy
+ops/bin/creator-ops|/usr/local/sbin/creator-ops
+ops/systemd/creator-web.service|/etc/systemd/system/creator-web.service
+ops/systemd/creator-worker.service|/etc/systemd/system/creator-worker.service
+ops/systemd/creator-worker@.service|/etc/systemd/system/creator-worker@.service
+ops/systemd/creator-worker@media.service.d/limits.conf|/etc/systemd/system/creator-worker@media.service.d/limits.conf
+CONTROL_PLANE
+}
+
 load_environment_migrate_and_seed_templates() {
   local directory="$1"
 
@@ -217,6 +246,8 @@ if [[ "$release_ready" != true ]]; then
     || fail "extracted release could not be made root-owned and runtime-read-only"
   validate_release "$temporary_dir" "$release_sha" \
     || fail "extracted release failed hardened integrity checks"
+  validate_installed_control_plane "$temporary_dir" \
+    || fail "release control plane does not match the trusted root-installed control plane; bootstrap it from a trusted checkout first"
 
   install -d -o root -g root -m 0700 "$backup_root"
   backup_path="$backup_root/predeploy-$(date -u +%Y%m%dT%H%M%SZ)-${release_sha}.sql.gz"
@@ -241,6 +272,9 @@ if [[ "$release_ready" != true ]]; then
   temporary_dir=""
   log "release extracted, verified, migrated, and template catalog ensured"
 fi
+
+validate_installed_control_plane "$release_dir" \
+  || fail "active release control plane does not match the trusted root-installed control plane"
 
 # Preserve the operator-selected topology. Drain every active worker before
 # switching the shared symlink so old code cannot claim work from the new release.
@@ -309,55 +343,13 @@ for unit in "${worker_services[@]}"; do
   systemctl is-active --quiet "$unit" || rollback
 done
 
-# Promote root control-plane artifacts only from the verified, immutable release.
-if ! validate_release "$release_dir" "$release_sha"; then
-  log "active release failed integrity checks before control-plane promotion" >&2
+# Re-check both boundaries after the release is live. Normal application
+# deployments never write the root control plane.
+if ! validate_release "$release_dir" "$release_sha" \
+  || ! validate_installed_control_plane "$release_dir"; then
+  log "release or root control-plane integrity changed after activation" >&2
   rollback
 fi
-log "promoting verified root control-plane artifacts"
-install -o root -g root -m 0755 \
-  "$release_dir/ops/bin/creator-deploy" \
-  /usr/local/sbin/creator-deploy
-install -o root -g root -m 0755 \
-  "$release_dir/ops/bin/creator-ops" \
-  /usr/local/sbin/creator-ops
-install -o root -g root -m 0644 \
-  "$release_dir/ops/systemd/creator-web.service" \
-  /etc/systemd/system/creator-web.service
-install -o root -g root -m 0644 \
-  "$release_dir/ops/systemd/creator-worker.service" \
-  /etc/systemd/system/creator-worker.service
-install -o root -g root -m 0644 \
-  "$release_dir/ops/systemd/creator-worker@.service" \
-  /etc/systemd/system/creator-worker@.service
-install -d -o root -g root -m 0755 \
-  /etc/systemd/system/creator-worker@media.service.d
-install -o root -g root -m 0644 \
-  "$release_dir/ops/systemd/creator-worker@media.service.d/limits.conf" \
-  /etc/systemd/system/creator-worker@media.service.d/limits.conf
-systemctl daemon-reload
-
-# Restart once more so the promoted filesystem sandbox applies to this release,
-# not merely the next deployment.
-log "restarting application services under the hardened filesystem sandbox"
-systemctl restart creator-web.service "${worker_services[@]}" || rollback
-
-healthy=false
-for _ in {1..30}; do
-  health_response="$(curl -fsS --max-time 3 http://127.0.0.1:3000/api/health 2>/dev/null || true)"
-  active_release_sha="$(cat "$current_link/RELEASE_SHA" 2>/dev/null || true)"
-
-  if [[ "$health_response" == *'"status":"ok"'* \
-     && "$active_release_sha" == "$release_sha" ]]; then
-    healthy=true
-    break
-  fi
-  sleep 2
-done
-[[ "$healthy" == true ]] || rollback
-for unit in "${worker_services[@]}"; do
-  systemctl is-active --quiet "$unit" || rollback
-done
 
 rm -f -- "$archive_path"
 log "deployment completed: $release_sha"

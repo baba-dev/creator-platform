@@ -50,7 +50,7 @@ describe("asset trash lifecycle", () => {
       where: { id: "asset_1" },
       data: { status: "PURGING" },
     });
-    expect(assetUpdate.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(assetUpdate.mock.invocationCallOrder[0]!).toBeLessThan(
       variantFindMany.mock.invocationCallOrder[0]!,
     );
   });

@@ -49,6 +49,10 @@ if [[ -d apps/web/public ]]; then
   cp -a apps/web/public "$release_root/apps/web/public"
 fi
 
+# Keep Next.js' legitimate runtime cache outside the immutable release tree.
+rm -rf -- "$release_root/apps/web/.next/cache"
+ln -s /var/www/creator-platform/.cache/next "$release_root/apps/web/.next/cache"
+
 cp -a apps/worker/dist "$release_root/apps/worker/dist"
 test -f "$release_root/apps/worker/dist/byteplus-smoke.cjs"
 test -f "$release_root/apps/worker/dist/media-ops.cjs"

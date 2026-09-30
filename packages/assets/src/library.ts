@@ -135,12 +135,37 @@ export async function createPendingUpload(
   });
 }
 
+async function lockUploadAsset(
+  tx: Prisma.TransactionClient,
+  input: { assetId: string; organizationId: string },
+) {
+  await tx.$queryRaw`
+    SELECT id
+    FROM Asset
+    WHERE id = ${input.assetId}
+      AND organizationId = ${input.organizationId}
+    FOR UPDATE
+  `;
+
+  return tx.asset.findFirst({
+    where: {
+      id: input.assetId,
+      organizationId: input.organizationId,
+    },
+  });
+}
+
+/**
+ * Publish an uploaded asset and write its audit event in the caller's database
+ * transaction. The asset row is locked before storage accounting so publish and
+ * cleanup always acquire locks in the same order.
+ */
 export async function finalizeUploadedAsset(
   tx: Prisma.TransactionClient,
   input: {
     assetId: string;
     organizationId: string;
-    reservedBytes: bigint;
+    actorUserId: string;
     actualBytes: bigint;
     sha256: string;
     width?: number | null;
@@ -148,22 +173,18 @@ export async function finalizeUploadedAsset(
     durationMs?: number | null;
   },
 ) {
-  const asset = await tx.asset.findFirst({
-    where: {
-      id: input.assetId,
-      organizationId: input.organizationId,
-      status: "PENDING",
-    },
-  });
-  if (!asset) throw new Error("Pending asset no longer exists.");
+  const asset = await lockUploadAsset(tx, input);
+  if (!asset || asset.status !== "PENDING")
+    throw new Error("Pending asset no longer exists.");
 
+  const reservedBytes = asset.byteSize;
   await finalizeAssetStorage(tx, {
     organizationId: input.organizationId,
-    reservedBytes: input.reservedBytes,
+    reservedBytes,
     actualBytes: input.actualBytes,
   });
 
-  return tx.asset.update({
+  const readyAsset = await tx.asset.update({
     where: { id: input.assetId },
     data: {
       status: "READY",
@@ -174,26 +195,46 @@ export async function finalizeUploadedAsset(
       durationMs: input.durationMs ?? null,
     },
   });
+
+  await tx.auditEvent.create({
+    data: {
+      actorUserId: input.actorUserId,
+      organizationId: input.organizationId,
+      action: "asset.uploaded",
+      targetType: "Asset",
+      targetId: readyAsset.id,
+      metadata: {
+        mediaKind: readyAsset.mediaKind,
+        byteSize: readyAsset.byteSize.toString(),
+      },
+    },
+  });
+
+  return readyAsset;
 }
 
+/**
+ * Cancel an upload only while its authoritative Asset row is still PENDING.
+ *
+ * Returns true only when this transaction owns and releases that asset's exact
+ * reservation. Callers may delete the object only after a true result commits.
+ */
 export async function failPendingUpload(
   tx: Prisma.TransactionClient,
   input: {
     assetId: string;
     organizationId: string;
-    reservedBytes: bigint;
   },
-): Promise<void> {
+): Promise<boolean> {
+  const asset = await lockUploadAsset(tx, input);
+  if (!asset || asset.status !== "PENDING") return false;
+
   await releaseAssetStorage(tx, {
     organizationId: input.organizationId,
-    reservedBytes: input.reservedBytes,
+    reservedBytes: asset.byteSize,
   });
-  await tx.asset.updateMany({
-    where: {
-      id: input.assetId,
-      organizationId: input.organizationId,
-      status: "PENDING",
-    },
+  await tx.asset.update({
+    where: { id: input.assetId },
     data: {
       status: "DELETED",
       byteSize: 0n,
@@ -201,6 +242,8 @@ export async function failPendingUpload(
       purgeAfter: new Date(),
     },
   });
+
+  return true;
 }
 
 function purgeDate(now = new Date()): Date {

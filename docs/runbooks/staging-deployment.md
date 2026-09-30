@@ -50,14 +50,14 @@ must themselves be root-owned and not group/other writable. A control-plane
 change therefore requires a separate trusted operator installation.
 
 Services run under `ProtectSystem=strict`; only `shared/`, `.cache/`,
-`.config/`, and `.local/state/` are writable, releases are explicitly
-read-only, and `incoming/` is inaccessible to application processes. The
-packaged `apps/web/.next/cache` path is a root-owned symlink into
+`.config/`, and `.local/state/` are writable, releases are explicitly read-only,
+and `incoming/` is inaccessible to application processes. The packaged
+`apps/web/.next/cache` path is a root-owned symlink into
 `/var/www/creator-platform/.cache/next`, preserving legitimate Next.js runtime
 cache writes without making release code writable.
 
-If a same-SHA release directory exists but fails content, checksum, ownership, or
-permission checks, deployment rebuilds it from the uploaded archive and
+If a same-SHA release directory exists but fails content, checksum, ownership,
+or permission checks, deployment rebuilds it from the uploaded archive and
 quarantines the damaged directory. A previous release is eligible for rollback
 only if it passes the same hardened checks; otherwise rollback fails closed
 instead of reactivating mutable code.
@@ -109,8 +109,8 @@ self-upgrade from a runtime-writable release. The staging deploy workflow checks
 `creator-deploy --version` and refuses to upload or activate v3 until the host
 reports control-plane version `3`.
 
-From a trusted operator checkout of the exact reviewed or merged commit,
-install the complete root control plane before rerunning the deploy workflow:
+From a trusted operator checkout of the exact reviewed or merged commit, install
+the complete root control plane before rerunning the deploy workflow:
 
 ```bash
 sudo bash infra/deploy/install-control-plane.sh
@@ -123,16 +123,16 @@ units, and the media-worker drop-in, then runs `systemctl daemon-reload`. It
 deliberately does **not** restart application services; the next deployment
 performs the controlled restart after the new release is ready.
 
-Do not source this bootstrap from
-`/var/www/creator-platform/current/ops/bin` or any existing release directory:
-layout-v2 releases were writable by `aiwa-creator` and are intentionally outside
-the v3 trust boundary. Once the trusted v3 deployer is installed, the next
-successful deployment rebuilds the active release as root-owned/read-only,
-verifies the control-plane manifest, confirms that it exactly matches the
-already installed root control plane, and restarts the services under the
-filesystem sandbox. Because layout-v2 is intentionally not trusted for
-rollback, the first v3 deployment fails closed and stops the application if the
-new release cannot become healthy; schedule that one-time upgrade accordingly.
+Do not source this bootstrap from `/var/www/creator-platform/current/ops/bin` or
+any existing release directory: layout-v2 releases were writable by
+`aiwa-creator` and are intentionally outside the v3 trust boundary. Once the
+trusted v3 deployer is installed, the next successful deployment rebuilds the
+active release as root-owned/read-only, verifies the control-plane manifest,
+confirms that it exactly matches the already installed root control plane, and
+restarts the services under the filesystem sandbox. Because layout-v2 is
+intentionally not trusted for rollback, the first v3 deployment fails closed and
+stops the application if the new release cannot become healthy; schedule that
+one-time upgrade accordingly.
 
 For bare-metal local storage, keep `ASSET_STORAGE_ROOT` below
 `/var/www/creator-platform/shared`. If a future deployment deliberately uses a

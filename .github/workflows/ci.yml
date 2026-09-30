@@ -103,7 +103,19 @@ jobs:
           grep -q '"status":"failed"' byteplus-smoke.log
 
       - name: Package and validate staging release
-        run: bash infra/deploy/package-release.sh "$GITHUB_SHA"
+        run: |
+          bash infra/deploy/package-release.sh "$GITHUB_SHA"
+          validation_dir="$(mktemp -d)"
+          trap 'rm -rf "$validation_dir"' EXIT
+          tar -xzf "creator-platform-${GITHUB_SHA}.tar.gz" -C "$validation_dir"
+          test "$(cat "$validation_dir/RELEASE_LAYOUT")" = "3"
+          (
+            cd "$validation_dir"
+            sha256sum --check --strict ops/control-plane.sha256
+          )
+          grep -qx 'ProtectSystem=strict' "$validation_dir/ops/systemd/creator-web.service"
+          grep -qx 'ProtectSystem=strict' "$validation_dir/ops/systemd/creator-worker.service"
+          grep -qx 'ProtectSystem=strict' "$validation_dir/ops/systemd/creator-worker@.service"
 
       - name: Upload staging release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

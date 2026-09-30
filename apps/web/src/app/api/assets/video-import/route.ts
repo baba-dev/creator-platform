@@ -119,42 +119,35 @@ export async function POST(request: Request) {
       });
     });
     const stored = await storage.putFile(objectKey, path);
-    const asset = await db.$transaction(async (tx) => {
-      const ready = await finalizeUploadedAsset(tx, {
+    const asset = await db.$transaction((tx) =>
+      finalizeUploadedAsset(tx, {
         assetId: pending!.id,
         organizationId,
-        reservedBytes: pending!.byteSize,
+        actorUserId: session.user.id,
+        audit: {
+          action: "asset.video_imported",
+          metadata: { sourceHost: url.hostname },
+        },
         actualBytes: stored.byteSize,
         sha256: stored.sha256,
         width: media.width,
         height: media.height,
         durationMs: media.durationMs,
-      });
-      await tx.auditEvent.create({
-        data: {
-          actorUserId: session.user.id,
-          organizationId,
-          action: "asset.video_imported",
-          targetType: "Asset",
-          targetId: ready.id,
-          metadata: { sourceHost: url.hostname },
-        },
-      });
-      return ready;
-    });
+      }),
+    );
     return NextResponse.json({ asset: serializeAsset(asset) }, { status: 201 });
   } catch (error) {
     if (pending) {
-      await storage.delete(pending.objectKey).catch(() => undefined);
-      await db
+      const cancelled = await db
         .$transaction((tx) =>
           failPendingUpload(tx, {
             assetId: pending!.id,
             organizationId,
-            reservedBytes: pending!.byteSize,
           }),
         )
-        .catch(() => undefined);
+        .catch(() => false);
+      if (cancelled)
+        await storage.delete(pending.objectKey).catch(() => undefined);
     }
     const message = safeErrorMessage(error, "Video import failed.");
     return NextResponse.json(

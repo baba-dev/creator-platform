@@ -135,12 +135,41 @@ export async function createPendingUpload(
   });
 }
 
+async function lockAssetRow(
+  tx: Prisma.TransactionClient,
+  input: { assetId: string; organizationId: string },
+) {
+  await tx.$queryRaw`
+    SELECT id
+    FROM Asset
+    WHERE id = ${input.assetId}
+      AND organizationId = ${input.organizationId}
+    FOR UPDATE
+  `;
+
+  return tx.asset.findFirst({
+    where: {
+      id: input.assetId,
+      organizationId: input.organizationId,
+    },
+  });
+}
+
+/**
+ * Publish an uploaded asset and write its audit event in the caller's database
+ * transaction. The asset row is locked before storage accounting so publish and
+ * cleanup always acquire locks in the same order.
+ */
 export async function finalizeUploadedAsset(
   tx: Prisma.TransactionClient,
   input: {
     assetId: string;
     organizationId: string;
-    reservedBytes: bigint;
+    actorUserId: string;
+    audit?: {
+      action: string;
+      metadata?: Prisma.InputJsonValue;
+    };
     actualBytes: bigint;
     sha256: string;
     width?: number | null;
@@ -148,22 +177,18 @@ export async function finalizeUploadedAsset(
     durationMs?: number | null;
   },
 ) {
-  const asset = await tx.asset.findFirst({
-    where: {
-      id: input.assetId,
-      organizationId: input.organizationId,
-      status: "PENDING",
-    },
-  });
-  if (!asset) throw new Error("Pending asset no longer exists.");
+  const asset = await lockAssetRow(tx, input);
+  if (!asset || asset.status !== "PENDING")
+    throw new Error("Pending asset no longer exists.");
 
+  const reservedBytes = asset.byteSize;
   await finalizeAssetStorage(tx, {
     organizationId: input.organizationId,
-    reservedBytes: input.reservedBytes,
+    reservedBytes,
     actualBytes: input.actualBytes,
   });
 
-  return tx.asset.update({
+  const readyAsset = await tx.asset.update({
     where: { id: input.assetId },
     data: {
       status: "READY",
@@ -174,26 +199,48 @@ export async function finalizeUploadedAsset(
       durationMs: input.durationMs ?? null,
     },
   });
+
+  await tx.auditEvent.create({
+    data: {
+      actorUserId: input.actorUserId,
+      organizationId: input.organizationId,
+      action: input.audit?.action ?? "asset.uploaded",
+      targetType: "Asset",
+      targetId: readyAsset.id,
+      metadata:
+        input.audit?.metadata ??
+        ({
+          mediaKind: readyAsset.mediaKind,
+          byteSize: readyAsset.byteSize.toString(),
+        } satisfies Prisma.InputJsonValue),
+    },
+  });
+
+  return readyAsset;
 }
 
+/**
+ * Cancel an upload only while its authoritative Asset row is still PENDING.
+ *
+ * Returns true only when this transaction owns and releases that asset's exact
+ * reservation. Callers may delete the object only after a true result commits.
+ */
 export async function failPendingUpload(
   tx: Prisma.TransactionClient,
   input: {
     assetId: string;
     organizationId: string;
-    reservedBytes: bigint;
   },
-): Promise<void> {
+): Promise<boolean> {
+  const asset = await lockAssetRow(tx, input);
+  if (!asset || asset.status !== "PENDING") return false;
+
   await releaseAssetStorage(tx, {
     organizationId: input.organizationId,
-    reservedBytes: input.reservedBytes,
+    reservedBytes: asset.byteSize,
   });
-  await tx.asset.updateMany({
-    where: {
-      id: input.assetId,
-      organizationId: input.organizationId,
-      status: "PENDING",
-    },
+  await tx.asset.update({
+    where: { id: input.assetId },
     data: {
       status: "DELETED",
       byteSize: 0n,
@@ -201,6 +248,8 @@ export async function failPendingUpload(
       purgeAfter: new Date(),
     },
   });
+
+  return true;
 }
 
 function purgeDate(now = new Date()): Date {
@@ -246,24 +295,111 @@ export async function restoreAssets(
 ): Promise<number> {
   if (input.assetIds.length > MAX_ASSET_BULK_SELECTION)
     throw new Error("Too many assets selected.");
-  const result = await tx.asset.updateMany({
-    where: {
-      id: { in: input.assetIds },
+
+  let restored = 0;
+  const assetIds = [...new Set(input.assetIds)].sort();
+  for (const assetId of assetIds) {
+    const asset = await lockAssetRow(tx, {
+      assetId,
       organizationId: input.organizationId,
-      status: "DELETED",
-    },
-    data: { status: "READY", deletedAt: null, purgeAfter: null },
-  });
-  if (result.count > 0) {
+    });
+    if (!asset || asset.status !== "DELETED") continue;
+
+    await tx.asset.update({
+      where: { id: asset.id },
+      data: { status: "READY", deletedAt: null, purgeAfter: null },
+    });
+    restored += 1;
+  }
+
+  if (restored > 0) {
     await tx.assetStorageUsage.updateMany({
       where: { organizationId: input.organizationId },
       data: {
-        readyAssetCount: { increment: result.count },
+        readyAssetCount: { increment: restored },
         version: { increment: 1 },
       },
     });
   }
-  return result.count;
+  return restored;
+}
+
+/**
+ * Atomically claim expired trash before any bytes are deleted.
+ *
+ * PURGING is intentionally not restorable. A failed object deletion leaves the
+ * row in PURGING so a later maintenance pass can safely retry idempotent
+ * deletes without exposing a partially-deleted asset as READY.
+ */
+export async function claimExpiredAssetForPurge(
+  tx: Prisma.TransactionClient,
+  input: {
+    assetId: string;
+    organizationId: string;
+    now?: Date;
+  },
+) {
+  const asset = await lockAssetRow(tx, input);
+  const now = input.now ?? new Date();
+  if (
+    !asset ||
+    !asset.purgeAfter ||
+    asset.purgeAfter.getTime() > now.getTime() ||
+    (asset.status !== "DELETED" && asset.status !== "PURGING")
+  ) {
+    return null;
+  }
+
+  if (asset.status === "DELETED") {
+    await tx.asset.update({
+      where: { id: asset.id },
+      data: { status: "PURGING" },
+    });
+  }
+
+  const variants = await tx.assetVariant.findMany({
+    where: { assetId: asset.id },
+    select: { objectKey: true },
+  });
+
+  return {
+    id: asset.id,
+    organizationId: asset.organizationId,
+    objectKey: asset.objectKey,
+    byteSize: asset.byteSize,
+    variants,
+  };
+}
+
+/**
+ * Finalize a purge only after every stored object has been deleted.
+ */
+export async function completeAssetPurge(
+  tx: Prisma.TransactionClient,
+  input: { assetId: string; organizationId: string },
+): Promise<boolean> {
+  const asset = await lockAssetRow(tx, input);
+  if (!asset || asset.status !== "PURGING") return false;
+
+  await tx.assetVariant.deleteMany({ where: { assetId: asset.id } });
+  await tx.asset.update({
+    where: { id: asset.id },
+    data: {
+      status: "PURGED",
+      byteSize: 0n,
+      sha256: null,
+      purgeAfter: null,
+    },
+  });
+  await tx.assetStorageUsage.updateMany({
+    where: { organizationId: asset.organizationId },
+    data: {
+      usedBytes: { decrement: asset.byteSize },
+      version: { increment: 1 },
+    },
+  });
+
+  return true;
 }
 
 export async function assignAssets(

@@ -166,6 +166,10 @@ export async function finalizeUploadedAsset(
     assetId: string;
     organizationId: string;
     actorUserId: string;
+    audit?: {
+      action: string;
+      metadata?: Prisma.InputJsonValue;
+    };
     actualBytes: bigint;
     sha256: string;
     width?: number | null;
@@ -200,13 +204,15 @@ export async function finalizeUploadedAsset(
     data: {
       actorUserId: input.actorUserId,
       organizationId: input.organizationId,
-      action: "asset.uploaded",
+      action: input.audit?.action ?? "asset.uploaded",
       targetType: "Asset",
       targetId: readyAsset.id,
-      metadata: {
-        mediaKind: readyAsset.mediaKind,
-        byteSize: readyAsset.byteSize.toString(),
-      },
+      metadata:
+        input.audit?.metadata ??
+        ({
+          mediaKind: readyAsset.mediaKind,
+          byteSize: readyAsset.byteSize.toString(),
+        } satisfies Prisma.InputJsonValue),
     },
   });
 

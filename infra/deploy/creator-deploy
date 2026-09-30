@@ -167,6 +167,14 @@ done
 exec 9>/run/lock/creator-platform-deploy.lock
 flock -n 9 || fail "another deployment is already running"
 
+# Explicit runtime-writable state lives outside immutable releases.
+install -d -o "$runtime_user" -g "$runtime_group" -m 0750 \
+  "$application_root/shared" \
+  "$application_root/.cache" \
+  "$application_root/.cache/next" \
+  "$application_root/.config" \
+  "$application_root/.local/state"
+
 if tar -tzf "$archive_path" | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
   fail "release archive contains an unsafe path"
 fi

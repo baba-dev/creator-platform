@@ -3,10 +3,7 @@ import {
   completeMediaTask,
   recordMediaOutput,
 } from "./media-tasks";
-import {
-  claimExpiredAssetForPurge,
-  completeAssetPurge,
-} from "@aiwa/assets";
+import { claimExpiredAssetForPurge, completeAssetPurge } from "@aiwa/assets";
 import {
   createAssetVariantObjectKey,
   LocalAssetStorage,

@@ -497,3 +497,5 @@ Media worker limits, incident pause/resume and audited preview recovery:
 Media ownership and retries: [Phase B runbook](docs/operations/durable-media-recovery.md).
 
 Worker role separation and host sizing: [Phase C runbook](docs/operations/worker-isolation.md).
+
+Preview states, audited retries and operator diagnostics: [Phase D runbook](docs/operations/media-visibility.md).

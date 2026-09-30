@@ -64,6 +64,7 @@ describe.skipIf(process.env.GENERATION_INTEGRATION_TEST !== "true")(
       });
       await db.mediaCapacity.deleteMany({ where: { id: "native-media-v1" } });
       await db.asset.deleteMany({ where: { organizationId: orgId } });
+      await db.membership.deleteMany({ where: { organizationId: orgId } });
       await db.organization.delete({ where: { id: orgId } });
       await db.user.delete({ where: { id: userId } });
       await db.$disconnect();
@@ -194,6 +195,111 @@ describe.skipIf(process.env.GENERATION_INTEGRATION_TEST !== "true")(
           throw new Error("must not run");
         }),
       ).toBe(false);
+    });
+    it("web retries are tenant checked, race safe, bounded and audited without changing storage", async () => {
+      const task = await makeTask();
+      await db.asset.create({
+        data: {
+          id: task.targetId,
+          organizationId: orgId,
+          status: "READY",
+          mediaKind: "IMAGE",
+          storageProvider: "LOCAL",
+          objectKey: `${prefix}/${task.targetId}.png`,
+          mimeType: "image/png",
+          byteSize: 1n,
+        },
+      });
+      await db.membership.upsert({
+        where: { organizationId_userId: { organizationId: orgId, userId } },
+        create: { organizationId: orgId, userId, role: "ORGANIZATION_OWNER" },
+        update: {},
+      });
+      await db.mediaTask.update({
+        where: { id: task.id },
+        data: { status: "FAILED", attemptCount: 3 },
+      });
+      const request = {
+        actorUserId: userId,
+        expectedCycle: 1,
+        organizationId: orgId,
+        assetId: task.targetId,
+      };
+      await expect(
+        retryMediaTask(task.id, false, {
+          ...request,
+          organizationId: "another-org",
+        }),
+      ).rejects.toThrow("NOT_FOUND");
+      const raced = await Promise.allSettled([
+        retryMediaTask(task.id, false, request),
+        retryMediaTask(task.id, false, request),
+      ]);
+      expect(
+        raced.filter((result) => result.status === "fulfilled"),
+      ).toHaveLength(1);
+      expect(
+        await db.auditEvent.count({
+          where: { targetId: task.id, actorUserId: userId },
+        }),
+      ).toBe(1);
+      expect(
+        (await db.asset.findUniqueOrThrow({ where: { id: task.targetId } }))
+          .byteSize,
+      ).toBe(1n);
+      await db.mediaTask.update({
+        where: { id: task.id },
+        data: { status: "REVIEW" },
+      });
+      await expect(
+        retryMediaTask(task.id, true, { ...request, expectedCycle: 2 }),
+      ).rejects.toThrow("STATE_CHANGED");
+      await db.mediaTask.update({
+        where: { id: task.id },
+        data: { status: "FAILED" },
+      });
+      await retryMediaTask(task.id, false, { ...request, expectedCycle: 2 });
+      await db.mediaTask.update({
+        where: { id: task.id },
+        data: { status: "FAILED" },
+      });
+      await expect(
+        retryMediaTask(task.id, false, { ...request, expectedCycle: 3 }),
+      ).rejects.toThrow("RETRY_LIMIT");
+      expect(
+        (await db.mediaTask.findUniqueOrThrow({ where: { id: task.id } }))
+          .cycle,
+      ).toBe(3);
+      await db.membership.update({
+        where: { organizationId_userId: { organizationId: orgId, userId } },
+        data: { role: "ORGANIZATION_VIEWER" },
+      });
+      const second = await makeTask();
+      await db.asset.create({
+        data: {
+          id: second.targetId,
+          organizationId: orgId,
+          status: "READY",
+          mediaKind: "IMAGE",
+          storageProvider: "LOCAL",
+          objectKey: `${prefix}/${second.targetId}.png`,
+          mimeType: "image/png",
+          byteSize: 1n,
+        },
+      });
+      await db.mediaTask.update({
+        where: { id: second.id },
+        data: { status: "FAILED" },
+      });
+      await expect(
+        retryMediaTask(second.id, false, {
+          ...request,
+          assetId: second.targetId,
+        }),
+      ).rejects.toThrow("NOT_FOUND");
+      expect(
+        await db.auditEvent.count({ where: { targetId: second.id } }),
+      ).toBe(0);
     });
     it("operator revocation fences stale publication and retains abandoned attempts", async () => {
       const task = await makeTask("VIDEO_RENDER");

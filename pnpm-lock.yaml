@@ -172,6 +172,9 @@ importers:
 
   packages/assets:
     dependencies:
+      '@aiwa/authz':
+        specifier: workspace:*
+        version: link:../authz
       '@aiwa/db':
         specifier: workspace:*
         version: link:../db

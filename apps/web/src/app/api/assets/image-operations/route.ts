@@ -180,7 +180,20 @@ export async function GET(request: Request) {
     where: { id: operationId, organizationId, createdById: session.user.id },
     select: { id: true, status: true, outputAssetId: true, errorMessage: true },
   });
+  const task = operation
+    ? await db.mediaTask.findUnique({
+        where: { taskKey: `${operation.id}:IMAGE_EDIT:v1` },
+        select: { status: true },
+      })
+    : null;
+  const processingState =
+    operation && ["PENDING", "PROCESSING"].includes(operation.status)
+      ? (task?.status ?? "PENDING")
+      : operation?.status;
   return operation
-    ? NextResponse.json(operation, { headers: { "Cache-Control": "no-store" } })
+    ? NextResponse.json(
+        { ...operation, processingState },
+        { headers: { "Cache-Control": "no-store" } },
+      )
     : NextResponse.json({ error: "Operation unavailable." }, { status: 404 });
 }

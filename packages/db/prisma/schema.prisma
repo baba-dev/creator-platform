@@ -906,6 +906,7 @@ model MediaTask {
   attempts          MediaTaskAttempt[]
 
   @@index([status, nextAttemptAt, updatedAt])
+  @@index([status, updatedAt])
   @@index([organizationId, createdAt])
 }
 
@@ -923,6 +924,7 @@ model MediaTaskAttempt {
   task            MediaTask @relation(fields: [taskId], references: [id], onDelete: Restrict)
 
   @@unique([taskId, fence])
+  @@index([finishedAt, outcome])
 }
 
 model MediaCapacity {

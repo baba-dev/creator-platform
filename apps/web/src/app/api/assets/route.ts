@@ -1,3 +1,4 @@
+import { loadAssetPreviewStatuses } from "@/lib/asset-preview-status";
 import { db } from "@aiwa/db";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -108,6 +109,7 @@ export async function GET(request: Request) {
       originalFilename: true,
       mediaKind: true,
       sourceType: true,
+      storageProvider: true,
       mimeType: true,
       byteSize: true,
       width: true,
@@ -124,7 +126,9 @@ export async function GET(request: Request) {
       folder: { select: { id: true, name: true } },
       variants: {
         where: {
-          kind: { in: ["THUMBNAIL", "POSTER", "STORYBOARD", "WAVEFORM"] },
+          kind: {
+            in: ["THUMBNAIL", "PREVIEW", "POSTER", "STORYBOARD", "WAVEFORM"],
+          },
         },
         select: {
           id: true,
@@ -147,10 +151,12 @@ export async function GET(request: Request) {
 
   const hasMore = rows.length > input.limit;
   const page = rows.slice(0, input.limit);
+  const previews = await loadAssetPreviewStatuses(input.organizationId, page);
   return NextResponse.json(
     {
       assets: page.map((row) => ({
         ...serializeAsset(row),
+        previews: previews.get(row.id),
         favorite: row.favorites.length > 0,
         tags: row.tagAssignments.map(({ tag }) => tag),
         tagAssignments: undefined,

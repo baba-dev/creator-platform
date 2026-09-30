@@ -50,6 +50,12 @@ const navigation: readonly (AdminNavigationItem & {
     permission: "jobs:read",
   },
   {
+    href: "/admin/media",
+    label: "Media processing",
+    icon: "activity",
+    permission: "jobs:read",
+  },
+  {
     href: "/admin/templates",
     label: "Templates",
     icon: "wand",

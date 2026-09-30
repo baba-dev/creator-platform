@@ -1,3 +1,10 @@
+import { withMediaCapacity } from "@aiwa/assets/media-capacity";
+import sharp from "sharp";
+import {
+  assetJobOptions,
+  canDispatchAssetJob,
+  retainFailedAssetJob,
+} from "./asset-dispatch";
 import { parseServerEnv } from "@aiwa/config";
 import { db } from "@aiwa/db";
 import {
@@ -23,6 +30,8 @@ import { processReasoningJob } from "./reasoning";
 import { reapExpiredRecoveryJobs } from "./reaper";
 
 const env = parseServerEnv();
+sharp.concurrency(env.MEDIA_THREADS);
+sharp.cache({ memory: 32, files: 0, items: 32 });
 const redis = new Redis(env.REDIS_URL, {
   enableReadyCheck: true,
   maxRetriesPerRequest: null,
@@ -169,24 +178,26 @@ const assetQueue = new Queue("asset-ingestion", {
 
 const assetWorker = new Worker(
   "asset-ingestion",
-  async (job) => {
-    if (job.name === "image-edit") {
-      if (typeof job.data.operationId !== "string")
-        throw new Error("Invalid image operation payload");
-      await processImageOperation(job.data.operationId);
-      return;
-    }
-    if (job.name === "video-render") {
-      if (typeof job.data.renderId !== "string")
-        throw new Error("Invalid video render payload");
-      await processVideoRender(job.data.renderId);
-      return;
-    }
-    if (typeof job.data.assetId !== "string")
-      throw new Error("Invalid asset queue payload");
-    await processAssetDerivatives(job.data.assetId);
-  },
-  { connection: redis, prefix: "aiwa", concurrency: 2 },
+  async (job) =>
+    withMediaCapacity(async () => {
+      retainFailedAssetJob(job);
+      if (job.name === "image-edit") {
+        if (typeof job.data.operationId !== "string")
+          throw new Error("Invalid image operation payload");
+        await processImageOperation(job.data.operationId);
+        return;
+      }
+      if (job.name === "video-render") {
+        if (typeof job.data.renderId !== "string")
+          throw new Error("Invalid video render payload");
+        await processVideoRender(job.data.renderId);
+        return;
+      }
+      if (typeof job.data.assetId !== "string")
+        throw new Error("Invalid asset queue payload");
+      await processAssetDerivatives(job.data.assetId);
+    }),
+  { connection: redis, prefix: "aiwa", concurrency: 1, autorun: false },
 );
 
 assetWorker.on("error", () =>
@@ -221,9 +232,33 @@ assetWorker.on("failed", (job, error) => {
   });
 });
 
+let mediaReady = false;
+async function startMediaWorker(): Promise<void> {
+  await assetQueue.setGlobalConcurrency(1);
+  if (isShuttingDown) return;
+  if (!env.MEDIA_PROCESSING_ENABLED) {
+    await assetQueue.pause();
+    log(
+      "info",
+      "Media processing paused; orchestration and mail remain enabled",
+    );
+    return;
+  }
+  await assetQueue.resume();
+  mediaReady = true;
+  void assetWorker.run().catch(() => {
+    mediaReady = false;
+    log("error", "Media worker stopped; queued tasks retained");
+  });
+}
+void startMediaWorker().catch(() =>
+  log("error", "Media worker startup failed; queued tasks retained"),
+);
+
+let assetScanCursor: string | undefined;
 let assetDispatching = false;
 async function dispatchAssets() {
-  if (isShuttingDown || assetDispatching) return;
+  if (isShuttingDown || assetDispatching || !mediaReady) return;
   assetDispatching = true;
   try {
     await purgeExpiredAssets();
@@ -243,21 +278,18 @@ async function dispatchAssets() {
     });
     for (const operation of operations) {
       const jobId = `image-edit-${operation.id}`;
-      const queued = await assetQueue.getJob(jobId);
-      if (queued) {
-        const state = await queued.getState();
-        if (["completed", "failed"].includes(state)) await queued.remove();
-        else continue;
-      }
+      if (
+        !(await canDispatchAssetJob(assetQueue, jobId, () =>
+          failImageOperation(operation.id),
+        ))
+      )
+        continue;
       await assetQueue.add(
         "image-edit",
         { operationId: operation.id },
         {
           jobId,
-          attempts: 3,
-          backoff: { type: "exponential", delay: 5_000 },
-          removeOnComplete: true,
-          removeOnFail: 100,
+          ...assetJobOptions,
         },
       );
     }
@@ -277,27 +309,25 @@ async function dispatchAssets() {
     });
     for (const render of renders) {
       const jobId = `video-render-${render.id}`;
-      const queued = await assetQueue.getJob(jobId);
-      if (queued) {
-        const state = await queued.getState();
-        if (["completed", "failed"].includes(state)) await queued.remove();
-        else continue;
-      }
+      if (
+        !(await canDispatchAssetJob(assetQueue, jobId, () =>
+          failVideoRender(render.id),
+        ))
+      )
+        continue;
       await assetQueue.add(
         "video-render",
         { renderId: render.id },
         {
           jobId,
-          attempts: 3,
-          backoff: { type: "exponential", delay: 5_000 },
-          removeOnComplete: true,
-          removeOnFail: 100,
+          ...assetJobOptions,
         },
       );
     }
     const assets = await db.asset.findMany({
       where: {
         status: "READY",
+        ...(assetScanCursor ? { id: { gt: assetScanCursor } } : {}),
         OR: [
           {
             mediaKind: "IMAGE",
@@ -314,25 +344,19 @@ async function dispatchAssets() {
         ],
       },
       select: { id: true },
-      orderBy: { createdAt: "asc" },
+      orderBy: { id: "asc" },
       take: 100,
     });
+    assetScanCursor =
+      assets.length === 100 ? assets[assets.length - 1]!.id : undefined;
     for (const asset of assets) {
-      const queued = await assetQueue.getJob(asset.id);
-      if (queued) {
-        const state = await queued.getState();
-        if (["completed", "failed"].includes(state)) await queued.remove();
-        else continue;
-      }
+      if (!(await canDispatchAssetJob(assetQueue, asset.id))) continue;
       await assetQueue.add(
         "derive",
         { assetId: asset.id },
         {
           jobId: asset.id,
-          attempts: 3,
-          backoff: { type: "exponential", delay: 5_000 },
-          removeOnComplete: true,
-          removeOnFail: 100,
+          ...assetJobOptions,
         },
       );
     }
@@ -682,4 +706,7 @@ log("info", "worker started", {
   bytePlusConfigured: Boolean(bytePlusProvider),
   nvidiaConfigured: Boolean(nvidiaProvider),
   mailEnabled: env.MAIL_ENABLED,
+  mediaEnabled: env.MEDIA_PROCESSING_ENABLED,
+  mediaConcurrency: 1,
+  mediaThreads: env.MEDIA_THREADS,
 });

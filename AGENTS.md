@@ -51,6 +51,11 @@ These rules apply to every contributor and coding agent.
   assignment mutation must revalidate tenant ownership.
 - Bound bulk asset mutations to 100 IDs per request and keep generated
   provenance immutable during project/folder/tag changes.
+- Keep native worker media operations behind the shared media-capacity gate and
+  asset queue global concurrency limit. Bound FFmpeg decoder, encoder and filter
+  threads. Never delete exhausted asset jobs from automatic dispatchers or evict
+  failed queue records to reset their retry budget; explicit derivative retry
+  must be audited. See `docs/operations/media-containment.md`.
 
 ## Generation templates
 

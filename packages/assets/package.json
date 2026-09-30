@@ -9,7 +9,8 @@
     "./video-edit": "./src/video-edit.ts",
     "./video-captions": "./src/video-captions.ts",
     "./media-probe": "./src/media-probe.ts",
-    "./storage": "./src/storage.ts"
+    "./storage": "./src/storage.ts",
+    "./media-capacity": "./src/media-capacity.ts"
   },
   "dependencies": {
     "@aiwa/db": "workspace:*",

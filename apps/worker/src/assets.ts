@@ -2,7 +2,7 @@ import {
   createAssetVariantObjectKey,
   LocalAssetStorage,
 } from "@aiwa/assets/storage";
-import { parseServerEnv } from "@aiwa/config";
+import { parseServerEnv, parseMediaEnv } from "@aiwa/config";
 import { db, Prisma } from "@aiwa/db";
 import sharp from "sharp";
 import { mediaCommand } from "./video-media";
@@ -119,7 +119,7 @@ export async function processAssetDerivatives(assetId: string): Promise<void> {
         "mjpeg",
         "pipe:1",
       ],
-      15_000,
+      parseMediaEnv().MEDIA_DERIVATIVE_TIMEOUT_MS,
     );
     const poster = await sharp(frame)
       .webp({ quality: 82 })

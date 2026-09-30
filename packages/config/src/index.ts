@@ -38,6 +38,24 @@ const booleanFromString = z
   .default("true")
   .transform((value) => value === "true");
 
+export const mediaEnvSchema = z.object({
+  MEDIA_PROCESSING_ENABLED: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((value) => value === "true"),
+  MEDIA_THREADS: z.coerce.number().int().min(1).max(2).default(1),
+  MEDIA_DERIVATIVE_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .min(15_000)
+    .max(120_000)
+    .default(60_000),
+});
+
+export function parseMediaEnv(environment: NodeJS.ProcessEnv = process.env) {
+  return mediaEnvSchema.parse(environment);
+}
+
 export const serverEnvSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
@@ -79,6 +97,7 @@ export const serverEnvSchema = z.object({
     .min(1)
     .max(10)
     .default(3),
+  ...mediaEnvSchema.shape,
   ASSET_STORAGE_ROOT: optionalAbsolutePath.default(
     "/var/www/creator-platform/shared/assets",
   ),

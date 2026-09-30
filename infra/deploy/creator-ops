@@ -18,6 +18,8 @@ Usage:
   creator-ops promote-owner <email>
   creator-ops seed-templates
   creator-ops byteplus-smoke
+  creator-ops media-status
+  creator-ops media-retry <assetId>
 USAGE
   exit 64
 }
@@ -37,6 +39,13 @@ case "$command_name" in
     ;;
   seed-templates)
     [[ $# -eq 0 ]] || usage
+    ;;
+  media-status)
+    [[ $# -eq 0 ]] || usage
+    ;;
+  media-retry)
+    asset_id="${1:-}"
+    [[ $# -eq 1 && "$asset_id" =~ ^[A-Za-z0-9_-]{1,128}$ ]] || usage
     ;;
   byteplus-smoke)
     [[ $# -eq 0 ]] || usage
@@ -61,6 +70,10 @@ case "$command_name" in
     [[ -f "$release_dir/ops/db/prisma/seed-templates.ts" ]] \
       || fail "template seed command is unavailable"
     ;;
+  media-status|media-retry)
+    [[ -f "$release_dir/apps/worker/dist/media-ops.cjs" ]] \
+      || fail "media operations command is unavailable"
+    ;;
   byteplus-smoke)
     [[ -f "$release_dir/apps/worker/dist/byteplus-smoke.cjs" ]] \
       || fail "BytePlus smoke command is unavailable"
@@ -72,7 +85,7 @@ runuser --preserve-environment -u "$runtime_user" -- \
   "$release_dir" \
   "$environment_file" \
   "$command_name" \
-  "${email:-}" <<'OPERATIONS'
+  "${email:-${asset_id:-}}" <<'OPERATIONS'
 set -Eeuo pipefail
 release_dir="$1"
 environment_file="$2"
@@ -104,6 +117,14 @@ case "$command_name" in
   seed-templates)
     cd "$release_dir/ops/db"
     exec ./node_modules/.bin/tsx prisma/seed-templates.ts
+    ;;
+  media-status)
+    cd "$release_dir"
+    exec /usr/bin/node apps/worker/dist/media-ops.cjs status
+    ;;
+  media-retry)
+    cd "$release_dir"
+    exec /usr/bin/node apps/worker/dist/media-ops.cjs retry "$argument"
     ;;
   byteplus-smoke)
     export BYTEPLUS_SMOKE_OUTPUT_DIR=/var/www/creator-platform/shared/byteplus-smoke

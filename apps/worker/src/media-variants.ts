@@ -1,3 +1,4 @@
+import { parseMediaEnv } from "@aiwa/config";
 import { resolveLocalAssetPath } from "@aiwa/assets/storage";
 import sharp from "sharp";
 import { mediaCommand } from "./video-media";
@@ -28,7 +29,7 @@ export async function videoStoryboard(
       "mjpeg",
       "pipe:1",
     ],
-    30_000,
+    parseMediaEnv().MEDIA_DERIVATIVE_TIMEOUT_MS,
   );
   if (!frame.length) throw new Error("Could not extract video frames.");
   return sharp(frame)
@@ -57,7 +58,7 @@ export async function audioWaveform(storageRoot: string, objectKey: string) {
       "png",
       "pipe:1",
     ],
-    30_000,
+    parseMediaEnv().MEDIA_DERIVATIVE_TIMEOUT_MS,
   );
   if (!frame.length) throw new Error("Could not extract audio waveform.");
   return sharp(frame)

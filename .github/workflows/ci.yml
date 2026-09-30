@@ -74,6 +74,7 @@ jobs:
       - name: Check deployment shell syntax
         run: |
           bash -n infra/deploy/bootstrap-server.sh
+          bash -n infra/deploy/install-control-plane.sh
           bash -n infra/deploy/creator-deploy
           bash -n infra/deploy/creator-ops
           bash -n infra/deploy/package-release.sh

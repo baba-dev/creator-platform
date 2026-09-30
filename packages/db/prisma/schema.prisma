@@ -102,6 +102,7 @@ enum AssetStatus {
   READY
   QUARANTINED
   DELETED
+  PURGING
   PURGED
 }
 

@@ -19,7 +19,9 @@ Usage:
   creator-ops seed-templates
   creator-ops byteplus-smoke
   creator-ops media-status
-  creator-ops media-retry <assetId>
+  creator-ops media-retry <taskId> [--confirm-stopped]
+  creator-ops media-abandon <taskId> --confirm-stopped
+  creator-ops media-recover-capacity --confirm-stopped
 USAGE
   exit 64
 }
@@ -43,9 +45,15 @@ case "$command_name" in
   media-status)
     [[ $# -eq 0 ]] || usage
     ;;
-  media-retry)
+  media-retry|media-abandon)
     asset_id="${1:-}"
-    [[ $# -eq 1 && "$asset_id" =~ ^[A-Za-z0-9_-]{1,128}$ ]] || usage
+    [[ $# -ge 1 && $# -le 2 && "$asset_id" =~ ^[A-Za-z0-9_-]{1,128}$ ]] || usage
+    confirmation="${2:-}"
+    [[ -z "$confirmation" || "$confirmation" == --confirm-stopped ]] || usage
+    [[ "$command_name" != media-abandon || "$confirmation" == --confirm-stopped ]] || usage
+    ;;
+  media-recover-capacity)
+    [[ $# -eq 1 && "$1" == --confirm-stopped ]] || usage
     ;;
   byteplus-smoke)
     [[ $# -eq 0 ]] || usage
@@ -70,7 +78,7 @@ case "$command_name" in
     [[ -f "$release_dir/ops/db/prisma/seed-templates.ts" ]] \
       || fail "template seed command is unavailable"
     ;;
-  media-status|media-retry)
+  media-status|media-retry|media-abandon|media-recover-capacity)
     [[ -f "$release_dir/apps/worker/dist/media-ops.cjs" ]] \
       || fail "media operations command is unavailable"
     ;;
@@ -85,12 +93,13 @@ runuser --preserve-environment -u "$runtime_user" -- \
   "$release_dir" \
   "$environment_file" \
   "$command_name" \
-  "${email:-${asset_id:-}}" <<'OPERATIONS'
+  "${email:-${asset_id:-}}" "${confirmation:-}" <<'OPERATIONS'
 set -Eeuo pipefail
 release_dir="$1"
 environment_file="$2"
 command_name="$3"
 argument="$4"
+confirmation="$5"
 
 while IFS= read -r line || [[ -n "$line" ]]; do
   line="${line%$'\r'}"
@@ -124,7 +133,16 @@ case "$command_name" in
     ;;
   media-retry)
     cd "$release_dir"
+    if [[ -n "$confirmation" ]]; then exec /usr/bin/node apps/worker/dist/media-ops.cjs retry "$argument" "$confirmation"; fi
     exec /usr/bin/node apps/worker/dist/media-ops.cjs retry "$argument"
+    ;;
+  media-abandon)
+    cd "$release_dir"
+    exec /usr/bin/node apps/worker/dist/media-ops.cjs abandon "$argument" --confirm-stopped
+    ;;
+  media-recover-capacity)
+    cd "$release_dir"
+    exec /usr/bin/node apps/worker/dist/media-ops.cjs recover-capacity --confirm-stopped
     ;;
   byteplus-smoke)
     export BYTEPLUS_SMOKE_OUTPUT_DIR=/var/www/creator-platform/shared/byteplus-smoke

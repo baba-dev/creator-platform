@@ -57,6 +57,12 @@ These rules apply to every contributor and coding agent.
   failed queue records to reset their retry budget; explicit derivative retry
   must be audited. See `docs/operations/media-containment.md`.
 
+- MariaDB MediaTask records own retry eligibility. Redis cleanup must never
+  reset budgets. Publish assets and complete their tasks in the same fenced
+  transaction.
+- Expired native capacity requires audited operator recovery after confirming
+  all old processes stopped; never reclaim it automatically.
+
 ## Generation templates
 
 - Templates are an orchestration/configuration layer only; never submit provider

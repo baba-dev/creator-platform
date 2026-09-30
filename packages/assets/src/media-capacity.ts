@@ -2,6 +2,12 @@ import { AsyncLocalStorage } from "node:async_hooks";
 
 // One native media operation at a time in this process, including generation
 // validation. The asset queue also has a Redis global concurrency limit.
+let sharedGate: <T>(operation: () => Promise<T>) => Promise<T> = async (
+  operation,
+) => operation();
+export function configureMediaCapacityGate(gate: typeof sharedGate): void {
+  sharedGate = gate;
+}
 const ownership = new AsyncLocalStorage<boolean>();
 let tail: Promise<void> = Promise.resolve();
 
@@ -17,7 +23,7 @@ export async function withMediaCapacity<T>(
   });
   await previous;
   try {
-    return await ownership.run(true, operation);
+    return await ownership.run(true, () => sharedGate(operation));
   } finally {
     release();
   }

@@ -1,10 +1,15 @@
-import { withMediaCapacity } from "@aiwa/assets/media-capacity";
+import {
+  withMediaCapacity,
+  configureMediaCapacityGate,
+} from "@aiwa/assets/media-capacity";
 import sharp from "sharp";
 import {
-  assetJobOptions,
-  canDispatchAssetJob,
-  retainFailedAssetJob,
-} from "./asset-dispatch";
+  withDatabaseMediaCapacity,
+  runMediaTask,
+  ensureMediaTask,
+  reviewExpiredMediaTasks,
+} from "./media-tasks";
+import { assetJobOptions, retainFailedAssetJob } from "./asset-dispatch";
 import { parseServerEnv } from "@aiwa/config";
 import { db } from "@aiwa/db";
 import {
@@ -23,12 +28,17 @@ import { createBytePlusProvider } from "@aiwa/providers/byteplus";
 import { createNvidiaProvider } from "@aiwa/providers/nvidia";
 import { Queue, Worker } from "bullmq";
 import Redis from "ioredis";
-import { processAssetDerivatives, purgeExpiredAssets } from "./assets";
+import {
+  processAssetDerivatives,
+  purgeExpiredAssets,
+  purgeMediaAttemptOutputs,
+} from "./assets";
 import { failImageOperation, processImageOperation } from "./image-operations";
 import { failVideoRender, processVideoRender } from "./video-renders";
 import { processReasoningJob } from "./reasoning";
 import { reapExpiredRecoveryJobs } from "./reaper";
 
+configureMediaCapacityGate(withDatabaseMediaCapacity);
 const env = parseServerEnv();
 sharp.concurrency(env.MEDIA_THREADS);
 sharp.cache({ memory: 32, files: 0, items: 32 });
@@ -181,21 +191,76 @@ const assetWorker = new Worker(
   async (job) =>
     withMediaCapacity(async () => {
       retainFailedAssetJob(job);
-      if (job.name === "image-edit") {
-        if (typeof job.data.operationId !== "string")
-          throw new Error("Invalid image operation payload");
-        await processImageOperation(job.data.operationId);
+      if (job.name === "media-task" && typeof job.data.taskId === "string") {
+        const task = await db.mediaTask.findUnique({
+          where: { id: job.data.taskId },
+        });
+        if (!task) return;
+        await runMediaTask(task.id, async () => {
+          if (task.kind === "IMAGE_EDIT")
+            await processImageOperation(task.targetId);
+          else if (task.kind === "VIDEO_RENDER")
+            await processVideoRender(task.targetId);
+          else await processAssetDerivatives(task.targetId, task.kind);
+        });
         return;
       }
-      if (job.name === "video-render") {
-        if (typeof job.data.renderId !== "string")
-          throw new Error("Invalid video render payload");
-        await processVideoRender(job.data.renderId);
+      // Legacy delivery can precede discovery; import its previous attempts too.
+      if (
+        job.name === "image-edit" &&
+        typeof job.data.operationId === "string"
+      ) {
+        const operation = await db.imageOperation.findUnique({
+          where: { id: job.data.operationId },
+        });
+        if (!operation) return;
+        const task = await ensureMediaTask({
+          targetId: operation.id,
+          organizationId: operation.organizationId,
+          kind: "IMAGE_EDIT",
+          legacyAttempts: job.attemptsMade,
+        });
+        await runMediaTask(task.id, () => processImageOperation(operation.id));
         return;
       }
-      if (typeof job.data.assetId !== "string")
-        throw new Error("Invalid asset queue payload");
-      await processAssetDerivatives(job.data.assetId);
+      if (
+        job.name === "video-render" &&
+        typeof job.data.renderId === "string"
+      ) {
+        const render = await db.videoRender.findUnique({
+          where: { id: job.data.renderId },
+        });
+        if (!render) return;
+        const task = await ensureMediaTask({
+          targetId: render.id,
+          organizationId: render.organizationId,
+          kind: "VIDEO_RENDER",
+          legacyAttempts: job.attemptsMade,
+        });
+        await runMediaTask(task.id, () => processVideoRender(render.id));
+        return;
+      }
+      if (job.name === "derive" && typeof job.data.assetId === "string") {
+        const asset = await db.asset.findUnique({
+          where: { id: job.data.assetId },
+          include: { variants: true },
+        });
+        if (!asset) return;
+        for (const kind of derivativeKinds(asset.mediaKind)) {
+          if (asset.variants.some((variant) => variant.kind === kind)) continue;
+          const task = await ensureMediaTask({
+            targetId: asset.id,
+            organizationId: asset.organizationId,
+            kind,
+            legacyAttempts: job.attemptsMade,
+          });
+          await runMediaTask(task.id, () =>
+            processAssetDerivatives(asset.id, kind),
+          );
+        }
+        return;
+      }
+      throw new Error("Invalid media queue payload");
     }),
   { connection: redis, prefix: "aiwa", concurrency: 1, autorun: false },
 );
@@ -203,34 +268,37 @@ const assetWorker = new Worker(
 assetWorker.on("error", () =>
   log("error", "Asset ingestion queue connection failed"),
 );
-assetWorker.on("failed", (job, error) => {
-  if (
-    job?.name === "image-edit" &&
-    typeof job.data.operationId === "string" &&
-    job.attemptsMade >= (job.opts.attempts ?? 1)
-  ) {
-    void failImageOperation(job.data.operationId).catch(() =>
-      log("error", "Image operation cleanup failed", {
-        operationId: job.data.operationId,
-      }),
-    );
-  }
-  if (
-    job?.name === "video-render" &&
-    typeof job.data.renderId === "string" &&
-    job.attemptsMade >= (job.opts.attempts ?? 1)
-  ) {
-    void failVideoRender(job.data.renderId).catch(() =>
-      log("error", "Video render cleanup failed", {
-        renderId: job.data.renderId,
-      }),
-    );
-  }
-  log("error", "Asset processing failed", {
-    assetId: job?.data?.assetId,
-    errorName: error.name,
+assetWorker.on("failed", (job) => {
+  log("error", "Media delivery failed; durable state retained", {
+    jobId: job?.id,
   });
 });
+function derivativeKinds(
+  kind: string,
+): ("THUMBNAIL" | "PREVIEW" | "POSTER" | "STORYBOARD" | "WAVEFORM")[] {
+  return kind === "IMAGE"
+    ? ["THUMBNAIL", "PREVIEW"]
+    : kind === "VIDEO"
+      ? ["POSTER", "STORYBOARD"]
+      : kind === "AUDIO"
+        ? ["WAVEFORM"]
+        : [];
+}
+async function importTask(
+  targetId: string,
+  organizationId: string,
+  kind: Parameters<typeof ensureMediaTask>[0]["kind"],
+  legacyId: string,
+) {
+  const legacy = await assetQueue.getJob(legacyId);
+  return ensureMediaTask({
+    targetId,
+    organizationId,
+    kind,
+    legacyAttempts: legacy?.attemptsMade,
+    legacyFailed: legacy ? (await legacy.getState()) === "failed" : false,
+  });
+}
 
 let mediaReady = false;
 async function startMediaWorker(): Promise<void> {
@@ -255,15 +323,21 @@ void startMediaWorker().catch(() =>
   log("error", "Media worker startup failed; queued tasks retained"),
 );
 
+let operationScanCursor: string | undefined;
+let renderScanCursor: string | undefined;
+let cleanupScanCursor: string | undefined;
 let assetScanCursor: string | undefined;
 let assetDispatching = false;
 async function dispatchAssets() {
   if (isShuttingDown || assetDispatching || !mediaReady) return;
   assetDispatching = true;
   try {
+    await reviewExpiredMediaTasks();
+    await purgeMediaAttemptOutputs();
     await purgeExpiredAssets();
     const operations = await db.imageOperation.findMany({
       where: {
+        ...(operationScanCursor ? { id: { gt: operationScanCursor } } : {}),
         OR: [
           { status: "PENDING" },
           {
@@ -272,29 +346,24 @@ async function dispatchAssets() {
           },
         ],
       },
-      select: { id: true },
-      orderBy: { createdAt: "asc" },
+      select: { id: true, organizationId: true },
+      orderBy: { id: "asc" },
       take: 50,
     });
-    for (const operation of operations) {
-      const jobId = `image-edit-${operation.id}`;
-      if (
-        !(await canDispatchAssetJob(assetQueue, jobId, () =>
-          failImageOperation(operation.id),
-        ))
-      )
-        continue;
-      await assetQueue.add(
-        "image-edit",
-        { operationId: operation.id },
-        {
-          jobId,
-          ...assetJobOptions,
-        },
+    operationScanCursor =
+      operations.length === 50
+        ? operations[operations.length - 1]!.id
+        : undefined;
+    for (const operation of operations)
+      await importTask(
+        operation.id,
+        operation.organizationId,
+        "IMAGE_EDIT",
+        `image-edit-${operation.id}`,
       );
-    }
     const renders = await db.videoRender.findMany({
       where: {
+        ...(renderScanCursor ? { id: { gt: renderScanCursor } } : {}),
         OR: [
           { status: "PENDING" },
           {
@@ -303,27 +372,19 @@ async function dispatchAssets() {
           },
         ],
       },
-      select: { id: true },
-      orderBy: { createdAt: "asc" },
+      select: { id: true, organizationId: true },
+      orderBy: { id: "asc" },
       take: 20,
     });
-    for (const render of renders) {
-      const jobId = `video-render-${render.id}`;
-      if (
-        !(await canDispatchAssetJob(assetQueue, jobId, () =>
-          failVideoRender(render.id),
-        ))
-      )
-        continue;
-      await assetQueue.add(
-        "video-render",
-        { renderId: render.id },
-        {
-          jobId,
-          ...assetJobOptions,
-        },
+    renderScanCursor =
+      renders.length === 20 ? renders[renders.length - 1]!.id : undefined;
+    for (const render of renders)
+      await importTask(
+        render.id,
+        render.organizationId,
+        "VIDEO_RENDER",
+        `video-render-${render.id}`,
       );
-    }
     const assets = await db.asset.findMany({
       where: {
         status: "READY",
@@ -331,7 +392,10 @@ async function dispatchAssets() {
         OR: [
           {
             mediaKind: "IMAGE",
-            variants: { none: { kind: "PREVIEW" } },
+            OR: [
+              { variants: { none: { kind: "PREVIEW" } } },
+              { variants: { none: { kind: "THUMBNAIL" } } },
+            ],
           },
           {
             mediaKind: "VIDEO",
@@ -343,22 +407,53 @@ async function dispatchAssets() {
           { mediaKind: "AUDIO", variants: { none: { kind: "WAVEFORM" } } },
         ],
       },
-      select: { id: true },
+      include: { variants: true },
       orderBy: { id: "asc" },
       take: 100,
     });
     assetScanCursor =
       assets.length === 100 ? assets[assets.length - 1]!.id : undefined;
-    for (const asset of assets) {
-      if (!(await canDispatchAssetJob(assetQueue, asset.id))) continue;
+    for (const asset of assets)
+      for (const kind of derivativeKinds(asset.mediaKind)) {
+        if (asset.variants.some((variant) => variant.kind === kind)) continue;
+        await importTask(asset.id, asset.organizationId, kind, asset.id);
+      }
+    const tasks = await db.mediaTask.findMany({
+      where: {
+        status: { in: ["PENDING", "RETRY_WAIT"] },
+        OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: new Date() } }],
+      },
+      orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
+      take: 100,
+    });
+    for (const task of tasks) {
+      const jobId = `media-${task.id}-${task.cycle}-${task.attemptCount}`;
+      const wakeup = await assetQueue.getJob(jobId);
+      if (wakeup) {
+        const state = await wakeup.getState();
+        if (!["completed", "failed"].includes(state)) continue;
+        await wakeup.remove();
+      }
       await assetQueue.add(
-        "derive",
-        { assetId: asset.id },
-        {
-          jobId: asset.id,
-          ...assetJobOptions,
-        },
+        "media-task",
+        { taskId: task.id },
+        { ...assetJobOptions, jobId, attempts: 1 },
       );
+    }
+    const failed = await db.mediaTask.findMany({
+      where: {
+        status: "FAILED",
+        kind: { in: ["IMAGE_EDIT", "VIDEO_RENDER"] },
+        ...(cleanupScanCursor ? { id: { gt: cleanupScanCursor } } : {}),
+      },
+      orderBy: { id: "asc" },
+      take: 100,
+    });
+    cleanupScanCursor =
+      failed.length === 100 ? failed[failed.length - 1]!.id : undefined;
+    for (const task of failed) {
+      if (task.kind === "IMAGE_EDIT") await failImageOperation(task.targetId);
+      else await failVideoRender(task.targetId);
     }
   } catch (error) {
     log("error", "Asset derivative dispatch unavailable", {
@@ -570,8 +665,8 @@ async function dispatchReasoning() {
 
     const jobs = await db.reasoningJob.findMany({
       where: { status: "QUEUED", providerModel: { enabled: true } },
-      select: { id: true },
-      orderBy: { createdAt: "asc" },
+      select: { id: true, organizationId: true },
+      orderBy: { id: "asc" },
       take: 100,
     });
 

@@ -178,7 +178,7 @@ model User {
   twoFactorEnabled       Boolean                  @default(false)
   twoFactors             TwoFactor[]
   notificationPreference NotificationPreference?
-  templateFavorites       TemplateFavorite[]
+  templateFavorites      TemplateFavorite[]
 
   @@index([platformRole, disabledAt])
 }
@@ -405,29 +405,29 @@ model ProviderModel {
 }
 
 model ModelPriceVersion {
-  id                   String           @id @default(cuid())
-  providerModelId      String
-  providerCostMicroUsd BigInt
-  publicationKey      String?          @unique @db.VarChar(36)
-  publicationHash     String?          @db.VarChar(64)
-  usageRates          Json?
+  id                    String           @id @default(cuid())
+  providerModelId       String
+  providerCostMicroUsd  BigInt
+  publicationKey        String?          @unique @db.VarChar(36)
+  publicationHash       String?          @db.VarChar(64)
+  usageRates            Json?
   providerCostBasisNote String?          @db.VarChar(255)
-  videoInputRate720p   BigInt?
-  videoInputRate1080p  BigInt?
-  customerCredits      BigInt
-  fxBaisaNumerator     BigInt
-  fxBaisaDenominator   BigInt
-  targetMarginBps      Int
-  pricingDimension     PricingDimension @default(REQUEST)
-  unitQuantity         Int              @default(1)
-  creditsPerBaisa      BigInt           @default(1)
-  effectiveFrom        DateTime
-  effectiveTo          DateTime?
-  createdById          String
-  createdAt            DateTime         @default(now())
-  providerModel        ProviderModel    @relation(fields: [providerModelId], references: [id], onDelete: Restrict)
-  createdBy            User             @relation("PriceVersionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  generationJobs       GenerationJob[]
+  videoInputRate720p    BigInt?
+  videoInputRate1080p   BigInt?
+  customerCredits       BigInt
+  fxBaisaNumerator      BigInt
+  fxBaisaDenominator    BigInt
+  targetMarginBps       Int
+  pricingDimension      PricingDimension @default(REQUEST)
+  unitQuantity          Int              @default(1)
+  creditsPerBaisa       BigInt           @default(1)
+  effectiveFrom         DateTime
+  effectiveTo           DateTime?
+  createdById           String
+  createdAt             DateTime         @default(now())
+  providerModel         ProviderModel    @relation(fields: [providerModelId], references: [id], onDelete: Restrict)
+  createdBy             User             @relation("PriceVersionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  generationJobs        GenerationJob[]
 
   @@index([providerModelId, effectiveFrom])
   @@index([effectiveFrom, effectiveTo])
@@ -874,4 +874,61 @@ model ReasoningJob {
   @@index([createdById, organizationId, createdAt])
   @@index([status, updatedAt])
   @@index([providerRequestId])
+}
+
+enum MediaTaskStatus {
+  PENDING
+  PROCESSING
+  RETRY_WAIT
+  SUCCEEDED
+  FAILED
+  REVIEW
+}
+
+model MediaTask {
+  id                String             @id @default(cuid())
+  taskKey           String             @unique @db.VarChar(191)
+  targetId          String             @db.VarChar(128)
+  organizationId    String             @db.VarChar(128)
+  kind              String             @db.VarChar(32)
+  processingVersion Int                @default(1)
+  status            MediaTaskStatus    @default(PENDING)
+  cycle             Int                @default(1)
+  attemptCount      Int                @default(0)
+  maxAttempts       Int                @default(3)
+  nextAttemptAt     DateTime?
+  owner             String?            @db.VarChar(64)
+  fence             Int                @default(0)
+  leaseUntil        DateTime?
+  errorCode         String?            @db.VarChar(64)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  attempts          MediaTaskAttempt[]
+
+  @@index([status, nextAttemptAt, updatedAt])
+  @@index([organizationId, createdAt])
+}
+
+model MediaTaskAttempt {
+  id              String    @id @default(cuid())
+  taskId          String
+  cycle           Int
+  number          Int
+  fence           Int
+  startedAt       DateTime  @default(now())
+  finishedAt      DateTime?
+  outcome         String?   @db.VarChar(32)
+  errorCode       String?   @db.VarChar(64)
+  outputObjectKey String?   @db.VarChar(191)
+  task            MediaTask @relation(fields: [taskId], references: [id], onDelete: Restrict)
+
+  @@unique([taskId, fence])
+}
+
+model MediaCapacity {
+  id         String    @id @db.VarChar(64)
+  owner      String?   @db.VarChar(64)
+  fence      Int       @default(0)
+  leaseUntil DateTime?
+  updatedAt  DateTime  @updatedAt
 }

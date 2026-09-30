@@ -232,6 +232,9 @@ export async function purgeExpiredAssets(limit = 50): Promise<number> {
       await storage.delete(claimed.objectKey);
     } catch {
       // Keep PURGING so a later maintenance pass can retry idempotent deletes.
+      console.error("Asset purge deletion failed; retry remains eligible.", {
+        assetId: claimed.id,
+      });
       continue;
     }
 

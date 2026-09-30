@@ -325,7 +325,7 @@ export function ConfirmPaymentForm({
   paymentId,
   amountBaisa,
 }: ConfirmPaymentFormProps) {
-  const [creditsPerBaisa, setCreditsPerBaisa] = useState("1");
+  const creditsPerBaisa = "1";
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
@@ -403,7 +403,7 @@ export function ConfirmPaymentForm({
 
       <div>
         <label className="block text-xs font-semibold text-muted-foreground">
-          Credits per 1 Baisa
+          Fixed denomination: credits per baisa
         </label>
         <div className="mt-1 flex items-center gap-3">
           <input
@@ -412,7 +412,7 @@ export function ConfirmPaymentForm({
             min="1"
             step="1"
             value={creditsPerBaisa}
-            onChange={(e) => setCreditsPerBaisa(e.target.value)}
+            readOnly
             className="w-36 min-h-10 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground tabular-nums focus:border-ring focus:outline-hidden"
           />
           <div className="text-sm text-muted-foreground">

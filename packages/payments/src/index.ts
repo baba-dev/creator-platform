@@ -238,6 +238,14 @@ export async function _confirmPaymentTx(
     throw new InvalidPaymentTransitionError(payment.status, "CONFIRMED");
   }
 
+  // Replays of already-confirmed historical payments remain valid above. New grants
+  // use the same fixed denomination as newly published model prices.
+  if (params.creditsPerBaisa !== 1n)
+    throw new PaymentDomainError(
+      "INVALID_CREDIT_RATE",
+      "The platform denomination is 1 credit per baisa. Record bonuses as promotional grants.",
+    );
+
   if (payment.amountBaisa > MAX_SIGNED_BIGINT / params.creditsPerBaisa) {
     throw new PaymentDomainError(
       "CREDIT_GRANT_OVERFLOW",

@@ -756,8 +756,9 @@ describe("voice processing", () => {
       format: "mp3",
     },
     providerModel: { providerModelId: "seed-tts-2.0" },
-    priceVersion: { providerCostMicroUsd: 30_000n },
+    priceVersion: { providerCostMicroUsd: 30_000n, unitQuantity: 1000 },
     quotedUnits: 1,
+    billableQuantity: 11,
     reservedCredits: 2n,
   };
 
@@ -937,7 +938,7 @@ describe("voice processing", () => {
       ...voiceBase,
       status: "PROCESSING",
       outputPayload: { stored: true, byteSize: 300, sha256 },
-      priceVersion: { providerCostMicroUsd: 30_000n },
+      priceVersion: { providerCostMicroUsd: 30_000n, unitQuantity: 1000 },
     });
     const tx = transaction("PROCESSING", voiceBase);
 
@@ -950,7 +951,7 @@ describe("voice processing", () => {
       expect.objectContaining({
         data: expect.objectContaining({
           status: "SUCCEEDED",
-          actualProviderCostMicroUsd: 30_000n,
+          actualProviderCostMicroUsd: 330n,
         }),
       }),
     );
@@ -1101,4 +1102,100 @@ describe("model disabling emergency stop and pause semantics", () => {
       data: { status: "QUEUED", submittedAt: null },
     });
   });
+});
+
+describe("ordinary token-priced video settlement", () => {
+  const tokenJob = {
+    ...base,
+    requestPayload: {
+      durationSeconds: 5,
+      resolution: "720p",
+      aspectRatio: "16:9",
+    },
+    reservedCredits: 1000n,
+    priceVersion: {
+      providerCostMicroUsd: 10700n,
+      pricingDimension: "TOKEN",
+      fxBaisaNumerator: 769n,
+      fxBaisaDenominator: 2n,
+      targetMarginBps: 2500,
+      creditsPerBaisa: 1n,
+      usageRates: {
+        estimator: "byteplus-video-v1",
+        rates: [
+          {
+            resolution: "720p",
+            workflow: "GENERATE",
+            microUsdPerThousandTokens: "10700",
+          },
+        ],
+      },
+    },
+  };
+  it.each([108000, 500000])(
+    "captures measured usage %i under the disclosed ceiling",
+    async (tokens) => {
+      const p = provider();
+      vi.mocked(p.getJob).mockResolvedValue({
+        status: "succeeded",
+        providerRequestId: "token-video",
+        outputUrls: ["https://provider.invalid/video.mp4"],
+        rawUsage: { completion_tokens: tokens },
+      });
+      mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+        ...tokenJob,
+        status: "PROCESSING",
+        providerRequestId: "token-video",
+      });
+      const tx = transaction("PROCESSING", tokenJob);
+      await processVideoPollJob("job1", p);
+      expect(mocks.capture).toHaveBeenCalledWith(
+        tx,
+        expect.objectContaining({
+          amountCredits: tokens === 108000 ? 594n : 1000n,
+          metadata: {
+            completionTokens: tokens,
+            cappedAtReservation: tokens !== 108000,
+          },
+        }),
+      );
+      expect(tx.generationJob.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            actualProviderCostMicroUsd: tokens === 108000 ? 1155600n : 5350000n,
+            providerCostBasis: "PROVIDER_USAGE",
+            actualUnits: tokens,
+          }),
+        }),
+      );
+    },
+  );
+  it.each([undefined, 0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
+    "holds for review when provider usage is invalid (%s)",
+    async (tokens) => {
+      const p = provider();
+      vi.mocked(p.getJob).mockResolvedValue({
+        status: "succeeded",
+        providerRequestId: "token-video",
+        outputUrls: ["https://provider.invalid/video.mp4"],
+        rawUsage: { completion_tokens: tokens },
+      });
+      mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+        ...tokenJob,
+        status: "PROCESSING",
+        providerRequestId: "token-video",
+      });
+      await processVideoPollJob("job1", p);
+      expect(mocks.capture).not.toHaveBeenCalled();
+      expect(mocks.release).not.toHaveBeenCalled();
+      expect(mocks.db.generationJob.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: "MANUAL_REVIEW",
+            errorCode: "MISSING_PROVIDER_USAGE",
+          }),
+        }),
+      );
+    },
+  );
 });

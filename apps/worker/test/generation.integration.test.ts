@@ -136,8 +136,20 @@ describe.skipIf(!enabled)("generation with MariaDB and Redis", () => {
       data: {
         id: videoPriceId,
         providerModelId: videoModelId,
-        providerCostMicroUsd: 100000n,
-        customerCredits: 50n,
+        providerCostMicroUsd: 1000n,
+        customerCredits: 0n,
+        pricingDimension: "TOKEN",
+        unitQuantity: 1000,
+        usageRates: {
+          estimator: "byteplus-video-v1",
+          rates: [
+            {
+              resolution: "1080p",
+              workflow: "GENERATE",
+              microUsdPerThousandTokens: "1000",
+            },
+          ],
+        },
         fxBaisaNumerator: 769n,
         fxBaisaDenominator: 2n,
         targetMarginBps: 2500,
@@ -272,6 +284,7 @@ describe.skipIf(!enabled)("generation with MariaDB and Redis", () => {
       providerRequestId: "mock-task-id",
       status: "succeeded",
       outputUrls: ["https://fixture.bytepluscdn.com/result.mp4"],
+      rawUsage: { completion_tokens: 243000 },
     });
 
     const provider = {
@@ -300,6 +313,10 @@ describe.skipIf(!enabled)("generation with MariaDB and Redis", () => {
     });
 
     expect(finishedJob.status).toBe("SUCCEEDED");
+    expect(finishedJob.actualUnits).toBe(243000);
+    expect(finishedJob.actualProviderCostMicroUsd).toBe(243000n);
+    expect(finishedJob.chargedCredits).toBe(126n);
+    expect(finishedJob.chargedCredits).toBeLessThan(jobRecord.reservedCredits);
     expect(finishedJob.assets[0]?.status).toBe("READY");
     expect(finishedJob.assets[0]?.mimeType).toBe("video/mp4");
   }, 10000);

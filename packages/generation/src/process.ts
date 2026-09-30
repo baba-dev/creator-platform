@@ -1,3 +1,4 @@
+import { selectUsageRate } from "@aiwa/credits";
 import { captureCreditsForJob, releaseOrRefundCredits } from "@aiwa/credits";
 import { createCreditQuote, videoInputProviderCost } from "@aiwa/credits";
 import { finalizeAssetStorage, releaseAssetStorage } from "@aiwa/assets";
@@ -349,7 +350,7 @@ export async function processVideoPollJob(
 ) {
   const job = await db.generationJob.findUniqueOrThrow({
     where: { id },
-    include: { providerModel: true },
+    include: { providerModel: true, priceVersion: true },
   });
   if (job.status !== "PROCESSING" || !job.providerRequestId) return;
 
@@ -411,8 +412,9 @@ export async function processVideoPollJob(
   const requestPayload = job.requestPayload as Record<string, unknown>;
   const hasReferenceVideo =
     typeof requestPayload.referenceVideoAssetId === "string";
+  const tokenPriced = job.priceVersion.pricingDimension === "TOKEN";
   if (
-    hasReferenceVideo &&
+    (hasReferenceVideo || tokenPriced) &&
     (completionTokens === null || completionTokens === 0)
   ) {
     await db.generationJob.updateMany({
@@ -425,6 +427,13 @@ export async function processVideoPollJob(
       },
     });
     return;
+  }
+
+  if (completionTokens !== null && completionTokens > 0) {
+    await db.generationJob.updateMany({
+      where: { id, status: "PROCESSING" },
+      data: { outputPayload: { providerUsage: { completionTokens } } },
+    });
   }
 
   let stored: Awaited<ReturnType<typeof storeVideo>>;
@@ -447,17 +456,23 @@ export async function processVideoPollJob(
       where: { organizationId: job.organizationId },
     });
     const resolution = requestPayload.resolution === "1080p" ? "1080p" : "720p";
-    const rate =
-      resolution === "1080p"
+    const rate = tokenPriced
+      ? selectUsageRate(
+          current.priceVersion.usageRates,
+          resolution,
+          hasReferenceVideo,
+        )
+      : resolution === "1080p"
         ? current.priceVersion.videoInputRate1080p
         : current.priceVersion.videoInputRate720p;
     if (hasReferenceVideo && !rate)
       throw new Error(
         "The reference-video price snapshot is missing its token rate.",
       );
-    const actualCost = hasReferenceVideo
-      ? videoInputProviderCost(BigInt(completionTokens!), rate!)
-      : null;
+    const actualCost =
+      hasReferenceVideo || tokenPriced
+        ? videoInputProviderCost(BigInt(completionTokens!), rate!)
+        : null;
     const actualQuote =
       actualCost === null
         ? null
@@ -479,7 +494,7 @@ export async function processVideoPollJob(
       jobId: id,
       amountCredits: charge,
       idempotencyKey: `generation-capture-${id}`,
-      ...(hasReferenceVideo
+      ...(hasReferenceVideo || tokenPriced
         ? {
             metadata: {
               completionTokens,
@@ -508,7 +523,11 @@ export async function processVideoPollJob(
       data: {
         status: "SUCCEEDED",
         actualProviderCostMicroUsd: actualCost,
-        actualUnits: current.quotedUnits,
+        providerCostBasis: actualCost === null ? null : "PROVIDER_USAGE",
+        actualUnits:
+          tokenPriced || hasReferenceVideo
+            ? completionTokens
+            : current.quotedUnits,
         completedAt: new Date(),
         outputPayload: {
           stored: true,
@@ -933,6 +952,7 @@ export async function processImageJob(
         actualUnits: successfulCount,
         billableQuantity: successfulCount,
         actualProviderCostMicroUsd,
+        providerCostBasis: "CONFIGURED_RATE",
         completedAt: new Date(),
         outputPayload: {
           stored: true,
@@ -1182,7 +1202,7 @@ async function finalizeVoiceJob(
   job: {
     organizationId: string;
     createdById: string;
-    priceVersion: { providerCostMicroUsd: bigint };
+    priceVersion: { providerCostMicroUsd: bigint; unitQuantity: number };
   },
   stored: { byteSize: bigint; sha256: string },
 ) {
@@ -1219,11 +1239,15 @@ async function finalizeVoiceJob(
       data: {
         status: "SUCCEEDED",
         actualUnits: current.quotedUnits,
+        providerCostBasis: "CONFIGURED_CHARACTERS",
         actualProviderCostMicroUsd:
-          current.quotedUnits === null
+          current.billableQuantity == null
             ? null
-            : job.priceVersion.providerCostMicroUsd *
-              BigInt(current.quotedUnits),
+            : (job.priceVersion.providerCostMicroUsd *
+                BigInt(current.billableQuantity) +
+                BigInt(job.priceVersion.unitQuantity) -
+                1n) /
+              BigInt(job.priceVersion.unitQuantity),
         completedAt: new Date(),
         outputPayload: {
           stored: true,

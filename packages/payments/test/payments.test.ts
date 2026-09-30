@@ -551,19 +551,48 @@ describe("@aiwa/payments", () => {
         organizationId: orgId,
         paymentId: "pay_draft_1",
         confirmedById: userId,
-        creditsPerBaisa: 2n,
+        creditsPerBaisa: 1n,
         idempotencyKey: "idem_confirm_1",
       });
 
       expect(result.payment.status).toBe("CONFIRMED");
-      expect(result.payment.creditsGranted).toBe(4000n); // 2000 * 2
-      expect(result.payment.creditsPerBaisa).toBe(2n);
+      expect(result.payment.creditsGranted).toBe(2000n); // fixed denomination
+      expect(result.payment.creditsPerBaisa).toBe(1n);
       expect(result.ledgerEntry.type).toBe("PAYMENT_GRANT");
-      expect(result.ledgerEntry.amountCredits).toBe(4000n);
-      expect(result.ledgerEntry.balanceAfter).toBe(4500n); // 500 + 4000
+      expect(result.ledgerEntry.amountCredits).toBe(2000n);
+      expect(result.ledgerEntry.balanceAfter).toBe(2500n); // 500 + 2000
 
       const wallet = mock.getWallet("wal_1");
-      expect(wallet?.balanceCache).toBe(4500n);
+      expect(wallet?.balanceCache).toBe(2500n);
+    });
+
+    it("rejects new grants at a different denomination without touching the ledger", async () => {
+      const mock = createMockTx({
+        payments: [
+          {
+            id: "pay_fixed_rate",
+            organizationId: orgId,
+            createdById: userId,
+            method: "CASH",
+            status: "DRAFT",
+            amountBaisa: 2000n,
+            receivedAt: new Date(),
+            idempotencyKey: "fixed-rate",
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ],
+      });
+      await expect(
+        _confirmPaymentTx(mock.tx, {
+          organizationId: orgId,
+          paymentId: "pay_fixed_rate",
+          confirmedById: userId,
+          creditsPerBaisa: 2n,
+          idempotencyKey: "fixed-confirm",
+        }),
+      ).rejects.toThrow("platform denomination");
+      expect(mock.getPayment("pay_fixed_rate")?.status).toBe("DRAFT");
     });
 
     it("confirms a PENDING cheque payment", async () => {
@@ -1221,7 +1250,7 @@ describe("@aiwa/payments", () => {
             createdById: userId,
             method: "CASH",
             status: "DRAFT",
-            amountBaisa: 9_223_372_036_854_775_807n,
+            amountBaisa: 9_223_372_036_854_775_808n,
             receivedAt: new Date(),
             idempotencyKey: "idem_overflow_record",
             createdAt: new Date(),
@@ -1235,7 +1264,7 @@ describe("@aiwa/payments", () => {
           organizationId: orgId,
           paymentId: "pay_overflow",
           confirmedById: userId,
-          creditsPerBaisa: 2n,
+          creditsPerBaisa: 1n,
           idempotencyKey: "idem_overflow_confirm",
         }),
       ).rejects.toThrow(PaymentDomainError);

@@ -1,0 +1,160 @@
+import { requireNonNegativeInteger } from "@aiwa/core";
+
+const MICRO_USD_PER_USD = 1_000_000n;
+const BASIS_POINTS = 10_000n;
+
+export interface ExchangeRateSnapshot {
+  readonly baisaNumerator: bigint;
+  readonly baisaDenominator: bigint;
+}
+
+export interface QuoteInput {
+  readonly providerCostMicroUsd: bigint;
+  readonly exchangeRate: ExchangeRateSnapshot;
+  readonly targetGrossMarginBps: number;
+  readonly creditsPerBaisa: bigint;
+}
+
+export interface CreditQuote {
+  readonly providerCostMicroUsd: bigint;
+  readonly convertedCostBaisa: bigint;
+  readonly customerPriceBaisa: bigint;
+  readonly customerCredits: bigint;
+  readonly creditsPerBaisa: bigint;
+  readonly targetGrossMarginBps: number;
+}
+
+function divideRoundUp(numerator: bigint, denominator: bigint): bigint {
+  if (denominator <= 0n) {
+    throw new RangeError("denominator must be greater than zero");
+  }
+
+  return (numerator + denominator - 1n) / denominator;
+}
+
+export function createCreditQuote(input: QuoteInput): CreditQuote {
+  const providerCostMicroUsd = requireNonNegativeInteger(
+    input.providerCostMicroUsd,
+    "providerCostMicroUsd",
+  );
+  const creditsPerBaisa = requireNonNegativeInteger(
+    input.creditsPerBaisa,
+    "creditsPerBaisa",
+  );
+
+  if (creditsPerBaisa === 0n) {
+    throw new RangeError("creditsPerBaisa must be greater than zero");
+  }
+
+  if (
+    !Number.isInteger(input.targetGrossMarginBps) ||
+    input.targetGrossMarginBps < 0 ||
+    input.targetGrossMarginBps >= Number(BASIS_POINTS)
+  ) {
+    throw new RangeError(
+      "targetGrossMarginBps must be an integer from 0 to 9999",
+    );
+  }
+
+  if (
+    input.exchangeRate.baisaNumerator <= 0n ||
+    input.exchangeRate.baisaDenominator <= 0n
+  )
+    throw new RangeError(
+      "Exchange-rate numerator and denominator must be positive.",
+    );
+  if (providerCostMicroUsd > 9223372036854775807n)
+    throw new RangeError("Provider cost exceeds ledger range.");
+  const convertedCostBaisa = divideRoundUp(
+    providerCostMicroUsd * input.exchangeRate.baisaNumerator,
+    MICRO_USD_PER_USD * input.exchangeRate.baisaDenominator,
+  );
+  const customerPriceBaisa = divideRoundUp(
+    convertedCostBaisa * BASIS_POINTS,
+    BASIS_POINTS - BigInt(input.targetGrossMarginBps),
+  );
+
+  if (customerPriceBaisa * creditsPerBaisa > 9223372036854775807n)
+    throw new RangeError("Customer price exceeds ledger range.");
+
+  return {
+    providerCostMicroUsd,
+    convertedCostBaisa,
+    customerPriceBaisa,
+    customerCredits: customerPriceBaisa * creditsPerBaisa,
+    creditsPerBaisa,
+    targetGrossMarginBps: input.targetGrossMarginBps,
+  };
+}
+
+export const DEFAULT_FX_RATE: ExchangeRateSnapshot = {
+  baisaNumerator: 769n,
+  baisaDenominator: 2n,
+} as const;
+
+export const DEFAULT_CREDITS_PER_BAISA = 1n;
+export const DEFAULT_TARGET_MARGIN_BPS = 2_500;
+
+export interface ModelQuoteParams {
+  readonly providerCostMicroUsd: bigint;
+  readonly units?: number | bigint;
+  readonly exchangeRate?: ExchangeRateSnapshot;
+  readonly targetGrossMarginBps?: number;
+  readonly creditsPerBaisa?: bigint;
+}
+
+export function calculateModelQuote(params: ModelQuoteParams): CreditQuote {
+  const rawUnits = params.units ?? 1n;
+  const units = BigInt(rawUnits);
+  if (units <= 0n) {
+    throw new RangeError("units must be greater than zero");
+  }
+
+  const scaledCost = params.providerCostMicroUsd * units;
+
+  return createCreditQuote({
+    providerCostMicroUsd: scaledCost,
+    exchangeRate: params.exchangeRate ?? DEFAULT_FX_RATE,
+    targetGrossMarginBps:
+      params.targetGrossMarginBps ?? DEFAULT_TARGET_MARGIN_BPS,
+    creditsPerBaisa: params.creditsPerBaisa ?? DEFAULT_CREDITS_PER_BAISA,
+  });
+}
+
+export function countBillableCharacters(text: string): number {
+  if (!text) return 0;
+  return Array.from(text).length;
+}
+
+export function calculateBillableUnits(
+  billableQuantity: number | bigint,
+  unitQuantity: number | bigint = 1,
+): bigint {
+  const quantity = BigInt(billableQuantity);
+  const unit = BigInt(unitQuantity);
+  if (unit <= 0n) {
+    throw new RangeError("unitQuantity must be greater than zero");
+  }
+  if (quantity <= 0n) {
+    return 0n;
+  }
+  return (quantity + unit - 1n) / unit;
+}
+
+export function parseMarginPercent(value: string): number {
+  if (!/^\d{1,2}(?:\.\d{1,2})?$/.test(value))
+    throw new RangeError(
+      "Margin must be 0–99.99% with at most two decimal places.",
+    );
+  const [whole, fraction = ""] = value.split(".");
+  const bps = BigInt(whole!) * 100n + BigInt(fraction.padEnd(2, "0"));
+  if (bps >= 10000n) throw new RangeError("Margin must be below 100%.");
+  return Number(bps);
+}
+
+export function formatMarginPercent(bps: number): string {
+  if (!Number.isSafeInteger(bps) || bps < 0 || bps >= 10000)
+    throw new RangeError("Invalid margin basis points.");
+  const value = BigInt(bps);
+  return `${value / 100n}.${(value % 100n).toString().padStart(2, "0")}`;
+}

@@ -167,6 +167,7 @@ export const pricingDimensionSchema = z.enum([
   "REQUEST",
   "CHARACTER",
   "SECOND",
+  "TOKEN",
 ]);
 export type PricingDimension = z.infer<typeof pricingDimensionSchema>;
 
@@ -178,7 +179,7 @@ export const PRICING_DIMENSIONS_BY_MEDIA_KIND: Record<
   readonly PricingDimension[]
 > = {
   IMAGE: ["REQUEST"],
-  VIDEO: ["SECOND", "REQUEST"],
+  VIDEO: ["SECOND", "REQUEST", "TOKEN"],
   VOICE: ["CHARACTER", "REQUEST"],
   REASONING: ["REQUEST"],
 } as const;
@@ -205,7 +206,40 @@ export function assertPricingDimensionMatchesMediaKind(
   }
 }
 
+export const usageRatesSchema = z
+  .object({
+    estimator: z.literal("byteplus-video-v1"),
+    rates: z
+      .array(
+        z
+          .object({
+            resolution: z.enum(["480p", "720p", "1080p", "4K"]),
+            workflow: z.enum(["GENERATE", "VIDEO_INPUT"]),
+            microUsdPerThousandTokens: z
+              .string()
+              .regex(/^\d{1,19}$/)
+              .refine(
+                (value) =>
+                  BigInt(value) > 0n && BigInt(value) <= MAX_SIGNED_BIGINT,
+              ),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(8),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      new Set(value.rates.map((row) => row.resolution + ":" + row.workflow))
+        .size === value.rates.length,
+    "Duplicate rate selector.",
+  );
+
 export const publishPriceVersionSchema = z.object({
+  idempotencyKey: z.uuid().optional(),
+  usageRates: usageRatesSchema.optional(),
+  providerCostBasisNote: z.string().trim().max(255).optional(),
   providerCostMicroUsd: z
     .union([z.bigint(), z.string().regex(/^\d+$/).transform(BigInt)])
     .pipe(z.bigint().positive().max(MAX_SIGNED_BIGINT)),
@@ -237,7 +271,7 @@ export const publishPriceVersionSchema = z.object({
 export const quoteRequestSchema = z.object({
   organizationId: cuidSchema,
   modelId: z.string().trim().min(1).max(128),
-  units: z.coerce.number().int().positive().default(1),
+  units: z.coerce.number().int().positive().max(15).default(1),
   billableQuantity: z.coerce
     .number()
     .int()
@@ -245,7 +279,23 @@ export const quoteRequestSchema = z.object({
     .max(1_000_000)
     .optional(),
   text: z.string().max(4096).optional(),
-  durationSeconds: z.coerce.number().int().min(1).max(60).optional(),
+  durationSeconds: z.coerce.number().int().min(4).max(30).optional(),
+  aspectRatio: z
+    .enum([
+      "1:1",
+      "16:9",
+      "9:16",
+      "4:3",
+      "3:4",
+      "3:2",
+      "2:3",
+      "21:9",
+      "adaptive",
+    ])
+    .optional(),
+  referenceAssetIds: z.array(cuidSchema).max(14).default([]),
+  firstFrameAssetId: cuidSchema.optional(),
+  lastFrameAssetId: cuidSchema.optional(),
   resolution: z.enum(["480p", "720p", "1080p", "2K", "4K"]).optional(),
   generateAudio: z.boolean().optional(),
   referenceVideoAssetId: cuidSchema.optional(),

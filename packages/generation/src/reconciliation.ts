@@ -1,3 +1,8 @@
+import {
+  quoteSnapshotCost,
+  selectUsageRate,
+  videoInputProviderCost,
+} from "@aiwa/credits";
 import { createHash } from "node:crypto";
 import { captureCreditsForJob, releaseOrRefundCredits } from "@aiwa/credits";
 import { db, type Prisma } from "@aiwa/db";
@@ -243,17 +248,7 @@ export async function getJobReconciliationDetails(jobId: string) {
           mediaKind: true,
         },
       },
-      priceVersion: {
-        select: {
-          id: true,
-          providerCostMicroUsd: true,
-          customerCredits: true,
-          targetMarginBps: true,
-          pricingDimension: true,
-          unitQuantity: true,
-          creditsPerBaisa: true,
-        },
-      },
+      priceVersion: true,
       assets: {
         orderBy: { createdAt: "desc" },
         select: {
@@ -478,6 +473,7 @@ export async function reconcileProviderOutcome(
     }
     if (params.actualProviderCostMicroUsd !== undefined) {
       updateData.actualProviderCostMicroUsd = params.actualProviderCostMicroUsd;
+      updateData.providerCostBasis = "MANUAL_RECONCILIATION";
     }
     if (
       job.status === "MANUAL_REVIEW" &&
@@ -701,6 +697,22 @@ export async function recoverGeneratedOutput(
   }
 
   const mediaKind = job.providerModel.mediaKind;
+  const oldOutput =
+    job.outputPayload &&
+    typeof job.outputPayload === "object" &&
+    !Array.isArray(job.outputPayload)
+      ? (job.outputPayload as Record<string, unknown>)
+      : {};
+  const oldUsage =
+    oldOutput.providerUsage && typeof oldOutput.providerUsage === "object"
+      ? (oldOutput.providerUsage as Record<string, unknown>)
+      : {};
+  let recoveredCompletionTokens =
+    typeof oldUsage.completionTokens === "number" &&
+    Number.isSafeInteger(oldUsage.completionTokens) &&
+    oldUsage.completionTokens > 0
+      ? oldUsage.completionTokens
+      : null;
   let outputUrl: string | undefined = params.outputUrl;
   let bytes: Buffer;
   let objectKey: string;
@@ -763,6 +775,13 @@ export async function recoverGeneratedOutput(
             providerJob.outputUrls?.[0]
           ) {
             outputUrl = providerJob.outputUrls[0];
+            const tokens = providerJob.rawUsage?.completion_tokens;
+            if (
+              typeof tokens === "number" &&
+              Number.isSafeInteger(tokens) &&
+              tokens > 0
+            )
+              recoveredCompletionTokens = tokens;
           }
         } catch {
           // An operator may still supply a verified provider output URL.
@@ -812,6 +831,7 @@ export async function recoverGeneratedOutput(
       await tx.$queryRaw`SELECT id FROM GenerationJob WHERE id = ${params.jobId} FOR UPDATE`;
       const current = await tx.generationJob.findUniqueOrThrow({
         where: { id: params.jobId },
+        include: { priceVersion: true },
       });
 
       const existing = await findResolutionAudit(
@@ -868,6 +888,55 @@ export async function recoverGeneratedOutput(
         );
       }
 
+      const requestPayload = current.requestPayload as Record<string, unknown>;
+      const measuredVideo =
+        mediaKind === "VIDEO" &&
+        (current.priceVersion?.pricingDimension === "TOKEN" ||
+          typeof requestPayload.referenceVideoAssetId === "string");
+      let recoveredCost: bigint | null = null;
+      let charge = current.reservedCredits;
+      if (measuredVideo) {
+        if (recoveredCompletionTokens !== null) {
+          const resolution =
+            requestPayload.resolution === "1080p" ? "1080p" : "720p";
+          const rate =
+            current.priceVersion.pricingDimension === "TOKEN"
+              ? selectUsageRate(
+                  current.priceVersion.usageRates,
+                  resolution,
+                  typeof requestPayload.referenceVideoAssetId === "string",
+                )
+              : resolution === "1080p"
+                ? current.priceVersion.videoInputRate1080p
+                : current.priceVersion.videoInputRate720p;
+          if (!rate)
+            throw new JobReconciliationError(
+              "MISSING_PRICE_RATE",
+              "Video token rate is missing from the job snapshot.",
+              409,
+            );
+          recoveredCost = videoInputProviderCost(
+            BigInt(recoveredCompletionTokens),
+            rate,
+          );
+        } else if (
+          current.providerCostBasis === "MANUAL_RECONCILIATION" &&
+          current.actualProviderCostMicroUsd !== null
+        ) {
+          recoveredCost = current.actualProviderCostMicroUsd;
+        } else
+          throw new JobReconciliationError(
+            "MISSING_PROVIDER_USAGE",
+            "Reconcile provider usage or cost before capturing a token-priced video.",
+            409,
+          );
+        const actual = quoteSnapshotCost(
+          current.priceVersion,
+          recoveredCost,
+        ).customerCredits;
+        charge = actual < charge ? actual : charge;
+      }
+
       let stored: { byteSize: bigint; sha256: string };
       if (mediaKind === "IMAGE") {
         stored = await storeImage(objectKey, bytes);
@@ -885,7 +954,7 @@ export async function recoverGeneratedOutput(
       await captureCreditsForJob(tx, {
         walletId: wallet.id,
         jobId: current.id,
-        amountCredits: current.reservedCredits,
+        amountCredits: charge,
         idempotencyKey: "generation-capture-" + current.id,
       });
 
@@ -909,6 +978,16 @@ export async function recoverGeneratedOutput(
         where: { id: current.id },
         data: {
           status: "SUCCEEDED",
+          ...(recoveredCost === null
+            ? {}
+            : {
+                actualProviderCostMicroUsd: recoveredCost,
+                providerCostBasis:
+                  recoveredCompletionTokens === null
+                    ? "MANUAL_RECONCILIATION"
+                    : "PROVIDER_USAGE",
+                actualUnits: recoveredCompletionTokens,
+              }),
           completedAt: new Date(),
           outputPayload:
             mediaKind === "VOICE"
@@ -917,7 +996,16 @@ export async function recoverGeneratedOutput(
                   byteSize: Number(stored.byteSize),
                   sha256: stored.sha256,
                 }
-              : { stored: true },
+              : {
+                  stored: true,
+                  ...(recoveredCompletionTokens === null
+                    ? {}
+                    : {
+                        providerUsage: {
+                          completionTokens: recoveredCompletionTokens,
+                        },
+                      }),
+                },
           errorCode: null,
           errorMessage: null,
         },

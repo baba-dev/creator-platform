@@ -1,11 +1,11 @@
 import { hasOrganizationPermission, hasPlatformPermission } from "@aiwa/authz";
 import {
-  calculateBillableUnits,
-  calculateVideoPricing,
-  quoteVideoInputReservation,
-  countBillableCharacters,
-  createCreditQuote,
-} from "@aiwa/credits";
+  estimateAuthorizedGeneration,
+  QuoteValidationError,
+  issueGenerationQuote,
+  quoteParameters,
+} from "@aiwa/generation";
+import { formatBaisa } from "@/lib/format-baisa";
 import { db } from "@aiwa/db";
 import { checkMemberSpendingBudget } from "@aiwa/organizations";
 import { quoteRequestSchema } from "@aiwa/validation";
@@ -46,17 +46,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
-  const {
-    organizationId,
-    modelId,
-    units,
-    billableQuantity,
-    text,
-    durationSeconds,
-    resolution,
-    generateAudio,
-    referenceVideoAssetId,
-  } = parsed.data;
+  const { organizationId, modelId, referenceVideoAssetId } = parsed.data;
 
   const membership = await db.membership.findUnique({
     where: {
@@ -134,213 +124,135 @@ export async function POST(request: Request): Promise<NextResponse> {
       { status: 400 },
     );
 
-  let effectiveBillableQuantity: number | undefined;
-  let effectiveUnits: number;
-  let quote: ReturnType<typeof createCreditQuote>;
-
-  if (
-    model.mediaKind === "VIDEO" ||
-    activePriceVersion.pricingDimension === "SECOND"
-  ) {
-    if (
-      model.mediaKind !== "VIDEO" ||
-      (activePriceVersion.pricingDimension !== "SECOND" &&
-        activePriceVersion.pricingDimension !== "REQUEST")
-    ) {
-      return NextResponse.json(
-        { error: "Model has an incompatible video pricing configuration." },
-        { status: 409 },
-      );
-    }
-    if (
-      generateAudio === true &&
-      (!(model.capabilities && typeof model.capabilities === "object") ||
-        Array.isArray(model.capabilities) ||
-        (model.capabilities as Record<string, unknown>).generateAudio !== true)
-    ) {
-      return NextResponse.json(
-        { error: "Audio generation is not supported by this model." },
-        { status: 400 },
-      );
-    }
-    const duration =
-      durationSeconds ??
-      (activePriceVersion.pricingDimension === "SECOND"
-        ? activePriceVersion.unitQuantity
-        : 5);
-    const videoPricing = calculateVideoPricing({
-      providerCostMicroUsd: activePriceVersion.providerCostMicroUsd,
-      durationSeconds: duration,
-      resolution,
-      generateAudio,
-      pricingDimension: activePriceVersion.pricingDimension as
-        "SECOND" | "REQUEST",
-      unitQuantity: activePriceVersion.unitQuantity,
-      exchangeRate: {
-        baisaNumerator: activePriceVersion.fxBaisaNumerator,
-        baisaDenominator: activePriceVersion.fxBaisaDenominator,
+  let estimate: Awaited<ReturnType<typeof estimateAuthorizedGeneration>>;
+  try {
+    estimate = await estimateAuthorizedGeneration(
+      model,
+      activePriceVersion,
+      parsed.data,
+      organizationId,
+      session.user.id,
+    );
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : "Quote is unavailable.",
       },
-      targetGrossMarginBps: activePriceVersion.targetMarginBps,
-      creditsPerBaisa: activePriceVersion.creditsPerBaisa,
-    });
-    effectiveBillableQuantity = duration;
-    effectiveUnits = Number(videoPricing.durationUnits);
-    quote = videoPricing.quote;
-    if (referenceVideoAssetId) {
-      if (
-        model.mediaKind !== "VIDEO" ||
-        !(
-          model.capabilities &&
-          typeof model.capabilities === "object" &&
-          !Array.isArray(model.capabilities) &&
-          (model.capabilities as Record<string, unknown>).referenceVideo ===
-            true
-        )
-      )
-        return NextResponse.json(
-          { error: "Video references are not supported by this model." },
-          { status: 400 },
-        );
-      const source = await db.asset.findFirst({
-        where: {
-          id: referenceVideoAssetId,
-          organizationId,
-          mediaKind: "VIDEO",
-          status: "READY",
-          storageProvider: "LOCAL",
-          mimeType: "video/mp4",
-          OR: [
-            { purpose: "GENERAL" },
-            { purpose: "REFERENCE_INPUT", storageOwnerUserId: session.user.id },
-          ],
-        },
-        select: {
-          durationMs: true,
-          width: true,
-          height: true,
-          byteSize: true,
-        },
-      });
-      const rate =
-        resolution === "1080p"
-          ? activePriceVersion.videoInputRate1080p
-          : activePriceVersion.videoInputRate720p;
-      if (
-        !source?.durationMs ||
-        source.durationMs < 2_000 ||
-        source.durationMs > 30_000 ||
-        source.width === null ||
-        source.height === null ||
-        source.width < 300 ||
-        source.height < 300 ||
-        source.width * source.height < 407_696 ||
-        source.width * source.height > 8_295_044 ||
-        source.width / source.height < 0.4 ||
-        source.width / source.height > 2.5 ||
-        source.byteSize > 100_000_000n
-      )
-        return NextResponse.json(
-          {
-            error:
-              "Reference video is unavailable or outside the duration limit.",
-          },
-          { status: 400 },
-        );
-      if (!rate)
-        return NextResponse.json(
-          { error: "Video-input pricing is unavailable for this model." },
-          { status: 409 },
-        );
-      quote = quoteVideoInputReservation({
-        inputDurationMs: source.durationMs,
-        resolution: resolution === "1080p" ? "1080p" : "720p",
-        rateMicroUsdPerThousandTokens: rate,
-        exchangeRate: {
-          baisaNumerator: activePriceVersion.fxBaisaNumerator,
-          baisaDenominator: activePriceVersion.fxBaisaDenominator,
-        },
-        targetGrossMarginBps: activePriceVersion.targetMarginBps,
-        creditsPerBaisa: activePriceVersion.creditsPerBaisa,
-      });
-    }
-  } else {
-    effectiveBillableQuantity =
-      activePriceVersion.pricingDimension === "CHARACTER" && text !== undefined
-        ? countBillableCharacters(text)
-        : billableQuantity;
-    if (
-      activePriceVersion.pricingDimension === "CHARACTER" &&
-      effectiveBillableQuantity === undefined
-    ) {
-      return NextResponse.json(
-        { error: "Character-priced models require text or billableQuantity." },
-        { status: 400 },
-      );
-    }
-    effectiveUnits =
-      activePriceVersion.pricingDimension === "CHARACTER"
-        ? Number(
-            calculateBillableUnits(
-              BigInt(effectiveBillableQuantity!),
-              BigInt(activePriceVersion.unitQuantity),
-            ),
-          )
-        : units;
-
-    const scaledProviderCostMicroUsd =
-      activePriceVersion.providerCostMicroUsd * BigInt(effectiveUnits);
-
-    quote = createCreditQuote({
-      providerCostMicroUsd: scaledProviderCostMicroUsd,
-      exchangeRate: {
-        baisaNumerator: activePriceVersion.fxBaisaNumerator,
-        baisaDenominator: activePriceVersion.fxBaisaDenominator,
-      },
-      targetGrossMarginBps: activePriceVersion.targetMarginBps,
-      creditsPerBaisa: activePriceVersion.creditsPerBaisa,
-    });
+      { status: error instanceof QuoteValidationError ? error.status : 409 },
+    );
   }
-
   const budget = await checkMemberSpendingBudget({
     organizationId,
     userId: session.user.id,
-    proposedCredits: quote.customerCredits,
+    proposedCredits: estimate.reservation.customerCredits,
     date: now,
   });
-
-  const canViewCommercialPricing = hasPlatformPermission(
+  const wallet = await db.wallet.findUnique({
+    where: { organizationId },
+    select: { balanceCache: true },
+  });
+  const available = wallet?.balanceCache ?? 0n;
+  const reservation = estimate.reservation;
+  const signedQuote = issueGenerationQuote(
+    {
+      organizationId,
+      userId: session.user.id,
+      modelId: model.id,
+      priceVersionId: activePriceVersion.id,
+      parameters: quoteParameters(model.mediaKind, parsed.data),
+    },
+    reservation.customerCredits,
+    now,
+  );
+  const commercial = hasPlatformPermission(
     session.user.platformRole,
     "payments:read",
   );
-
-  return NextResponse.json({
-    quote: {
-      modelId: model.id,
-      providerModelId: model.providerModelId,
-      displayName: model.displayName,
-      mediaKind: model.mediaKind,
-      priceVersionId: activePriceVersion.id,
-      pricingDimension: activePriceVersion.pricingDimension,
-      unitQuantity: activePriceVersion.unitQuantity?.toString() ?? null,
-      units: effectiveUnits,
-      billableQuantity: effectiveBillableQuantity ?? null,
-      customerPriceBaisa: quote.customerPriceBaisa.toString(),
-      customerCredits: quote.customerCredits.toString(),
-      creditsPerBaisa: activePriceVersion.creditsPerBaisa.toString(),
-      ...(canViewCommercialPricing
-        ? {
-            providerCostMicroUsd: quote.providerCostMicroUsd.toString(),
-            convertedCostBaisa: quote.convertedCostBaisa.toString(),
-            targetGrossMarginBps: quote.targetGrossMarginBps,
-          }
-        : {}),
+  return NextResponse.json(
+    {
+      quote: {
+        ...signedQuote,
+        createdAt: now.toISOString(),
+        currency: "OMR",
+        modelId: model.id,
+        providerModelId: model.providerModelId,
+        displayName: model.displayName,
+        mediaKind: model.mediaKind,
+        priceVersionId: activePriceVersion.id,
+        pricingDimension: activePriceVersion.pricingDimension,
+        unitQuantity: activePriceVersion.unitQuantity.toString(),
+        units: estimate.units,
+        billableQuantity: estimate.billableQuantity,
+        // Legacy fields remain reservation-based so existing clients do not under-reserve.
+        customerPriceBaisa: reservation.customerPriceBaisa.toString(),
+        customerCredits: reservation.customerCredits.toString(),
+        creditsPerBaisa: activePriceVersion.creditsPerBaisa.toString(),
+        estimatedCredits: estimate.quote.customerCredits.toString(),
+        estimatedPriceBaisa: estimate.quote.customerPriceBaisa.toString(),
+        estimatedOmr: formatBaisa(estimate.quote.customerPriceBaisa),
+        reservationCredits: reservation.customerCredits.toString(),
+        maximumChargeCredits: reservation.customerCredits.toString(),
+        maximumChargeBaisa: reservation.customerPriceBaisa.toString(),
+        maximumChargeOmr: formatBaisa(reservation.customerPriceBaisa),
+        estimatedUsage: {
+          unit:
+            estimate.estimatedTokens === null
+              ? model.mediaKind === "VOICE"
+                ? "CHARACTER"
+                : "IMAGE"
+              : "COMPLETION_TOKEN",
+          quantity:
+            estimate.estimatedTokens?.toString() ??
+            estimate.billableQuantity.toString(),
+          isEstimate: estimate.estimatedTokens !== null,
+        },
+        settlement: estimate.settlement,
+        chargeRangeCredits: {
+          minimum:
+            estimate.settlement === "ACTUAL_USAGE" ||
+            model.mediaKind === "IMAGE"
+              ? "0"
+              : estimate.quote.customerCredits.toString(),
+          maximum: reservation.customerCredits.toString(),
+        },
+        estimationPolicy:
+          activePriceVersion.pricingDimension === "TOKEN"
+            ? "byteplus-video-v1"
+            : "configured-unit-v1",
+        confidence:
+          estimate.estimatedTokens === null ? "FIXED_QUOTE" : "ESTIMATE",
+        roundingPolicy: "PER_IMAGE_OR_JOB_BAISA_CEIL_V1",
+        ...(commercial
+          ? {
+              providerCostMicroUsd:
+                estimate.quote.providerCostMicroUsd.toString(),
+              reservationProviderCostMicroUsd:
+                reservation.providerCostMicroUsd.toString(),
+              convertedCostBaisa: estimate.quote.convertedCostBaisa.toString(),
+              targetGrossMarginBps: activePriceVersion.targetMarginBps,
+              costBasis:
+                estimate.estimatedTokens === null
+                  ? "CONFIGURED_RATE"
+                  : "ESTIMATED_TOKENS",
+              providerCostBasisNote: activePriceVersion.providerCostBasisNote,
+            }
+          : {}),
+      },
+      wallet: {
+        availableCredits: available.toString(),
+        canAfford: available >= reservation.customerCredits,
+        balanceAfterReservationCredits: (
+          available - reservation.customerCredits
+        ).toString(),
+      },
+      budget: {
+        monthlyCapCredits: budget.monthlyCapCredits?.toString() ?? null,
+        currentMonthSpentCredits: budget.currentMonthSpentCredits.toString(),
+        proposedCredits: budget.proposedCredits.toString(),
+        canSpend: budget.canSpend,
+        remainingCredits: budget.remainingCredits?.toString() ?? null,
+      },
     },
-    budget: {
-      monthlyCapCredits: budget.monthlyCapCredits?.toString() ?? null,
-      currentMonthSpentCredits: budget.currentMonthSpentCredits.toString(),
-      proposedCredits: budget.proposedCredits.toString(),
-      canSpend: budget.canSpend,
-      remainingCredits: budget.remainingCredits?.toString() ?? null,
-    },
-  });
+    { headers: { "Cache-Control": "no-store" } },
+  );
 }

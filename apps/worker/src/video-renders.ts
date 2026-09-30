@@ -1,9 +1,19 @@
+import {
+  assertMediaOwnership,
+  completeMediaTask,
+  recordMediaOutput,
+  MediaPermanentFailure,
+} from "./media-tasks";
 import { finalizeAssetStorage, releaseAssetStorage } from "@aiwa/assets";
 import {
   videoEditDocumentSchema,
   videoEditAssetIds,
 } from "@aiwa/assets/video-edit";
-import { LocalAssetStorage, resolveLocalAssetPath } from "@aiwa/assets/storage";
+import {
+  createAssetObjectKey,
+  LocalAssetStorage,
+  resolveLocalAssetPath,
+} from "@aiwa/assets/storage";
 import { parseServerEnv } from "@aiwa/config";
 import { db } from "@aiwa/db";
 import { renderVideo } from "./video-media";
@@ -25,7 +35,7 @@ export async function processVideoRender(id: string): Promise<void> {
     ids.length !== job.inputs.length ||
     ids.some((assetId) => !job.inputs.some((item) => item.assetId === assetId))
   )
-    throw new Error("Render inputs changed.");
+    throw new MediaPermanentFailure();
   const paths = new Map<string, string>();
   for (const input of job.inputs) {
     const asset = input.asset;
@@ -34,7 +44,7 @@ export async function processVideoRender(id: string): Promise<void> {
       asset.status !== "READY" ||
       asset.storageProvider !== "LOCAL"
     )
-      throw new Error("Render source unavailable.");
+      throw new MediaPermanentFailure();
     paths.set(asset.id, resolveLocalAssetPath(root, asset.objectKey));
   }
   await db.videoRender.update({
@@ -42,51 +52,64 @@ export async function processVideoRender(id: string): Promise<void> {
     data: { status: "PROCESSING", processingAt: new Date() },
   });
   const output = await renderVideo(document, paths);
-  const stored = await storage.put(job.outputAsset.objectKey, output.bytes);
-  await db.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM VideoRender WHERE id = ${id} FOR UPDATE`;
-    const current = await tx.videoRender.findUniqueOrThrow({
-      where: { id },
-      include: { outputAsset: true },
-    });
-    if (current.status === "SUCCEEDED") return;
-    if (current.status === "FAILED" || current.outputAsset.status !== "PENDING")
-      throw new Error("Render output state changed.");
-    await finalizeAssetStorage(tx, {
-      organizationId: current.organizationId,
-      reservedBytes: current.outputAsset.byteSize,
-      actualBytes: stored.byteSize,
-    });
-    await tx.asset.update({
-      where: { id: current.outputAssetId },
-      data: {
-        status: "READY",
-        byteSize: stored.byteSize,
-        sha256: stored.sha256,
-        width: output.width,
-        height: output.height,
-        durationMs: output.durationMs,
-      },
-    });
-    await tx.videoRender.update({
-      where: { id },
-      data: {
-        status: "SUCCEEDED",
-        completedAt: new Date(),
-        errorMessage: null,
-      },
-    });
-    await tx.auditEvent.create({
-      data: {
-        actorUserId: current.createdById,
+  const objectKey = createAssetObjectKey(job.organizationId, "mp4");
+  await recordMediaOutput(objectKey);
+  const stored = await storage.put(objectKey, output.bytes);
+  try {
+    await db.$transaction(async (tx) => {
+      await assertMediaOwnership(tx);
+      await tx.$queryRaw`SELECT id FROM VideoRender WHERE id = ${id} FOR UPDATE`;
+      const current = await tx.videoRender.findUniqueOrThrow({
+        where: { id },
+        include: { outputAsset: true },
+      });
+      if (current.status === "SUCCEEDED") return;
+      if (
+        current.status === "FAILED" ||
+        current.outputAsset.status !== "PENDING"
+      )
+        throw new Error("Render output state changed.");
+      await finalizeAssetStorage(tx, {
         organizationId: current.organizationId,
-        action: "asset.video_rendered",
-        targetType: "Asset",
-        targetId: current.outputAssetId,
-        metadata: { editId: current.editId, revision: current.revision },
-      },
+        reservedBytes: current.outputAsset.byteSize,
+        actualBytes: stored.byteSize,
+      });
+      await tx.asset.update({
+        where: { id: current.outputAssetId },
+        data: {
+          objectKey,
+          status: "READY",
+          byteSize: stored.byteSize,
+          sha256: stored.sha256,
+          width: output.width,
+          height: output.height,
+          durationMs: output.durationMs,
+        },
+      });
+      await tx.videoRender.update({
+        where: { id },
+        data: {
+          status: "SUCCEEDED",
+          completedAt: new Date(),
+          errorMessage: null,
+        },
+      });
+      await tx.auditEvent.create({
+        data: {
+          actorUserId: current.createdById,
+          organizationId: current.organizationId,
+          action: "asset.video_rendered",
+          targetType: "Asset",
+          targetId: current.outputAssetId,
+          metadata: { editId: current.editId, revision: current.revision },
+        },
+      });
+      await completeMediaTask(tx);
     });
-  });
+  } catch (error) {
+    await storage.delete(objectKey).catch(() => undefined);
+    throw error;
+  }
 }
 
 export async function failVideoRender(id: string): Promise<void> {

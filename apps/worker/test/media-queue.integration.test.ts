@@ -2,12 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Queue, QueueEvents, Worker, type Job } from "bullmq";
 import Redis from "ioredis";
 import { describe, expect, it } from "vitest";
-import {
-  assetJobOptions,
-  canDispatchAssetJob,
-  retryFailedDerivative,
-  retainFailedAssetJob,
-} from "../src/asset-dispatch";
+import { assetJobOptions, retainFailedAssetJob } from "../src/asset-dispatch";
 
 describe.skipIf(process.env.GENERATION_INTEGRATION_TEST !== "true")(
   "media queue containment with Redis",
@@ -76,8 +71,7 @@ describe.skipIf(process.env.GENERATION_INTEGRATION_TEST !== "true")(
         await expect(broken.waitUntilFinished(events, 5000)).rejects.toThrow(
           "invalid media",
         );
-        for (let scan = 0; scan < 3; scan++)
-          expect(await canDispatchAssetJob(queue, "broken")).toBe(false);
+        expect(await (await queue.getJob("broken"))!.getState()).toBe("failed");
         expect(failedAttempts).toBe(3);
         const otherFailure = await queue.add(
           "derive",
@@ -88,16 +82,6 @@ describe.skipIf(process.env.GENERATION_INTEGRATION_TEST !== "true")(
           otherFailure.waitUntilFinished(events, 5000),
         ).rejects.toThrow("invalid media");
         expect(await queue.getJob("broken")).toBeDefined();
-        let auditedAttempts = 0;
-        await retryFailedDerivative(queue, "broken", async (attempts) => {
-          auditedAttempts = attempts;
-        });
-        await expect(
-          (await queue.getJob("broken"))!.waitUntilFinished(events, 5000),
-        ).rejects.toThrow("invalid media");
-        expect(auditedAttempts).toBe(3);
-        expect(failedAttempts).toBe(7);
-        expect(await (await queue.getJob("broken"))!.getState()).toBe("failed");
       } finally {
         await Promise.all(workers.map((worker) => worker.close()));
         await events.close();

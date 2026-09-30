@@ -1,4 +1,9 @@
 import {
+  assertMediaOwnership,
+  completeMediaTask,
+  recordMediaOutput,
+} from "./media-tasks";
+import {
   createAssetVariantObjectKey,
   LocalAssetStorage,
 } from "@aiwa/assets/storage";
@@ -21,20 +26,29 @@ async function saveVariant(input: {
   height: number;
 }) {
   const objectKey = createAssetVariantObjectKey(input.organizationId, "webp");
+  await recordMediaOutput(objectKey);
   const stored = await storage.put(objectKey, input.bytes);
   try {
-    await db.assetVariant.create({
-      data: {
-        assetId: input.assetId,
-        kind: input.kind,
-        storageProvider: "LOCAL",
-        objectKey,
-        mimeType: "image/webp",
-        byteSize: stored.byteSize,
-        sha256: stored.sha256,
-        width: input.width,
-        height: input.height,
-      },
+    await db.$transaction(async (tx) => {
+      await assertMediaOwnership(tx);
+      await tx.$queryRaw`SELECT id FROM Asset WHERE id = ${input.assetId} FOR UPDATE`;
+      const asset = await tx.asset.findUnique({ where: { id: input.assetId } });
+      if (!asset || asset.status !== "READY")
+        throw new Error("Asset is no longer available.");
+      await tx.assetVariant.create({
+        data: {
+          assetId: input.assetId,
+          kind: input.kind,
+          storageProvider: "LOCAL",
+          objectKey,
+          mimeType: "image/webp",
+          byteSize: stored.byteSize,
+          sha256: stored.sha256,
+          width: input.width,
+          height: input.height,
+        },
+      });
+      await completeMediaTask(tx);
     });
   } catch (error) {
     await storage.delete(objectKey).catch(() => undefined);
@@ -52,7 +66,10 @@ async function saveVariant(input: {
  * Produce bounded media used by library grids and inspectors. Originals stay
  * private and are never fetched merely to paint a card.
  */
-export async function processAssetDerivatives(assetId: string): Promise<void> {
+export async function processAssetDerivatives(
+  assetId: string,
+  onlyKind?: string,
+): Promise<void> {
   const asset = await db.asset.findUnique({
     where: { id: assetId },
     include: { variants: true },
@@ -61,7 +78,16 @@ export async function processAssetDerivatives(assetId: string): Promise<void> {
     return;
   }
 
-  const kinds = new Set(asset.variants.map((variant) => variant.kind));
+  const kinds = new Set<string>(asset.variants.map((variant) => variant.kind));
+  if (onlyKind)
+    for (const kind of [
+      "THUMBNAIL",
+      "PREVIEW",
+      "POSTER",
+      "STORYBOARD",
+      "WAVEFORM",
+    ])
+      if (kind !== onlyKind) kinds.add(kind);
   if (asset.mediaKind === "IMAGE") {
     const original = await storage.read(asset.objectKey);
     if (!kinds.has("THUMBNAIL")) {
@@ -212,4 +238,28 @@ export async function purgeExpiredAssets(limit = 50): Promise<number> {
     });
   }
   return purged;
+}
+
+/** Never reclaim an active/review output; inspect canonical rows before deleting. */
+export async function purgeMediaAttemptOutputs(limit = 50): Promise<void> {
+  const attempts = await db.mediaTaskAttempt.findMany({
+    where: {
+      outputObjectKey: { not: null },
+      outcome: { in: ["FAILED", "ABANDONED", "REVOKED"] },
+    },
+    orderBy: { startedAt: "asc" },
+    take: limit,
+  });
+  for (const attempt of attempts) {
+    const objectKey = attempt.outputObjectKey!;
+    const [asset, variant] = await Promise.all([
+      db.asset.findUnique({ where: { objectKey } }),
+      db.assetVariant.findUnique({ where: { objectKey } }),
+    ]);
+    if (!asset && !variant) await storage.delete(objectKey);
+    await db.mediaTaskAttempt.updateMany({
+      where: { id: attempt.id, outputObjectKey: objectKey },
+      data: { outputObjectKey: null },
+    });
+  }
 }

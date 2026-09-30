@@ -77,6 +77,9 @@ node "$operations_root/node_modules/prisma/build/index.js" generate --schema "$o
 mkdir -p "$release_root/apps/worker/node_modules/@prisma"
 ln -s ../../../../ops/db/node_modules/@prisma/client "$release_root/apps/worker/node_modules/@prisma/client"
 
+mkdir -p "$release_root/ops/systemd"
+cp -a infra/systemd/. "$release_root/ops/systemd/"
+
 cp infra/deploy/creator-deploy "$release_root/ops/bin/creator-deploy"
 cp infra/deploy/creator-ops "$release_root/ops/bin/creator-ops"
 chmod 0755 \

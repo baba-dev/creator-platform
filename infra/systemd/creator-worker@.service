@@ -1,8 +1,8 @@
 [Unit]
-Description=Aiwa Creators Platform web application
+Description=Aiwa Creators Platform %i worker
 After=network-online.target mariadb.service redis-server.service
 Wants=network-online.target mariadb.service redis-server.service
-ConditionPathExists=/var/www/creator-platform/current/apps/web/server.js
+ConditionPathExists=/var/www/creator-platform/current/apps/worker/dist/index.cjs
 
 [Service]
 Type=simple
@@ -11,17 +11,20 @@ Group=aiwa-creator
 WorkingDirectory=/var/www/creator-platform/current
 EnvironmentFile=/etc/aiwa-creators/creator.env
 EnvironmentFile=-/var/www/creator-platform/current/release.env
-Environment=HOSTNAME=127.0.0.1
-Environment=PORT=3000
-Environment=NODE_OPTIONS=--max-old-space-size=384
-ExecStart=/usr/bin/node /var/www/creator-platform/current/apps/web/server.js
+Environment=NODE_OPTIONS=--max-old-space-size=128
 CPUAccounting=true
 MemoryAccounting=true
-CPUWeight=200
+CPUWeight=100
+MemoryHigh=192M
+MemoryMax=256M
+TasksMax=128
+KillMode=control-group
+ExecStart=/usr/bin/env WORKER_ROLE=%i /usr/bin/node /var/www/creator-platform/current/apps/worker/dist/index.cjs
 Restart=on-failure
 RestartSec=5s
-TimeoutStartSec=60s
-TimeoutStopSec=30s
+TimeoutStartSec=30s
+# 600s max provider request + 120s media transfer + 60s shutdown margin.
+TimeoutStopSec=780s
 KillSignal=SIGTERM
 UMask=0027
 NoNewPrivileges=true

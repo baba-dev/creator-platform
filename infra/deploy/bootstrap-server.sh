@@ -45,6 +45,14 @@ install -o root -g root -m 0644 \
   "$repository_root/infra/systemd/creator-worker.service" \
   /etc/systemd/system/creator-worker.service
 
+install -o root -g root -m 0644 \
+  "$repository_root/infra/systemd/creator-worker@.service" \
+  /etc/systemd/system/creator-worker@.service
+install -d -o root -g root -m 0755 /etc/systemd/system/creator-worker@media.service.d
+install -o root -g root -m 0644 \
+  "$repository_root/infra/systemd/creator-worker@media.service.d/limits.conf" \
+  /etc/systemd/system/creator-worker@media.service.d/limits.conf
+
 printf '%s ALL=(root) NOPASSWD: /usr/local/sbin/creator-deploy *\n' "$deploy_user" \
   >/etc/sudoers.d/creator-platform-deploy
 chmod 0440 /etc/sudoers.d/creator-platform-deploy

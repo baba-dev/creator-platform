@@ -173,6 +173,25 @@ if [[ "$release_ready" != true ]]; then
   log "release extracted, verified, migrated, and template catalog ensured"
 fi
 
+# Preserve the operator-selected topology. Drain every active worker before
+# switching the shared symlink so old code cannot claim work from the new release.
+worker_services=()
+for unit in creator-worker.service creator-worker@all.service creator-worker@core.service creator-worker@orchestration.service creator-worker@mail.service creator-worker@media.service; do
+  if systemctl is-active --quiet "$unit" || systemctl is-enabled --quiet "$unit"; then
+    worker_services+=("$unit")
+  fi
+done
+[[ ${#worker_services[@]} -gt 0 ]] || fail "no worker service is selected"
+selected=" ${worker_services[*]} "
+if [[ ( "$selected" == *' creator-worker.service '* || "$selected" == *' creator-worker@all.service '* ) && ${#worker_services[@]} -gt 1 ]] \
+  || [[ "$selected" == *' creator-worker@core.service '* && ( "$selected" == *' creator-worker@mail.service '* || "$selected" == *' creator-worker@orchestration.service '* ) ]]; then
+  fail "overlapping worker roles selected; correct enabled/active services before deployment"
+fi
+if ! systemctl stop "${worker_services[@]}"; then
+  systemctl start "${worker_services[@]}" || true
+  fail "workers failed to stop; release symlink was not changed"
+fi
+
 new_link="$application_root/.current-$release_sha"
 rm -f -- "$new_link"
 ln -s "$release_dir" "$new_link"
@@ -180,22 +199,28 @@ mv -Tf "$new_link" "$current_link"
 
 rollback() {
   log "health check failed; rolling application symlink back" >&2
+  systemctl stop "${worker_services[@]}" || true
   if [[ -n "$previous_release" ]] && validate_runtime "$previous_release"; then
     rollback_link="$application_root/.rollback-$release_sha"
     rm -f -- "$rollback_link"
     ln -s "$previous_release" "$rollback_link"
     mv -Tf "$rollback_link" "$current_link"
-    systemctl restart creator-web.service creator-worker.service || true
+    if [[ "$selected" == *' creator-worker@'* && ! -f "$previous_release/ops/systemd/creator-worker@.service" ]]; then
+      systemctl restart creator-web.service || true
+      log "previous release predates role isolation; workers remain stopped. Disable template instances and enable the legacy worker before resuming." >&2
+    else
+      systemctl restart creator-web.service "${worker_services[@]}" || true
+    fi
   else
     rm -f -- "$current_link"
-    systemctl stop creator-web.service creator-worker.service || true
+    systemctl stop creator-web.service "${worker_services[@]}" || true
     log "no valid previous runtime was available for rollback" >&2
   fi
   exit 1
 }
 
 log "restarting application services"
-systemctl restart creator-web.service creator-worker.service || rollback
+systemctl restart creator-web.service "${worker_services[@]}" || rollback
 
 healthy=false
 for _ in {1..30}; do
@@ -211,7 +236,9 @@ for _ in {1..30}; do
 done
 
 [[ "$healthy" == true ]] || rollback
-systemctl is-active --quiet creator-worker.service || rollback
+for unit in "${worker_services[@]}"; do
+  systemctl is-active --quiet "$unit" || rollback
+done
 
 # Update the root-owned control plane only after the new release is healthy.
 install -o root -g root -m 0755 \

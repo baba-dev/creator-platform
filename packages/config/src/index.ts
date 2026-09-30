@@ -91,6 +91,9 @@ export const serverEnvSchema = z.object({
     .default("creator-tool@aiwamediagroup.com"),
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.url().default("redis://127.0.0.1:6379/0"),
+  WORKER_ROLE: z
+    .enum(["all", "core", "orchestration", "mail", "media"])
+    .default("all"),
   GENERATION_WORKER_CONCURRENCY: z.coerce
     .number()
     .int()

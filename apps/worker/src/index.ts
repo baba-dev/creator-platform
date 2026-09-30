@@ -331,10 +331,7 @@ async function startMediaWorker(): Promise<void> {
   if (isShuttingDown) return;
   if (!env.MEDIA_PROCESSING_ENABLED) {
     await assetQueue.pause();
-    log(
-      "info",
-      "Media processing paused; orchestration and mail remain enabled",
-    );
+    log("info", "Media processing paused; queued tasks retained");
     return;
   }
   await assetQueue.resume();

@@ -176,14 +176,14 @@ fi
 # Preserve the operator-selected topology. Drain every active worker before
 # switching the shared symlink so old code cannot claim work from the new release.
 worker_services=()
-for unit in creator-worker.service creator-worker@core.service creator-worker@orchestration.service creator-worker@mail.service creator-worker@media.service; do
+for unit in creator-worker.service creator-worker@all.service creator-worker@core.service creator-worker@orchestration.service creator-worker@mail.service creator-worker@media.service; do
   if systemctl is-active --quiet "$unit" || systemctl is-enabled --quiet "$unit"; then
     worker_services+=("$unit")
   fi
 done
 [[ ${#worker_services[@]} -gt 0 ]] || fail "no worker service is selected"
 selected=" ${worker_services[*]} "
-if [[ "$selected" == *' creator-worker.service '* && ${#worker_services[@]} -gt 1 ]] \
+if [[ ( "$selected" == *' creator-worker.service '* || "$selected" == *' creator-worker@all.service '* ) && ${#worker_services[@]} -gt 1 ]] \
   || [[ "$selected" == *' creator-worker@core.service '* && ( "$selected" == *' creator-worker@mail.service '* || "$selected" == *' creator-worker@orchestration.service '* ) ]]; then
   fail "overlapping worker roles selected; correct enabled/active services before deployment"
 fi

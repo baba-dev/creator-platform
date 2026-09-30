@@ -22,13 +22,16 @@ bounded in the web process. This is not complete separation of image validation.
 ## Host sizing and activation
 
 On the 1 GB VPS, start with **core + media**, retaining mail in core to avoid a
-third worker process. Measure under representative concurrent traffic first;
-Node heap limits do not include native buffers, Prisma, FFmpeg or the database.
-The template budgets are ceilings, not a guarantee that all processes fit RAM.
-If web, DB, Redis, core and media cannot fit with at least 150 MiB available and
-without sustained swap churn, keep media paused and resize the VPS before
-activation. Moving media to another host also requires shared private asset
-storage and database/Redis connectivity; copying the unit alone is insufficient.
+third worker process. Local bundled smoke tests measured roughly 101–102 MiB
+idle RSS per role with providers/mail disabled; these are development-host
+measurements, not a production budget. Measure under representative concurrent
+traffic first; Node heap limits do not include native buffers, Prisma, FFmpeg or
+the database. The template budgets are ceilings, not a guarantee that all
+processes fit RAM. If web, DB, Redis, core and media cannot fit with at least
+150 MiB available and without sustained swap churn, keep media paused and resize
+the VPS before activation. Moving media to another host also requires shared
+private asset storage and database/Redis connectivity; copying the unit alone is
+insufficient.
 
 Install `ops/systemd/creator-worker@.service` and the
 `creator-worker@media.service.d/limits.conf` directory from the packaged release

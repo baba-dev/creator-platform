@@ -17,7 +17,7 @@
   "dependencies": {
     "@aiwa/config": "workspace:*",
     "@aiwa/db": "workspace:*",
-    "nodemailer": "10.0.2"
+    "nodemailer": "10.0.9"
   },
   "devDependencies": {
     "@types/nodemailer": "8.0.2",

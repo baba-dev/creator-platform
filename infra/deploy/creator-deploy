@@ -302,8 +302,10 @@ for unit in "${worker_services[@]}"; do
 done
 
 # Promote root control-plane artifacts only from the verified, immutable release.
-validate_release "$release_dir" "$release_sha" \
-  || fail "active release failed integrity checks before control-plane promotion"
+if ! validate_release "$release_dir" "$release_sha"; then
+  log "active release failed integrity checks before control-plane promotion" >&2
+  rollback
+fi
 log "promoting verified root control-plane artifacts"
 install -o root -g root -m 0755 \
   "$release_dir/ops/bin/creator-deploy" \

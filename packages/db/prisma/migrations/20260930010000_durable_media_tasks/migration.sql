@@ -54,4 +54,3 @@ CREATE TABLE `MediaCapacity` (
 
 -- AddForeignKey
 ALTER TABLE `MediaTaskAttempt` ADD CONSTRAINT `MediaTaskAttempt_taskId_fkey` FOREIGN KEY (`taskId`) REFERENCES `MediaTask`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
-

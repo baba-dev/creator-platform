@@ -316,7 +316,7 @@ export async function restoreAssets(
     });
   }
   return restored;
-};
+}
 
 /**
  * Atomically claim expired trash before any bytes are deleted.

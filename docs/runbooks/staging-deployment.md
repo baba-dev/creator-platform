@@ -43,11 +43,18 @@ with no group/other write bits before migrations run as `aiwa-creator`. A second
 integrity check after migrations fails the deployment if runtime tooling changed
 the release tree.
 
-After the new application passes health checks, only the verified immutable
-release may update `creator-deploy`, `creator-ops`, or the systemd units. The
-services are then restarted once under `ProtectSystem=strict`; only `shared/`,
-`.cache/`, `.config/`, and `.local/state/` are writable, while releases are
-explicitly read-only and `incoming/` is inaccessible to application processes.
+Application deployments never update the root control plane. Before migrations
+or activation, the release-bundled `creator-deploy`, `creator-ops`, and systemd
+files must byte-for-byte match the already installed root-owned copies, which
+must themselves be root-owned and not group/other writable. A control-plane
+change therefore requires a separate trusted operator installation.
+
+Services run under `ProtectSystem=strict`; only `shared/`, `.cache/`,
+`.config/`, and `.local/state/` are writable, releases are explicitly
+read-only, and `incoming/` is inaccessible to application processes. The
+packaged `apps/web/.next/cache` path is a root-owned symlink into
+`/var/www/creator-platform/.cache/next`, preserving legitimate Next.js runtime
+cache writes without making release code writable.
 
 If a same-SHA release directory exists but fails content, checksum, ownership, or
 permission checks, deployment rebuilds it from the uploaded archive and
@@ -103,26 +110,29 @@ self-upgrade from a runtime-writable release. The staging deploy workflow checks
 reports control-plane version `3`.
 
 From a trusted operator checkout of the exact reviewed or merged commit,
-reinstall both root entry points before rerunning the deploy workflow:
+install the complete root control plane before rerunning the deploy workflow:
 
 ```bash
-sudo install -o root -g root -m 0755 \
-  infra/deploy/creator-deploy \
-  /usr/local/sbin/creator-deploy
-sudo install -o root -g root -m 0755 \
-  infra/deploy/creator-ops \
-  /usr/local/sbin/creator-ops
+sudo bash infra/deploy/install-control-plane.sh
 sudo /usr/local/sbin/creator-deploy --version
 # expected: 3
 ```
+
+The installer updates `creator-deploy`, `creator-ops`, the web/worker systemd
+units, and the media-worker drop-in, then runs `systemctl daemon-reload`. It
+deliberately does **not** restart application services; the next deployment
+performs the controlled restart after the new release is ready.
 
 Do not source this bootstrap from
 `/var/www/creator-platform/current/ops/bin` or any existing release directory:
 layout-v2 releases were writable by `aiwa-creator` and are intentionally outside
 the v3 trust boundary. Once the trusted v3 deployer is installed, the next
 successful deployment rebuilds the active release as root-owned/read-only,
-verifies the control-plane manifest, installs the hardened systemd units, and
-restarts the services under the filesystem sandbox.
+verifies the control-plane manifest, confirms that it exactly matches the
+already installed root control plane, and restarts the services under the
+filesystem sandbox. Because layout-v2 is intentionally not trusted for
+rollback, the first v3 deployment fails closed and stops the application if the
+new release cannot become healthy; schedule that one-time upgrade accordingly.
 
 For bare-metal local storage, keep `ASSET_STORAGE_ROOT` below
 `/var/www/creator-platform/shared`. If a future deployment deliberately uses a

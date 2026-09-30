@@ -80,10 +80,7 @@ jobs:
           bash -n infra/deploy/package-release.sh
 
       - name: Check formatting
-        run: |
-          pnpm exec prettier --write docs/runbooks/staging-deployment.md
-          git diff -- docs/runbooks/staging-deployment.md
-          exit 1
+        run: pnpm format:check
 
       - name: Lint
         run: pnpm lint

@@ -1,3 +1,4 @@
+import { withMediaCapacity } from "@aiwa/assets/media-capacity";
 import { createHash, randomUUID } from "node:crypto";
 import { LocalAssetStorage } from "@aiwa/assets/storage";
 import { lookup } from "node:dns/promises";
@@ -361,6 +362,10 @@ export async function downloadImage(
 }
 
 export async function validateJpegImage(bytes: Buffer): Promise<Buffer> {
+  return withMediaCapacity(() => validateJpegImageInner(bytes));
+}
+
+async function validateJpegImageInner(bytes: Buffer): Promise<Buffer> {
   if (!bytes.subarray(0, JPEG_SIGNATURE.length).equals(JPEG_SIGNATURE)) {
     throw new ImageStorageError(
       "IMAGE_OUTPUT_INVALID_PNG",
@@ -381,6 +386,10 @@ export async function validateJpegImage(bytes: Buffer): Promise<Buffer> {
 
 /** Seedream 4.5 does not accept output_format and may return JPEG instead of PNG. */
 export async function normalizeImageToPng(bytes: Buffer): Promise<Buffer> {
+  return withMediaCapacity(() => normalizeImageToPngInner(bytes));
+}
+
+async function normalizeImageToPngInner(bytes: Buffer): Promise<Buffer> {
   if (bytes.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)) {
     return bytes;
   }
@@ -420,6 +429,12 @@ export type ValidatedReferenceImage = {
 };
 
 export async function validateReferenceImage(
+  bytes: Buffer,
+): Promise<ValidatedReferenceImage> {
+  return withMediaCapacity(() => validateReferenceImageInner(bytes));
+}
+
+async function validateReferenceImageInner(
   bytes: Buffer,
 ): Promise<ValidatedReferenceImage> {
   if (bytes.byteLength <= 0 || bytes.byteLength > MAX_REFERENCE_IMAGE_BYTES) {

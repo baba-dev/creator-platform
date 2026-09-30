@@ -490,3 +490,6 @@ durable MariaDB outbox with BullMQ delivery and pooled TLS SMTP. See
 for production configuration, sender identities, retry behavior and diagnostics.
 
 Provider cost configuration, quote contracts, denomination and launch migration: [provider pricing](docs/finance/provider-pricing.md).
+
+Media worker limits, incident pause/resume and audited preview recovery:
+[media containment runbook](docs/operations/media-containment.md).

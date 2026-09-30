@@ -1,3 +1,6 @@
+import { parseMediaEnv } from "@aiwa/config";
+import { withMediaCapacity } from "@aiwa/assets/media-capacity";
+import { boundedMediaArgs } from "./media-policy";
 import { spawn } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -9,30 +12,47 @@ export async function mediaCommand(
   args: string[],
   timeoutMs: number,
 ): Promise<Buffer> {
+  return withMediaCapacity(() => runMediaCommand(binary, args, timeoutMs));
+}
+
+async function runMediaCommand(
+  binary: string,
+  args: string[],
+  timeoutMs: number,
+): Promise<Buffer> {
+  const threads = parseMediaEnv().MEDIA_THREADS;
   return new Promise((resolve, reject) => {
-    const child = spawn(binary, args, { stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(binary, boundedMediaArgs(binary, args, threads), {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
     const output: Buffer[] = [];
-    let errorText = "";
+    let failure: "MEDIA_TIMEOUT" | "MEDIA_OUTPUT_LIMIT" | undefined;
     let outputSize = 0;
-    const timer = setTimeout(() => child.kill("SIGKILL"), timeoutMs);
+    const timer = setTimeout(() => {
+      failure = "MEDIA_TIMEOUT";
+      child.kill("SIGKILL");
+    }, timeoutMs);
     child.stdout.on("data", (chunk: Buffer) => {
       outputSize += chunk.length;
-      if (outputSize > 1_000_000) child.kill("SIGKILL");
-      else output.push(chunk);
+      if (outputSize > 1_000_000) {
+        failure = "MEDIA_OUTPUT_LIMIT";
+        child.kill("SIGKILL");
+      } else output.push(chunk);
     });
-    child.stderr.on("data", (chunk: Buffer) => {
-      errorText = (errorText + chunk.toString("utf8")).slice(-4000);
-    });
+    // Drain diagnostics without putting customer paths or media URLs into logs.
+    child.stderr.resume();
     child.on("error", (error) => {
       clearTimeout(timer);
       reject(error);
     });
     child.on("close", (code) => {
       clearTimeout(timer);
-      if (code === 0) resolve(Buffer.concat(output));
+      if (code === 0 && !failure) resolve(Buffer.concat(output));
       else
         reject(
-          new Error(`Media command failed (${code}): ${errorText.slice(-300)}`),
+          new Error(
+            `Media command failed: ${failure ?? "MEDIA_EXIT"} (${code})`,
+          ),
         );
     });
   });

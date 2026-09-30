@@ -50,6 +50,7 @@ fi
 
 cp -a apps/worker/dist "$release_root/apps/worker/dist"
 test -f "$release_root/apps/worker/dist/byteplus-smoke.cjs"
+test -f "$release_root/apps/worker/dist/media-ops.cjs"
 
 # The bundled image pipeline loads Sharp's platform native modules at runtime.
 # Copy the deploy-resolved packages rather than relying on the server's pnpm store.

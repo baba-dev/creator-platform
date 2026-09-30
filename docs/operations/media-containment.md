@@ -94,3 +94,6 @@ No database migration is required. Rollback to the previous code reintroduces
 its automatic failed-job recreation and unrestricted threading, and it does not
 honor the media flag. Do not roll back into an overloaded host with media work
 enabled; stop/freeze the old worker temporarily or forward-fix containment.
+
+Phase B supersedes Redis-only retry recovery. See
+[durable media recovery](durable-media-recovery.md).

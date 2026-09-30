@@ -493,3 +493,5 @@ Provider cost configuration, quote contracts, denomination and launch migration:
 
 Media worker limits, incident pause/resume and audited preview recovery:
 [media containment runbook](docs/operations/media-containment.md).
+
+Media ownership and retries: [Phase B runbook](docs/operations/durable-media-recovery.md).

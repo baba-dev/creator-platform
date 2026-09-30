@@ -378,7 +378,8 @@ describe.skipIf(!enabled)("generation with MariaDB and Redis", () => {
     });
     expect(completed.status).toBe("SUCCEEDED");
     expect(completed.actualUnits).toBe(2);
-    expect(completed.actualProviderCostMicroUsd).toBe(60_000n);
+    expect(completed.actualProviderCostMicroUsd).toBe(45_000n);
+    expect(completed.providerCostBasis).toBe("CONFIGURED_CHARACTERS");
     expect(completed.assets[0]).toMatchObject({
       mimeType: "audio/mpeg",
       status: "READY",

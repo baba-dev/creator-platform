@@ -20,7 +20,7 @@ getent passwd "$deploy_user" >/dev/null || {
 }
 
 install -d -o root -g aiwa-creator -m 0755 /var/www/creator-platform
-install -d -o root -g aiwa-creator -m 0755 /var/www/creator-platform/releases
+install -d -o root -g aiwa-creator -m 0750 /var/www/creator-platform/releases
 install -d -o "$deploy_user" -g aiwa-creator -m 0750 /var/www/creator-platform/incoming
 install -d -o aiwa-creator -g aiwa-creator -m 0750 /var/www/creator-platform/shared
 install -d -o aiwa-creator -g aiwa-creator -m 0750 /var/www/creator-platform/.cache

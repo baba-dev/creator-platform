@@ -488,3 +488,5 @@ Authentication, billing, membership, generation and report notifications use a
 durable MariaDB outbox with BullMQ delivery and pooled TLS SMTP. See
 [the transactional-email operations runbook](docs/operations/transactional-email.md)
 for production configuration, sender identities, retry behavior and diagnostics.
+
+Provider cost configuration, quote contracts, denomination and launch migration: [provider pricing](docs/finance/provider-pricing.md).

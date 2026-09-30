@@ -230,12 +230,14 @@ export default async function JobDetailPage({
               </span>
             </div>
             <div>
-              <span className="text-muted-foreground">Provider Cost:</span>{" "}
+              <span className="text-muted-foreground">
+                Provider cost estimate:
+              </span>{" "}
               <span className="font-mono">
                 {job.actualProviderCostMicroUsd
                   ? `${job.actualProviderCostMicroUsd} micro-USD`
                   : job.priceVersion?.providerCostMicroUsd
-                    ? `~${job.priceVersion.providerCostMicroUsd} micro-USD`
+                    ? "Pending usage reconciliation"
                     : "Unknown"}
               </span>
             </div>

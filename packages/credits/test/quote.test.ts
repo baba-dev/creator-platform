@@ -34,12 +34,12 @@ describe("credit quote", () => {
   });
 
   describe("voice billing dimension calculations", () => {
-    it("counts billable characters while ignoring whitespace", () => {
+    it("counts provider-billable whitespace and Unicode code points", () => {
       expect(countBillableCharacters("")).toBe(0);
-      expect(countBillableCharacters("   \n\t  ")).toBe(0);
-      expect(countBillableCharacters("Hello world")).toBe(10);
-      expect(countBillableCharacters("مرحبا بك")).toBe(7);
-      expect(countBillableCharacters("Hello 👋 World 🌍")).toBe(12);
+      expect(countBillableCharacters("   \n\t  ")).toBe(7);
+      expect(countBillableCharacters("Hello world")).toBe(11);
+      expect(countBillableCharacters("مرحبا بك")).toBe(8);
+      expect(countBillableCharacters("Hello 👋 World 🌍")).toBe(15);
     });
 
     it("calculates billable blocks with ceiling division", () => {

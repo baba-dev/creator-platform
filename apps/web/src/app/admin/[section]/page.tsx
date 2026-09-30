@@ -454,6 +454,10 @@ async function renderSection(
             select: {
               customerCredits: true,
               providerCostMicroUsd: true,
+              usageRates: true,
+              providerCostBasisNote: true,
+              fxBaisaNumerator: true,
+              fxBaisaDenominator: true,
               videoInputRate720p: true,
               videoInputRate1080p: true,
               targetMarginBps: true,
@@ -508,7 +512,11 @@ async function renderSection(
                   <Cell>{titleCase(row.provider)}</Cell>
                   <Cell>{titleCase(row.mediaKind)}</Cell>
                   <NumericCell>
-                    {price ? formatBigInt(price.customerCredits) : "—"}
+                    {price?.pricingDimension === "TOKEN"
+                      ? "Usage-based"
+                      : price
+                        ? formatBigInt(price.customerCredits)
+                        : "—"}
                   </NumericCell>
                   <NumericCell>
                     {price ? formatBigInt(price.providerCostMicroUsd) : "—"}
@@ -530,8 +538,15 @@ async function renderSection(
                     <Cell>
                       <ModelActions
                         modelId={row.id}
+                        providerModelId={row.providerModelId}
                         displayName={row.displayName}
                         enabled={row.enabled}
+                        currentUsageRates={price?.usageRates}
+                        currentProviderCostBasisNote={
+                          price?.providerCostBasisNote
+                        }
+                        currentFxBaisaNumerator={price?.fxBaisaNumerator.toString()}
+                        currentFxBaisaDenominator={price?.fxBaisaDenominator.toString()}
                         currentProviderCostMicroUsd={price?.providerCostMicroUsd.toString()}
                         currentVideoInputRate720p={price?.videoInputRate720p?.toString()}
                         currentVideoInputRate1080p={price?.videoInputRate1080p?.toString()}

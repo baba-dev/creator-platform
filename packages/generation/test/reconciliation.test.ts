@@ -1,3 +1,4 @@
+import type * as CreditsModule from "@aiwa/credits";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -42,7 +43,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@aiwa/db", () => ({ db: mocks.db }));
-vi.mock("@aiwa/credits", () => ({
+vi.mock("@aiwa/credits", async (importOriginal) => ({
+  ...(await importOriginal<typeof CreditsModule>()),
   captureCreditsForJob: mocks.capture,
   releaseOrRefundCredits: mocks.releaseOrRefund,
 }));
@@ -354,6 +356,61 @@ describe("Generation Job Reconciliation", () => {
         }),
       );
     });
+
+    it.each([true, false])(
+      "uses verified tokens during immediate video recovery (usage present: %s)",
+      async (present) => {
+        const videoJob = {
+          ...baseJob,
+          providerModel: { ...baseJob.providerModel, mediaKind: "VIDEO" },
+          requestPayload: { resolution: "720p" },
+          reservedCredits: 1000n,
+          outputPayload: {
+            url: "https://trusted.bytepluscdn.com/output.mp4",
+            ...(present ? { providerUsage: { completionTokens: 108000 } } : {}),
+          },
+          priceVersion: {
+            ...baseJob.priceVersion,
+            pricingDimension: "TOKEN",
+            fxBaisaNumerator: 769n,
+            fxBaisaDenominator: 2n,
+            creditsPerBaisa: 1n,
+            targetMarginBps: 2500,
+            usageRates: {
+              estimator: "byteplus-video-v1",
+              rates: [
+                {
+                  resolution: "720p",
+                  workflow: "GENERATE",
+                  microUsdPerThousandTokens: "10700",
+                },
+              ],
+            },
+          },
+        };
+        mocks.db.generationJob.findUnique.mockResolvedValue(videoJob);
+        mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue(videoJob);
+        const request = {
+          jobId: "job-123",
+          actorUserId: "operator-1",
+          reason: "Recover verified stored video",
+          mode: "immediate" as const,
+          idempotencyKey: "video-usage-recovery",
+        };
+        if (present) {
+          await recoverGeneratedOutput(request);
+          expect(mocks.capture).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.objectContaining({ amountCredits: 594n }),
+          );
+        } else {
+          await expect(recoverGeneratedOutput(request)).rejects.toThrow(
+            "Reconcile provider usage or cost",
+          );
+          expect(mocks.capture).not.toHaveBeenCalled();
+        }
+      },
+    );
 
     it("resumes a partially stored multi-image job with its ordered provider manifest intact", async () => {
       const outputPayload = {

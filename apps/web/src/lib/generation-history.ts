@@ -182,6 +182,9 @@ export async function getCustomerJob(
       ...(scope.ownOnly ? { createdById: userId } : {}),
     },
     include: {
+      priceVersion: {
+        select: { pricingDimension: true, creditsPerBaisa: true },
+      },
       providerModel: {
         select: { displayName: true, mediaKind: true, provider: true },
       },
@@ -234,6 +237,21 @@ export async function getCustomerJob(
     completedAt: job.completedAt,
     reservedCredits: job.reservedCredits.toString(),
     chargedCredits: job.chargedCredits.toString(),
+    pricingDimension: job.priceVersion.pricingDimension,
+    chargedPriceBaisa: (
+      (job.chargedCredits + job.priceVersion.creditsPerBaisa - 1n) /
+      job.priceVersion.creditsPerBaisa
+    ).toString(),
+    actualCompletionTokens:
+      job.outputPayload &&
+      typeof job.outputPayload === "object" &&
+      !Array.isArray(job.outputPayload) &&
+      job.outputPayload.providerUsage &&
+      typeof job.outputPayload.providerUsage === "object" &&
+      !Array.isArray(job.outputPayload.providerUsage) &&
+      typeof job.outputPayload.providerUsage.completionTokens === "number"
+        ? job.outputPayload.providerUsage.completionTokens
+        : null,
     quotedUnits: job.quotedUnits,
     actualUnits: job.actualUnits,
     billableQuantity: job.billableQuantity,

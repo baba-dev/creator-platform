@@ -3,8 +3,8 @@ import { hasOrganizationPermission } from "@aiwa/authz";
 import { defaultAssetName, reserveAssetStorage } from "@aiwa/assets";
 import {
   calculateBillableUnits,
-  calculateVideoPricing,
-  quoteVideoInputReservation,
+  estimateGeneration,
+  quoteImageOutputs,
   countBillableCharacters,
   createCreditQuote,
   reserveCreditsForJob,
@@ -21,6 +21,8 @@ import { resolvePresetVoice, VoiceResolutionError } from "./voices";
 export * from "./voices";
 export * from "./reconciliation";
 export * from "./cancel";
+export * from "./quote-contract";
+import { verifyGenerationQuote, quoteParameters } from "./quote-contract";
 
 export const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 export const MAX_REFERENCE_SET_BYTES = 80 * 1024 * 1024;
@@ -33,6 +35,7 @@ export const imageRequestSchema = z
     projectId: z.string().min(1).max(100).nullable().optional(),
     modelId: z.string().min(1).max(100),
     priceVersionId: z.string().min(1).max(100),
+    quoteToken: z.string().min(1).max(2048).optional(),
     idempotencyKey: z.uuid(),
     templateId: z.string().min(1).max(100).optional(),
     prompt: z.string().trim().min(1).max(2000),
@@ -64,6 +67,7 @@ export const videoRequestSchema = z
     projectId: z.string().min(1).max(100).nullable().optional(),
     modelId: z.string().min(1).max(100),
     priceVersionId: z.string().min(1).max(100),
+    quoteToken: z.string().min(1).max(2048).optional(),
     idempotencyKey: z.uuid(),
     templateId: z.string().min(1).max(100).optional(),
     prompt: z.string().trim().min(1).max(2000),
@@ -103,6 +107,7 @@ export const voiceRequestSchema = z
     projectId: z.string().min(1).max(100).nullable().optional(),
     modelId: z.string().min(1).max(100),
     priceVersionId: z.string().min(1).max(100),
+    quoteToken: z.string().min(1).max(2048).optional(),
     idempotencyKey: z.uuid(),
     templateId: z.string().min(1).max(100).optional(),
     text: z.string().trim().min(1).max(4096),
@@ -404,8 +409,29 @@ export async function createImageJob(userId: string, raw: unknown) {
         );
       }
 
-      const creditsPerImage = priceCredits(price);
-      const credits = creditsPerImage * BigInt(input.outputCount);
+      const credits = quoteImageOutputs(
+        price,
+        input.outputCount,
+      ).customerCredits;
+      try {
+        verifyGenerationQuote(
+          input.quoteToken,
+          {
+            organizationId: input.organizationId,
+            userId,
+            modelId: model.id,
+            priceVersionId: price.id,
+            parameters: quoteParameters(model.mediaKind, input),
+          },
+          credits,
+          now,
+        );
+      } catch (error) {
+        throw new GenerationError(
+          error instanceof Error ? error.message : "Quote is invalid.",
+          409,
+        );
+      }
       const { start, end } = muscatCalendarMonth(now);
       const jobs = await tx.generationJob.findMany({
         where: {
@@ -712,53 +738,46 @@ export async function createVideoJob(userId: string, raw: unknown) {
           );
       }
 
-      if (
-        price.pricingDimension !== "SECOND" &&
-        price.pricingDimension !== "REQUEST"
-      ) {
+      let pricing: ReturnType<typeof estimateGeneration>;
+      try {
+        pricing = estimateGeneration({
+          price,
+          mediaKind: "VIDEO",
+          providerModelId: model.providerModelId,
+          durationSeconds: input.durationSeconds,
+          resolution: input.resolution,
+          aspectRatio: input.aspectRatio,
+          generateAudio: input.generateAudio,
+          inputDurationMs: referenceVideo?.durationMs ?? undefined,
+        });
+      } catch (error) {
         throw new GenerationError(
-          "Video model has an incompatible pricing configuration. Ask an administrator to publish a valid video price.",
+          error instanceof Error
+            ? error.message
+            : "Video pricing is unavailable.",
           409,
         );
       }
-
-      const pricing = calculateVideoPricing({
-        providerCostMicroUsd: price.providerCostMicroUsd,
-        durationSeconds: input.durationSeconds,
-        resolution: input.resolution,
-        generateAudio: input.generateAudio,
-        pricingDimension: price.pricingDimension,
-        unitQuantity: price.unitQuantity,
-        exchangeRate: {
-          baisaNumerator: price.fxBaisaNumerator,
-          baisaDenominator: price.fxBaisaDenominator,
-        },
-        targetGrossMarginBps: price.targetMarginBps,
-        creditsPerBaisa: price.creditsPerBaisa,
-      });
-      const referenceRate =
-        input.resolution === "1080p"
-          ? price.videoInputRate1080p
-          : price.videoInputRate720p;
-      if (referenceVideo && !referenceRate)
+      const credits = pricing.reservation.customerCredits;
+      try {
+        verifyGenerationQuote(
+          input.quoteToken,
+          {
+            organizationId: input.organizationId,
+            userId,
+            modelId: model.id,
+            priceVersionId: price.id,
+            parameters: quoteParameters(model.mediaKind, input),
+          },
+          credits,
+          now,
+        );
+      } catch (error) {
         throw new GenerationError(
-          "Video-input pricing is unavailable for this model.",
+          error instanceof Error ? error.message : "Quote is invalid.",
           409,
         );
-      const credits =
-        referenceVideo && referenceRate
-          ? quoteVideoInputReservation({
-              inputDurationMs: referenceVideo.durationMs!,
-              resolution: input.resolution,
-              rateMicroUsdPerThousandTokens: referenceRate,
-              exchangeRate: {
-                baisaNumerator: price.fxBaisaNumerator,
-                baisaDenominator: price.fxBaisaDenominator,
-              },
-              targetGrossMarginBps: price.targetMarginBps,
-              creditsPerBaisa: price.creditsPerBaisa,
-            }).customerCredits
-          : pricing.quote.customerCredits;
+      }
       const { start, end } = muscatCalendarMonth(now);
       const jobs = await tx.generationJob.findMany({
         where: {
@@ -802,7 +821,7 @@ export async function createVideoJob(userId: string, raw: unknown) {
           status: "QUOTED",
           quotedAt: now,
           billableQuantity: input.durationSeconds,
-          quotedUnits: Number(pricing.durationUnits),
+          quotedUnits: pricing.units,
         },
       });
       const sourceIds = [
@@ -988,6 +1007,25 @@ export async function createVoiceJob(userId: string, raw: unknown) {
         providerCostMicroUsd: scaledCost,
       });
 
+      try {
+        verifyGenerationQuote(
+          input.quoteToken,
+          {
+            organizationId: input.organizationId,
+            userId,
+            modelId: model.id,
+            priceVersionId: price.id,
+            parameters: quoteParameters(model.mediaKind, input),
+          },
+          credits,
+          now,
+        );
+      } catch (error) {
+        throw new GenerationError(
+          error instanceof Error ? error.message : "Quote is invalid.",
+          409,
+        );
+      }
       const { start, end } = muscatCalendarMonth(now);
       const jobs = await tx.generationJob.findMany({
         where: {
@@ -1074,3 +1112,5 @@ export async function createVoiceJob(userId: string, raw: unknown) {
     { isolationLevel: "ReadCommitted", timeout: 15000 },
   );
 }
+
+export * from "./estimate";

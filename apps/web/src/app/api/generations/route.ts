@@ -196,7 +196,10 @@ export async function GET(request: Request) {
                   pricingDimension: m.priceVersions[0].pricingDimension,
                   unitQuantity:
                     m.priceVersions[0].unitQuantity?.toString() ?? null,
-                  credits: priceCredits(m.priceVersions[0]).toString(),
+                  credits:
+                    m.priceVersions[0].pricingDimension === "TOKEN"
+                      ? "0"
+                      : priceCredits(m.priceVersions[0]).toString(),
                   capabilities:
                     m.mediaKind === "VIDEO" &&
                     m.capabilities &&
@@ -207,8 +210,10 @@ export async function GET(request: Request) {
                           referenceVideo:
                             (m.capabilities as Record<string, unknown>)
                               .referenceVideo === true &&
-                            m.priceVersions[0].videoInputRate720p !== null &&
-                            m.priceVersions[0].videoInputRate1080p !== null,
+                            (m.priceVersions[0].pricingDimension === "TOKEN" ||
+                              (m.priceVersions[0].videoInputRate720p !== null &&
+                                m.priceVersions[0].videoInputRate1080p !==
+                                  null)),
                         }
                       : m.capabilities,
                 },

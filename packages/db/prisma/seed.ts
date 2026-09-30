@@ -11,7 +11,8 @@ interface SeedModel {
   capabilities: Prisma.InputJsonValue;
   providerCostMicroUsd: bigint;
   customerCredits: bigint;
-  pricingDimension?: "REQUEST" | "CHARACTER" | "SECOND";
+  pricingDimension?: "REQUEST" | "CHARACTER" | "SECOND" | "TOKEN";
+  usageRates?: Prisma.InputJsonValue;
   unitQuantity?: number;
 }
 
@@ -40,8 +41,8 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
       maxGeneratedImages: 15,
       maxTotalInputOutputImages: 15,
     },
-    providerCostMicroUsd: 54_000n,
-    customerCredits: 28n,
+    providerCostMicroUsd: 31_500n,
+    customerCredits: 18n,
     pricingDimension: "REQUEST",
     unitQuantity: 1,
   },
@@ -68,8 +69,8 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
       maxGeneratedImages: 15,
       maxTotalInputOutputImages: 15,
     },
-    providerCostMicroUsd: 41_000n,
-    customerCredits: 22n,
+    providerCostMicroUsd: 36_000n,
+    customerCredits: 19n,
     pricingDimension: "REQUEST",
     unitQuantity: 1,
   },
@@ -89,10 +90,35 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
       "durationSeconds:10": true,
       generateAudio: true,
     },
-    providerCostMicroUsd: 468_000n,
-    customerCredits: 240n,
-    pricingDimension: "SECOND",
-    unitQuantity: 5,
+    providerCostMicroUsd: 10_700n,
+    customerCredits: 0n,
+    pricingDimension: "TOKEN",
+    unitQuantity: 1000,
+    usageRates: {
+      estimator: "byteplus-video-v1",
+      rates: [
+        {
+          resolution: "720p",
+          workflow: "GENERATE",
+          microUsdPerThousandTokens: "10700",
+        },
+        {
+          resolution: "1080p",
+          workflow: "GENERATE",
+          microUsdPerThousandTokens: "11700",
+        },
+        {
+          resolution: "720p",
+          workflow: "VIDEO_INPUT",
+          microUsdPerThousandTokens: "6400",
+        },
+        {
+          resolution: "1080p",
+          workflow: "VIDEO_INPUT",
+          microUsdPerThousandTokens: "7000",
+        },
+      ],
+    },
   },
   {
     providerModelId: "seed-tts-2.0",
@@ -167,6 +193,7 @@ async function main(): Promise<void> {
         data: {
           providerModelId: providerModel.id,
           providerCostMicroUsd: model.providerCostMicroUsd,
+          usageRates: model.usageRates,
           customerCredits: model.customerCredits,
           fxBaisaNumerator: 769n,
           fxBaisaDenominator: 2n,

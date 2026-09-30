@@ -1,5 +1,7 @@
 "use client";
 
+import { countBillableCharacters } from "@aiwa/credits/pricing";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
@@ -26,7 +28,7 @@ type Model = {
   mediaKind: MediaKind;
   description?: string | null;
   priceVersionId: string;
-  pricingDimension?: "REQUEST" | "CHARACTER" | "SECOND" | null;
+  pricingDimension?: "REQUEST" | "CHARACTER" | "SECOND" | "TOKEN" | null;
   unitQuantity?: string | null;
   credits: string;
   capabilities?: Record<string, CapabilityValue> | null;
@@ -95,6 +97,18 @@ function capabilityValues(
     .map(([key]) => key.slice(marker.length));
 }
 
+interface StudioQuote {
+  quoteToken: string;
+  priceVersionId: string;
+  expiresAt: string;
+  estimatedCredits: string;
+  estimatedOmr: string;
+  reservationCredits: string;
+  maximumChargeOmr: string;
+  settlement: "FIXED" | "ACTUAL_USAGE";
+  estimatedUsage: { unit: string; quantity: string; isEstimate: boolean };
+}
+
 const mediaModes = ["IMAGE", "VIDEO", "VOICE"] as const;
 
 export function GenerationStudio({
@@ -118,25 +132,15 @@ export function GenerationStudio({
   const [voiceText, setVoiceText] = useState("");
   const [voiceKey, setVoiceKey] = useState("jasper");
   const [speechRate, setSpeechRate] = useState(1.0);
-  const [quotedCreditsInfo, setQuotedCreditsInfo] = useState<{
-    text: string;
-    modelId: string;
-    priceVersionId: string;
-    credits: string;
+  const [quoteState, setQuoteState] = useState<{
+    key: string;
+    quote: StudioQuote;
+    canSpend: boolean;
+    canAfford: boolean;
   } | null>(null);
-  const [voiceQuotePending, setVoiceQuotePending] = useState(false);
-  const [voiceQuoteError, setVoiceQuoteError] = useState<string | null>(null);
-  const [videoQuotedCreditsInfo, setVideoQuotedCreditsInfo] = useState<{
-    duration: string;
-    resolution: string;
-    modelId: string;
-    priceVersionId: string;
-    credits: string;
-    generateAudio: boolean;
-    referenceVideoAssetId: string;
-  } | null>(null);
-  const [videoQuotePending, setVideoQuotePending] = useState(false);
-  const [videoQuoteError, setVideoQuoteError] = useState<string | null>(null);
+  const [quotePending, setQuotePending] = useState(false);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
+  const [quoteRefresh, setQuoteRefresh] = useState(0);
   const [ratio, setRatio] = useState("1:1");
   const [resolution, setResolution] = useState("2K");
   const [templateContext, setTemplateContext] = useState<{
@@ -243,167 +247,100 @@ export function GenerationStudio({
     [activeMode, data?.models],
   );
 
-  const billableCharacters = Array.from(voiceText.replace(/\s/gu, "")).length;
+  const billableCharacters = countBillableCharacters(voiceText.trim());
   const unitQuantity = Number(model?.unitQuantity ?? 1000);
   const estimatedUnits =
     billableCharacters > 0 ? Math.ceil(billableCharacters / unitQuantity) : 0;
   const activeModelId = model?.id;
   const activePriceVersionId = model?.priceVersionId;
-
-  const quotedCredits =
-    quotedCreditsInfo?.text === voiceText &&
-    quotedCreditsInfo?.modelId === activeModelId &&
-    quotedCreditsInfo?.priceVersionId === activePriceVersionId
-      ? quotedCreditsInfo.credits
+  const quoteRequestKey = JSON.stringify({
+    organizationId,
+    modelId: activeModelId,
+    ...(activeMode === "VOICE"
+      ? { text: voiceText }
+      : { aspectRatio: selectedRatio, resolution: selectedResolution }),
+    ...(activeMode === "IMAGE"
+      ? { units: selectedOutputCount, referenceAssetIds }
+      : {}),
+    ...(activeMode === "VIDEO"
+      ? {
+          durationSeconds: Number(selectedDuration),
+          generateAudio,
+          ...(videoFirstFrameId
+            ? { firstFrameAssetId: videoFirstFrameId }
+            : {}),
+          ...(videoLastFrameId ? { lastFrameAssetId: videoLastFrameId } : {}),
+          ...(referenceVideoAssetId ? { referenceVideoAssetId } : {}),
+        }
+      : {}),
+  });
+  const activeQuote =
+    quoteState?.key === quoteRequestKey &&
+    quoteState.quote.priceVersionId === activePriceVersionId
+      ? quoteState
       : null;
-
-  const videoQuotedCredits =
-    videoQuotedCreditsInfo?.duration === selectedDuration &&
-    videoQuotedCreditsInfo?.resolution === selectedResolution &&
-    videoQuotedCreditsInfo?.modelId === activeModelId &&
-    videoQuotedCreditsInfo?.priceVersionId === activePriceVersionId &&
-    videoQuotedCreditsInfo?.generateAudio === generateAudio &&
-    videoQuotedCreditsInfo?.referenceVideoAssetId === referenceVideoAssetId
-      ? videoQuotedCreditsInfo.credits
-      : null;
-
   useEffect(() => {
-    if (activeMode !== "VOICE" || !activeModelId || billableCharacters === 0)
+    if (!activeModelId || (activeMode === "VOICE" && !billableCharacters)) {
       return;
-    const quoteModelId = activeModelId;
-    let cancelled = false;
+    }
+    const controller = new AbortController();
     const timer = setTimeout(async () => {
-      if (cancelled) return;
-      setQuotedCreditsInfo(null);
-      setVoiceQuotePending(true);
-      setVoiceQuoteError(null);
+      setQuoteState(null);
+      setQuotePending(true);
+      setQuoteError(null);
       try {
         const res = await fetch("/api/quotes", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            organizationId,
-            modelId: quoteModelId,
-            text: voiceText,
-          }),
+          body: quoteRequestKey,
+          signal: controller.signal,
         });
-        if (cancelled) return;
-        const resData = (await res.json()) as {
+        const result = (await res.json()) as {
           error?: string;
-          quote?: { customerCredits?: string; priceVersionId?: string };
+          quote?: StudioQuote;
+          budget?: { canSpend: boolean };
+          wallet?: { canAfford: boolean };
         };
-        if (
-          res.ok &&
-          resData.quote?.customerCredits !== undefined &&
-          resData.quote.priceVersionId
-        ) {
-          setQuotedCreditsInfo({
-            text: voiceText,
-            modelId: quoteModelId,
-            priceVersionId: resData.quote.priceVersionId,
-            credits: String(resData.quote.customerCredits),
-          });
-          setVoiceQuoteError(null);
-        } else {
-          setVoiceQuoteError(resData.error ?? "Voice quote is unavailable.");
-        }
-      } catch {
-        if (!cancelled) setVoiceQuoteError("Voice quote is unavailable.");
+        if (controller.signal.aborted) return;
+        if (!res.ok || !result.quote || !result.quote.quoteToken)
+          throw new Error(result.error ?? "Quote is unavailable.");
+        if (result.quote.priceVersionId !== activePriceVersionId)
+          throw new Error("Model pricing changed. Refresh the Studio.");
+        setQuoteState({
+          key: quoteRequestKey,
+          quote: result.quote,
+          canSpend: result.budget?.canSpend === true,
+          canAfford: result.wallet?.canAfford === true,
+        });
+      } catch (error) {
+        if (!controller.signal.aborted)
+          setQuoteError(
+            error instanceof Error ? error.message : "Quote is unavailable.",
+          );
       } finally {
-        if (!cancelled) setVoiceQuotePending(false);
+        if (!controller.signal.aborted) setQuotePending(false);
       }
     }, 300);
+    const refreshTimer = setTimeout(
+      () => setQuoteRefresh((value) => value + 1),
+      240000,
+    );
     return () => {
-      cancelled = true;
+      controller.abort();
       clearTimeout(timer);
+      clearTimeout(refreshTimer);
     };
   }, [
-    activeMode,
     activeModelId,
     activePriceVersionId,
+    activeMode,
     billableCharacters,
-    voiceText,
-    organizationId,
+    quoteRequestKey,
+    quoteRefresh,
   ]);
-
-  useEffect(() => {
-    if (activeMode !== "VIDEO" || !activeModelId || !selectedDuration) return;
-    const quoteModelId = activeModelId;
-    let cancelled = false;
-    const timer = setTimeout(async () => {
-      if (cancelled) return;
-      setVideoQuotedCreditsInfo(null);
-      setVideoQuotePending(true);
-      setVideoQuoteError(null);
-      try {
-        const res = await fetch("/api/quotes", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            organizationId,
-            modelId: quoteModelId,
-            durationSeconds: Number.parseInt(selectedDuration, 10),
-            resolution: selectedResolution,
-            generateAudio,
-            ...(referenceVideoAssetId ? { referenceVideoAssetId } : {}),
-          }),
-        });
-        if (cancelled) return;
-        const resData = (await res.json()) as {
-          error?: string;
-          quote?: { customerCredits?: string; priceVersionId?: string };
-        };
-        if (
-          res.ok &&
-          resData.quote?.customerCredits !== undefined &&
-          resData.quote.priceVersionId
-        ) {
-          setVideoQuotedCreditsInfo({
-            duration: selectedDuration,
-            resolution: selectedResolution,
-            modelId: quoteModelId,
-            priceVersionId: resData.quote.priceVersionId,
-            credits: String(resData.quote.customerCredits),
-            generateAudio,
-            referenceVideoAssetId,
-          });
-          setVideoQuoteError(null);
-        } else {
-          setVideoQuoteError(resData.error ?? "Video quote is unavailable.");
-        }
-      } catch {
-        if (!cancelled) setVideoQuoteError("Video quote is unavailable.");
-      } finally {
-        if (!cancelled) setVideoQuotePending(false);
-      }
-    }, 150);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [
-    activeMode,
-    activeModelId,
-    activePriceVersionId,
-    selectedDuration,
-    selectedResolution,
-    generateAudio,
-    referenceVideoAssetId,
-    organizationId,
-  ]);
-
-  const activeRequiredCredits =
-    activeMode === "VOICE"
-      ? quotedCredits === null
-        ? null
-        : BigInt(quotedCredits)
-      : activeMode === "VIDEO"
-        ? videoQuotedCredits !== null
-          ? BigInt(videoQuotedCredits)
-          : model?.pricingDimension === "SECOND"
-            ? null
-            : BigInt(model?.credits ?? "0")
-        : BigInt(model?.credits ?? "0") * BigInt(selectedOutputCount);
+  const activeRequiredCredits = activeQuote
+    ? BigInt(activeQuote.quote.reservationCredits)
+    : null;
 
   const isConfiguredForMode =
     activeMode === "VOICE"
@@ -726,7 +663,7 @@ export function GenerationStudio({
     };
   }, [data]);
   async function generate() {
-    if (!model || busy || isEnhancing) return;
+    if (!model || busy || isEnhancing || !activeQuote) return;
     setBusy(true);
     setError(null);
     let input: Record<string, unknown>;
@@ -774,7 +711,11 @@ export function GenerationStudio({
       const response = await fetch("/api/generations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...input, idempotencyKey: attempt.current.key }),
+        body: JSON.stringify({
+          ...input,
+          quoteToken: activeQuote.quote.quoteToken,
+          idempotencyKey: attempt.current.key,
+        }),
       });
       const body = await response.json();
       if (!response.ok)
@@ -1031,11 +972,13 @@ export function GenerationStudio({
               {modelsForMode.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name} ·{" "}
-                  {m.pricingDimension === "CHARACTER"
-                    ? `${m.credits} credits / ${m.unitQuantity ?? 1000} chars`
-                    : m.pricingDimension === "SECOND"
-                      ? `${m.credits} credits / ${m.unitQuantity ?? 5}s`
-                      : `${m.credits} credits`}
+                  {m.pricingDimension === "TOKEN"
+                    ? "Usage-based pricing"
+                    : m.pricingDimension === "CHARACTER"
+                      ? `${m.credits} credits / ${m.unitQuantity ?? 1000} chars`
+                      : m.pricingDimension === "SECOND"
+                        ? `${m.credits} credits / ${m.unitQuantity ?? 5}s`
+                        : `${m.credits} credits`}
                 </option>
               ))}
             </select>
@@ -1188,6 +1131,9 @@ export function GenerationStudio({
                     isEnhancing ||
                     !canGenerate ||
                     !model ||
+                    !activeQuote ||
+                    !activeQuote.canSpend ||
+                    !activeQuote.canAfford ||
                     !prompt.trim()
                   }
                   aria-busy={isEnhancing}
@@ -1575,39 +1521,72 @@ export function GenerationStudio({
             </Link>
           ) : null}
 
-          <p className="text-sm tabular-nums text-muted-foreground">
-            Available balance: {data?.balance ?? "…"} credits
-            {activeMode === "VOICE" && billableCharacters > 0 ? (
-              <span className="ml-2 font-semibold text-foreground">
-                ·{" "}
-                {voiceQuotePending
-                  ? "Calculating quote…"
-                  : quotedCredits !== null
-                    ? `Quoted: ${quotedCredits} credits`
-                    : "Quote unavailable"}
+          <section
+            aria-label="Generation cost estimate"
+            aria-live="polite"
+            className="space-y-3 rounded-xl border border-border bg-surface-sunken p-4"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm font-semibold">
+                {activeQuote?.quote.settlement === "ACTUAL_USAGE"
+                  ? "Estimated generation cost"
+                  : "Generation quote"}
               </span>
-            ) : null}
-            {activeMode === "VIDEO" && selectedDuration ? (
-              <span className="ml-2 font-semibold text-foreground">
-                ·{" "}
-                {videoQuotePending
-                  ? "Calculating quote…"
-                  : videoQuotedCredits !== null
-                    ? `Quoted: ${videoQuotedCredits} credits`
-                    : "Quote unavailable"}
+              <span className="text-xs tabular-nums text-muted-foreground">
+                Balance: {data?.balance ?? "…"} credits
               </span>
-            ) : null}
-          </p>
-          {voiceQuoteError ? (
-            <p role="status" className="text-sm text-destructive">
-              {voiceQuoteError}
-            </p>
-          ) : null}
-          {videoQuoteError ? (
-            <p role="status" className="text-sm text-destructive">
-              {videoQuoteError}
-            </p>
-          ) : null}
+            </div>
+            {quotePending ? (
+              <p className="text-sm text-muted-foreground">Calculating cost…</p>
+            ) : activeQuote ? (
+              <>
+                <p className="text-lg font-semibold tabular-nums">
+                  {activeQuote.quote.estimatedCredits} credits{" "}
+                  <span className="text-sm font-normal text-muted-foreground">
+                    · {activeQuote.quote.estimatedOmr}
+                  </span>
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {activeQuote.quote.estimatedUsage.isEstimate
+                    ? "Estimated "
+                    : "Billable "}
+                  {activeQuote.quote.estimatedUsage.unit === "COMPLETION_TOKEN"
+                    ? "video tokens"
+                    : activeQuote.quote.estimatedUsage.unit === "CHARACTER"
+                      ? "characters"
+                      : "images"}
+                  : {activeQuote.quote.estimatedUsage.quantity}
+                </p>
+                {activeQuote.quote.settlement === "ACTUAL_USAGE" && (
+                  <p className="text-xs text-muted-foreground">
+                    Wallet hold / maximum charge:{" "}
+                    {activeQuote.quote.reservationCredits} credits ·{" "}
+                    {activeQuote.quote.maximumChargeOmr}. Final charge uses
+                    provider usage; unused held credits return to your balance.
+                  </p>
+                )}
+                {!activeQuote.canSpend && (
+                  <p className="text-sm text-destructive">
+                    This generation exceeds your monthly spending cap.
+                  </p>
+                )}
+                {!activeQuote.canAfford && (
+                  <p className="text-sm text-destructive">
+                    Your wallet cannot cover the required wallet hold.
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Choose settings to receive a quote.
+              </p>
+            )}
+            {quoteError && (
+              <p role="status" className="text-sm text-destructive">
+                {quoteError}
+              </p>
+            )}
+          </section>
 
           <Button
             type="button"
@@ -1640,18 +1619,7 @@ export function GenerationStudio({
                     : activeMode === "VOICE"
                       ? "speech"
                       : "image"
-                } · ${
-                  activeMode === "VOICE"
-                    ? (quotedCredits ?? "—")
-                    : activeMode === "VIDEO" &&
-                        model?.pricingDimension === "SECOND"
-                      ? (videoQuotedCredits ?? "—")
-                      : activeMode === "IMAGE" && model
-                        ? (
-                            BigInt(model.credits) * BigInt(selectedOutputCount)
-                          ).toString()
-                        : (model?.credits ?? "—")
-                } credits`}
+                } · ${activeQuote?.quote.reservationCredits ?? "—"} credits`}
           </Button>
           <p className="text-xs text-muted-foreground">
             Credits are reserved when queued and charged once the media is

@@ -72,6 +72,7 @@ enum MediaKind {
 }
 
 enum PricingDimension {
+  TOKEN
   REQUEST
   CHARACTER
   SECOND
@@ -407,6 +408,10 @@ model ModelPriceVersion {
   id                   String           @id @default(cuid())
   providerModelId      String
   providerCostMicroUsd BigInt
+  publicationKey      String?          @unique @db.VarChar(36)
+  publicationHash     String?          @db.VarChar(64)
+  usageRates          Json?
+  providerCostBasisNote String?          @db.VarChar(255)
   videoInputRate720p   BigInt?
   videoInputRate1080p  BigInt?
   customerCredits      BigInt
@@ -444,6 +449,7 @@ model GenerationJob {
   reservedCredits            BigInt                 @default(0)
   chargedCredits             BigInt                 @default(0)
   actualProviderCostMicroUsd BigInt?
+  providerCostBasis          String?                @db.VarChar(32)
   quotedUnits                Int?
   actualUnits                Int?
   billableQuantity           Int?

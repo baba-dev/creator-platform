@@ -1,3 +1,4 @@
+import { formatBaisa } from "@/lib/format-baisa";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CancelJobButton } from "@/components/studio/cancel-job-button";
@@ -150,6 +151,27 @@ export default async function CustomerJobPage({
             <p className="mt-3 text-sm">
               Reserved: {job.reservedCredits} · Charged: {job.chargedCredits}
             </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Final charge equivalent:{" "}
+              {formatBaisa(BigInt(job.chargedPriceBaisa))}
+            </p>
+            {job.status === "SUCCEEDED" &&
+              BigInt(job.reservedCredits) > BigInt(job.chargedCredits) && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Unused hold returned:{" "}
+                  {(
+                    BigInt(job.reservedCredits) - BigInt(job.chargedCredits)
+                  ).toString()}{" "}
+                  credits
+                </p>
+              )}
+            {job.kind === "VIDEO" && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Actual completion tokens:{" "}
+                {job.actualCompletionTokens ??
+                  "Unavailable / pending reconciliation"}
+              </p>
+            )}
             {job.quotedUnits !== null && (
               <p className="mt-1 text-xs text-muted-foreground">
                 Quoted units: {job.quotedUnits}

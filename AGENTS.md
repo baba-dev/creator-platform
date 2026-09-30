@@ -19,7 +19,13 @@ These rules apply to every contributor and coding agent.
 - Wallet history is immutable. Correct mistakes with reversal or adjustment
   entries; never rewrite or delete a posted entry.
 - Reserve customer credits before submitting a billable provider request.
-- Require idempotency keys on generation and financial mutations.
+- Require idempotency keys on generation and financial mutations, including
+  price publication.
+- New payment grants and model prices use 1 credit per baisa; record bonuses as
+  separate audited grants. Preserve historical snapshots.
+- Keep token-rate selectors and registered estimators in `packages/credits`;
+  quotes and admission must use the same rounding/reservation policy. Missing
+  provider usage must not be guessed during token settlement or recovery.
 
 ## Assets and media
 

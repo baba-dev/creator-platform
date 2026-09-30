@@ -119,7 +119,7 @@ export async function POST(request: Request) {
       finalizeUploadedAsset(tx, {
         assetId: pending!.id,
         organizationId,
-        reservedBytes: pending!.byteSize,
+        actorUserId: session.user.id,
         actualBytes: stored.byteSize,
         sha256: stored.sha256,
         width: media.width,
@@ -127,32 +127,19 @@ export async function POST(request: Request) {
         durationMs: media.durationMs,
       }),
     );
-    await db.auditEvent.create({
-      data: {
-        actorUserId: session.user.id,
-        organizationId,
-        action: "asset.uploaded",
-        targetType: "Asset",
-        targetId: asset.id,
-        metadata: {
-          mediaKind: asset.mediaKind,
-          byteSize: asset.byteSize.toString(),
-        },
-      },
-    });
     return NextResponse.json({ asset: serializeAsset(asset) }, { status: 201 });
   } catch (error) {
     if (pending) {
-      await storage.delete(pending.objectKey).catch(() => undefined);
-      await db
+      const cancelled = await db
         .$transaction((tx) =>
           failPendingUpload(tx, {
             assetId: pending!.id,
             organizationId,
-            reservedBytes: pending!.byteSize,
           }),
         )
-        .catch(() => undefined);
+        .catch(() => false);
+      if (cancelled)
+        await storage.delete(pending.objectKey).catch(() => undefined);
     }
     return NextResponse.json(
       { error: safeErrorMessage(error, "Upload failed.") },

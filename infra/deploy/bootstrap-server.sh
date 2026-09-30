@@ -24,6 +24,7 @@ install -d -o root -g aiwa-creator -m 0750 /var/www/creator-platform/releases
 install -d -o "$deploy_user" -g aiwa-creator -m 0750 /var/www/creator-platform/incoming
 install -d -o aiwa-creator -g aiwa-creator -m 0750 /var/www/creator-platform/shared
 install -d -o aiwa-creator -g aiwa-creator -m 0750 /var/www/creator-platform/.cache
+install -d -o aiwa-creator -g aiwa-creator -m 0750 /var/www/creator-platform/.cache/next
 install -d -o aiwa-creator -g aiwa-creator -m 0750 /var/www/creator-platform/.config
 install -d -o aiwa-creator -g aiwa-creator -m 0750 /var/www/creator-platform/.local/state
 install -d -o root -g aiwa-creator -m 0750 /etc/aiwa-creators

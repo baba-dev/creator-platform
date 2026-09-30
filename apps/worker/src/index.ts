@@ -1,3 +1,5 @@
+import { monitorEventLoopDelay } from "node:perf_hooks";
+import { workerQueues } from "./roles";
 import {
   withMediaCapacity,
   configureMediaCapacityGate,
@@ -26,7 +28,7 @@ import {
 } from "@aiwa/mail/transport";
 import { createBytePlusProvider } from "@aiwa/providers/byteplus";
 import { createNvidiaProvider } from "@aiwa/providers/nvidia";
-import { Queue, Worker } from "bullmq";
+import { Queue, Worker, type Processor, type WorkerOptions } from "bullmq";
 import Redis from "ioredis";
 import {
   processAssetDerivatives,
@@ -42,6 +44,35 @@ configureMediaCapacityGate(withDatabaseMediaCapacity);
 const env = parseServerEnv();
 sharp.concurrency(env.MEDIA_THREADS);
 sharp.cache({ memory: 32, files: 0, items: 32 });
+const selectedQueues = workerQueues(env.WORKER_ROLE);
+const owns = (queue: string) => selectedQueues.includes(queue);
+const workers: Worker[] = [];
+const queues: Queue[] = [];
+function createWorker(
+  name: string,
+  processor: Processor<Record<string, unknown>>,
+  options: WorkerOptions,
+): Worker | undefined {
+  if (!owns(name)) return undefined;
+  const worker = new Worker<Record<string, unknown>>(name, processor, options);
+  workers.push(worker);
+  worker.on("error", () =>
+    log("error", "Worker connection failed", { queue: name }),
+  );
+  worker.on("stalled", (jobId) =>
+    log("error", "Queue lock lost; job stalled", { queue: name, jobId }),
+  );
+  return worker;
+}
+function createQueue(name: string): Queue | undefined {
+  if (!owns(name)) return undefined;
+  const queue = new Queue(name, { connection: redis, prefix: "aiwa" });
+  queues.push(queue);
+  queue.on("error", () =>
+    log("error", "Queue connection failed", { queue: name }),
+  );
+  return queue;
+}
 const redis = new Redis(env.REDIS_URL, {
   enableReadyCheck: true,
   maxRetriesPerRequest: null,
@@ -57,6 +88,7 @@ function log(
     level,
     service: "creator-platform-worker",
     version: env.APP_VERSION,
+    role: env.WORKER_ROLE,
     message,
     ...fields,
   });
@@ -65,7 +97,7 @@ function log(
   else console.info(entry);
 }
 
-const maintenanceWorker = new Worker(
+const maintenanceWorker = createWorker(
   "maintenance",
   async (job) => {
     log("info", "maintenance job received", {
@@ -77,10 +109,10 @@ const maintenanceWorker = new Worker(
   { connection: redis, concurrency: 1, prefix: "aiwa" },
 );
 
-maintenanceWorker.on("completed", (job) => {
+maintenanceWorker?.on("completed", (job) => {
   log("info", "job completed", { jobId: job.id, queue: job.queueName });
 });
-maintenanceWorker.on("failed", (job, error) => {
+maintenanceWorker?.on("failed", (job, error) => {
   log("error", "job failed", {
     jobId: job?.id,
     queue: job?.queueName,
@@ -88,12 +120,9 @@ maintenanceWorker.on("failed", (job, error) => {
   });
 });
 
-const mailQueue = new Queue("mail", {
-  connection: redis,
-  prefix: "aiwa",
-});
+const mailQueue = createQueue("mail");
 
-const mailWorker = new Worker(
+const mailWorker = createWorker(
   "mail",
   async (job) => {
     if (!env.MAIL_ENABLED) return;
@@ -108,8 +137,8 @@ const mailWorker = new Worker(
   { connection: redis, prefix: "aiwa", concurrency: 3 },
 );
 
-mailWorker.on("error", () => log("error", "Mail queue connection failed"));
-mailWorker.on("failed", (job, error) =>
+mailWorker?.on("error", () => log("error", "Mail queue connection failed"));
+mailWorker?.on("failed", (job, error) =>
   log("error", "Mail delivery attempt failed", {
     mailId: job?.data?.mailId,
     attemptsMade: job?.attemptsMade,
@@ -118,13 +147,10 @@ mailWorker.on("failed", (job, error) =>
   }),
 );
 
-const generationQueue = new Queue("generation", {
-  connection: redis,
-  prefix: "aiwa",
-});
-const hasBytePlus = Boolean(
-  env.BYTEPLUS_API_KEY || env.BYTEPLUS_SPEECH_API_KEY,
-);
+const generationQueue = createQueue("generation");
+const hasBytePlus =
+  owns("generation") &&
+  Boolean(env.BYTEPLUS_API_KEY || env.BYTEPLUS_SPEECH_API_KEY);
 const bytePlusProvider = hasBytePlus
   ? createBytePlusProvider({
       apiKey: env.BYTEPLUS_API_KEY,
@@ -138,7 +164,7 @@ const bytePlusProvider = hasBytePlus
     })
   : null;
 
-const generationWorker = new Worker(
+const generationWorker = createWorker(
   "generation",
   async (job) => {
     if (!bytePlusProvider)
@@ -169,10 +195,10 @@ const generationWorker = new Worker(
   },
 );
 
-generationWorker.on("error", () =>
+generationWorker?.on("error", () =>
   log("error", "Generation queue connection failed"),
 );
-generationWorker.on("failed", (job, error) =>
+generationWorker?.on("failed", (job, error) =>
   log("error", "Generation processing failed; recovery remains queued", {
     jobId: job?.id,
     attemptsMade: job?.attemptsMade,
@@ -181,12 +207,9 @@ generationWorker.on("failed", (job, error) =>
   }),
 );
 
-const assetQueue = new Queue("asset-ingestion", {
-  connection: redis,
-  prefix: "aiwa",
-});
+const assetQueue = createQueue("asset-ingestion");
 
-const assetWorker = new Worker(
+const assetWorker = createWorker(
   "asset-ingestion",
   async (job) =>
     withMediaCapacity(async () => {
@@ -265,10 +288,10 @@ const assetWorker = new Worker(
   { connection: redis, prefix: "aiwa", concurrency: 1, autorun: false },
 );
 
-assetWorker.on("error", () =>
+assetWorker?.on("error", () =>
   log("error", "Asset ingestion queue connection failed"),
 );
-assetWorker.on("failed", (job) => {
+assetWorker?.on("failed", (job) => {
   log("error", "Media delivery failed; durable state retained", {
     jobId: job?.id,
   });
@@ -290,6 +313,7 @@ async function importTask(
   kind: Parameters<typeof ensureMediaTask>[0]["kind"],
   legacyId: string,
 ) {
+  if (!assetQueue) throw new Error("Media role required");
   const legacy = await assetQueue.getJob(legacyId);
   return ensureMediaTask({
     targetId,
@@ -302,6 +326,7 @@ async function importTask(
 
 let mediaReady = false;
 async function startMediaWorker(): Promise<void> {
+  if (!assetQueue || !assetWorker) return;
   await assetQueue.setGlobalConcurrency(1);
   if (isShuttingDown) return;
   if (!env.MEDIA_PROCESSING_ENABLED) {
@@ -329,7 +354,7 @@ let cleanupScanCursor: string | undefined;
 let assetScanCursor: string | undefined;
 let assetDispatching = false;
 async function dispatchAssets() {
-  if (isShuttingDown || assetDispatching || !mediaReady) return;
+  if (isShuttingDown || assetDispatching || !mediaReady || !assetQueue) return;
   assetDispatching = true;
   try {
     await reviewExpiredMediaTasks();
@@ -464,23 +489,21 @@ async function dispatchAssets() {
   }
 }
 
-const reasoningQueue = new Queue("reasoning", {
-  connection: redis,
-  prefix: "aiwa",
-});
-const nvidiaProvider = env.NVIDIA_API_KEY
-  ? createNvidiaProvider({
-      apiKey: env.NVIDIA_API_KEY,
-      baseUrl: env.NVIDIA_BASE_URL,
-      defaultModel:
-        env.NVIDIA_REASONING_MODEL ||
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
-      requestTimeoutMs: env.NVIDIA_REQUEST_TIMEOUT_MS,
-      idleTimeoutMs: env.NVIDIA_IDLE_TIMEOUT_MS,
-    })
-  : null;
+const reasoningQueue = createQueue("reasoning");
+const nvidiaProvider =
+  owns("reasoning") && env.NVIDIA_API_KEY
+    ? createNvidiaProvider({
+        apiKey: env.NVIDIA_API_KEY,
+        baseUrl: env.NVIDIA_BASE_URL,
+        defaultModel:
+          env.NVIDIA_REASONING_MODEL ||
+          "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+        requestTimeoutMs: env.NVIDIA_REQUEST_TIMEOUT_MS,
+        idleTimeoutMs: env.NVIDIA_IDLE_TIMEOUT_MS,
+      })
+    : null;
 
-const reasoningWorker = new Worker(
+const reasoningWorker = createWorker(
   "reasoning",
   async (job) => {
     if (!nvidiaProvider)
@@ -490,10 +513,10 @@ const reasoningWorker = new Worker(
   { connection: redis, prefix: "aiwa", concurrency: 2 },
 );
 
-reasoningWorker.on("error", () =>
+reasoningWorker?.on("error", () =>
   log("error", "Reasoning queue connection failed"),
 );
-reasoningWorker.on("failed", (job, error) =>
+reasoningWorker?.on("failed", (job, error) =>
   log("error", "Reasoning job failed", {
     jobId: job?.id,
     attemptsMade: job?.attemptsMade,
@@ -505,7 +528,8 @@ reasoningWorker.on("failed", (job, error) =>
 let isShuttingDown = false;
 let mailDispatching = false;
 async function dispatchMail() {
-  if (isShuttingDown || mailDispatching || !env.MAIL_ENABLED) return;
+  if (isShuttingDown || mailDispatching || !env.MAIL_ENABLED || !mailQueue)
+    return;
   mailDispatching = true;
   try {
     const now = new Date();
@@ -575,7 +599,13 @@ async function dispatchMail() {
 
 let generationDispatching = false;
 async function dispatchGeneration() {
-  if (isShuttingDown || generationDispatching || !bytePlusProvider) return;
+  if (
+    isShuttingDown ||
+    generationDispatching ||
+    !bytePlusProvider ||
+    !generationQueue
+  )
+    return;
   generationDispatching = true;
   try {
     await reapExpiredRecoveryJobs();
@@ -643,7 +673,13 @@ async function dispatchGeneration() {
 
 let reasoningDispatching = false;
 async function dispatchReasoning() {
-  if (isShuttingDown || reasoningDispatching || !nvidiaProvider) return;
+  if (
+    isShuttingDown ||
+    reasoningDispatching ||
+    !nvidiaProvider ||
+    !reasoningQueue
+  )
+    return;
   reasoningDispatching = true;
   try {
     // A PROCESSING row left behind by a worker crash has an unknown provider
@@ -700,36 +736,51 @@ async function dispatchReasoning() {
   }
 }
 
-const mailDispatchTimer = setInterval(() => void dispatchMail(), 5_000);
-const generationDispatchTimer = setInterval(
-  () => void dispatchGeneration(),
-  10_000,
+const timers: NodeJS.Timeout[] = [];
+const dispatches = new Set<Promise<void>>();
+function schedule(
+  queue: string,
+  dispatch: () => Promise<void>,
+  interval: number,
+) {
+  if (!owns(queue)) return;
+  const run = () => {
+    const pending = dispatch();
+    dispatches.add(pending);
+    void pending.finally(() => dispatches.delete(pending));
+  };
+  timers.push(setInterval(run, interval));
+  run();
+}
+schedule("mail", dispatchMail, 5_000);
+schedule("generation", dispatchGeneration, 10_000);
+schedule("reasoning", dispatchReasoning, 2_000);
+schedule("asset-ingestion", dispatchAssets, 15_000);
+const loopDelay = monitorEventLoopDelay({ resolution: 20 });
+loopDelay.enable();
+timers.push(
+  setInterval(() => {
+    const memory = process.memoryUsage();
+    log("info", "Worker health", {
+      eventLoopP99Ms: Math.round(loopDelay.percentile(99) / 1e6),
+      eventLoopMaxMs: Math.round(loopDelay.max / 1e6),
+      rssBytes: memory.rss,
+      runningConsumers: workers.reduce(
+        (count, worker) => count + (worker.isRunning() ? 1 : 0),
+        0,
+      ),
+      queues: selectedQueues,
+    });
+    loopDelay.reset();
+  }, 30_000),
 );
-const reasoningDispatchTimer = setInterval(
-  () => void dispatchReasoning(),
-  2_000,
-);
-const assetDispatchTimer = setInterval(() => void dispatchAssets(), 15_000);
-void dispatchMail();
-void dispatchGeneration();
-void dispatchReasoning();
-void dispatchAssets();
 
 async function shutdown(signal: NodeJS.Signals): Promise<void> {
   log("info", "worker shutting down", { signal });
   isShuttingDown = true;
-  clearInterval(mailDispatchTimer);
-  clearInterval(generationDispatchTimer);
-  clearInterval(reasoningDispatchTimer);
-  clearInterval(assetDispatchTimer);
-
-  // Stop accepting new jobs from Redis queues immediately
-  await Promise.allSettled([
-    mailWorker.pause(true),
-    generationWorker.pause(true),
-    reasoningWorker.pause(true),
-    assetWorker.pause(true),
-  ]);
+  for (const timer of timers) clearInterval(timer);
+  loopDelay.disable();
+  await Promise.allSettled(workers.map((worker) => worker.pause(true)));
 
   // Cover the configured provider request deadline, a worst-case 120s media
   // transfer, and 30s for persistence/queue cleanup. Server env validation caps
@@ -741,16 +792,11 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   );
   const drainTimeoutMs = providerDeadlineMs + 120_000 + 30_000;
   const drainPromise = Promise.all([
-    mailWorker.close(),
-    generationWorker.close(),
-    reasoningWorker.close(),
-    mailQueue.close(),
-    generationQueue.close(),
-    reasoningQueue.close(),
-    assetWorker.close(),
-    assetQueue.close(),
-    maintenanceWorker.close(),
-    closeSmtpTransport(),
+    ...workers.map((worker) => worker.close()),
+    Promise.allSettled([...dispatches]).then(() =>
+      Promise.all(queues.map((queue) => queue.close())),
+    ),
+    ...(owns("mail") ? [closeSmtpTransport()] : []),
   ]);
 
   let timeoutHandle: NodeJS.Timeout | undefined;
@@ -796,7 +842,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
 }
 
 log("info", "worker started", {
-  queues: ["maintenance", "mail", "generation", "reasoning", "asset-ingestion"],
+  queues: selectedQueues,
   environment: env.APP_ENV,
   bytePlusConfigured: Boolean(bytePlusProvider),
   nvidiaConfigured: Boolean(nvidiaProvider),

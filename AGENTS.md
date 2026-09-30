@@ -11,6 +11,11 @@ These rules apply to every contributor and coding agent.
 - Never import server credentials into a client component or use a
   `NEXT_PUBLIC_` provider secret.
 
+- Worker roles must own only their selected queues and dispatchers. Only the
+  media role may change media queue pause state. Drain all selected workers
+  before switching the deployment symlink; never overlap all/core with split
+  consumers. See `docs/operations/worker-isolation.md`.
+
 ## Money and credits
 
 - Store OMR as integer baisa, provider USD cost as integer micro-USD, platform

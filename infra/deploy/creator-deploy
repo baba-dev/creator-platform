@@ -111,7 +111,7 @@ validate_root_control_file() {
   local path="$1"
   local unsafe=""
 
-  [[ -f "$path" ]] || return 1
+  [[ -f "$path" && ! -L "$path" ]] || return 1
   [[ "$(stat -c '%U' "$path" 2>/dev/null)" == root ]] || return 1
   unsafe="$(find "$path" -maxdepth 0 -perm /022 -print -quit 2>/dev/null)"
   [[ -z "$unsafe" ]]

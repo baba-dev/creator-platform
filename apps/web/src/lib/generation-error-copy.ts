@@ -171,8 +171,7 @@ export function getGenerationErrorPresentation({
       title: "A reference image could not be read",
       description:
         "The provider could not parse one of the supplied reference images.",
-      nextStep:
-        "Remove or replace the affected reference image and try again.",
+      nextStep: "Remove or replace the affected reference image and try again.",
     };
   }
 

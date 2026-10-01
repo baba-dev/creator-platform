@@ -4,6 +4,7 @@ import {
   assertFlatVideoPriceCoversWorstCase,
   createCreditQuote,
   DEFAULT_FX_RATE,
+  parseTextUsageRates,
   parseUsageRates,
   selectUsageRate,
 } from "@aiwa/credits";
@@ -247,7 +248,29 @@ export async function PATCH(
         { error: "Usage rates require TOKEN pricing." },
         { status: 400 },
       );
-    if (pricingDimension === "TOKEN") {
+    if (usageRates && model.mediaKind !== "VIDEO" && model.mediaKind !== "TEXT")
+      return NextResponse.json(
+        {
+          error: "Usage-rate tables are only valid for video or text models.",
+        },
+        { status: 400 },
+      );
+    if (pricingDimension === "TOKEN" && model.mediaKind === "TEXT") {
+      try {
+        parseTextUsageRates(usageRates);
+      } catch (error) {
+        return NextResponse.json(
+          {
+            error:
+              error instanceof Error
+                ? error.message
+                : "Invalid text token pricing.",
+          },
+          { status: 400 },
+        );
+      }
+    }
+    if (pricingDimension === "TOKEN" && model.mediaKind === "VIDEO") {
       try {
         const table = parseUsageRates(usageRates);
         const capabilities = model.capabilities as Record<

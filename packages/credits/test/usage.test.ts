@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   estimateGeneration,
   estimateVideoTokens,
+  parseTextUsageRates,
   parseUsageRates,
   quoteImageOutputs,
   selectUsageRate,
+  textProviderCostMicroUsd,
   type PriceSnapshot,
 } from "../src/index";
 import { parseMarginPercent, createCreditQuote } from "../src/pricing";
@@ -176,5 +178,66 @@ describe("generation pricing policies", () => {
         exchangeRate: { baisaNumerator: -1n, baisaDenominator: 2n },
       }),
     ).toThrow("must be positive");
+  });
+
+  it("prices text input, cached input and output independently", () => {
+    const textRates = {
+      estimator: "byteplus-text-v1",
+      tiers: [
+        {
+          maxPromptTokens: 131072,
+          inputMicroUsdPerMillionTokens: "500000",
+          cachedInputMicroUsdPerMillionTokens: "100000",
+          outputMicroUsdPerMillionTokens: "3000000",
+        },
+        {
+          maxPromptTokens: 262144,
+          inputMicroUsdPerMillionTokens: "1000000",
+          cachedInputMicroUsdPerMillionTokens: "200000",
+          outputMicroUsdPerMillionTokens: "6000000",
+        },
+      ],
+    };
+    expect(parseTextUsageRates(textRates).tiers).toHaveLength(2);
+    expect(
+      textProviderCostMicroUsd(textRates, {
+        promptTokens: 1000,
+        cachedPromptTokens: 200,
+        completionTokens: 500,
+      }),
+    ).toBe(1920n);
+    expect(
+      textProviderCostMicroUsd(textRates, {
+        promptTokens: 150000,
+        completionTokens: 1000,
+      }),
+    ).toBe(156000n);
+  });
+
+  it("estimates and reserves credits for Seed text generation using TOKEN pricing", () => {
+    const textPrice: PriceSnapshot = {
+      providerCostMicroUsd: 2000n, // $2.00 per 1000 tokens
+      pricingDimension: "TOKEN",
+      unitQuantity: 1000,
+      fxBaisaNumerator: 769n,
+      fxBaisaDenominator: 2n,
+      targetMarginBps: 2500,
+      creditsPerBaisa: 1n,
+    };
+
+    const estimate = estimateGeneration({
+      price: textPrice,
+      mediaKind: "TEXT",
+      providerModelId: "dola-seed-2-1-turbo-260628",
+      text: "Write a high-energy script for a commercial.",
+      units: 1000, // 1000 requested completion tokens
+    });
+
+    expect(estimate.settlement).toBe("ACTUAL_USAGE");
+    expect(estimate.estimatedTokens).toBeGreaterThan(1000n);
+    expect(estimate.quote.customerCredits).toBeGreaterThan(0n);
+    expect(estimate.reservation.customerCredits).toBeGreaterThanOrEqual(
+      estimate.quote.customerCredits,
+    );
   });
 });

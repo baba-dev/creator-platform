@@ -22,6 +22,8 @@ export * from "./voices";
 export * from "./reconciliation";
 export * from "./cancel";
 export * from "./quote-contract";
+export * from "./text";
+export * from "./speech-trial";
 import { verifyGenerationQuote, quoteParameters } from "./quote-contract";
 
 export const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
@@ -129,6 +131,47 @@ export const voiceModelIds = VERIFIED_BYTEPLUS_MODELS.filter(
   (m) => m.mediaKind === "voice",
 ).map((m) => m.id);
 
+export const textRequestSchema = z
+  .object({
+    organizationId: z.string().min(1).max(100),
+    projectId: z.string().min(1).max(100).nullable().optional(),
+    modelId: z.string().min(1).max(100),
+    priceVersionId: z.string().min(1).max(100),
+    quoteToken: z.string().min(1).max(2048).optional(),
+    idempotencyKey: z.uuid(),
+    templateId: z.string().min(1).max(100).optional(),
+    messages: z
+      .array(
+        z.object({
+          role: z.enum(["system", "user", "assistant"]),
+          content: z.string().min(1).max(8000),
+        }),
+      )
+      .min(1)
+      .max(50),
+    temperature: z.number().min(0).max(2).default(0.7),
+    maxTokens: z.number().int().positive().max(8192).default(2048),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const totalCharacters = value.messages.reduce(
+      (sum, message) => sum + message.content.length,
+      0,
+    );
+    if (totalCharacters > 120_000) {
+      context.addIssue({
+        code: "custom",
+        path: ["messages"],
+        message:
+          "Combined text-generation context cannot exceed 120,000 characters.",
+      });
+    }
+  });
+
+export const textModelIds = VERIFIED_BYTEPLUS_MODELS.filter(
+  (m) => m.mediaKind === "text",
+).map((m) => m.id);
+
 export function hasModelCapability(
   capabilities: unknown,
   capability: string,
@@ -142,10 +185,10 @@ export function hasModelCapability(
   return (capabilities as Record<string, unknown>)[capability] === true;
 }
 
-async function resolveGenerationTemplateId(
+export async function resolveGenerationTemplateId(
   tx: Prisma.TransactionClient,
   templateId: string | undefined,
-  mediaKind: "IMAGE" | "VIDEO" | "VOICE",
+  mediaKind: "IMAGE" | "VIDEO" | "VOICE" | "TEXT",
 ): Promise<string | null> {
   if (!templateId) return null;
   const template = await tx.generationTemplate.findFirst({

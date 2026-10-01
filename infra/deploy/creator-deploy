@@ -61,7 +61,7 @@ validate_release_contents() {
     && [[ -f "$directory/ops/db/prisma/schema.prisma" ]] \
     && [[ -d "$directory/ops/db/prisma/migrations" ]] \
     && [[ -f "$directory/ops/db/prisma/promote-owner.ts" ]] \
-    && [[ -f "$directory/ops/db/prisma/seed-templates.ts" ]] \
+    && [[ -f "$directory/ops/db/prisma/seed.ts" ]] \
     && [[ -f "$directory/ops/db/prisma/template-catalog.ts" ]] \
     && [[ -f "$directory/ops/db/prisma/templates.ts" ]] \
     && [[ -x "$directory/ops/bin/creator-deploy" ]] \
@@ -136,7 +136,7 @@ ops/systemd/creator-worker@media.service.d/limits.conf|/etc/systemd/system/creat
 CONTROL_PLANE
 }
 
-load_environment_migrate_and_seed_templates() {
+load_environment_migrate_and_seed_catalog() {
   local directory="$1"
 
   runuser --preserve-environment -u "$runtime_user" -- \
@@ -164,7 +164,7 @@ export XDG_STATE_HOME=/var/www/creator-platform/.local/state
 
 cd "$release_dir/ops/db"
 ./node_modules/.bin/prisma migrate deploy --schema prisma/schema.prisma
-./node_modules/.bin/tsx prisma/seed-templates.ts
+./node_modules/.bin/tsx prisma/seed.ts
 MIGRATE
 }
 
@@ -256,8 +256,8 @@ if [[ "$release_ready" != true ]]; then
     | gzip -1 >"$backup_path"
   chmod 0600 "$backup_path"
 
-  log "applying database migrations and ensuring template catalog"
-  load_environment_migrate_and_seed_templates "$temporary_dir"
+  log "applying database migrations and ensuring provider/template catalog"
+  load_environment_migrate_and_seed_catalog "$temporary_dir"
   validate_release "$temporary_dir" "$release_sha" \
     || fail "release integrity changed while running deployment operations"
 
@@ -270,7 +270,7 @@ if [[ "$release_ready" != true ]]; then
 
   mv -- "$temporary_dir" "$release_dir"
   temporary_dir=""
-  log "release extracted, verified, migrated, and template catalog ensured"
+  log "release extracted, verified, migrated, and provider/template catalog ensured"
 fi
 
 validate_installed_control_plane "$release_dir" \

@@ -116,6 +116,16 @@ export function quoteParameters(
       billableQuantity:
         input.text === undefined ? (input.billableQuantity ?? null) : null,
     };
+  if (mediaKind === "TEXT")
+    return {
+      textHash:
+        input.text === undefined
+          ? null
+          : createHash("sha256").update(input.text.trim()).digest("hex"),
+      units: input.units ?? 1024,
+      billableQuantity:
+        input.text === undefined ? (input.billableQuantity ?? null) : null,
+    };
   return {
     units: input.outputCount ?? input.units ?? 1,
     resolution: input.resolution ?? "2K",

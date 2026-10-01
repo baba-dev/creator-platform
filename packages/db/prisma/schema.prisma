@@ -69,6 +69,7 @@ enum MediaKind {
   VIDEO
   VOICE
   REASONING
+  TEXT
 }
 
 enum PricingDimension {
@@ -180,6 +181,11 @@ model User {
   twoFactors             TwoFactor[]
   notificationPreference NotificationPreference?
   templateFavorites      TemplateFavorite[]
+  personas               Persona[]
+  chatThreads            ChatThread[]
+  scripts                Script[]
+  brandProfiles          BrandProfile[]
+  storyPlans             StoryPlan[]
 
   @@index([platformRole, disabledAt])
 }
@@ -283,6 +289,11 @@ model Organization {
   assetTags              AssetTag[]
   assetStorageUsage      AssetStorageUsage?
   invitations            OrganizationInvitation[]
+  personas               Persona[]
+  chatThreads            ChatThread[]
+  scripts                Script[]
+  brandProfiles          BrandProfile[]
+  storyPlans             StoryPlan[]
 
   @@index([status])
   @@index([ownerUserId])
@@ -382,6 +393,9 @@ model Project {
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   generationJobs GenerationJob[]
   assets         Asset[]
+  chatThreads    ChatThread[]
+  scripts        Script[]
+  storyPlans     StoryPlan[]
 
   @@index([organizationId, archivedAt])
 }
@@ -935,4 +949,122 @@ model MediaCapacity {
   fence      Int       @default(0)
   leaseUntil DateTime?
   updatedAt  DateTime  @updatedAt
+}
+
+model Persona {
+  id             String       @id @default(cuid())
+  organizationId String
+  name           String
+  avatarUrl      String?
+  tag            String?
+  description    String?      @db.Text
+  systemPrompt   String       @db.Text
+  voiceKey       String?
+  modelId        String       @default("doubao-seed-character-260628")
+  isPreset       Boolean      @default(false)
+  createdById    String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  createdBy      User         @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  chatThreads    ChatThread[]
+
+  @@index([organizationId, isPreset, createdAt])
+}
+
+model ChatThread {
+  id             String        @id @default(cuid())
+  organizationId String
+  projectId      String?
+  createdById    String
+  personaId      String?
+  title          String
+  modelId        String        @default("doubao-seed-character-260628")
+  systemPrompt   String?       @db.Text
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  project        Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdBy      User          @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  persona        Persona?      @relation(fields: [personaId], references: [id], onDelete: SetNull)
+  messages       ChatMessage[]
+
+  @@index([organizationId, createdById, updatedAt])
+  @@index([projectId])
+}
+
+model ChatMessage {
+  id          String     @id @default(cuid())
+  threadId    String
+  role        String
+  content     String     @db.LongText
+  tokensUsed  Int?
+  metadata    Json?
+  createdAt   DateTime   @default(now())
+
+  thread      ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId, createdAt])
+}
+
+model Script {
+  id                    String       @id @default(cuid())
+  organizationId        String
+  projectId             String?
+  title                 String
+  description           String?      @db.Text
+  logline               String?      @db.Text
+  targetDurationSeconds Int?
+  content               Json
+  createdById           String
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  project               Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdBy             User         @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, updatedAt])
+}
+
+model BrandProfile {
+  id             String       @id @default(cuid())
+  organizationId String
+  name           String
+  tagline        String?
+  voiceTone      String?      @db.Text
+  guidelines     String?      @db.Text
+  targetAudience String?      @db.Text
+  vocabulary     Json?
+  createdById    String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  createdBy      User         @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, updatedAt])
+}
+
+model StoryPlan {
+  id             String       @id @default(cuid())
+  organizationId String
+  projectId      String?
+  title          String
+  genre          String?
+  premise        String?      @db.Text
+  structureType  String       @default("THREE_ACT")
+  beats          Json
+  characters     Json
+  createdById    String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  project        Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdBy      User         @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, updatedAt])
 }

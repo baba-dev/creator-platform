@@ -38,6 +38,15 @@ describe("BytePlus provider adapter", () => {
       "seedream-4-0-250828",
       "dreamina-seedance-2-5-260628",
       "seed-tts-2.0",
+      "dola-seed-2-1-turbo-260628",
+      "seed-2-0-pro-260328",
+      "seed-2-0-lite-260428",
+      "seed-2-0-mini-260428",
+      "seed-2-0-code-preview-260328",
+      "doubao-seed-character-260628",
+      "seed-1-8-251228",
+      "seed-1-6-250915",
+      "seed-1-6-flash-250715",
     ]);
     expect(
       models.find((model) => model.id === "seedream-5-0-260128")?.capabilities,
@@ -755,6 +764,143 @@ describe("BytePlus provider adapter", () => {
         },
       },
     });
+  });
+
+  it("submits a text chat completion request and decodes content and token usage", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        id: "chatcmpl-seed-1",
+        choices: [
+          {
+            message: {
+              role: "assistant",
+              content: "Hello from Seed!",
+            },
+            finish_reason: "stop",
+          },
+        ],
+        usage: {
+          prompt_tokens: 15,
+          completion_tokens: 8,
+          total_tokens: 23,
+        },
+      }),
+    );
+    const provider = createBytePlusProvider({
+      ...validConfig,
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const job = await provider.submit({
+      idempotencyKey: "chat-job-1",
+      modelId: "dola-seed-2-1-turbo-260628",
+      mediaKind: "text",
+      input: {
+        messages: [
+          { role: "system", content: "You are a creative assistant." },
+          { role: "user", content: "Hello Seed!" },
+        ],
+        temperature: 0.7,
+        maxTokens: 1024,
+      },
+    });
+
+    expect(job).toMatchObject({
+      providerRequestId: "chatcmpl-seed-1",
+      status: "succeeded",
+      inlineOutputs: [
+        {
+          mediaType: "text/plain",
+          dataBase64: Buffer.from("Hello from Seed!", "utf8").toString(
+            "base64",
+          ),
+        },
+      ],
+      rawUsage: {
+        prompt_tokens: 15,
+        completion_tokens: 8,
+        total_tokens: 23,
+      },
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      "https://ark.ap-southeast.bytepluses.com/api/v3/chat/completions",
+    );
+    expect(init.headers).toMatchObject({
+      authorization: "Bearer test-byteplus-api-key",
+      "content-type": "application/json",
+    });
+    expect(JSON.parse(init.body as string)).toEqual({
+      model: "dola-seed-2-1-turbo-260628",
+      messages: [
+        { role: "system", content: "You are a creative assistant." },
+        { role: "user", content: "Hello Seed!" },
+      ],
+      temperature: 0.7,
+      max_tokens: 1024,
+    });
+  });
+
+  it("submits Character Chat using doubao-seed-character-260628", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        id: "chatcmpl-char-1",
+        choices: [
+          {
+            message: {
+              role: "assistant",
+              content: "Welcome to my salon, darling!",
+            },
+            finish_reason: "stop",
+          },
+        ],
+        usage: {
+          prompt_tokens: 50,
+          completion_tokens: 12,
+          total_tokens: 62,
+        },
+      }),
+    );
+    const provider = createBytePlusProvider({
+      ...validConfig,
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const job = await provider.submit({
+      idempotencyKey: "char-job-1",
+      modelId: "doubao-seed-character-260628",
+      mediaKind: "text",
+      input: {
+        messages: [
+          {
+            role: "system",
+            content: "You are an eccentric 1920s Parisian artist.",
+          },
+          { role: "user", content: "Bonjour!" },
+        ],
+      },
+    });
+
+    expect(job.status).toBe("succeeded");
+    expect(job.providerRequestId).toBe("chatcmpl-char-1");
+  });
+
+  it("requires ModelArk API key for text completions", async () => {
+    const provider = createBytePlusProvider({
+      region: "ap-southeast-1",
+      speechApiKey: "speech-only-key",
+    });
+    await expect(
+      provider.submit({
+        idempotencyKey: "text-job-no-key",
+        modelId: "seed-2-0-lite-260428",
+        mediaKind: "text",
+        input: {
+          messages: [{ role: "user", content: "Hi" }],
+        },
+      }),
+    ).rejects.toBeInstanceOf(ProviderConfigurationError);
   });
 
   it("requires separate speech credentials for voice synthesis", async () => {

@@ -72,6 +72,115 @@ export function selectUsageRate(
   return BigInt(row.microUsdPerThousandTokens);
 }
 
+export interface TextUsageTier {
+  maxPromptTokens: number;
+  inputMicroUsdPerMillionTokens: string;
+  outputMicroUsdPerMillionTokens: string;
+  cachedInputMicroUsdPerMillionTokens?: string;
+}
+export interface TextUsageRates {
+  estimator: "byteplus-text-v1";
+  tiers: TextUsageTier[];
+}
+
+export function parseTextUsageRates(value: unknown): TextUsageRates {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new RangeError("Text token pricing requires a rate table.");
+  const config = value as Record<string, unknown>;
+  if (
+    config.estimator !== "byteplus-text-v1" ||
+    !Array.isArray(config.tiers) ||
+    config.tiers.length < 1 ||
+    config.tiers.length > 4
+  )
+    throw new RangeError("Unsupported text usage estimator or rate table.");
+  let previousMax = 0;
+  const tiers = config.tiers.map((raw: unknown) => {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw))
+      throw new RangeError("Invalid text usage tier.");
+    const row = raw as Record<string, unknown>;
+    const maxPromptTokens = Number(row.maxPromptTokens);
+    const validRate = (rate: unknown) =>
+      typeof rate === "string" &&
+      /^\d{1,19}$/.test(rate) &&
+      BigInt(rate) > 0n &&
+      BigInt(rate) <= 9223372036854775807n;
+    if (
+      !Number.isSafeInteger(maxPromptTokens) ||
+      maxPromptTokens <= previousMax ||
+      maxPromptTokens > 1_048_576 ||
+      !validRate(row.inputMicroUsdPerMillionTokens) ||
+      !validRate(row.outputMicroUsdPerMillionTokens) ||
+      (row.cachedInputMicroUsdPerMillionTokens !== undefined &&
+        !validRate(row.cachedInputMicroUsdPerMillionTokens))
+    )
+      throw new RangeError("Invalid text usage tier.");
+    previousMax = maxPromptTokens;
+    return {
+      maxPromptTokens,
+      inputMicroUsdPerMillionTokens: String(row.inputMicroUsdPerMillionTokens),
+      outputMicroUsdPerMillionTokens: String(
+        row.outputMicroUsdPerMillionTokens,
+      ),
+      ...(row.cachedInputMicroUsdPerMillionTokens === undefined
+        ? {}
+        : {
+            cachedInputMicroUsdPerMillionTokens: String(
+              row.cachedInputMicroUsdPerMillionTokens,
+            ),
+          }),
+    };
+  });
+  return { estimator: "byteplus-text-v1", tiers };
+}
+
+function divideRoundUpBigInt(numerator: bigint, denominator: bigint): bigint {
+  return (numerator + denominator - 1n) / denominator;
+}
+
+export function textProviderCostMicroUsd(
+  config: unknown,
+  usage: {
+    promptTokens: number;
+    completionTokens: number;
+    cachedPromptTokens?: number;
+  },
+): bigint {
+  if (
+    !Number.isSafeInteger(usage.promptTokens) ||
+    usage.promptTokens < 0 ||
+    !Number.isSafeInteger(usage.completionTokens) ||
+    usage.completionTokens < 0 ||
+    !Number.isSafeInteger(usage.cachedPromptTokens ?? 0) ||
+    (usage.cachedPromptTokens ?? 0) < 0 ||
+    (usage.cachedPromptTokens ?? 0) > usage.promptTokens
+  )
+    throw new RangeError("Invalid text token usage.");
+  const table = parseTextUsageRates(config);
+  const tier = table.tiers.find(
+    (candidate) => usage.promptTokens <= candidate.maxPromptTokens,
+  );
+  if (!tier) {
+    throw new RangeError(
+      "Prompt token usage exceeds the configured text pricing tiers.",
+    );
+  }
+  const cached = usage.cachedPromptTokens ?? 0;
+  const uncached = usage.promptTokens - cached;
+  const inputRate = BigInt(tier.inputMicroUsdPerMillionTokens);
+  const outputRate = BigInt(tier.outputMicroUsdPerMillionTokens);
+  const cachedRate = BigInt(
+    tier.cachedInputMicroUsdPerMillionTokens ??
+      tier.inputMicroUsdPerMillionTokens,
+  );
+  const million = 1_000_000n;
+  return (
+    divideRoundUpBigInt(BigInt(uncached) * inputRate, million) +
+    divideRoundUpBigInt(BigInt(cached) * cachedRate, million) +
+    divideRoundUpBigInt(BigInt(usage.completionTokens) * outputRate, million)
+  );
+}
+
 export interface PriceSnapshot {
   providerCostMicroUsd: bigint;
   fxBaisaNumerator: bigint;
@@ -365,6 +474,51 @@ export function estimateGeneration(params: {
       referenceImageCount: params.referenceImageCount,
     });
     reservation = quote;
+  } else if (params.mediaKind === "TEXT") {
+    const promptText = params.text?.trim() ?? "";
+    const promptLength = promptText
+      ? countBillableCharacters(promptText)
+      : (params.billableQuantity ?? 0);
+    const estimatedInputTokens = Math.max(1, Math.ceil(promptLength / 3.5));
+    const requestedCompletionTokens = Math.max(1, params.units ?? 1024);
+    estimatedTokens = BigInt(estimatedInputTokens + requestedCompletionTokens);
+    billableQuantity = Number(estimatedTokens);
+    units = Number(calculateBillableUnits(estimatedTokens, price.unitQuantity));
+    const estimatedCost =
+      price.usageRates &&
+      typeof price.usageRates === "object" &&
+      !Array.isArray(price.usageRates) &&
+      (price.usageRates as Record<string, unknown>).estimator ===
+        "byteplus-text-v1"
+        ? textProviderCostMicroUsd(price.usageRates, {
+            promptTokens: estimatedInputTokens,
+            completionTokens: requestedCompletionTokens,
+          })
+        : price.providerCostMicroUsd * BigInt(units);
+    quote = quoteSnapshotCost(price, estimatedCost);
+    // Tokenization differs by language/code. Reserve a 25% input safety envelope
+    // while preserving the configured output cap.
+    const reservationInputTokens = Math.max(
+      estimatedInputTokens,
+      promptLength || estimatedInputTokens,
+    );
+    const reservationCost =
+      price.usageRates &&
+      typeof price.usageRates === "object" &&
+      !Array.isArray(price.usageRates) &&
+      (price.usageRates as Record<string, unknown>).estimator ===
+        "byteplus-text-v1"
+        ? textProviderCostMicroUsd(price.usageRates, {
+            promptTokens: reservationInputTokens,
+            completionTokens: requestedCompletionTokens,
+          })
+        : price.providerCostMicroUsd *
+          calculateBillableUnits(
+            BigInt(reservationInputTokens + requestedCompletionTokens),
+            price.unitQuantity,
+          );
+    reservation = quoteSnapshotCost(price, reservationCost);
+    settlement = "ACTUAL_USAGE";
   } else {
     if (price.pricingDimension === "TOKEN")
       throw new RangeError("No estimator is registered for this media kind.");

@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   db: {
     $transaction: vi.fn(),
+    generationJob: {
+      updateMany: vi.fn(),
+    },
   },
   credits: {
     calculateBillableUnits: vi.fn(
@@ -14,6 +17,7 @@ const mocks = vi.hoisted(() => ({
     reserveCreditsForJob: vi.fn(),
     captureCreditsForJob: vi.fn(),
     releaseOrRefundCredits: vi.fn(),
+    textProviderCostMicroUsd: vi.fn(() => 5_000n),
   },
   quoteContract: {
     verifyGenerationQuote: vi.fn(),
@@ -140,6 +144,110 @@ describe("executeTextGeneration", () => {
     expect(mocks.credits.captureCreditsForJob).toHaveBeenCalled();
   });
 
+
+  it("replays a succeeded request only when the idempotent payload matches", async () => {
+    const payload = {
+      messages: [{ role: "user", content: "Greetings!" }],
+      temperature: 0.7,
+      maxTokens: 1024,
+    };
+    const tx = {
+      $queryRaw: vi.fn(),
+      membership: {
+        findUnique: vi.fn().mockResolvedValue({
+          role: "ORGANIZATION_MEMBER",
+          monthlySpendingCapCredits: null,
+          organization: { status: "ACTIVE" },
+          user: { disabledAt: null, emailVerified: true },
+        }),
+      },
+      generationTemplate: { findFirst: vi.fn().mockResolvedValue(null) },
+      generationJob: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "job_cached",
+          status: "SUCCEEDED",
+          projectId: null,
+          templateId: null,
+          providerModelId: "m_1",
+          priceVersionId: "pv_1",
+          requestPayload: payload,
+          outputPayload: {
+            content: "Cached answer",
+            usage: {
+              promptTokens: 5,
+              completionTokens: 2,
+              totalTokens: 7,
+            },
+          },
+          chargedCredits: 3n,
+        }),
+      },
+    };
+    mocks.db.$transaction.mockImplementationOnce(async (callback) =>
+      callback(tx),
+    );
+
+    const result = await executeTextGeneration("user_1", {
+      organizationId: "org_1",
+      modelId: "m_1",
+      priceVersionId: "pv_1",
+      idempotencyKey: "123e4567-e89b-12d3-a456-426614174010",
+      messages: [{ role: "user", content: "Greetings!" }],
+      temperature: 0.7,
+      maxTokens: 1024,
+    });
+
+    expect(result.content).toBe("Cached answer");
+    expect(result.chargedCredits).toBe(3);
+  });
+
+  it("rejects reuse of an idempotency key with changed text inputs", async () => {
+    const tx = {
+      $queryRaw: vi.fn(),
+      membership: {
+        findUnique: vi.fn().mockResolvedValue({
+          role: "ORGANIZATION_MEMBER",
+          monthlySpendingCapCredits: null,
+          organization: { status: "ACTIVE" },
+          user: { disabledAt: null, emailVerified: true },
+        }),
+      },
+      generationTemplate: { findFirst: vi.fn().mockResolvedValue(null) },
+      generationJob: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "job_existing",
+          status: "SUCCEEDED",
+          projectId: null,
+          templateId: null,
+          providerModelId: "m_1",
+          priceVersionId: "pv_1",
+          requestPayload: {
+            messages: [{ role: "user", content: "Original" }],
+            temperature: 0.7,
+            maxTokens: 1024,
+          },
+          outputPayload: { content: "Old answer" },
+          chargedCredits: 3n,
+        }),
+      },
+    };
+    mocks.db.$transaction.mockImplementationOnce(async (callback) =>
+      callback(tx),
+    );
+
+    await expect(
+      executeTextGeneration("user_1", {
+        organizationId: "org_1",
+        modelId: "m_1",
+        priceVersionId: "pv_1",
+        idempotencyKey: "123e4567-e89b-12d3-a456-426614174011",
+        messages: [{ role: "user", content: "Changed" }],
+        temperature: 0.7,
+        maxTokens: 1024,
+      }),
+    ).rejects.toThrow("different inputs");
+  });
+
   it("rejects aggregate prompt context above the bounded limit", async () => {
     await expect(
       executeTextGeneration("user_1", {
@@ -256,7 +364,7 @@ describe("executeTextGeneration", () => {
     );
   });
 
-  it("releases credits if provider fails", async () => {
+  it("preserves credits for reconciliation when provider outcome is unknown", async () => {
     const tx = {
       $queryRaw: vi.fn(),
       membership: {
@@ -331,8 +439,17 @@ describe("executeTextGeneration", () => {
       executeTextGeneration("user_1", validPayload, {
         provider: mockFailingProvider,
       }),
-    ).rejects.toThrow("Provider API timeout");
+    ).rejects.toThrow("provider response timed out");
 
-    expect(mocks.credits.releaseOrRefundCredits).toHaveBeenCalled();
+    expect(mocks.credits.releaseOrRefundCredits).not.toHaveBeenCalled();
+    expect(mocks.db.generationJob.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "job_text_1", status: "SUBMITTED" },
+        data: expect.objectContaining({
+          status: "MANUAL_REVIEW",
+          errorCode: "PROVIDER_OUTCOME_UNKNOWN",
+        }),
+      }),
+    );
   });
 });

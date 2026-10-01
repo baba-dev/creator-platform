@@ -671,15 +671,29 @@ export async function setOrganizationSuspended(input: {
 }
 
 export async function getStorageUsage(organizationId: string, userId?: string) {
-  const result = await db.asset.aggregate({
-    where: {
-      organizationId,
-      storageOwnerUserId: userId,
-      status: { in: ["PENDING", "READY", "QUARANTINED", "DELETED", "PURGING"] },
-    },
-    _sum: { byteSize: true },
-  });
-  return result._sum.byteSize ?? 0n;
+  const [assets, variants] = await Promise.all([
+    db.asset.aggregate({
+      where: {
+        organizationId,
+        storageOwnerUserId: userId,
+        status: {
+          in: ["PENDING", "READY", "QUARANTINED", "DELETED", "PURGING"],
+        },
+      },
+      _sum: { byteSize: true },
+    }),
+    db.assetVariant.aggregate({
+      where: {
+        asset: {
+          organizationId,
+          storageOwnerUserId: userId,
+          status: { in: ["READY", "QUARANTINED", "DELETED", "PURGING"] },
+        },
+      },
+      _sum: { byteSize: true },
+    }),
+  ]);
+  return (assets._sum.byteSize ?? 0n) + (variants._sum.byteSize ?? 0n);
 }
 
 export async function getLogicalStorageUsage(
@@ -711,30 +725,56 @@ export async function withStorageAllocation<T>(input: {
   return db.$transaction(
     async (transaction) => {
       await lockedOrganization(transaction, input.organizationId);
-      const [member, organization] = await Promise.all([
-        transaction.asset.aggregate({
-          where: {
-            organizationId: input.organizationId,
-            storageOwnerUserId: input.storageOwnerUserId,
-            status: {
-              in: ["PENDING", "READY", "QUARANTINED", "DELETED", "PURGING"],
+      const [memberAssets, memberVariants, organizationAssets, organizationVariants] =
+        await Promise.all([
+          transaction.asset.aggregate({
+            where: {
+              organizationId: input.organizationId,
+              storageOwnerUserId: input.storageOwnerUserId,
+              status: {
+                in: ["PENDING", "READY", "QUARANTINED", "DELETED", "PURGING"],
+              },
             },
-          },
-          _sum: { byteSize: true },
-        }),
-        transaction.asset.aggregate({
-          where: {
-            organizationId: input.organizationId,
-            status: {
-              in: ["PENDING", "READY", "QUARANTINED", "DELETED", "PURGING"],
+            _sum: { byteSize: true },
+          }),
+          transaction.assetVariant.aggregate({
+            where: {
+              asset: {
+                organizationId: input.organizationId,
+                storageOwnerUserId: input.storageOwnerUserId,
+                status: { in: ["READY", "QUARANTINED", "DELETED", "PURGING"] },
+              },
             },
-          },
-          _sum: { byteSize: true },
-        }),
-      ]);
+            _sum: { byteSize: true },
+          }),
+          transaction.asset.aggregate({
+            where: {
+              organizationId: input.organizationId,
+              status: {
+                in: ["PENDING", "READY", "QUARANTINED", "DELETED", "PURGING"],
+              },
+            },
+            _sum: { byteSize: true },
+          }),
+          transaction.assetVariant.aggregate({
+            where: {
+              asset: {
+                organizationId: input.organizationId,
+                status: { in: ["READY", "QUARANTINED", "DELETED", "PURGING"] },
+              },
+            },
+            _sum: { byteSize: true },
+          }),
+        ]);
+      const memberUsed =
+        (memberAssets._sum.byteSize ?? 0n) +
+        (memberVariants._sum.byteSize ?? 0n);
+      const organizationUsed =
+        (organizationAssets._sum.byteSize ?? 0n) +
+        (organizationVariants._sum.byteSize ?? 0n);
       assertStorageAllocationFits(
-        member._sum.byteSize ?? 0n,
-        organization._sum.byteSize ?? 0n,
+        memberUsed,
+        organizationUsed,
         input.proposedBytes,
       );
       return input.allocate(transaction);

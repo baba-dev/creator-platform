@@ -190,6 +190,18 @@ export function speechRateMultiplierToPercentage(multiplier: number): number {
   return Math.round((parsed.data - 1) * 100);
 }
 
+export const bytePlusChatMessageSchema = z.object({
+  role: z.enum(["system", "user", "assistant"]),
+  content: z.string().min(1),
+});
+
+export const bytePlusTextInputSchema = z.object({
+  messages: z.array(bytePlusChatMessageSchema).min(1),
+  temperature: z.number().min(0).max(2).default(0.7),
+  maxTokens: z.number().int().positive().max(8192).default(2048),
+  topP: z.number().min(0).max(1).optional(),
+});
+
 export const VERIFIED_BYTEPLUS_MODELS: readonly ProviderModelDescriptor[] = [
   {
     id: "seedream-5-0-260128",
@@ -336,7 +348,165 @@ export const VERIFIED_BYTEPLUS_MODELS: readonly ProviderModelDescriptor[] = [
       "format:pcm": true,
     },
   },
+  {
+    id: "dola-seed-2-1-turbo-260628",
+    provider: "byteplus",
+    displayName: "Dola Seed 2.1 Turbo",
+    description:
+      "Flagship deep reasoning and agentic text generation with 256K context.",
+    mediaKind: "text",
+    capabilities: {
+      contextWindow: 262144,
+      maxTokens: 8192,
+      streaming: true,
+      chat: true,
+      reasoning: true,
+      toolCall: true,
+    },
+  },
+  {
+    id: "seed-2-0-pro-260328",
+    provider: "byteplus",
+    displayName: "Seed 2.0 Pro",
+    description:
+      "Frontier reasoning, long-chain planning, and complex story architecture.",
+    mediaKind: "text",
+    capabilities: {
+      contextWindow: 262144,
+      maxTokens: 8192,
+      streaming: true,
+      chat: true,
+      reasoning: true,
+      storyPlanning: true,
+    },
+  },
+  {
+    id: "seed-2-0-lite-260428",
+    provider: "byteplus",
+    displayName: "Seed 2.0 Lite",
+    description:
+      "High-efficiency balanced generation for scripts, articles, and dialogue.",
+    mediaKind: "text",
+    capabilities: {
+      contextWindow: 262144,
+      maxTokens: 8192,
+      streaming: true,
+      chat: true,
+      scriptwriting: true,
+    },
+  },
+  {
+    id: "seed-2-0-mini-260428",
+    provider: "byteplus",
+    displayName: "Seed 2.0 Mini",
+    description:
+      "Low-latency responsive text generation for conversational assistance.",
+    mediaKind: "text",
+    capabilities: {
+      contextWindow: 131072,
+      maxTokens: 4096,
+      streaming: true,
+      chat: true,
+      fast: true,
+    },
+  },
+  {
+    id: "seed-2-0-code-preview-260328",
+    provider: "byteplus",
+    displayName: "Seed 2.0 Code Preview",
+    description:
+      "Structured technical reasoning, prompt syntax, and code generation.",
+    mediaKind: "text",
+    capabilities: {
+      contextWindow: 262144,
+      maxTokens: 8192,
+      streaming: true,
+      chat: true,
+      code: true,
+    },
+  },
+  {
+    id: "doubao-seed-character-260628",
+    provider: "byteplus",
+    displayName: "Seed Character",
+    description:
+      "Persona-faithful conversational roleplay and expressive character dialogue.",
+    mediaKind: "text",
+    capabilities: {
+      contextWindow: 131072,
+      maxTokens: 4096,
+      streaming: true,
+      chat: true,
+      roleplay: true,
+      characterChat: true,
+    },
+  },
+  {
+    id: "seed-1-8-251228",
+    provider: "byteplus",
+    displayName: "Seed 1.8",
+    description:
+      "Reliable foundation model for steady long-form narrative generation.",
+    mediaKind: "text",
+    capabilities: {
+      contextWindow: 131072,
+      maxTokens: 4096,
+      streaming: true,
+      chat: true,
+    },
+  },
+  {
+    id: "seed-1-6-250915",
+    provider: "byteplus",
+    displayName: "Seed 1.6",
+    description:
+      "Versatile foundation text model with consistent instruction following.",
+    mediaKind: "text",
+    capabilities: {
+      contextWindow: 131072,
+      maxTokens: 4096,
+      streaming: true,
+      chat: true,
+    },
+  },
+  {
+    id: "seed-1-6-flash-250715",
+    provider: "byteplus",
+    displayName: "Seed 1.6 Flash",
+    description:
+      "Ultra-fast lightweight completion engine for real-time interaction.",
+    mediaKind: "text",
+    capabilities: {
+      contextWindow: 32768,
+      maxTokens: 2048,
+      streaming: true,
+      chat: true,
+      flash: true,
+    },
+  },
 ];
+
+const textResponseSchema = z.object({
+  id: providerIdentifierSchema.optional(),
+  choices: z
+    .array(
+      z.object({
+        message: z.object({
+          role: z.string(),
+          content: z.string().nullable().optional(),
+        }),
+        finish_reason: z.string().nullable().optional(),
+      }),
+    )
+    .min(1),
+  usage: z
+    .object({
+      prompt_tokens: z.number().int().nonnegative().optional(),
+      completion_tokens: z.number().int().nonnegative().optional(),
+      total_tokens: z.number().int().nonnegative().optional(),
+    })
+    .optional(),
+});
 
 const imageResponseSchema = z.object({
   id: providerIdentifierSchema.optional(),
@@ -1120,6 +1290,67 @@ export function createBytePlusProvider(
               },
             ],
             rawUsage: { outputBytes: audio.byteLength },
+          };
+        }
+
+        case "text": {
+          if (!validated.apiKey) {
+            throw new ProviderConfigurationError(
+              "BytePlus ModelArk API key is required for text generation",
+            );
+          }
+          const input = bytePlusTextInputSchema.safeParse(submission.input);
+          if (!input.success) {
+            throw new ProviderRequestError(
+              "Invalid BytePlus text input",
+              false,
+              {
+                code: "INVALID_INPUT",
+              },
+            );
+          }
+
+          const response = await safeFetch(
+            fetchClient,
+            `${baseUrl}/chat/completions`,
+            {
+              method: "POST",
+              headers: modelArkHeaders,
+              body: JSON.stringify({
+                model: submission.modelId,
+                messages: input.data.messages,
+                temperature: input.data.temperature,
+                max_tokens: input.data.maxTokens,
+                ...(input.data.topP !== undefined
+                  ? { top_p: input.data.topP }
+                  : {}),
+              }),
+            },
+            timeoutMs,
+            idleTimeoutMs,
+          );
+          await assertSuccessfulResponse(response);
+          const data = await parseJsonResponse(response, textResponseSchema);
+          const choice = data.choices[0];
+          const content = choice?.message?.content ?? "";
+          const providerRequestId =
+            data.id ?? stableRequestId("text", submission.idempotencyKey);
+          logger.info("BytePlus text generation completed", {
+            providerRequestId,
+            modelId: submission.modelId,
+            totalTokens: data.usage?.total_tokens,
+          });
+          return {
+            providerRequestId,
+            status: "succeeded",
+            inlineOutputs: [
+              {
+                mediaType: "text/plain",
+                dataBase64: Buffer.from(content, "utf8").toString("base64"),
+              },
+            ],
+            textOutput: { content },
+            rawUsage: data.usage,
           };
         }
       }

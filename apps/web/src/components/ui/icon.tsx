@@ -6,18 +6,23 @@ export type IconName =
   | "arrow"
   | "assets"
   | "bell"
+  | "brand"
+  | "chat"
   | "check"
   | "chevron"
   | "credits"
   | "dashboard"
+  | "director"
   | "image"
   | "menu"
   | "moon"
   | "plus"
   | "projects"
+  | "script"
   | "search"
   | "settings"
   | "sparkles"
+  | "story"
   | "sun"
   | "upload"
   | "video"
@@ -51,6 +56,15 @@ export function Icon({ name, className = "size-5", ...props }: IconProps) {
         <path d="M10 21h4" />
       </>
     ),
+    brand: (
+      <>
+        <circle cx="12" cy="8" r="5" />
+        <path d="m15.4 12.5 1.6 8.5-5-3-5 3 1.6-8.5" />
+      </>
+    ),
+    chat: (
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z" />
+    ),
     check: <path d="m5 12 4 4L19 6" />,
     chevron: <path d="m9 18 6-6-6-6" />,
     credits: (
@@ -65,6 +79,13 @@ export function Icon({ name, className = "size-5", ...props }: IconProps) {
         <rect x="14" y="3" width="7" height="7" rx="2" />
         <rect x="3" y="14" width="7" height="7" rx="2" />
         <rect x="14" y="14" width="7" height="7" rx="2" />
+      </>
+    ),
+    director: (
+      <>
+        <rect width="18" height="14" x="3" y="7" rx="2" />
+        <path d="m3 7 3-4h12l3 4" />
+        <path d="m8 3 3 4m3-4 3 4" />
       </>
     ),
     image: (
@@ -85,6 +106,12 @@ export function Icon({ name, className = "size-5", ...props }: IconProps) {
         <path d="M3 10h18" />
       </>
     ),
+    script: (
+      <>
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z" />
+        <path d="M14 2v6h6M8 13h8M8 17h5" />
+      </>
+    ),
     search: (
       <path d="m21 21-4.4-4.4m2.4-5.1a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z" />
     ),
@@ -98,6 +125,12 @@ export function Icon({ name, className = "size-5", ...props }: IconProps) {
       <>
         <path d="m12 3 1.2 3.3L16.5 7.5l-3.3 1.2L12 12l-1.2-3.3-3.3-1.2 3.3-1.2L12 3Z" />
         <path d="m18 13 .8 2.2L21 16l-2.2.8L18 19l-.8-2.2L15 16l2.2-.8L18 13ZM5.5 13l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7.7-1.8Z" />
+      </>
+    ),
+    story: (
+      <>
+        <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z" />
+        <path d="M8 7h8M8 11h6" />
       </>
     ),
     sun: (

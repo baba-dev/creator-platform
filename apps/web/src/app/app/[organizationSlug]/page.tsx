@@ -1,5 +1,6 @@
 import { hasOrganizationPermission } from "@aiwa/authz";
 import { db } from "@aiwa/db";
+import type { Route } from "next";
 import Link from "next/link";
 
 import { GenerationStudio } from "@/components/studio/generation-studio";
@@ -8,7 +9,7 @@ import { Annotation, Eyebrow } from "@/components/ui/creative";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { requireOrganizationPermission } from "@/lib/request-auth";
 
-type MediaKind = "IMAGE" | "VIDEO" | "VOICE";
+type MediaKind = "IMAGE" | "VIDEO" | "VOICE" | "TEXT";
 
 function promptFor(payload: unknown): string {
   if (
@@ -116,12 +117,12 @@ export default async function OrganizationWorkspacePage({
   const kindByModel = new Map(
     modelKinds.map((model) => [model.id, model.mediaKind]),
   );
-  const mix = { IMAGE: 0, VIDEO: 0, VOICE: 0 };
+  const mix = { IMAGE: 0, VIDEO: 0, VOICE: 0, TEXT: 0 };
   for (const group of mixCounts) {
     const kind = kindByModel.get(group.providerModelId);
     if (kind && kind in mix) mix[kind as MediaKind] += group._count._all;
   }
-  const mixTotal = mix.IMAGE + mix.VIDEO + mix.VOICE;
+  const mixTotal = mix.IMAGE + mix.VIDEO + mix.VOICE + mix.TEXT;
   const canGenerate = hasOrganizationPermission(
     membership.role,
     "generation:create",
@@ -406,6 +407,14 @@ export default async function OrganizationWorkspacePage({
                 detail="Voices, pacing and narration"
                 tone="bg-warning/10 text-warning"
               />
+              <StudioPath
+                slug={organizationSlug}
+                kind="chat"
+                count={mix.TEXT}
+                title="Character chat"
+                detail="Personas, dialogues and reasoning"
+                tone="bg-success/10 text-success"
+              />
             </div>
             <div className="mt-5 rounded-2xl border border-border bg-surface-sunken p-4">
               <p className="text-xs font-semibold text-foreground">
@@ -484,7 +493,7 @@ function StudioPath({
   tone,
 }: {
   slug: string;
-  kind: "image" | "video" | "speech";
+  kind: "image" | "video" | "speech" | "chat";
   count: number;
   title: string;
   detail: string;
@@ -492,7 +501,7 @@ function StudioPath({
 }) {
   return (
     <Link
-      href={`/app/${slug}/${kind}`}
+      href={`/app/${slug}/${kind}` as Route}
       className="group flex min-w-0 items-center gap-3 rounded-2xl border border-border bg-card p-3 transition hover:border-primary/40 hover:bg-primary/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
     >
       <span

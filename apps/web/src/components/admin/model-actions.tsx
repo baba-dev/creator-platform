@@ -35,7 +35,7 @@ export function ModelActions({
   providerModelId?: string;
   displayName: string;
   enabled: boolean;
-  mediaKind?: "IMAGE" | "VIDEO" | "VOICE" | "REASONING";
+  mediaKind?: "IMAGE" | "VIDEO" | "VOICE" | "REASONING" | "TEXT";
   currentUsageRates?: unknown;
   currentFxBaisaNumerator?: string;
   currentFxBaisaDenominator?: string;

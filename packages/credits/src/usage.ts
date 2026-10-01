@@ -365,6 +365,26 @@ export function estimateGeneration(params: {
       referenceImageCount: params.referenceImageCount,
     });
     reservation = quote;
+  } else if (params.mediaKind === "TEXT") {
+    const promptText = params.text?.trim() ?? "";
+    const promptLength = promptText
+      ? countBillableCharacters(promptText)
+      : (params.billableQuantity ?? 0);
+    const estimatedInputTokens = BigInt(
+      Math.max(1, Math.ceil(promptLength / 3.5)),
+    );
+    const requestedCompletionTokens = BigInt(params.units ?? 1024);
+    const envelopeCompletion =
+      requestedCompletionTokens > 0n ? requestedCompletionTokens : 1024n;
+    estimatedTokens = estimatedInputTokens + envelopeCompletion;
+    billableQuantity = Number(estimatedTokens);
+    units = Number(calculateBillableUnits(estimatedTokens, price.unitQuantity));
+    quote = quoteSnapshotCost(
+      price,
+      price.providerCostMicroUsd * BigInt(units),
+    );
+    reservation = quote;
+    settlement = "ACTUAL_USAGE";
   } else {
     if (price.pricingDimension === "TOKEN")
       throw new RangeError("No estimator is registered for this media kind.");

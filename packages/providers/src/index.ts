@@ -1,4 +1,4 @@
-export type MediaKind = "image" | "video" | "voice";
+export type MediaKind = "image" | "video" | "voice" | "text";
 
 export type ProviderJobStatus =
   "submitted" | "processing" | "succeeded" | "failed" | "cancelled";
@@ -29,6 +29,7 @@ export interface ProviderJob {
   readonly status: ProviderJobStatus;
   readonly outputUrls?: readonly string[];
   readonly inlineOutputs?: readonly ProviderInlineOutput[];
+  readonly textOutput?: { readonly content: string };
   readonly rawUsage?: Readonly<Record<string, unknown>>;
   readonly errorCode?: string;
 }

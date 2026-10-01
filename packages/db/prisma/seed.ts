@@ -5,7 +5,7 @@ const db = new PrismaClient();
 
 interface SeedModel {
   providerModelId: string;
-  mediaKind: "IMAGE" | "VIDEO" | "VOICE";
+  mediaKind: "IMAGE" | "VIDEO" | "VOICE" | "TEXT";
   displayName: string;
   description: string;
   capabilities: Prisma.InputJsonValue;
@@ -214,6 +214,180 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
     pricingDimension: "CHARACTER",
     unitQuantity: 1000,
   },
+  {
+    providerModelId: "dola-seed-2-1-turbo-260628",
+    mediaKind: "TEXT",
+    displayName: "Dola Seed 2.1 Turbo",
+    description:
+      "Flagship deep reasoning and agentic text generation with 256K context.",
+    capabilities: {
+      contextWindow: 262144,
+      maxTokens: 8192,
+      streaming: true,
+      chat: true,
+      reasoning: true,
+      toolCall: true,
+    },
+    providerCostMicroUsd: 2_000n,
+    customerCredits: 2n,
+    pricingDimension: "TOKEN",
+    unitQuantity: 1000,
+    providerCostBasisNote:
+      "ModelArk Seed 2.1 Turbo completion rate: $2.00/1000 tokens",
+  },
+  {
+    providerModelId: "seed-2-0-pro-260328",
+    mediaKind: "TEXT",
+    displayName: "Seed 2.0 Pro",
+    description:
+      "Frontier reasoning, long-chain planning, and complex story architecture.",
+    capabilities: {
+      contextWindow: 262144,
+      maxTokens: 8192,
+      streaming: true,
+      chat: true,
+      reasoning: true,
+      storyPlanning: true,
+    },
+    providerCostMicroUsd: 2_500n,
+    customerCredits: 2n,
+    pricingDimension: "TOKEN",
+    unitQuantity: 1000,
+    providerCostBasisNote: "ModelArk Seed 2.0 Pro rate: $2.50/1000 tokens",
+  },
+  {
+    providerModelId: "seed-2-0-lite-260428",
+    mediaKind: "TEXT",
+    displayName: "Seed 2.0 Lite",
+    description:
+      "High-efficiency balanced generation for scripts, articles, and dialogue.",
+    capabilities: {
+      contextWindow: 262144,
+      maxTokens: 8192,
+      streaming: true,
+      chat: true,
+      scriptwriting: true,
+    },
+    providerCostMicroUsd: 1_000n,
+    customerCredits: 1n,
+    pricingDimension: "TOKEN",
+    unitQuantity: 1000,
+    providerCostBasisNote: "ModelArk Seed 2.0 Lite rate: $1.00/1000 tokens",
+  },
+  {
+    providerModelId: "seed-2-0-mini-260428",
+    mediaKind: "TEXT",
+    displayName: "Seed 2.0 Mini",
+    description:
+      "Low-latency responsive text generation for conversational assistance.",
+    capabilities: {
+      contextWindow: 131072,
+      maxTokens: 4096,
+      streaming: true,
+      chat: true,
+      fast: true,
+    },
+    providerCostMicroUsd: 500n,
+    customerCredits: 1n,
+    pricingDimension: "TOKEN",
+    unitQuantity: 1000,
+    providerCostBasisNote: "ModelArk Seed 2.0 Mini rate: $0.50/1000 tokens",
+  },
+  {
+    providerModelId: "seed-2-0-code-preview-260328",
+    mediaKind: "TEXT",
+    displayName: "Seed 2.0 Code Preview",
+    description:
+      "Structured technical reasoning, prompt syntax, and code generation.",
+    capabilities: {
+      contextWindow: 262144,
+      maxTokens: 8192,
+      streaming: true,
+      chat: true,
+      code: true,
+    },
+    providerCostMicroUsd: 2_000n,
+    customerCredits: 2n,
+    pricingDimension: "TOKEN",
+    unitQuantity: 1000,
+    providerCostBasisNote:
+      "ModelArk Seed 2.0 Code Preview rate: $2.00/1000 tokens",
+  },
+  {
+    providerModelId: "doubao-seed-character-260628",
+    mediaKind: "TEXT",
+    displayName: "Seed Character",
+    description:
+      "Persona-faithful conversational roleplay and expressive character dialogue.",
+    capabilities: {
+      contextWindow: 131072,
+      maxTokens: 4096,
+      streaming: true,
+      chat: true,
+      roleplay: true,
+      characterChat: true,
+    },
+    providerCostMicroUsd: 1_500n,
+    customerCredits: 1n,
+    pricingDimension: "TOKEN",
+    unitQuantity: 1000,
+    providerCostBasisNote: "ModelArk Seed Character rate: $1.50/1000 tokens",
+  },
+  {
+    providerModelId: "seed-1-8-251228",
+    mediaKind: "TEXT",
+    displayName: "Seed 1.8",
+    description:
+      "Reliable foundation model for steady long-form narrative generation.",
+    capabilities: {
+      contextWindow: 131072,
+      maxTokens: 4096,
+      streaming: true,
+      chat: true,
+    },
+    providerCostMicroUsd: 1_200n,
+    customerCredits: 1n,
+    pricingDimension: "TOKEN",
+    unitQuantity: 1000,
+    providerCostBasisNote: "ModelArk Seed 1.8 rate: $1.20/1000 tokens",
+  },
+  {
+    providerModelId: "seed-1-6-250915",
+    mediaKind: "TEXT",
+    displayName: "Seed 1.6",
+    description:
+      "Versatile foundation text model with consistent instruction following.",
+    capabilities: {
+      contextWindow: 131072,
+      maxTokens: 4096,
+      streaming: true,
+      chat: true,
+    },
+    providerCostMicroUsd: 1_000n,
+    customerCredits: 1n,
+    pricingDimension: "TOKEN",
+    unitQuantity: 1000,
+    providerCostBasisNote: "ModelArk Seed 1.6 rate: $1.00/1000 tokens",
+  },
+  {
+    providerModelId: "seed-1-6-flash-250715",
+    mediaKind: "TEXT",
+    displayName: "Seed 1.6 Flash",
+    description:
+      "Ultra-fast lightweight completion engine for real-time interaction.",
+    capabilities: {
+      contextWindow: 32768,
+      maxTokens: 2048,
+      streaming: true,
+      chat: true,
+      flash: true,
+    },
+    providerCostMicroUsd: 400n,
+    customerCredits: 1n,
+    pricingDimension: "TOKEN",
+    unitQuantity: 1000,
+    providerCostBasisNote: "ModelArk Seed 1.6 Flash rate: $0.40/1000 tokens",
+  },
 ];
 
 async function main(): Promise<void> {
@@ -339,6 +513,70 @@ async function main(): Promise<void> {
       ? `Created ${createdTemplates} missing generation templates.`
       : "Generation template catalog is already present.",
   );
+
+  // Seed default presets for any existing organizations
+  const activeOrgs = await db.organization.findMany({ select: { id: true } });
+  const presetPersonas = [
+    {
+      name: "Creative Muse",
+      tag: "Inspiration",
+      description:
+        "Poetic, perception-shifting ideation partner for bold creative concepts.",
+      systemPrompt:
+        "You are a poetic, inventive creative muse. You help creators push past cliché, unearth striking metaphors, and weave evocative narrative themes. You speak with warm artistic passion and precision.",
+      modelId: "doubao-seed-character-260628",
+    },
+    {
+      name: "Screenplay Polisher",
+      tag: "Writing",
+      description:
+        "Dialogue doctor and script doctor specializing in scene rhythm and character voice.",
+      systemPrompt:
+        "You are a seasoned screenplay consultant. You analyze dialogue for subtext, authentic vernacular, dramatic tension, and economy of words. You provide actionable formatting and line revisions.",
+      modelId: "doubao-seed-character-260628",
+    },
+    {
+      name: "Brand Strategist",
+      tag: "Marketing",
+      description:
+        "Senior commercial director focused on brand voice, positioning, and target audiences.",
+      systemPrompt:
+        "You are a master brand strategist and copy director. You ensure every line reflects authentic brand identity, cuts through market noise, and speaks directly to customer psychology.",
+      modelId: "dola-seed-2-1-turbo-260628",
+    },
+    {
+      name: "Historic Sage",
+      tag: "Worldbuilding",
+      description:
+        "Scholar of era-authentic vernacular, historical context, and deep world lore.",
+      systemPrompt:
+        "You are a learned historian and cultural chronicler. You provide rich, period-accurate detail, historical idioms, sensory worldbuilding, and believable character motivations.",
+      modelId: "doubao-seed-character-260628",
+    },
+  ];
+
+  for (const org of activeOrgs) {
+    for (const preset of presetPersonas) {
+      const existing = await db.persona.findFirst({
+        where: { organizationId: org.id, name: preset.name },
+      });
+      if (!existing) {
+        await db.persona.create({
+          data: {
+            organizationId: org.id,
+            name: preset.name,
+            tag: preset.tag,
+            description: preset.description,
+            systemPrompt: preset.systemPrompt,
+            modelId: preset.modelId,
+            isPreset: true,
+            createdById: systemUser.id,
+          },
+        });
+      }
+    }
+  }
+
   console.info("Seeding completed successfully.");
 }
 

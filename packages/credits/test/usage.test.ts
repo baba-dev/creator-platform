@@ -177,4 +177,31 @@ describe("generation pricing policies", () => {
       }),
     ).toThrow("must be positive");
   });
+
+  it("estimates and reserves credits for Seed text generation using TOKEN pricing", () => {
+    const textPrice: PriceSnapshot = {
+      providerCostMicroUsd: 2000n, // $2.00 per 1000 tokens
+      pricingDimension: "TOKEN",
+      unitQuantity: 1000,
+      fxBaisaNumerator: 769n,
+      fxBaisaDenominator: 2n,
+      targetMarginBps: 2500,
+      creditsPerBaisa: 1n,
+    };
+
+    const estimate = estimateGeneration({
+      price: textPrice,
+      mediaKind: "TEXT",
+      providerModelId: "dola-seed-2-1-turbo-260628",
+      text: "Write a high-energy script for a commercial.",
+      units: 1000, // 1000 requested completion tokens
+    });
+
+    expect(estimate.settlement).toBe("ACTUAL_USAGE");
+    expect(estimate.estimatedTokens).toBeGreaterThan(1000n);
+    expect(estimate.quote.customerCredits).toBeGreaterThan(0n);
+    expect(estimate.reservation.customerCredits).toBe(
+      estimate.quote.customerCredits,
+    );
+  });
 });

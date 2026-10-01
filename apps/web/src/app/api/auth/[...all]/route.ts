@@ -33,8 +33,7 @@ function genericPasswordResetResponse() {
 }
 
 export async function POST(request: Request) {
-  const isPasswordReset =
-    new URL(request.url).pathname === PASSWORD_RESET_PATH;
+  const isPasswordReset = new URL(request.url).pathname === PASSWORD_RESET_PATH;
 
   if (!isPasswordReset) return handlers.POST(request);
 

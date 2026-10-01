@@ -16,6 +16,7 @@ interface SeedModel {
   unitQuantity?: number;
   negotiatedDiscountBps?: number;
   providerCostBasisNote?: string;
+  enabled?: boolean;
 }
 
 const verifiedBytePlusModels: readonly SeedModel[] = [
@@ -228,12 +229,12 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
       reasoning: true,
       toolCall: true,
     },
-    providerCostMicroUsd: 2_000n,
+    providerCostMicroUsd: 2_500n,
     customerCredits: 2n,
     pricingDimension: "TOKEN",
     unitQuantity: 1000,
     providerCostBasisNote:
-      "ModelArk Seed 2.1 Turbo completion rate: $2.00/1000 tokens",
+      "Conservative blended rate: $2.50/M total tokens (standard output rate; input is cheaper).",
   },
   {
     providerModelId: "seed-2-0-pro-260328",
@@ -249,11 +250,12 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
       reasoning: true,
       storyPlanning: true,
     },
-    providerCostMicroUsd: 2_500n,
+    providerCostMicroUsd: 3_000n,
     customerCredits: 2n,
     pricingDimension: "TOKEN",
     unitQuantity: 1000,
-    providerCostBasisNote: "ModelArk Seed 2.0 Pro rate: $2.50/1000 tokens",
+    providerCostBasisNote:
+      "Conservative blended rate: $3.00/M total tokens for prompts up to 128K (standard output rate).",
   },
   {
     providerModelId: "seed-2-0-lite-260428",
@@ -268,11 +270,12 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
       chat: true,
       scriptwriting: true,
     },
-    providerCostMicroUsd: 1_000n,
+    providerCostMicroUsd: 2_000n,
     customerCredits: 1n,
     pricingDimension: "TOKEN",
     unitQuantity: 1000,
-    providerCostBasisNote: "ModelArk Seed 2.0 Lite rate: $1.00/1000 tokens",
+    providerCostBasisNote:
+      "Conservative blended rate: $2.00/M total tokens for prompts up to 128K (standard output rate).",
   },
   {
     providerModelId: "seed-2-0-mini-260428",
@@ -281,17 +284,18 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
     description:
       "Low-latency responsive text generation for conversational assistance.",
     capabilities: {
-      contextWindow: 131072,
+      contextWindow: 262144,
       maxTokens: 4096,
       streaming: true,
       chat: true,
       fast: true,
     },
-    providerCostMicroUsd: 500n,
+    providerCostMicroUsd: 400n,
     customerCredits: 1n,
     pricingDimension: "TOKEN",
     unitQuantity: 1000,
-    providerCostBasisNote: "ModelArk Seed 2.0 Mini rate: $0.50/1000 tokens",
+    providerCostBasisNote:
+      "Conservative blended rate: $0.40/M total tokens for prompts up to 128K (standard output rate).",
   },
   {
     providerModelId: "seed-2-0-code-preview-260328",
@@ -306,12 +310,12 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
       chat: true,
       code: true,
     },
-    providerCostMicroUsd: 2_000n,
+    providerCostMicroUsd: 3_000n,
     customerCredits: 2n,
     pricingDimension: "TOKEN",
     unitQuantity: 1000,
     providerCostBasisNote:
-      "ModelArk Seed 2.0 Code Preview rate: $2.00/1000 tokens",
+      "Conservative blended rate: $3.00/M total tokens for prompts up to 128K (standard output rate).",
   },
   {
     providerModelId: "doubao-seed-character-260628",
@@ -331,7 +335,8 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
     customerCredits: 1n,
     pricingDimension: "TOKEN",
     unitQuantity: 1000,
-    providerCostBasisNote: "ModelArk Seed Character rate: $1.50/1000 tokens",
+    providerCostBasisNote:
+      "Provisional blended rate: $1.50/M total tokens; verify against the active BytePlus contract before changing margin.",
   },
   {
     providerModelId: "seed-1-8-251228",
@@ -345,11 +350,13 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
       streaming: true,
       chat: true,
     },
-    providerCostMicroUsd: 1_200n,
+    providerCostMicroUsd: 2_000n,
     customerCredits: 1n,
     pricingDimension: "TOKEN",
     unitQuantity: 1000,
-    providerCostBasisNote: "ModelArk Seed 1.8 rate: $1.20/1000 tokens",
+    enabled: false,
+    providerCostBasisNote:
+      "Retired model. Conservative legacy rate: $2.00/M total tokens; replacement: Seed 2.0 Lite.",
   },
   {
     providerModelId: "seed-1-6-250915",
@@ -363,11 +370,13 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
       streaming: true,
       chat: true,
     },
-    providerCostMicroUsd: 1_000n,
+    providerCostMicroUsd: 2_000n,
     customerCredits: 1n,
     pricingDimension: "TOKEN",
     unitQuantity: 1000,
-    providerCostBasisNote: "ModelArk Seed 1.6 rate: $1.00/1000 tokens",
+    enabled: false,
+    providerCostBasisNote:
+      "Retired model. Conservative legacy rate: $2.00/M total tokens; replacement: Seed 2.0 Lite.",
   },
   {
     providerModelId: "seed-1-6-flash-250715",
@@ -382,11 +391,13 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
       chat: true,
       flash: true,
     },
-    providerCostMicroUsd: 400n,
+    providerCostMicroUsd: 300n,
     customerCredits: 1n,
     pricingDimension: "TOKEN",
     unitQuantity: 1000,
-    providerCostBasisNote: "ModelArk Seed 1.6 Flash rate: $0.40/1000 tokens",
+    enabled: false,
+    providerCostBasisNote:
+      "Retired model. Conservative legacy rate: $0.30/M total tokens; replacement: Seed 2.0 Mini.",
   },
 ];
 
@@ -415,7 +426,7 @@ async function main(): Promise<void> {
         description: model.description,
         mediaKind: model.mediaKind,
         capabilities: model.capabilities,
-        enabled: true,
+        enabled: model.enabled ?? true,
         ...(model.negotiatedDiscountBps === undefined
           ? {}
           : { negotiatedDiscountBps: model.negotiatedDiscountBps }),
@@ -427,7 +438,7 @@ async function main(): Promise<void> {
         description: model.description,
         mediaKind: model.mediaKind,
         capabilities: model.capabilities,
-        enabled: true,
+        enabled: model.enabled ?? true,
         ...(model.negotiatedDiscountBps === undefined
           ? {}
           : { negotiatedDiscountBps: model.negotiatedDiscountBps }),

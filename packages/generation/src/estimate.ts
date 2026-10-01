@@ -206,6 +206,7 @@ export async function estimateAuthorizedGeneration(
       aspectRatio: normalizedRatio,
       generateAudio,
       inputDurationMs,
+      referenceImageCount: referenceIds.length,
     });
   } catch (error) {
     throw new QuoteValidationError(

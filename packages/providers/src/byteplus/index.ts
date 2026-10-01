@@ -138,17 +138,52 @@ export const bytePlusImageInputSchema = z
     }
   });
 
+const bytePlusVideoSourceSchema = z
+  .object({
+    role: z.enum([
+      "FIRST_FRAME",
+      "LAST_FRAME",
+      "REFERENCE_IMAGE",
+      "REFERENCE_VIDEO",
+      "REFERENCE_AUDIO",
+      "SOURCE_VIDEO",
+    ]),
+    url: httpsUrlSchema,
+  })
+  .strict();
+
 export const bytePlusVideoInputSchema = z
   .object({
-    prompt: z.string().trim().min(1),
+    workflow: z
+      .enum([
+        "GENERATE",
+        "FRAME_TO_VIDEO",
+        "FIRST_LAST_FRAME",
+        "REFERENCE",
+        "EDIT",
+        "EXTEND",
+        "DRAFT",
+        "DRAFT_FINAL",
+      ])
+      .default("GENERATE"),
+    prompt: z.string().trim().max(4000).default(""),
+    sources: z.array(bytePlusVideoSourceSchema).max(50).default([]),
     aspectRatio: z
       .enum(["16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "adaptive"])
       .default("16:9"),
-    resolution: z.enum(["480p", "720p", "1080p"]).default("720p"),
-    durationSeconds: z.number().int().min(4).max(30).default(5),
+    resolution: z.enum(["480p", "720p", "1080p", "4K"]).default("720p"),
+    durationSeconds: z.number().int().min(-1).max(30).default(5),
     generateAudio: z.boolean().default(false),
     watermark: z.boolean().default(false),
+    outputFormat: z.enum(["mp4", "mov"]).default("mp4"),
+    returnLastFrame: z.boolean().default(true),
     seed: z.number().int().min(-1).max(2_147_483_647).optional(),
+    draftProviderTaskId: providerIdentifierSchema.optional(),
+    extensionDirection: z.enum(["BEFORE", "AFTER"]).optional(),
+
+    // V1 compatibility. The worker converts historical jobs to sources before
+    // submission, but keeping these inputs accepted protects direct adapter
+    // callers and old provider tests during the transition.
     firstFrameImage: z
       .string()
       .startsWith("data:image/")
@@ -159,17 +194,45 @@ export const bytePlusVideoInputSchema = z
       .startsWith("data:image/")
       .max(42 * 1024 * 1024)
       .optional(),
-    referenceVideoUrl: z.url().startsWith("https://").optional(),
+    referenceVideoUrl: httpsUrlSchema.optional(),
   })
-  .refine(
-    (input) =>
-      !input.referenceVideoUrl ||
-      (!input.firstFrameImage && !input.lastFrameImage),
-    {
-      path: ["referenceVideoUrl"],
-      message: "Video reference cannot be combined with image frames.",
-    },
-  );
+  .superRefine((input, ctx) => {
+    if (input.workflow === "DRAFT_FINAL" && !input.draftProviderTaskId) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["draftProviderTaskId"],
+        message: "Draft final rendering requires a provider Draft task.",
+      });
+    }
+    if (input.workflow !== "DRAFT_FINAL" && input.prompt.length === 0) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["prompt"],
+        message: "A video prompt is required.",
+      });
+    }
+    if (input.workflow === "EDIT") {
+      if (input.aspectRatio !== "adaptive" || input.durationSeconds !== -1) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["durationSeconds"],
+          message: "Editing requires adaptive ratio and duration -1.",
+        });
+      }
+    }
+    if (
+      input.sources.length > 0 &&
+      (input.firstFrameImage ||
+        input.lastFrameImage ||
+        input.referenceVideoUrl)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["sources"],
+        message: "V2 sources cannot be combined with legacy source fields.",
+      });
+    }
+  });
 
 export const bytePlusVoiceInputSchema = z.object({
   text: z.string().trim().min(1),

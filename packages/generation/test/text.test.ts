@@ -140,6 +140,122 @@ describe("executeTextGeneration", () => {
     expect(mocks.credits.captureCreditsForJob).toHaveBeenCalled();
   });
 
+  it("rejects aggregate prompt context above the bounded limit", async () => {
+    await expect(
+      executeTextGeneration("user_1", {
+        organizationId: "org_1",
+        modelId: "m_1",
+        priceVersionId: "pv_1",
+        idempotencyKey: "123e4567-e89b-12d3-a456-426614174099",
+        messages: Array.from({ length: 16 }, () => ({
+          role: "user" as const,
+          content: "x".repeat(8000),
+        })),
+      }),
+    ).rejects.toThrow(
+      "Combined text-generation context cannot exceed 120,000 characters.",
+    );
+
+    expect(mocks.db.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("uses the reserved estimate when provider usage telemetry is missing", async () => {
+    const submittedJob = {
+      id: "job_text_fallback",
+      status: "SUBMITTED",
+      billableQuantity: 2048,
+      quotedUnits: 3,
+      reservedCredits: 10n,
+    };
+    const tx = {
+      $queryRaw: vi.fn(),
+      membership: {
+        findUnique: vi.fn().mockResolvedValue({
+          role: "ORGANIZATION_MEMBER",
+          monthlySpendingCapCredits: null,
+          organization: { status: "ACTIVE" },
+          user: { disabledAt: null, emailVerified: true },
+        }),
+      },
+      generationTemplate: { findFirst: vi.fn() },
+      generationJob: {
+        findUnique: vi.fn().mockResolvedValue(null),
+        create: vi.fn().mockResolvedValue({ id: submittedJob.id }),
+        update: vi.fn().mockResolvedValue(submittedJob),
+        aggregate: vi.fn().mockResolvedValue({
+          _sum: { chargedCredits: 0n, reservedCredits: 0n },
+        }),
+      },
+      providerModel: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: "m_1",
+          providerModelId: "doubao-seed-character-260628",
+          enabled: true,
+          priceVersions: [
+            {
+              id: "pv_1",
+              providerCostMicroUsd: 1000n,
+              pricingDimension: "TOKEN",
+              unitQuantity: 1000,
+            },
+          ],
+        }),
+      },
+      project: { findUnique: vi.fn() },
+      wallet: {
+        findUnique: vi.fn().mockResolvedValue({ id: "wallet_1" }),
+      },
+      auditEvent: {
+        create: vi.fn(),
+      },
+    };
+
+    mocks.db.$transaction.mockImplementation(async (callback) => callback(tx));
+    mocks.credits.estimateGeneration.mockReturnValue({
+      reservation: { customerCredits: 10n },
+      units: 3,
+      billableQuantity: 2048,
+    });
+    mocks.credits.priceCredits.mockReturnValue(5n);
+
+    const providerWithoutUsage = {
+      name: "byteplus" as const,
+      listModels: vi.fn(),
+      getJob: vi.fn(),
+      cancel: vi.fn(),
+      submit: vi.fn().mockResolvedValue({
+        providerRequestId: "req_fallback",
+        status: "succeeded" as const,
+        textOutput: { content: "Generated without usage telemetry." },
+      }),
+    };
+
+    const result = await executeTextGeneration(
+      "user_1",
+      {
+        organizationId: "org_1",
+        modelId: "m_1",
+        priceVersionId: "pv_1",
+        idempotencyKey: "123e4567-e89b-12d3-a456-426614174098",
+        messages: [{ role: "user" as const, content: "Generate." }],
+        maxTokens: 2048,
+      },
+      { provider: providerWithoutUsage },
+    );
+
+    expect(result.status).toBe("SUCCEEDED");
+    expect(result.usage).toBeUndefined();
+    expect(result.chargedCredits).toBe(10);
+    expect(mocks.credits.captureCreditsForJob).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        jobId: submittedJob.id,
+        amountCredits: 10n,
+        metadata: expect.objectContaining({ usageFallback: true }),
+      }),
+    );
+  });
+
   it("releases credits if provider fails", async () => {
     const tx = {
       $queryRaw: vi.fn(),

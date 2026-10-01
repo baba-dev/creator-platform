@@ -110,50 +110,37 @@ export const VERIFIED_VOICES = [
   },
 ];
 
-const SEED_TEXT_MODELS = [
-  {
-    id: "doubao-seed-character-260628",
-    name: "Doubao Seed Character",
-    badge: "Roleplay & Character",
-  },
-  {
-    id: "dola-seed-2-1-turbo-260628",
-    name: "Dola Seed 2.1 Turbo",
-    badge: "Flagship Fast",
-  },
-  { id: "seed-2-0-pro-260328", name: "Seed 2.0 Pro", badge: "Deep Reasoning" },
-  { id: "seed-2-0-lite-260428", name: "Seed 2.0 Lite", badge: "Efficient" },
-  {
-    id: "seed-2-0-mini-260428",
-    name: "Seed 2.0 Mini",
-    badge: "Ultra Lightweight",
-  },
-  {
-    id: "seed-2-0-code-preview-260328",
-    name: "Seed 2.0 Code",
-    badge: "Technical Preview",
-  },
-  { id: "seed-1-8-251228", name: "Seed 1.8 Standard", badge: "Long Context" },
-  { id: "seed-1-6-250915", name: "Seed 1.6 Standard", badge: "Stable" },
-  { id: "seed-1-6-flash-250715", name: "Seed 1.6 Flash", badge: "Low Latency" },
-];
+const TEXT_MODEL_BADGES: Record<string, string> = {
+  "doubao-seed-character-260628": "Roleplay & Character",
+  "dola-seed-2-1-turbo-260628": "Flagship Fast",
+  "seed-2-0-pro-260328": "Deep Reasoning",
+  "seed-2-0-lite-260428": "Efficient",
+  "seed-2-0-mini-260428": "Ultra Lightweight",
+  "seed-2-0-code-preview-260328": "Technical Preview",
+};
 
 export function CharacterChatWorkspace({
   organizationId,
   canGenerate,
+  textModels,
 }: {
   organizationSlug: string;
   organizationId: string;
   canGenerate: boolean;
+  textModels: Array<{ id: string; name: string }>;
 }) {
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [selectedPersona, setSelectedPersona] = useState<Persona | null>(null);
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [selectedModel, setSelectedModel] = useState<string>(
-    "doubao-seed-character-260628",
-  );
+  const defaultTextModel =
+    textModels.find((model) => model.id === "doubao-seed-character-260628")
+      ?.id ??
+    textModels[0]?.id ??
+    "";
+  const [selectedModel, setSelectedModel] =
+    useState<string>(defaultTextModel);
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -584,9 +571,12 @@ export function CharacterChatWorkspace({
               onChange={(e) => setSelectedModel(e.target.value)}
               className="h-10 rounded-xl border border-border bg-card px-3 pr-8 text-xs font-semibold text-foreground shadow-xs transition hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-ring"
             >
-              {SEED_TEXT_MODELS.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name} ({m.badge})
+              {textModels.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.name}
+                  {TEXT_MODEL_BADGES[model.id]
+                    ? ` (${TEXT_MODEL_BADGES[model.id]})`
+                    : ""}
                 </option>
               ))}
             </select>
@@ -743,7 +733,7 @@ export function CharacterChatWorkspace({
                   </span>
                 )}
                 <span className="rounded-md border border-border bg-card px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                  {SEED_TEXT_MODELS.find((m) => m.id === selectedModel)?.name ||
+                  {textModels.find((model) => model.id === selectedModel)?.name ||
                     selectedModel}
                 </span>
 
@@ -889,7 +879,7 @@ export function CharacterChatWorkspace({
                 <div className="flex items-center gap-2 rounded-2xl border border-border bg-card px-4 py-3 text-xs text-muted-foreground">
                   <span className="size-2 animate-ping rounded-full bg-primary" />
                   Generating response via{" "}
-                  {SEED_TEXT_MODELS.find((m) => m.id === selectedModel)?.name}
+                  {textModels.find((model) => model.id === selectedModel)?.name}
                   ...
                 </div>
               </div>

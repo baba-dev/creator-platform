@@ -14,7 +14,7 @@ export interface UsageRate {
   microUsdPerThousandTokens: string;
 }
 export interface UsageRates {
-  estimator: "byteplus-video-v1";
+  estimator: "byteplus-video-v1" | "byteplus-video-v2";
   rates: UsageRate[];
 }
 
@@ -24,7 +24,9 @@ export function parseUsageRates(value: unknown): UsageRates {
     throw new RangeError("Token pricing requires a rate table.");
   const config = value as Record<string, unknown>;
   if (
-    config.estimator !== "byteplus-video-v1" ||
+    !["byteplus-video-v1", "byteplus-video-v2"].includes(
+      String(config.estimator),
+    ) ||
     !Array.isArray(config.rates) ||
     config.rates.length < 1 ||
     config.rates.length > 8
@@ -53,7 +55,10 @@ export function parseUsageRates(value: unknown): UsageRates {
       microUsdPerThousandTokens: row.microUsdPerThousandTokens,
     };
   });
-  return { estimator: "byteplus-video-v1", rates };
+  return {
+    estimator: config.estimator as UsageRates["estimator"],
+    rates,
+  };
 }
 export function selectUsageRate(
   config: unknown,
@@ -202,6 +207,7 @@ export function estimateVideoTokens(params: {
   aspectRatio: string;
   durationSeconds: number;
   inputDurationMs?: number;
+  totalInputVideoDurationMs?: number;
   conservative?: boolean;
 }): bigint {
   const height = { "480p": 480n, "720p": 720n, "1080p": 1080n, "4K": 2160n }[
@@ -212,10 +218,12 @@ export function estimateVideoTokens(params: {
     !Number.isSafeInteger(params.durationSeconds) ||
     params.durationSeconds < 4 ||
     params.durationSeconds > 30 ||
-    (params.inputDurationMs !== undefined &&
-      (!Number.isSafeInteger(params.inputDurationMs) ||
-        params.inputDurationMs < 2000 ||
-        params.inputDurationMs > 30000))
+    ((params.totalInputVideoDurationMs ?? params.inputDurationMs) !== undefined &&
+      (!Number.isSafeInteger(
+        params.totalInputVideoDurationMs ?? params.inputDurationMs,
+      ) ||
+        (params.totalInputVideoDurationMs ?? params.inputDurationMs)! < 2000 ||
+        (params.totalInputVideoDurationMs ?? params.inputDurationMs)! > 30000))
   )
     throw new RangeError(
       "Video duration or resolution is outside estimator limits.",
@@ -233,7 +241,8 @@ export function estimateVideoTokens(params: {
   if (!ratio) throw new RangeError("Unsupported video aspect ratio.");
   const width = (height * ratio[0] + ratio[1] - 1n) / ratio[1];
   const milliseconds = BigInt(
-    params.durationSeconds * 1000 + (params.inputDurationMs ?? 0),
+    params.durationSeconds * 1000 +
+      (params.totalInputVideoDurationMs ?? params.inputDurationMs ?? 0),
   );
   return (width * height * 24n * milliseconds + 1023999n) / 1024000n;
 }
@@ -257,6 +266,7 @@ export function estimateGeneration(params: {
   aspectRatio?: string;
   generateAudio?: boolean;
   inputDurationMs?: number;
+  totalInputVideoDurationMs?: number;
   referenceImageCount?: number;
 }): GenerationEstimate {
   const { price } = params;
@@ -269,18 +279,20 @@ export function estimateGeneration(params: {
   if (params.mediaKind === "VIDEO") {
     const durationSeconds = params.durationSeconds ?? 5;
     const resolution = params.resolution ?? "720p";
+    const totalInputVideoDurationMs =
+      params.totalInputVideoDurationMs ?? params.inputDurationMs;
     billableQuantity = durationSeconds;
     if (price.pricingDimension === "TOKEN") {
       const rate = selectUsageRate(
         price.usageRates,
         resolution,
-        params.inputDurationMs !== undefined,
+        totalInputVideoDurationMs !== undefined,
       );
       estimatedTokens = estimateVideoTokens({
         resolution,
         aspectRatio: params.aspectRatio ?? "16:9",
         durationSeconds,
-        inputDurationMs: params.inputDurationMs,
+        totalInputVideoDurationMs,
       });
       quote = quoteSnapshotCost(
         price,
@@ -291,8 +303,8 @@ export function estimateGeneration(params: {
         resolution,
         aspectRatio: params.aspectRatio ?? "16:9",
         durationSeconds:
-          params.inputDurationMs !== undefined ? 30 : durationSeconds,
-        inputDurationMs: params.inputDurationMs,
+          totalInputVideoDurationMs !== undefined ? 30 : durationSeconds,
+        totalInputVideoDurationMs,
         conservative: true,
       });
       reservation = quoteSnapshotCost(
@@ -326,7 +338,7 @@ export function estimateGeneration(params: {
       quote = legacy.quote;
       reservation = quote;
       units = Number(legacy.durationUnits);
-      if (params.inputDurationMs !== undefined) {
+      if (totalInputVideoDurationMs !== undefined) {
         const rate =
           resolution === "1080p"
             ? price.videoInputRate1080p
@@ -334,7 +346,7 @@ export function estimateGeneration(params: {
         if (!rate)
           throw new RangeError("Video-input token rate is unavailable.");
         reservation = quoteVideoInputReservation({
-          inputDurationMs: params.inputDurationMs,
+          totalInputVideoDurationMs,
           resolution: resolution === "1080p" ? "1080p" : "720p",
           rateMicroUsdPerThousandTokens: rate,
           exchangeRate: {
@@ -348,7 +360,7 @@ export function estimateGeneration(params: {
           resolution,
           aspectRatio: params.aspectRatio ?? "16:9",
           durationSeconds,
-          inputDurationMs: params.inputDurationMs,
+          totalInputVideoDurationMs,
         });
         quote = quoteSnapshotCost(
           price,

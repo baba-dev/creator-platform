@@ -33,11 +33,7 @@ export async function POST(
   try {
     const body = await request.json();
     const input = chatMessageCreateSchema.parse(body);
-    const autoVoice =
-      typeof body === "object" &&
-      body !== null &&
-      "autoVoice" in body &&
-      (body as Record<string, unknown>).autoVoice === true;
+    const autoVoice = input.autoVoice;
     const thread = await db.chatThread.findUnique({
       where: { id: threadId },
       include: { persona: true },

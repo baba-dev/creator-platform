@@ -9,10 +9,7 @@ function dataView(bytes: Uint8Array): DataView {
 describe("buildPsdBuffer", () => {
   it("writes a PSD v1 RGBA header and required layer/mask framing", () => {
     const rgba = new Uint8Array([
-      255, 0, 0, 255,
-      0, 255, 0, 128,
-      0, 0, 255, 255,
-      255, 255, 255, 255,
+      255, 0, 0, 255, 0, 255, 0, 128, 0, 0, 255, 255, 255, 255, 255, 255,
     ]);
     const bytes = buildPsdBuffer({
       width: 2,

@@ -595,93 +595,138 @@ export const templateListQuerySchema = z.object({
   favorites: z.coerce.boolean().optional(),
 });
 
-export const personaCreateSchema = z.object({
-  organizationId: cuidSchema,
-  name: z.string().trim().min(2).max(100),
-  avatarUrl: z.string().trim().url().max(2048).optional(),
-  tag: z.string().trim().max(50).optional(),
-  description: z.string().trim().max(1000).optional(),
-  systemPrompt: z.string().trim().min(5).max(10000),
-  voiceKey: z.string().trim().max(100).optional(),
-  modelId: z
-    .string()
-    .trim()
-    .min(1)
-    .max(100)
-    .default("doubao-seed-character-260628"),
-  isPreset: z.boolean().default(false),
-});
+export const personaCreateSchema = z
+  .object({
+    organizationId: cuidSchema,
+    name: z.string().trim().min(2).max(100),
+    avatarUrl: z.string().trim().url().max(2048).optional(),
+    tag: z.string().trim().max(50).optional(),
+    description: z.string().trim().max(1000).optional(),
+    systemPrompt: z.string().trim().min(5).max(10000),
+    voiceKey: z.string().trim().max(100).optional(),
+    modelId: z
+      .string()
+      .trim()
+      .min(1)
+      .max(100)
+      .default("doubao-seed-character-260628"),
+  })
+  .strict();
 
 export const personaUpdateSchema = personaCreateSchema
   .partial()
   .omit({ organizationId: true });
 
-export const chatThreadCreateSchema = z.object({
-  organizationId: cuidSchema,
-  projectId: cuidSchema.optional(),
-  personaId: cuidSchema.optional(),
-  title: z.string().trim().min(1).max(200).default("New Conversation"),
-  modelId: z
-    .string()
-    .trim()
-    .min(1)
-    .max(100)
-    .default("doubao-seed-character-260628"),
-  systemPrompt: z.string().trim().max(10000).optional(),
-  initialMessage: z.string().trim().min(1).max(8000).optional(),
-});
+export const chatThreadCreateSchema = z
+  .object({
+    organizationId: cuidSchema,
+    projectId: cuidSchema.optional(),
+    personaId: cuidSchema.optional(),
+    title: z.string().trim().min(1).max(200).default("New Conversation"),
+    modelId: z
+      .string()
+      .trim()
+      .min(1)
+      .max(100)
+      .default("doubao-seed-character-260628"),
+    systemPrompt: z.string().trim().max(10000).optional(),
+  })
+  .strict();
 
-export const chatMessageCreateSchema = z.object({
-  content: z.string().trim().min(1).max(8000),
-  role: z.enum(["user", "assistant", "system"]).default("user"),
-  metadata: z.record(z.string(), z.unknown()).optional(),
-});
+export const chatMessageCreateSchema = z
+  .object({
+    content: z.string().trim().min(1).max(8000),
+  })
+  .strict();
 
-export const scriptCreateSchema = z.object({
-  organizationId: cuidSchema,
-  projectId: cuidSchema.optional(),
-  title: z.string().trim().min(1).max(200),
-  description: z.string().trim().max(1000).optional(),
-  logline: z.string().trim().max(500).optional(),
-  targetDurationSeconds: z.number().int().positive().max(3600).optional(),
-  content: z.record(z.string(), z.unknown()).or(z.array(z.unknown())),
-});
+const scriptSceneSchema = z
+  .object({
+    id: z.string().trim().min(1).max(64),
+    type: z.enum(["slugline", "action", "dialogue"]),
+    character: z.string().trim().max(100).optional(),
+    parenthetical: z.string().trim().max(200).optional(),
+    text: z.string().trim().min(1).max(8000),
+  })
+  .strict();
+
+const scriptContentSchema = z
+  .object({
+    scenes: z.array(scriptSceneSchema).max(500),
+  })
+  .strict();
+
+export const scriptCreateSchema = z
+  .object({
+    organizationId: cuidSchema,
+    projectId: cuidSchema.optional(),
+    title: z.string().trim().min(1).max(200),
+    description: z.string().trim().max(1000).optional(),
+    logline: z.string().trim().max(500).optional(),
+    targetDurationSeconds: z.number().int().positive().max(3600).optional(),
+    content: scriptContentSchema,
+  })
+  .strict();
 
 export const scriptUpdateSchema = scriptCreateSchema
   .partial()
   .omit({ organizationId: true });
 
-export const brandProfileCreateSchema = z.object({
-  organizationId: cuidSchema,
-  name: z.string().trim().min(2).max(100),
-  tagline: z.string().trim().max(200).optional(),
-  voiceTone: z.string().trim().max(1000).optional(),
-  guidelines: z.string().trim().max(5000).optional(),
-  targetAudience: z.string().trim().max(1000).optional(),
-  vocabulary: z
-    .object({
-      preferredTerms: z.array(z.string().trim().max(100)).max(50).default([]),
-      bannedTerms: z.array(z.string().trim().max(100)).max(50).default([]),
-    })
-    .optional(),
-});
+export const brandProfileCreateSchema = z
+  .object({
+    organizationId: cuidSchema,
+    name: z.string().trim().min(2).max(100),
+    tagline: z.string().trim().max(200).optional(),
+    voiceTone: z.string().trim().max(1000).optional(),
+    guidelines: z.string().trim().max(5000).optional(),
+    targetAudience: z.string().trim().max(1000).optional(),
+    vocabulary: z
+      .array(z.string().trim().min(1).max(100))
+      .max(50)
+      .optional(),
+  })
+  .strict();
 
 export const brandProfileUpdateSchema = brandProfileCreateSchema
   .partial()
   .omit({ organizationId: true });
 
-export const storyPlanCreateSchema = z.object({
-  organizationId: cuidSchema,
-  projectId: cuidSchema.optional(),
-  title: z.string().trim().min(1).max(200),
-  genre: z.string().trim().max(100).optional(),
-  premise: z.string().trim().max(2000).optional(),
-  structureType: z
-    .enum(["THREE_ACT", "HERO_JOURNEY", "SAVE_THE_CAT"])
-    .default("THREE_ACT"),
-  beats: z.array(z.record(z.string(), z.unknown())).default([]),
-  characters: z.array(z.record(z.string(), z.unknown())).default([]),
-});
+export const storyStructureTypeSchema = z.enum([
+  "THREE_ACT",
+  "FIVE_ACT",
+  "HERO_JOURNEY",
+  "SAVE_THE_CAT",
+]);
+
+const storyBeatSchema = z
+  .object({
+    act: z.string().trim().min(1).max(200),
+    beat: z.string().trim().min(1).max(200),
+    summary: z.string().trim().min(1).max(4000),
+    conflict: z.string().trim().max(2000).default(""),
+  })
+  .strict();
+
+const storyCharacterSchema = z
+  .object({
+    name: z.string().trim().min(1).max(160),
+    role: z.string().trim().max(160).default(""),
+    motivation: z.string().trim().max(2000).default(""),
+    flaw: z.string().trim().max(2000).default(""),
+  })
+  .strict();
+
+export const storyPlanCreateSchema = z
+  .object({
+    organizationId: cuidSchema,
+    projectId: cuidSchema.optional(),
+    title: z.string().trim().min(1).max(200),
+    genre: z.string().trim().max(100).optional(),
+    premise: z.string().trim().max(2000).optional(),
+    structureType: storyStructureTypeSchema.default("THREE_ACT"),
+    beats: z.array(storyBeatSchema).max(100).default([]),
+    characters: z.array(storyCharacterSchema).max(100).default([]),
+  })
+  .strict();
 
 export const storyPlanUpdateSchema = storyPlanCreateSchema
   .partial()

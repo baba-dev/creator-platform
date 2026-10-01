@@ -14,7 +14,7 @@ const scriptGenerateSchema = z.object({
     .default("dialogue"),
   currentScene: z.string().max(4000).optional(),
   targetTone: z.string().max(200).optional(),
-  modelId: z.string().optional(),
+  modelId: z.string().min(1).max(100).optional(),
 });
 
 const SCRIPTWRITER_SYSTEM_PROMPT = `You are an expert Hollywood and commercial screenplay writer and script consultant.
@@ -74,6 +74,7 @@ export async function POST(
     const now = new Date();
     let model = await db.providerModel.findFirst({
       where: {
+        provider: "BYTEPLUS",
         providerModelId: preferredModel,
         mediaKind: "TEXT",
         enabled: true,
@@ -92,7 +93,7 @@ export async function POST(
 
     if (!model || !model.priceVersions[0]) {
       model = await db.providerModel.findFirst({
-        where: { mediaKind: "TEXT", enabled: true },
+        where: { provider: "BYTEPLUS", mediaKind: "TEXT", enabled: true },
         include: {
           priceVersions: {
             where: {

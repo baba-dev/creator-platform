@@ -103,10 +103,23 @@ async function enqueueGenerationSuccess(
   );
 }
 
+const SAFE_FAILURE_CODE = /^[A-Za-z0-9_.:-]{1,100}$/;
+
+function normalizedFailureCode(code?: string): string {
+  return code && SAFE_FAILURE_CODE.test(code) ? code : "GENERATION_FAILED";
+}
+
+function providerRequestFailureCode(error: ProviderRequestError): string {
+  return error.code && SAFE_FAILURE_CODE.test(error.code)
+    ? error.code
+    : "PROVIDER_REJECTED";
+}
+
 export async function failJob(
   id: string,
   message: string,
   expectedStatus: "QUEUED" | "SUBMITTED" | "PROCESSING",
+  errorCode?: string,
 ) {
   await db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM GenerationJob WHERE id = ${id} FOR UPDATE`;
@@ -148,7 +161,7 @@ export async function failJob(
       where: { id },
       data: {
         status: "FAILED",
-        errorCode: "GENERATION_FAILED",
+        errorCode: normalizedFailureCode(errorCode),
         errorMessage: message,
         completedAt: new Date(),
       },
@@ -327,6 +340,9 @@ export async function processVideoSubmitJob(
           ? "Generation provider is unavailable. Credits released."
           : "Provider rejected the video request. Credits released.",
         "SUBMITTED",
+        error instanceof ProviderRequestError
+          ? providerRequestFailureCode(error)
+          : undefined,
       );
       return;
     }
@@ -383,6 +399,10 @@ export async function processVideoPollJob(
       id,
       "Provider did not complete the video. Credits released.",
       "PROCESSING",
+      result.errorCode ??
+        (result.status === "cancelled"
+          ? "PROVIDER_CANCELLED"
+          : "PROVIDER_FAILED"),
     );
     return;
   }
@@ -730,6 +750,9 @@ export async function processImageJob(
             ? "Generation provider is unavailable. Credits released."
             : "Provider rejected the image request. Credits released.",
           "SUBMITTED",
+          error instanceof ProviderRequestError
+            ? providerRequestFailureCode(error)
+            : undefined,
         );
         return;
       }
@@ -1100,6 +1123,9 @@ export async function processVoiceJob(
           ? "Generation provider is unavailable. Credits released."
           : "Provider rejected the voice request. Credits released.",
         "SUBMITTED",
+        error instanceof ProviderRequestError
+          ? providerRequestFailureCode(error)
+          : undefined,
       );
       return;
     }

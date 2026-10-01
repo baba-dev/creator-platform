@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { GenerationActivityCenter } from "@/components/process/generation-activity-center";
 import { Brand } from "@/components/ui/brand";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { WorkspaceNavigation } from "@/components/studio/workspace-navigation";
@@ -42,6 +43,10 @@ export default async function OrganizationLayout({
           <WorkspaceNavigation slug={organizationSlug} />
         </div>
         <div className="min-w-0">{children}</div>
+        <GenerationActivityCenter
+          organizationId={membership.organizationId}
+          organizationSlug={organizationSlug}
+        />
       </div>
     </div>
   );

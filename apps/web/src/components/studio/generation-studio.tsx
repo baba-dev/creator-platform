@@ -6,9 +6,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import Image from "next/image";
+import { ProcessFeedback } from "@/components/process/process-feedback";
 import { Button } from "@/components/ui/button";
 import { Eyebrow } from "@/components/ui/creative";
 import { StatusDot, Tape } from "@/components/ui/sketch";
+import { announceGenerationStarted } from "@/lib/generation-activity";
 
 type CapabilityValue = boolean | number | string;
 type MediaKind = "IMAGE" | "VIDEO" | "VOICE";
@@ -717,9 +719,15 @@ export function GenerationStudio({
           idempotencyKey: attempt.current.key,
         }),
       });
-      const body = await response.json();
+      const body = (await response.json()) as {
+        jobId?: string;
+        error?: string;
+      };
       if (!response.ok)
         throw new Error(body.error ?? "Generation could not be queued.");
+      if (!body.jobId)
+        throw new Error("Generation was accepted without a durable job id.");
+      announceGenerationStarted(organizationId, body.jobId);
       // A successful 202 means the durable job exists. Keep the key if the
       // history refresh fails so a retry returns the same job without a
       // second charge or provider submission.
@@ -1648,13 +1656,31 @@ export function GenerationStudio({
               sync provider models before generating.
             </p>
           ) : null}
+          {isEnhancing ? (
+            <ProcessFeedback
+              kind="loading"
+              title="Polishing your prompt"
+              description="The assistant is refining your idea. You can keep this Studio open while it finishes."
+            />
+          ) : null}
           {error ? (
-            <p
-              role="alert"
-              className="rounded-xl border border-destructive p-3 text-sm text-destructive"
-            >
-              {error}
-            </p>
+            <ProcessFeedback
+              kind={
+                error.includes("temporarily") ||
+                error.includes("interrupted") ||
+                error.includes("retry")
+                  ? "recoverable"
+                  : "error"
+              }
+              title={
+                error.includes("temporarily") ||
+                error.includes("interrupted") ||
+                error.includes("retry")
+                  ? "We are reconnecting"
+                  : "This action needs attention"
+              }
+              description={error}
+            />
           ) : null}
         </div>
         {variant === "advanced" ? (

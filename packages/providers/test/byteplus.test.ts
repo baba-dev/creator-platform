@@ -33,6 +33,7 @@ describe("BytePlus provider adapter", () => {
     const models = await createBytePlusProvider(validConfig).listModels();
     expect(models.map((model) => model.id)).toEqual([
       "seedream-5-0-260128",
+      "dola-seedream-5-0-pro-260628",
       "seedream-4-5-251128",
       "dreamina-seedance-2-5-260628",
       "seed-tts-2.0",
@@ -57,6 +58,22 @@ describe("BytePlus provider adapter", () => {
     });
     expect(
       models.find((model) => model.id === "seedream-4-5-251128")?.capabilities,
+    ).not.toHaveProperty("resolution:3K");
+    expect(
+      models.find((model) => model.id === "dola-seedream-5-0-pro-260628")
+        ?.capabilities,
+    ).toMatchObject({
+      "aspectRatio:1:1": true,
+      "resolution:2K": true,
+      "resolution:4K": true,
+      referenceImages: true,
+      maxReferenceImages: 10,
+      preciseEditing: true,
+      layerSeparation: true,
+    });
+    expect(
+      models.find((model) => model.id === "dola-seedream-5-0-pro-260628")
+        ?.capabilities,
     ).not.toHaveProperty("resolution:3K");
     expect(
       models.find((model) => model.mediaKind === "video")?.capabilities,
@@ -114,6 +131,42 @@ describe("BytePlus provider adapter", () => {
       response_format: "url",
       watermark: false,
     });
+  });
+
+  it("submits Seedream 5.0 Pro with output format and accepts alias", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        data: [{ url: "https://cdn.example.com/pro.png" }],
+        usage: { generated_images: 1 },
+      }),
+    );
+    const provider = createBytePlusProvider({
+      ...validConfig,
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const job = await provider.submit({
+      idempotencyKey: "image-job-pro-1",
+      modelId: "seedream-5-0-pro",
+      mediaKind: "image",
+      input: {
+        prompt: "A layered design visual <bbox>100 100 500 500</bbox>",
+        aspectRatio: "1:1",
+        resolution: "4K",
+        outputFormat: "png",
+      },
+    });
+
+    expect(job).toMatchObject({
+      status: "succeeded",
+      outputUrls: ["https://cdn.example.com/pro.png"],
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const payload = JSON.parse(init.body as string);
+    expect(payload.model).toBe("dola-seedream-5-0-pro-260628");
+    expect(payload.output_format).toBe("png");
+    expect(payload.size).toBe("4096x4096");
   });
 
   it.each([

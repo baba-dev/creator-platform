@@ -33,6 +33,22 @@ describe("pricing defaults and model quotes", () => {
     expect(quote.customerPriceBaisa).toBe(22n);
   });
 
+  it("calculates accurate quotes for seedream-5-pro at 2K and 4K rates", () => {
+    const quote2K = calculateModelQuote({
+      providerCostMicroUsd: 40_500n,
+    });
+    expect(quote2K.customerCredits).toBe(22n);
+    expect(quote2K.convertedCostBaisa).toBe(16n);
+    expect(quote2K.customerPriceBaisa).toBe(22n);
+
+    const quote4K = calculateModelQuote({
+      providerCostMicroUsd: 81_000n,
+    });
+    expect(quote4K.customerCredits).toBe(43n);
+    expect(quote4K.convertedCostBaisa).toBe(32n);
+    expect(quote4K.customerPriceBaisa).toBe(43n);
+  });
+
   it("calculates accurate quotes for seedance-2-5 (video)", () => {
     const quote = calculateModelQuote({
       providerCostMicroUsd: 468_000n,

@@ -120,6 +120,22 @@ export function quoteImageOutputs(
   };
 }
 
+export function getImageProviderCostMicroUsd(params: {
+  providerModelId: string;
+  baseCostMicroUsd: bigint;
+  resolution?: string;
+}): bigint {
+  const isSeedreamPro =
+    params.providerModelId === "dola-seedream-5-0-pro-260628" ||
+    params.providerModelId === "seedream-5-0-pro-260628" ||
+    params.providerModelId === "seedream-5-0-pro" ||
+    params.providerModelId === "byteplus-seedream-5-pro";
+  if (isSeedreamPro && params.resolution === "4K") {
+    return 81_000n;
+  }
+  return params.baseCostMicroUsd;
+}
+
 /** Size estimate; provider completion_tokens remains the settlement authority. */
 export function estimateVideoTokens(params: {
   resolution: string;
@@ -281,7 +297,17 @@ export function estimateGeneration(params: {
       }
     }
   } else if (params.mediaKind === "IMAGE") {
-    quote = quoteImageOutputs(price, units);
+    const unitCost = getImageProviderCostMicroUsd({
+      providerModelId: params.providerModelId,
+      baseCostMicroUsd: price.providerCostMicroUsd,
+      resolution: params.resolution,
+    });
+    quote = quoteImageOutputs(
+      unitCost === price.providerCostMicroUsd
+        ? price
+        : { ...price, providerCostMicroUsd: unitCost },
+      units,
+    );
     reservation = quote;
   } else {
     if (price.pricingDimension === "TOKEN")

@@ -218,6 +218,36 @@ export const VERIFIED_BYTEPLUS_MODELS: readonly ProviderModelDescriptor[] = [
     },
   },
   {
+    id: "dola-seedream-5-0-pro-260628",
+    provider: "byteplus",
+    displayName: "Seedream 5.0 Pro",
+    description:
+      "Professional foundation generation, interactive bounding-box editing, and layer separation.",
+    mediaKind: "image",
+    capabilities: {
+      "aspectRatio:1:1": true,
+      "aspectRatio:4:3": true,
+      "aspectRatio:3:4": true,
+      "aspectRatio:16:9": true,
+      "aspectRatio:9:16": true,
+      "aspectRatio:3:2": true,
+      "aspectRatio:2:3": true,
+      "aspectRatio:21:9": true,
+      "resolution:2K": true,
+      "resolution:4K": true,
+      referenceImages: true,
+      sequentialImages: true,
+      maxGeneratedImages: 15,
+      maxTotalInputOutputImages: 15,
+      maxReferenceImages: 10,
+      preciseEditing: true,
+      inpainting: true,
+      outpainting: true,
+      objectReplacement: true,
+      layerSeparation: true,
+    },
+  },
+  {
     id: "seedream-4-5-251128",
     provider: "byteplus",
     displayName: "Seedream 4.5",
@@ -401,11 +431,23 @@ function requestUuid(idempotencyKey: string): string {
   return `${digest.slice(0, 8)}-${digest.slice(8, 12)}-4${digest.slice(13, 16)}-a${digest.slice(17, 20)}-${digest.slice(20, 32)}`;
 }
 
+export function normalizeBytePlusModelId(modelId: string): string {
+  if (
+    modelId === "seedream-5-0-pro" ||
+    modelId === "seedream-5-0-pro-260628" ||
+    modelId === "dola-seedream-5-0-pro-260628"
+  ) {
+    return "dola-seedream-5-0-pro-260628";
+  }
+  return modelId;
+}
+
 function assertModelSupportsMediaKind(
   modelId: string,
   mediaKind: MediaKind,
 ): void {
-  const model = VERIFIED_BYTEPLUS_MODELS.find((item) => item.id === modelId);
+  const normalized = normalizeBytePlusModelId(modelId);
+  const model = VERIFIED_BYTEPLUS_MODELS.find((item) => item.id === normalized);
   if (!model || model.mediaKind !== mediaKind) {
     throw new ProviderRequestError(
       "Unsupported BytePlus model for requested media kind",
@@ -677,9 +719,10 @@ export function createBytePlusProvider(
     },
 
     async submit(submission: MediaSubmission): Promise<ProviderJob> {
-      assertModelSupportsMediaKind(submission.modelId, submission.mediaKind);
+      const resolvedModelId = normalizeBytePlusModelId(submission.modelId);
+      assertModelSupportsMediaKind(resolvedModelId, submission.mediaKind);
       logger.info("Submitting BytePlus media generation job", {
-        modelId: submission.modelId,
+        modelId: resolvedModelId,
         mediaKind: submission.mediaKind,
       });
 
@@ -702,12 +745,22 @@ export function createBytePlusProvider(
           }
           if (
             input.data.resolution === "3K" &&
-            submission.modelId !== "seedream-5-0-260128"
+            resolvedModelId !== "seedream-5-0-260128"
           ) {
             throw new ProviderRequestError(
               "3K output is only supported by Seedream 5.0 Lite",
               false,
               { code: "UNSUPPORTED_RESOLUTION" },
+            );
+          }
+          if (
+            resolvedModelId === "dola-seedream-5-0-pro-260628" &&
+            input.data.referenceImages.length > 10
+          ) {
+            throw new ProviderRequestError(
+              "Seedream 5.0 Pro supports up to 10 reference images",
+              false,
+              { code: "TOO_MANY_REFERENCE_IMAGES" },
             );
           }
           const response = await safeFetch(
@@ -717,13 +770,14 @@ export function createBytePlusProvider(
               method: "POST",
               headers: modelArkHeaders,
               body: JSON.stringify({
-                model: submission.modelId,
+                model: resolvedModelId,
                 prompt: input.data.prompt,
                 size: mapAspectRatioToSize(
                   input.data.aspectRatio,
                   input.data.resolution,
                 ),
-                ...(submission.modelId === "seedream-5-0-260128"
+                ...(resolvedModelId === "seedream-5-0-260128" ||
+                resolvedModelId === "dola-seedream-5-0-pro-260628"
                   ? { output_format: input.data.outputFormat }
                   : {}),
                 ...(input.data.referenceImages.length

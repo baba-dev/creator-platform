@@ -1,6 +1,10 @@
 import { selectUsageRate } from "@aiwa/credits";
 import { captureCreditsForJob, releaseOrRefundCredits } from "@aiwa/credits";
-import { createCreditQuote, videoInputProviderCost } from "@aiwa/credits";
+import {
+  createCreditQuote,
+  getImageProviderCostMicroUsd,
+  videoInputProviderCost,
+} from "@aiwa/credits";
 import { finalizeAssetStorage, releaseAssetStorage } from "@aiwa/assets";
 import { parseServerEnv } from "@aiwa/config";
 import { db, type Prisma } from "@aiwa/db";
@@ -895,7 +899,7 @@ export async function processImageJob(
     await tx.$queryRaw`SELECT id FROM GenerationJob WHERE id = ${id} FOR UPDATE`;
     const current = await tx.generationJob.findUniqueOrThrow({
       where: { id },
-      include: { priceVersion: true },
+      include: { priceVersion: true, providerModel: true },
     });
     if (current.status !== "PROCESSING") return;
 
@@ -965,8 +969,21 @@ export async function processImageJob(
       },
     });
 
+    const resolution =
+      typeof current.requestPayload === "object" &&
+      current.requestPayload !== null &&
+      "resolution" in current.requestPayload &&
+      typeof (current.requestPayload as { resolution?: unknown }).resolution ===
+        "string"
+        ? (current.requestPayload as { resolution: string }).resolution
+        : undefined;
+    const unitProviderCost = getImageProviderCostMicroUsd({
+      providerModelId: current.providerModel.providerModelId,
+      baseCostMicroUsd: current.priceVersion.providerCostMicroUsd,
+      resolution,
+    });
     const actualProviderCostMicroUsd =
-      current.priceVersion.providerCostMicroUsd * BigInt(successfulCount);
+      unitProviderCost * BigInt(successfulCount);
     const readyAssets = assets.slice(0, successfulCount);
     await tx.generationJob.update({
       where: { id },

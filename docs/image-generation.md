@@ -108,3 +108,25 @@ changing the allowlist.
 
 The worker never logs or exposes signed provider URLs. Storage/download failures
 may log the job ID, safe error class/message, and retry count only.
+
+## Seedream 5.0 Pro, Precision AI Editing & Layered Designs
+
+Seedream 5.0 Pro (`dola-seedream-5-0-pro-260628`) is BytePlus's premier
+foundation generation and precision editing model.
+
+- **Capabilities**: 8 standard aspect ratios (`1:1`, `4:3`, `3:4`, `16:9`,
+  `9:16`, `3:2`, `2:3`, `21:9`), resolution up to 4K (`2K` and `4K`), up to 10
+  reference images, up to 15 sequential outputs.
+- **Precision AI Editing**: Supports coordinate-grounded inpainting, generative
+  fill, and object replacement using normalized bounding-box tags
+  (`<bbox>ymin xmin ymax xmax</bbox>`), as well as outpainting and scene
+  expansion.
+- **Tiered Pricing**:
+  - 2K resolution: $0.0405 provider cost (40,500 µUSD) -> 16 baisa -> 22 credits
+  - 4K resolution: $0.0810 provider cost (81,000 µUSD) -> 32 baisa -> 43 credits
+- **Layered Design Canvas & PSD Export**:
+  - Image Editor supports multi-layer canvas composition (opacity, visibility,
+    blend modes, z-index).
+  - Standalone pure TypeScript `.psd` serializer compiles multi-layer
+    compositions into Adobe Photoshop files with genuine layer headers and
+    channel records without external C++ or native canvas libraries.

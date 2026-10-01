@@ -128,7 +128,7 @@ export function VoiceCastingBooth({
   const [auditionError, setAuditionError] = useState<string | null>(null);
 
   // Polling ref
-  const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [prevVoiceKey, setPrevVoiceKey] = useState(currentVoiceKey);
   const [prevPhrase, setPrevPhrase] = useState(initialTestPhrase);
@@ -146,7 +146,7 @@ export function VoiceCastingBooth({
 
   useEffect(() => {
     return () => {
-      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     };
   }, []);
 
@@ -186,50 +186,68 @@ export function VoiceCastingBooth({
 
       const { jobId } = await res.json();
 
-      // Poll for job completion
-      let attempts = 0;
-      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+      // Poll with progressive backoff. A new audition or unmount cancels
+      // the pending timer so stale requests cannot update the booth.
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
 
-      pollTimerRef.current = setInterval(async () => {
-        attempts += 1;
-        if (attempts > 30) {
-          if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+      const poll = async (attempt: number): Promise<void> => {
+        if (attempt > 30) {
           setAuditioningVoice(null);
           setAuditionError("Audition request timed out. Please try again.");
           return;
         }
 
         try {
-          const pollRes = await fetch(`/api/generation-jobs/${jobId}`);
-          if (!pollRes.ok) return;
-          const pollData = await pollRes.json();
-          const job = pollData.job;
+          const pollRes = await fetch(`/api/generation-jobs/${jobId}`, {
+            cache: "no-store",
+          });
+          if (pollRes.ok) {
+            const pollData = await pollRes.json();
+            const job = pollData.job;
 
-          if (job.status === "SUCCEEDED") {
-            if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-            setAuditioningVoice(null);
+            if (job.status === "SUCCEEDED") {
+              setAuditioningVoice(null);
+              const assetId =
+                job.outputPayload?.assetIds?.[0] ||
+                pollData.assets?.[0]?.id ||
+                pollData.asset?.id;
 
-            // Find associated asset
-            const assetId =
-              job.outputPayload?.assetIds?.[0] ||
-              pollData.assets?.[0]?.id ||
-              pollData.asset?.id;
-
-            if (assetId) {
-              setAuditionAudios((prev) => ({
-                ...prev,
-                [voiceKey]: `/api/assets/${assetId}`,
-              }));
+              if (assetId) {
+                setAuditionAudios((prev) => ({
+                  ...prev,
+                  [voiceKey]: `/api/assets/${assetId}`,
+                }));
+              } else {
+                setAuditionError(
+                  "Audition completed but its audio asset is not ready yet.",
+                );
+              }
+              return;
             }
-          } else if (job.status === "FAILED") {
-            if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-            setAuditioningVoice(null);
-            setAuditionError(job.errorMessage || "Audition synthesis failed.");
+
+            if (
+              job.status === "FAILED" ||
+              job.status === "CANCELLED" ||
+              job.status === "MANUAL_REVIEW"
+            ) {
+              setAuditioningVoice(null);
+              setAuditionError(
+                job.errorMessage || "Audition synthesis did not complete.",
+              );
+              return;
+            }
           }
         } catch {
-          // Retry next tick
+          // Transient polling failures are retried with backoff.
         }
-      }, 1500);
+
+        const delayMs = Math.min(1500 + attempt * 250, 5000);
+        pollTimerRef.current = setTimeout(() => {
+          void poll(attempt + 1);
+        }, delayMs);
+      };
+
+      void poll(1);
     } catch (err) {
       setAuditioningVoice(null);
       setAuditionError(err instanceof Error ? err.message : "Audition failed.");

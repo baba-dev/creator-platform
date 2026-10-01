@@ -66,8 +66,6 @@ describe("POST /api/admin/users/[userId]/memberships", () => {
       role: "ORGANIZATION_MEMBER",
       monthlySpendingCapCredits: null,
     });
-    expect(mocks.revalidatePath).toHaveBeenCalledWith(
-      `/admin/users/${userId}`,
-    );
+    expect(mocks.revalidatePath).toHaveBeenCalledWith(`/admin/users/${userId}`);
   });
 });

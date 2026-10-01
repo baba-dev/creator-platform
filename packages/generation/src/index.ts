@@ -17,6 +17,7 @@ import {
 import { VERIFIED_BYTEPLUS_MODELS } from "@aiwa/providers/byteplus";
 import { z } from "zod";
 import { resolvePresetVoice, VoiceResolutionError } from "./voices";
+import { inspectTalkingAvatarSources } from "./talking-avatar";
 import {
   normalizeVideoRequest,
   validateVideoModelRequest,
@@ -303,7 +304,21 @@ export async function createImageJob(userId: string, raw: unknown) {
           existing.templateId !== templateId ||
           existing.providerModelId !== input.modelId ||
           existing.priceVersionId !== input.priceVersionId ||
-          JSON.stringify(existing.requestPayload) !== JSON.stringify(payload)
+          JSON.stringify(
+            (() => {
+              const existingPayload =
+                existing.requestPayload &&
+                typeof existing.requestPayload === "object" &&
+                !Array.isArray(existing.requestPayload)
+                  ? { ...(existing.requestPayload as Record<string, unknown>) }
+                  : {};
+              delete existingPayload.draftProviderTaskId;
+              delete existingPayload.draftBillingContext;
+              delete existingPayload.trustedDrivingAudioDurationMs;
+              delete existingPayload.billableDurationSeconds;
+              return existingPayload;
+            })(),
+          ) !== JSON.stringify(payload)
         ) {
           // JSON columns can reorder keys: compare canonical fields below.
           const old = existing.requestPayload as Partial<typeof payload>;
@@ -774,10 +789,12 @@ export async function createVideoJob(userId: string, raw: unknown) {
         const expectsImage =
           source.role === "FIRST_FRAME" ||
           source.role === "LAST_FRAME" ||
-          source.role === "REFERENCE_IMAGE";
+          source.role === "REFERENCE_IMAGE" ||
+          source.role === "AVATAR_IMAGE";
         const expectsVideo =
           source.role === "REFERENCE_VIDEO" || source.role === "SOURCE_VIDEO";
-        const expectsAudio = source.role === "REFERENCE_AUDIO";
+        const expectsAudio =
+          source.role === "REFERENCE_AUDIO" || source.role === "DRIVING_AUDIO";
 
         if (
           (expectsImage && asset.mediaKind !== "IMAGE") ||
@@ -789,7 +806,7 @@ export async function createVideoJob(userId: string, raw: unknown) {
           );
         }
 
-        if (expectsImage) {
+        if (expectsImage && source.role !== "AVATAR_IMAGE") {
           if (
             asset.byteSize > 20n * 1024n * 1024n ||
             !asset.mimeType.startsWith("image/")
@@ -829,7 +846,7 @@ export async function createVideoJob(userId: string, raw: unknown) {
           totalInputVideoDurationMs += asset.durationMs;
         }
 
-        if (expectsAudio) {
+        if (expectsAudio && source.role !== "DRIVING_AUDIO") {
           if (
             asset.durationMs === null ||
             asset.durationMs < 2_000 ||
@@ -862,6 +879,24 @@ export async function createVideoJob(userId: string, raw: unknown) {
       let pricingInputVideoDurationMs =
         totalInputVideoDurationMs > 0 ? totalInputVideoDurationMs : undefined;
       let draftProviderTaskId: string | undefined;
+
+      if (input.workflow === "TALKING_AVATAR") {
+        try {
+          const facts = inspectTalkingAvatarSources(input, assetById);
+          pricingDurationSeconds = facts.billableDurationSeconds;
+          pricingAspectRatio = "adaptive";
+          pricingGenerateAudio = false;
+          payload.trustedDrivingAudioDurationMs =
+            facts.drivingAudioDurationMs;
+          payload.billableDurationSeconds = facts.billableDurationSeconds;
+        } catch (error) {
+          throw new GenerationError(
+            error instanceof Error
+              ? error.message
+              : "Talking-avatar source media is invalid.",
+          );
+        }
+      }
 
       if (input.workflow === "EDIT") {
         const source = input.sources.find(

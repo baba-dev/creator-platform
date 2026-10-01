@@ -9,6 +9,7 @@ export const videoWorkflowSchema = z.enum([
   "EXTEND",
   "DRAFT",
   "DRAFT_FINAL",
+  "TALKING_AVATAR",
 ]);
 export type VideoWorkflow = z.infer<typeof videoWorkflowSchema>;
 
@@ -19,6 +20,8 @@ export const videoSourceRoleSchema = z.enum([
   "REFERENCE_VIDEO",
   "REFERENCE_AUDIO",
   "SOURCE_VIDEO",
+  "AVATAR_IMAGE",
+  "DRIVING_AUDIO",
 ]);
 export type VideoSourceRole = z.infer<typeof videoSourceRoleSchema>;
 
@@ -92,7 +95,11 @@ export const videoRequestV2Schema = z
       count("REFERENCE_VIDEO") +
       count("REFERENCE_AUDIO");
 
-    if (value.workflow !== "DRAFT_FINAL" && value.prompt.length === 0) {
+    if (
+      value.workflow !== "DRAFT_FINAL" &&
+      value.workflow !== "TALKING_AVATAR" &&
+      value.prompt.length === 0
+    ) {
       context.addIssue({
         code: "custom",
         path: ["prompt"],
@@ -151,6 +158,59 @@ export const videoRequestV2Schema = z
         path: ["sources"],
         message:
           "Reference workflow requires reference media and no frame roles.",
+      });
+    }
+
+    const avatarCount = count("AVATAR_IMAGE");
+    const drivingAudioCount = count("DRIVING_AUDIO");
+    if (value.workflow === "TALKING_AVATAR") {
+      if (
+        avatarCount !== 1 ||
+        drivingAudioCount !== 1 ||
+        value.sources.length !== 2
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["sources"],
+          message:
+            "Talking-avatar generation requires exactly one avatar image and one driving audio source.",
+        });
+      }
+      if (value.aspectRatio !== "adaptive") {
+        context.addIssue({
+          code: "custom",
+          path: ["aspectRatio"],
+          message: "Talking-avatar generation uses the source image aspect ratio.",
+        });
+      }
+      if (value.durationSeconds !== -1) {
+        context.addIssue({
+          code: "custom",
+          path: ["durationSeconds"],
+          message:
+            "Talking-avatar duration is derived from the trusted driving audio.",
+        });
+      }
+      if (value.generateAudio) {
+        context.addIssue({
+          code: "custom",
+          path: ["generateAudio"],
+          message: "Talking-avatar audio is supplied by the driving audio source.",
+        });
+      }
+      if (value.outputFormat !== "mp4" || value.returnLastFrame) {
+        context.addIssue({
+          code: "custom",
+          path: ["outputFormat"],
+          message: "Talking-avatar generation supports MP4 output only.",
+        });
+      }
+    } else if (avatarCount > 0 || drivingAudioCount > 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["sources"],
+        message:
+          "Avatar-image and driving-audio roles are only valid for the talking-avatar workflow.",
       });
     }
 
@@ -397,6 +457,18 @@ export function validateVideoModelRequest(
   }
   if (request.returnLastFrame && capabilities.returnLastFrame !== true) {
     return "Returning the final frame is not supported by this model.";
+  }
+  if (
+    request.workflow === "TALKING_AVATAR" &&
+    capabilities.talkingAvatar !== true
+  ) {
+    return "Talking-avatar generation is not supported by this model.";
+  }
+  if (
+    providerModelId === "omnihuman-1.5" &&
+    request.workflow !== "TALKING_AVATAR"
+  ) {
+    return "OmniHuman 1.5 requires the talking-avatar workflow.";
   }
   if (request.workflow === "EDIT" && capabilities.editVideo !== true) {
     return "Video editing is not supported by this model.";

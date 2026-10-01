@@ -18,6 +18,12 @@ import {
   executeSafeFetch,
   sharedReadResponseText,
 } from "../http";
+import {
+  cancelOmniHumanVisionJob,
+  getOmniHumanVisionJob,
+  isOmniHumanVisionRequestId,
+  submitOmniHumanVisionTask,
+} from "./vision";
 
 const MODELARK_BASE_URLS = {
   "ap-southeast-1": "https://ark.ap-southeast.bytepluses.com/api/v3",
@@ -38,6 +44,9 @@ export interface BytePlusAdapterConfig {
   readonly apiKey?: string;
   readonly region: keyof typeof MODELARK_BASE_URLS;
   readonly modelArkBaseUrl?: string;
+  readonly visionAccessKeyId?: string;
+  readonly visionSecretAccessKey?: string;
+  readonly visionBaseUrl?: string;
   readonly speechApiKey?: string;
   readonly speechAppKey?: string;
   readonly speechBaseUrl?: string;
@@ -55,6 +64,24 @@ export function isBytePlusMediaConfigured(
 ): boolean {
   const key = (config.apiKey ?? config.BYTEPLUS_API_KEY) as string | undefined;
   return Boolean(key && key.trim().length > 0);
+}
+
+export function isBytePlusVisionConfigured(
+  config: {
+    visionAccessKeyId?: string;
+    visionSecretAccessKey?: string;
+    BYTEPLUS_VISION_ACCESS_KEY_ID?: string;
+    BYTEPLUS_VISION_SECRET_ACCESS_KEY?: string;
+    [key: string]: unknown;
+  } = process.env,
+): boolean {
+  const accessKeyId = (config.visionAccessKeyId ??
+    config.BYTEPLUS_VISION_ACCESS_KEY_ID) as string | undefined;
+  const secretAccessKey = (config.visionSecretAccessKey ??
+    config.BYTEPLUS_VISION_SECRET_ACCESS_KEY) as string | undefined;
+  return Boolean(
+    accessKeyId?.trim().length && secretAccessKey?.trim().length,
+  );
 }
 
 export function isBytePlusVoiceConfigured(
@@ -80,6 +107,9 @@ const adapterConfigSchema = z.object({
   apiKey: z.string().trim().min(1).optional(),
   region: z.enum(["ap-southeast-1", "eu-west-1"]),
   modelArkBaseUrl: httpsUrlSchema.optional(),
+  visionAccessKeyId: z.string().trim().min(1).optional(),
+  visionSecretAccessKey: z.string().trim().min(1).optional(),
+  visionBaseUrl: httpsUrlSchema.optional(),
   speechApiKey: z.string().trim().min(1).optional(),
   speechAppKey: z.string().trim().min(1).optional(),
   speechBaseUrl: httpsUrlSchema.optional(),
@@ -147,6 +177,8 @@ const bytePlusVideoSourceSchema = z
       "REFERENCE_VIDEO",
       "REFERENCE_AUDIO",
       "SOURCE_VIDEO",
+      "AVATAR_IMAGE",
+      "DRIVING_AUDIO",
     ]),
     url: httpsUrlSchema,
   })
@@ -164,6 +196,7 @@ export const bytePlusVideoInputSchema = z
         "EXTEND",
         "DRAFT",
         "DRAFT_FINAL",
+        "TALKING_AVATAR",
       ])
       .default("GENERATE"),
     prompt: z.string().trim().max(4000).default(""),
@@ -204,7 +237,11 @@ export const bytePlusVideoInputSchema = z
         message: "Draft final rendering requires a provider Draft task.",
       });
     }
-    if (input.workflow !== "DRAFT_FINAL" && input.prompt.length === 0) {
+    if (
+      input.workflow !== "DRAFT_FINAL" &&
+      input.workflow !== "TALKING_AVATAR" &&
+      input.prompt.length === 0
+    ) {
       ctx.addIssue({
         code: "custom",
         path: ["prompt"],
@@ -550,6 +587,27 @@ export const VERIFIED_BYTEPLUS_MODELS: readonly ProviderModelDescriptor[] = [
       maximumDurationSeconds: 30,
       fps: 24,
       concurrencyLimit: 10,
+    },
+  },
+  {
+    id: "omnihuman-1.5",
+    provider: "byteplus",
+    displayName: "OmniHuman 1.5",
+    description:
+      "Expressive talking-avatar video from one portrait image and a driving audio track.",
+    mediaKind: "video",
+    capabilities: {
+      "aspectRatio:adaptive": true,
+      "resolution:720p": true,
+      "resolution:1080p": true,
+      talkingAvatar: true,
+      avatarImage: true,
+      audioInput: true,
+      outputFormatMov: false,
+      returnLastFrame: false,
+      maximumDurationSeconds: 60,
+      concurrencyLimit: 1,
+      providerTransport: "vision",
     },
   },
   {
@@ -918,6 +976,9 @@ function requestUuid(idempotencyKey: string): string {
 }
 
 export function normalizeBytePlusModelId(modelId: string): string {
+  if (modelId === "omnihuman" || modelId === "omnihuman-1-5") {
+    return "omnihuman-1.5";
+  }
   if (
     modelId === "seedream-5-0-pro" ||
     modelId === "seedream-5-0-pro-260628" ||
@@ -1169,10 +1230,18 @@ export function createBytePlusProvider(
 
   const validated = parsedConfig.data;
   const hasMediaConfig = Boolean(validated.apiKey);
-  const hasSpeechConfig = Boolean(validated.speechApiKey);
-  if (!hasMediaConfig && !hasSpeechConfig) {
+  const hasVisionAccessKey = Boolean(validated.visionAccessKeyId);
+  const hasVisionSecretKey = Boolean(validated.visionSecretAccessKey);
+  if (hasVisionAccessKey !== hasVisionSecretKey) {
     throw new ProviderConfigurationError(
-      "BytePlus adapter configuration is invalid: neither ModelArk nor Speech credentials are provided",
+      "BytePlus Vision access key and secret key must be configured together",
+    );
+  }
+  const hasVisionConfig = hasVisionAccessKey && hasVisionSecretKey;
+  const hasSpeechConfig = Boolean(validated.speechApiKey);
+  if (!hasMediaConfig && !hasVisionConfig && !hasSpeechConfig) {
+    throw new ProviderConfigurationError(
+      "BytePlus adapter configuration is invalid: no ModelArk, Vision, or Speech credentials are provided",
     );
   }
 
@@ -1358,11 +1427,6 @@ export function createBytePlusProvider(
         }
 
         case "video": {
-          if (!validated.apiKey) {
-            throw new ProviderConfigurationError(
-              "BytePlus ModelArk API key is required for image and video generation",
-            );
-          }
           const input = bytePlusVideoInputSchema.safeParse(submission.input);
           if (!input.success) {
             throw new ProviderRequestError(
@@ -1371,6 +1435,24 @@ export function createBytePlusProvider(
               {
                 code: "INVALID_INPUT",
               },
+            );
+          }
+          if (resolvedModelId === "omnihuman-1.5") {
+            return submitOmniHumanVisionTask(
+              {
+                accessKeyId: validated.visionAccessKeyId,
+                secretAccessKey: validated.visionSecretAccessKey,
+                baseUrl: validated.visionBaseUrl,
+                requestTimeoutMs: timeoutMs,
+                idleTimeoutMs,
+                fetch: fetchClient,
+              },
+              input.data,
+            );
+          }
+          if (!validated.apiKey) {
+            throw new ProviderConfigurationError(
+              "BytePlus ModelArk API key is required for Seedance video generation",
             );
           }
           const legacySources = [
@@ -1661,6 +1743,19 @@ export function createBytePlusProvider(
     },
 
     async getJob(providerRequestId: string): Promise<ProviderJob> {
+      if (isOmniHumanVisionRequestId(providerRequestId)) {
+        return getOmniHumanVisionJob(
+          {
+            accessKeyId: validated.visionAccessKeyId,
+            secretAccessKey: validated.visionSecretAccessKey,
+            baseUrl: validated.visionBaseUrl,
+            requestTimeoutMs: timeoutMs,
+            idleTimeoutMs,
+            fetch: fetchClient,
+          },
+          providerRequestId,
+        );
+      }
       if (!validated.apiKey) {
         throw new ProviderConfigurationError(
           "BytePlus ModelArk API key is required",
@@ -1712,6 +1807,20 @@ export function createBytePlusProvider(
     },
 
     async cancel(providerRequestId: string): Promise<void> {
+      if (isOmniHumanVisionRequestId(providerRequestId)) {
+        await cancelOmniHumanVisionJob(
+          {
+            accessKeyId: validated.visionAccessKeyId,
+            secretAccessKey: validated.visionSecretAccessKey,
+            baseUrl: validated.visionBaseUrl,
+            requestTimeoutMs: timeoutMs,
+            idleTimeoutMs,
+            fetch: fetchClient,
+          },
+          providerRequestId,
+        );
+        return;
+      }
       if (!validated.apiKey) {
         throw new ProviderConfigurationError(
           "BytePlus ModelArk API key is required",

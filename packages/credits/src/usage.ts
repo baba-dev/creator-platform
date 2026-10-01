@@ -437,11 +437,14 @@ export function estimateGeneration(params: {
         throw new RangeError(
           "Publish token pricing for Seedance 2.5 before generating.",
         );
+      const isOmniHuman = params.providerModelId === "omnihuman-1.5";
+      if (isOmniHuman && price.pricingDimension !== "SECOND")
+        throw new RangeError("OmniHuman 1.5 requires per-second pricing.");
       const legacy = calculateVideoPricing({
         providerCostMicroUsd: price.providerCostMicroUsd,
         durationSeconds,
-        resolution,
-        generateAudio: params.generateAudio,
+        resolution: isOmniHuman ? undefined : resolution,
+        generateAudio: isOmniHuman ? false : params.generateAudio,
         pricingDimension: price.pricingDimension,
         unitQuantity: price.unitQuantity,
         exchangeRate: {

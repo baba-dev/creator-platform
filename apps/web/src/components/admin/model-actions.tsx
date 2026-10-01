@@ -70,9 +70,13 @@ export function ModelActions({
   const [marginPercent, setMarginPercent] = useState(defaultMargin);
   const [pricingDimension, setPricingDimension] = useState<
     "REQUEST" | "CHARACTER" | "SECOND" | "TOKEN"
->(
+  >(
     currentPricingDimension ??
-      (mediaKind === "VIDEO" ? "SECOND" : mediaKind === "TEXT" ? "TOKEN" : "REQUEST"),
+      (mediaKind === "VIDEO"
+        ? "SECOND"
+        : mediaKind === "TEXT"
+          ? "TOKEN"
+          : "REQUEST"),
   );
   const [unitQuantity, setUnitQuantity] = useState(
     String(currentUnitQuantity ?? (mediaKind === "VIDEO" ? 5 : 1000)),

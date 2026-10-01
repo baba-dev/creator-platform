@@ -129,7 +129,14 @@ printf '%s\n' "$release_sha" >"$release_root/RELEASE_SHA"
 printf '%s\n' "$release_layout" >"$release_root/RELEASE_LAYOUT"
 printf 'APP_VERSION=%s\n' "$release_sha" >"$release_root/release.env"
 
-tar -C "$release_root" -czf "$archive_path" .
-tar -tzf "$archive_path" >/dev/null
+# GitHub's Ubuntu runners include pigz; use all available cores for release
+# compression while keeping a standard gzip stream that production tar can read.
+if command -v pigz >/dev/null 2>&1; then
+  tar -C "$release_root" -I 'pigz -1' -cf "$archive_path" .
+  tar -I pigz -tf "$archive_path" >/dev/null
+else
+  tar -C "$release_root" -czf "$archive_path" .
+  tar -tzf "$archive_path" >/dev/null
+fi
 
 echo "Created $(basename "$archive_path") with isolated operations tooling"

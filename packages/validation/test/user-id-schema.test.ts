@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { cuidSchema, userRecordIdSchema } from "../src/index";
+import {
+  cuidSchema,
+  userRecordIdSchema,
+  userSearchSchema,
+} from "../src/index";
 
 describe("userRecordIdSchema", () => {
   it("accepts mixed-case Better Auth user identifiers", () => {
@@ -28,5 +32,13 @@ describe("userRecordIdSchema", () => {
     expect(
       cuidSchema.safeParse("AbCdEf0123456789GhIjKlMnOpQrStUv").success,
     ).toBe(false);
+  });
+
+  it("accepts mixed-case user IDs as user-search cursors", () => {
+    expect(
+      userSearchSchema.safeParse({
+        cursor: "AbCdEf0123456789GhIjKlMnOpQrStUv",
+      }).success,
+    ).toBe(true);
   });
 });

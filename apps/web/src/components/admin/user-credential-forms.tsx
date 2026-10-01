@@ -241,8 +241,7 @@ export function UserPasswordResetForm({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [feedback, setFeedback] = useState<Feedback>(null);
-  const allowed =
-    canManage && (targetRole === "USER" || isPlatformOwner);
+  const allowed = canManage && (targetRole === "USER" || isPlatformOwner);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

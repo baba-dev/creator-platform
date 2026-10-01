@@ -220,6 +220,23 @@ export const bytePlusVideoInputSchema = z
         });
       }
     }
+    if (input.lastFrameImage && !input.firstFrameImage) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["lastFrameImage"],
+        message: "A legacy last frame requires a first frame.",
+      });
+    }
+    if (
+      input.referenceVideoUrl &&
+      (input.firstFrameImage || input.lastFrameImage)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["referenceVideoUrl"],
+        message: "Legacy reference video cannot be combined with frame inputs.",
+      });
+    }
     if (
       input.sources.length > 0 &&
       (input.firstFrameImage ||

@@ -5,6 +5,14 @@ export const cuidSchema = z
   .min(20)
   .max(40)
   .regex(/^[a-z0-9]+$/);
+
+// Better Auth owns User.id values. Existing accounts may use mixed-case
+// alphanumeric IDs, while Prisma-owned records continue to use cuidSchema.
+export const userRecordIdSchema = z
+  .string()
+  .min(20)
+  .max(128)
+  .regex(/^[A-Za-z0-9_-]+$/);
 // ProviderModel includes a legacy seeded NVIDIA row with a hyphenated ID.
 // Admin model routes must accept both it and Prisma-generated CUIDs.
 export const providerModelRecordIdSchema = z
@@ -111,6 +119,7 @@ export const userPlatformRoleFilterSchema = z.enum([
   "PLATFORM_OWNER",
 ]);
 export const userSearchSchema = paginationSchema.extend({
+  cursor: userRecordIdSchema.optional(),
   search: z.string().trim().max(120).default(""),
   status: userStatusFilterSchema.default("all"),
   role: userPlatformRoleFilterSchema.default("all"),
@@ -122,6 +131,35 @@ export const changePlatformRoleSchema = z.object({
 
 export const userAccessMutationSchema = z.object({
   disabled: z.boolean(),
+});
+
+export const adminManagedPasswordSchema = z
+  .string()
+  .min(12, "Password must be at least 12 characters.")
+  .max(128, "Password cannot exceed 128 characters.");
+
+export const adminCreateUserSchema = z
+  .object({
+    name: z.string().trim().min(2).max(80),
+    email: z.string().trim().toLowerCase().email().max(254),
+    password: adminManagedPasswordSchema,
+    role: platformRoleSchema.default("USER"),
+    emailVerified: z.boolean().default(false),
+    verificationReason: z.string().trim().min(8).max(500).optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.emailVerified && !value.verificationReason) {
+      context.addIssue({
+        code: "custom",
+        path: ["verificationReason"],
+        message:
+          "An audit reason is required when administratively verifying an email.",
+      });
+    }
+  });
+
+export const adminResetPasswordSchema = z.object({
+  password: adminManagedPasswordSchema,
 });
 
 export const attachUserMembershipSchema = z.object({

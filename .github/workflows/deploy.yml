@@ -41,6 +41,24 @@ jobs:
           test -f "dist/creator-platform-${RELEASE_SHA}.tar.gz"
           tar -tzf "dist/creator-platform-${RELEASE_SHA}.tar.gz" >/dev/null
 
+      - name: Verify hardened staging control plane
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.STAGING_SSH_HOST }}
+          port: ${{ secrets.STAGING_SSH_PORT }}
+          username: ${{ secrets.STAGING_SSH_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          fingerprint: ${{ secrets.STAGING_SSH_FINGERPRINT }}
+          protocol: tcp4
+          command_timeout: 1m
+          script: |
+            set -eu
+            version="$(sudo -n /usr/local/sbin/creator-deploy --version)"
+            test "$version" = "3" || {
+              echo "staging creator-deploy control plane must be bootstrapped to version 3" >&2
+              exit 1
+            }
+
       - name: Upload release to staging
         uses: appleboy/scp-action@v1.0.0
         with:

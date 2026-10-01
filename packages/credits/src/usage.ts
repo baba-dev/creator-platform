@@ -498,7 +498,7 @@ export function estimateGeneration(params: {
     // while preserving the configured output cap.
     const reservationInputTokens = Math.max(
       estimatedInputTokens,
-      Math.ceil(estimatedInputTokens * 1.25),
+      promptLength || estimatedInputTokens,
     );
     const reservationCost =
       price.usageRates &&

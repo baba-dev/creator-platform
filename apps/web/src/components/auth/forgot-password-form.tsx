@@ -23,19 +23,23 @@ export function ForgotPasswordForm() {
     const emailValue = String(form.get("email") ?? "").trim();
     setEmail(emailValue);
 
-    const result = await authClient.requestPasswordReset({
-      email: emailValue,
-      redirectTo: "/reset-password",
-    });
+    try {
+      const result = await authClient.requestPasswordReset({
+        email: emailValue,
+        redirectTo: "/reset-password",
+      });
 
-    setPending(false);
+      if (result.error) {
+        setError("Could not start password recovery. Try again shortly.");
+        return;
+      }
 
-    if (result.error) {
-      setError(result.error.message ?? "Could not send password reset email.");
-      return;
+      setSubmitted(true);
+    } catch {
+      setError("Could not start password recovery. Try again shortly.");
+    } finally {
+      setPending(false);
     }
-
-    setSubmitted(true);
   }
 
   if (submitted) {

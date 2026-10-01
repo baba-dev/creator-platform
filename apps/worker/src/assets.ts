@@ -236,7 +236,10 @@ export async function purgeExpiredAssets(limit = 50): Promise<number> {
       });
       await db.asset
         .updateMany({
-          where: { id: candidate.id },
+          where: {
+            id: candidate.id,
+            status: { in: ["DELETED", "PURGING"] },
+          },
           data: { purgeAfter: new Date(Date.now() + 15 * 60_000) },
         })
         .catch(() => undefined);
@@ -257,7 +260,7 @@ export async function purgeExpiredAssets(limit = 50): Promise<number> {
       });
       await db.asset
         .updateMany({
-          where: { id: claimed.id },
+          where: { id: claimed.id, status: "PURGING" },
           data: { purgeAfter: new Date(Date.now() + 15 * 60_000) },
         })
         .catch(() => undefined);
@@ -279,7 +282,7 @@ export async function purgeExpiredAssets(limit = 50): Promise<number> {
       });
       await db.asset
         .updateMany({
-          where: { id: claimed.id },
+          where: { id: claimed.id, status: "PURGING" },
           data: { purgeAfter: new Date(Date.now() + 15 * 60_000) },
         })
         .catch(() => undefined);
@@ -301,14 +304,22 @@ export async function purgeMediaAttemptOutputs(limit = 50): Promise<void> {
   });
   for (const attempt of attempts) {
     const objectKey = attempt.outputObjectKey!;
-    const [asset, variant] = await Promise.all([
-      db.asset.findUnique({ where: { objectKey } }),
-      db.assetVariant.findUnique({ where: { objectKey } }),
-    ]);
-    if (!asset && !variant) await storage.delete(objectKey);
-    await db.mediaTaskAttempt.updateMany({
-      where: { id: attempt.id, outputObjectKey: objectKey },
-      data: { outputObjectKey: null },
-    });
+    try {
+      const [asset, variant] = await Promise.all([
+        db.asset.findUnique({ where: { objectKey } }),
+        db.assetVariant.findUnique({ where: { objectKey } }),
+      ]);
+      if (!asset && !variant) await storage.delete(objectKey);
+      await db.mediaTaskAttempt.updateMany({
+        where: { id: attempt.id, outputObjectKey: objectKey },
+        data: { outputObjectKey: null },
+      });
+    } catch (error) {
+      // Keep the output key attached so a later maintenance pass can retry.
+      console.error("Media attempt output cleanup failed; retry retained.", {
+        attemptId: attempt.id,
+        error,
+      });
+    }
   }
 }

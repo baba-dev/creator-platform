@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CancelJobButton } from "@/components/studio/cancel-job-button";
 import { JobRefresh } from "@/components/studio/job-refresh";
+import { getGenerationErrorPresentation } from "@/lib/generation-error-copy";
 import { getCustomerJob } from "@/lib/generation-history";
 import { requireOrganizationPermission } from "@/lib/request-auth";
 
@@ -44,6 +45,14 @@ export default async function CustomerJobPage({
     ["Submitted", job.submittedAt],
     ["Completed", job.completedAt],
   ] as const;
+  const error =
+    job.status === "FAILED" || job.status === "MANUAL_REVIEW"
+      ? getGenerationErrorPresentation({
+          status: job.status,
+          errorCode: job.errorCode,
+          errorMessage: job.errorMessage,
+        })
+      : null;
   return (
     <main className="min-h-screen bg-background text-foreground">
       <div className="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-8">
@@ -134,17 +143,39 @@ export default async function CustomerJobPage({
                 </ol>
               </div>
             )}
-            {job.errorMessage && (
-              <p className="mt-4 rounded-xl bg-warning/10 p-3 text-sm">
-                {job.errorMessage}
-              </p>
-            )}
-            {job.status === "MANUAL_REVIEW" && (
-              <p className="mt-3 text-sm text-muted-foreground">
-                The provider outcome needs review. Credits remain reserved until
-                resolved.
-              </p>
-            )}
+            {error ? (
+              <div
+                role={job.status === "FAILED" ? "alert" : "status"}
+                className={
+                  job.status === "FAILED"
+                    ? "mt-4 rounded-xl border border-destructive/25 bg-destructive/5 p-4"
+                    : "mt-4 rounded-xl border border-warning/25 bg-warning/5 p-4"
+                }
+              >
+                <h3 className="text-sm font-semibold text-foreground">
+                  {error.title}
+                </h3>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  {error.description}
+                </p>
+                {error.nextStep ? (
+                  <p className="mt-2 text-sm leading-6 text-foreground">
+                    {error.nextStep}
+                  </p>
+                ) : null}
+                {job.errorMessage &&
+                job.errorMessage.trim() !== error.description.trim() ? (
+                  <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                    System note: {job.errorMessage}
+                  </p>
+                ) : null}
+                {job.errorCode ? (
+                  <p className="mt-2 break-all font-mono text-[0.6875rem] text-subtle-foreground">
+                    Reference code: {job.errorCode}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
           </div>
           <div className="rounded-2xl border border-border bg-card p-6">
             <h2 className="font-display text-xl font-semibold">Credits</h2>

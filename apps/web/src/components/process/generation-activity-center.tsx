@@ -203,13 +203,13 @@ export function GenerationActivityCenter({
           >
             <MascotScene
               kind={
-                snapshot.experience.delayed ||
-                ["FAILED", "REVIEW", "CANCELLED"].includes(
-                  snapshot.experience.stage,
-                )
-                  ? "confused"
-                  : snapshot.experience.terminal
-                    ? "working"
+                snapshot.experience.stage === "READY"
+                  ? "celebration"
+                  : snapshot.experience.delayed ||
+                      ["FAILED", "REVIEW", "CANCELLED"].includes(
+                        snapshot.experience.stage,
+                      )
+                    ? "confused"
                     : "running"
               }
               size="compact"

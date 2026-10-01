@@ -1,11 +1,45 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@aiwa/db";
+import { getGenerationErrorPresentation } from "@/lib/generation-error-copy";
 import {
   historyQuerySchema,
   listGenerationHistory,
 } from "@/lib/generation-history";
 import { requireOrganizationPermission } from "@/lib/request-auth";
+
+function HistoryErrorSummary({
+  status,
+  errorCode,
+  errorMessage,
+}: {
+  status: string;
+  errorCode: string | null;
+  errorMessage: string | null;
+}) {
+  if (status !== "FAILED" && status !== "MANUAL_REVIEW") return null;
+  const error = getGenerationErrorPresentation({
+    status,
+    errorCode,
+    errorMessage,
+  });
+  if (!error) return null;
+
+  return (
+    <div
+      className={
+        status === "FAILED"
+          ? "mt-3 rounded-xl border border-destructive/25 bg-destructive/5 px-3 py-2"
+          : "mt-3 rounded-xl border border-warning/25 bg-warning/5 px-3 py-2"
+      }
+    >
+      <p className="text-xs font-semibold text-foreground">{error.title}</p>
+      <p className="mt-0.5 line-clamp-2 text-xs leading-5 text-muted-foreground">
+        {error.description}
+      </p>
+    </div>
+  );
+}
 
 export default async function HistoryPage({
   params,
@@ -207,6 +241,11 @@ export default async function HistoryPage({
                       ? "Credits released"
                       : job.reservedCredits + " credits reserved"}
                 </p>
+                <HistoryErrorSummary
+                  status={job.status}
+                  errorCode={job.errorCode}
+                  errorMessage={job.errorMessage}
+                />
               </Link>
             ))}
           </div>

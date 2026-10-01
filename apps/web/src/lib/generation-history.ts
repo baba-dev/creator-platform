@@ -144,6 +144,8 @@ export async function listGenerationHistory(
       project: { select: { id: true, name: true } },
       reservedCredits: true,
       chargedCredits: true,
+      errorCode: true,
+      errorMessage: true,
       assets: {
         where: { status: "READY" },
         select: { id: true, mimeType: true },
@@ -235,6 +237,7 @@ export async function getCustomerJob(
     project: job.project,
     creator: job.createdBy,
     request: job.requestPayload,
+    errorCode: job.errorCode,
     errorMessage: job.errorMessage,
     createdAt: job.createdAt,
     quotedAt: job.quotedAt,

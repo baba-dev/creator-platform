@@ -52,6 +52,7 @@ export async function GET(
     status: job.status,
     kind,
     queuedAt: job.queuedAt,
+    errorCode: job.errorCode,
     errorMessage: job.errorMessage,
     historicalDurationsMs,
   });

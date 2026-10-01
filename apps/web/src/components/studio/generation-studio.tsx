@@ -11,8 +11,13 @@ import { Button } from "@/components/ui/button";
 import { Eyebrow } from "@/components/ui/creative";
 import { StatusDot, Tape } from "@/components/ui/sketch";
 import { announceGenerationStarted } from "@/lib/generation-activity";
-
-type CapabilityValue = boolean | number | string;
+import {
+  capabilityValues,
+  referenceCapabilityLabel,
+  resolutionLabel,
+  selectSupportedCapability,
+  type CapabilityValue,
+} from "@/lib/studio-model-capabilities";
 type MediaKind = "IMAGE" | "VIDEO" | "VOICE";
 type PresetVoice = {
   key: string;
@@ -86,17 +91,6 @@ function statusLabel(status: string, mediaKind: MediaKind): string {
     CANCELLED: "Cancelled",
   };
   return statuses[status] ?? status;
-}
-
-function capabilityValues(
-  capabilities: Model["capabilities"],
-  prefix: string,
-): string[] {
-  if (!capabilities) return [];
-  const marker = `${prefix}:`;
-  return Object.entries(capabilities)
-    .filter(([key, value]) => key.startsWith(marker) && value === true)
-    .map(([key]) => key.slice(marker.length));
 }
 
 interface StudioQuote {
@@ -223,12 +217,15 @@ export function GenerationStudio({
   const selectedRatio =
     activeMode === "VIDEO" && videoFirstFrameId
       ? "adaptive"
-      : availableRatios.includes(ratio)
-        ? ratio
-        : (availableRatios[0] ?? "");
-  const selectedResolution = availableResolutions.includes(resolution)
-    ? resolution
-    : (availableResolutions[0] ?? "");
+      : selectSupportedCapability(model?.capabilities, "aspectRatio", ratio, [
+          "1:1",
+        ]);
+  const selectedResolution = selectSupportedCapability(
+    model?.capabilities,
+    "resolution",
+    resolution,
+    ["2K"],
+  );
   const selectedDuration = availableDurations.includes(duration)
     ? duration
     : (availableDurations[0] ?? "5");
@@ -958,16 +955,47 @@ export function GenerationStudio({
       >
         <div className="space-y-4">
           <div className={variant === "quick" ? "hidden" : "space-y-4"}>
-            <label
-              className="block text-sm font-semibold text-foreground"
-              htmlFor="media-model"
-            >
-              Generation model
-            </label>
+            <div className="flex items-center justify-between gap-3">
+              <label
+                className="block text-sm font-semibold text-foreground"
+                htmlFor="media-model"
+              >
+                Generation model
+              </label>
+              {model ? (
+                <span className="text-xs text-muted-foreground">
+                  {model.name}
+                </span>
+              ) : null}
+            </div>
             <select
               id="media-model"
               value={model?.id ?? ""}
-              onChange={(e) => setModelId(e.target.value)}
+              onChange={(e) => {
+                const nextId = e.target.value;
+                setModelId(nextId);
+                const nextModel = modelsForMode.find((m) => m.id === nextId);
+                if (nextModel?.capabilities) {
+                  const nextResolution = selectSupportedCapability(
+                    nextModel.capabilities,
+                    "resolution",
+                    resolution,
+                    ["2K"],
+                  );
+                  if (nextResolution && nextResolution !== resolution) {
+                    setResolution(nextResolution);
+                  }
+                  const nextRatio = selectSupportedCapability(
+                    nextModel.capabilities,
+                    "aspectRatio",
+                    ratio,
+                    ["1:1"],
+                  );
+                  if (nextRatio && nextRatio !== ratio) {
+                    setRatio(nextRatio);
+                  }
+                }
+              }}
               disabled={busy || isEnhancing}
               className="min-h-11 w-full rounded-xl border border-input bg-card px-3 text-foreground"
             >
@@ -977,35 +1005,61 @@ export function GenerationStudio({
                   pricing
                 </option>
               ) : null}
-              {modelsForMode.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name} ·{" "}
-                  {m.pricingDimension === "TOKEN"
-                    ? "Usage-based pricing"
-                    : m.pricingDimension === "CHARACTER"
-                      ? `${m.credits} credits / ${m.unitQuantity ?? 1000} chars`
-                      : m.pricingDimension === "SECOND"
-                        ? `${m.credits} credits / ${m.unitQuantity ?? 5}s`
-                        : `${m.credits} credits`}
-                </option>
-              ))}
+              {modelsForMode.map((m) => {
+                const resolutions = capabilityValues(
+                  m.capabilities,
+                  "resolution",
+                );
+                const resSnippet = resolutions.length
+                  ? ` · [${resolutions.join(", ")}]`
+                  : "";
+                return (
+                  <option key={m.id} value={m.id}>
+                    {m.name} ·{" "}
+                    {m.pricingDimension === "TOKEN"
+                      ? "Usage-based pricing"
+                      : m.pricingDimension === "CHARACTER"
+                        ? `${m.credits} credits / ${m.unitQuantity ?? 1000} chars`
+                        : m.pricingDimension === "SECOND"
+                          ? `${m.credits} credits / ${m.unitQuantity ?? 5}s`
+                          : `${m.credits} credits`}
+                    {resSnippet}
+                  </option>
+                );
+              })}
             </select>
             {model?.description ? (
               <p className="text-xs text-muted-foreground">
                 {model.description}
               </p>
             ) : null}
-            {model?.providerModelId?.includes("seedream-5-0-pro") ? (
-              <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
-                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 font-semibold text-primary">
-                  ✨ Interactive Bounding-Box &amp; Layer Separation
-                </span>
-                <a
-                  href="#image-editor"
-                  className="font-semibold text-primary hover:underline"
-                >
-                  Open in Precision Image Desk →
-                </a>
+
+            {model?.capabilities ? (
+              <div
+                className="flex flex-wrap items-center gap-1.5 pt-1"
+                aria-label="Supported model parameters"
+              >
+                {availableResolutions.length > 0 && (
+                  <span className="inline-flex items-center rounded-md border border-border/80 bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-foreground">
+                    Resolutions: {availableResolutions.join(", ")}
+                  </span>
+                )}
+                {availableRatios.length > 0 && (
+                  <span className="inline-flex items-center rounded-md border border-border/80 bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                    {availableRatios.length} aspect ratios
+                  </span>
+                )}
+                {referenceCapabilityLabel(model.capabilities) ? (
+                  <span className="inline-flex items-center rounded-md border border-border/80 bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                    {referenceCapabilityLabel(model.capabilities)}
+                  </span>
+                ) : null}
+                {Number(model.capabilities.maxGeneratedImages ?? 1) > 1 && (
+                  <span className="inline-flex items-center rounded-md border border-border/80 bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                    Up to {Number(model.capabilities.maxGeneratedImages)}{" "}
+                    outputs
+                  </span>
+                )}
               </div>
             ) : null}
 
@@ -1449,11 +1503,24 @@ export function GenerationStudio({
                     (activeMode === "VIDEO" && videoFirstFrameId
                       ? ["adaptive"]
                       : availableRatios
-                    ).map((r) => (
-                      <option key={r} value={r}>
-                        {r}
-                      </option>
-                    ))
+                    ).map((r) => {
+                      const ratioLabels: Record<string, string> = {
+                        "1:1": "1:1 · Square",
+                        "16:9": "16:9 · Landscape (Standard)",
+                        "9:16": "9:16 · Portrait (Reels/Stories)",
+                        "4:3": "4:3 · Classic Display",
+                        "3:4": "3:4 · Vertical Display",
+                        "3:2": "3:2 · 35mm Photography",
+                        "2:3": "2:3 · Vertical Photo",
+                        "21:9": "21:9 · Cinematic Ultrawide",
+                        adaptive: "Adaptive · From source frame",
+                      };
+                      return (
+                        <option key={r} value={r}>
+                          {ratioLabels[r] ?? r}
+                        </option>
+                      );
+                    })
                   ) : (
                     <option>No supported aspect ratios advertised</option>
                   )}
@@ -1475,7 +1542,7 @@ export function GenerationStudio({
                   {availableResolutions.length ? (
                     availableResolutions.map((value) => (
                       <option key={value} value={value}>
-                        {value}
+                        {resolutionLabel(value)}
                       </option>
                     ))
                   ) : (

@@ -33,8 +33,8 @@ describe("BytePlus provider adapter", () => {
     const models = await createBytePlusProvider(validConfig).listModels();
     expect(models.map((model) => model.id)).toEqual([
       "seedream-5-0-260128",
-      "dola-seedream-5-0-pro-260628",
       "seedream-4-5-251128",
+      "seedream-4-0-250828",
       "dreamina-seedance-2-5-260628",
       "seed-tts-2.0",
     ]);
@@ -60,20 +60,17 @@ describe("BytePlus provider adapter", () => {
       models.find((model) => model.id === "seedream-4-5-251128")?.capabilities,
     ).not.toHaveProperty("resolution:3K");
     expect(
-      models.find((model) => model.id === "dola-seedream-5-0-pro-260628")
-        ?.capabilities,
+      models.find((model) => model.id === "seedream-4-0-250828")?.capabilities,
     ).toMatchObject({
-      "aspectRatio:1:1": true,
+      "aspectRatio:2:3": true,
+      "resolution:1K": true,
       "resolution:2K": true,
       "resolution:4K": true,
       referenceImages: true,
-      maxReferenceImages: 10,
-      preciseEditing: true,
-      layerSeparation: true,
+      maxReferenceImages: 14,
     });
     expect(
-      models.find((model) => model.id === "dola-seedream-5-0-pro-260628")
-        ?.capabilities,
+      models.find((model) => model.id === "seedream-4-0-250828")?.capabilities,
     ).not.toHaveProperty("resolution:3K");
     expect(
       models.find((model) => model.mediaKind === "video")?.capabilities,
@@ -131,42 +128,6 @@ describe("BytePlus provider adapter", () => {
       response_format: "url",
       watermark: false,
     });
-  });
-
-  it("submits Seedream 5.0 Pro with output format and accepts alias", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      jsonResponse({
-        data: [{ url: "https://cdn.example.com/pro.png" }],
-        usage: { generated_images: 1 },
-      }),
-    );
-    const provider = createBytePlusProvider({
-      ...validConfig,
-      fetch: fetchMock as typeof fetch,
-    });
-
-    const job = await provider.submit({
-      idempotencyKey: "image-job-pro-1",
-      modelId: "seedream-5-0-pro",
-      mediaKind: "image",
-      input: {
-        prompt: "A layered design visual <bbox>100 100 500 500</bbox>",
-        aspectRatio: "1:1",
-        resolution: "4K",
-        outputFormat: "png",
-      },
-    });
-
-    expect(job).toMatchObject({
-      status: "succeeded",
-      outputUrls: ["https://cdn.example.com/pro.png"],
-    });
-
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    const payload = JSON.parse(init.body as string);
-    expect(payload.model).toBe("dola-seedream-5-0-pro-260628");
-    expect(payload.output_format).toBe("png");
-    expect(payload.size).toBe("4096x4096");
   });
 
   it.each([
@@ -387,6 +348,78 @@ describe("BytePlus provider adapter", () => {
       watermark: false,
     });
   });
+
+  it("submits Seedream 4.0 with its 1K mapping, references and bounded sequential output", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        data: [
+          { url: "https://cdn.example.com/image-40-1.jpg" },
+          { url: "https://cdn.example.com/image-40-2.jpg" },
+          { url: "https://cdn.example.com/image-40-3.jpg" },
+        ],
+      }),
+    );
+    const provider = createBytePlusProvider({
+      ...validConfig,
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const result = await provider.submit({
+      idempotencyKey: "image-job-40-1k",
+      modelId: "seedream-4-0-250828",
+      mediaKind: "image",
+      input: {
+        prompt: "Three consistent product campaign frames",
+        aspectRatio: "16:9",
+        resolution: "1K",
+        outputFormat: "png",
+        outputCount: 3,
+        referenceImages: ["data:image/jpeg;base64,aGVsbG8="],
+      },
+    });
+
+    expect(result.outputUrls).toHaveLength(3);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string);
+    expect(body).toMatchObject({
+      model: "seedream-4-0-250828",
+      size: "1312x736",
+      image: "data:image/jpeg;base64,aGVsbG8=",
+      sequential_image_generation: "auto",
+      sequential_image_generation_options: { max_images: 3 },
+      response_format: "url",
+      watermark: false,
+    });
+    expect(body).not.toHaveProperty("output_format");
+  });
+
+  it.each([
+    ["seedream-5-0-260128", "1K"],
+    ["seedream-4-5-251128", "1K"],
+    ["seedream-4-0-250828", "3K"],
+  ])(
+    "rejects %s resolution %s before provider dispatch",
+    async (modelId, resolution) => {
+      const fetchMock = vi.fn();
+      const provider = createBytePlusProvider({
+        ...validConfig,
+        fetch: fetchMock as typeof fetch,
+      });
+
+      await expect(
+        provider.submit({
+          idempotencyKey: `unsupported-resolution-${modelId}-${resolution}`,
+          modelId,
+          mediaKind: "image",
+          input: { prompt: "test", resolution },
+        }),
+      ).rejects.toMatchObject({
+        code: "UNSUPPORTED_RESOLUTION",
+        retryable: false,
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
 
   it("rejects unsupported model and media-kind combinations", async () => {
     const provider = createBytePlusProvider(validConfig);

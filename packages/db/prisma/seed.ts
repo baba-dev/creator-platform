@@ -14,6 +14,8 @@ interface SeedModel {
   pricingDimension?: "REQUEST" | "CHARACTER" | "SECOND" | "TOKEN";
   usageRates?: Prisma.InputJsonValue;
   unitQuantity?: number;
+  negotiatedDiscountBps?: number;
+  providerCostBasisNote?: string;
 }
 
 const verifiedBytePlusModels: readonly SeedModel[] = [
@@ -47,39 +49,6 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
     unitQuantity: 1,
   },
   {
-    providerModelId: "dola-seedream-5-0-pro-260628",
-    mediaKind: "IMAGE",
-    displayName: "Seedream 5.0 Pro",
-    description:
-      "Professional foundation generation, interactive bounding-box editing, and layer separation.",
-    capabilities: {
-      "aspectRatio:1:1": true,
-      "aspectRatio:4:3": true,
-      "aspectRatio:3:4": true,
-      "aspectRatio:16:9": true,
-      "aspectRatio:9:16": true,
-      "aspectRatio:3:2": true,
-      "aspectRatio:2:3": true,
-      "aspectRatio:21:9": true,
-      "resolution:2K": true,
-      "resolution:4K": true,
-      referenceImages: true,
-      maxReferenceImages: 10,
-      sequentialImages: true,
-      maxGeneratedImages: 15,
-      maxTotalInputOutputImages: 15,
-      preciseEditing: true,
-      inpainting: true,
-      outpainting: true,
-      objectReplacement: true,
-      layerSeparation: true,
-    },
-    providerCostMicroUsd: 40_500n,
-    customerCredits: 22n,
-    pricingDimension: "REQUEST",
-    unitQuantity: 1,
-  },
-  {
     providerModelId: "seedream-4-5-251128",
     mediaKind: "IMAGE",
     displayName: "Seedream 4.5",
@@ -106,6 +75,38 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
     customerCredits: 19n,
     pricingDimension: "REQUEST",
     unitQuantity: 1,
+  },
+  {
+    providerModelId: "seedream-4-0-250828",
+    mediaKind: "IMAGE",
+    displayName: "Seedream 4.0",
+    description:
+      "Versatile foundation image generation with balanced styling and prompt fidelity.",
+    capabilities: {
+      "aspectRatio:1:1": true,
+      "aspectRatio:4:3": true,
+      "aspectRatio:3:4": true,
+      "aspectRatio:16:9": true,
+      "aspectRatio:9:16": true,
+      "aspectRatio:3:2": true,
+      "aspectRatio:2:3": true,
+      "aspectRatio:21:9": true,
+      "resolution:1K": true,
+      "resolution:2K": true,
+      "resolution:4K": true,
+      referenceImages: true,
+      maxReferenceImages: 14,
+      sequentialImages: true,
+      maxGeneratedImages: 15,
+      maxTotalInputOutputImages: 15,
+    },
+    providerCostMicroUsd: 27_000n,
+    customerCredits: 15n,
+    pricingDimension: "REQUEST",
+    unitQuantity: 1,
+    negotiatedDiscountBps: 1_000,
+    providerCostBasisNote:
+      "Verified AIWA BytePlus Seedream 4.0 rate: 10% off the $0.030/image public list price.",
   },
   {
     providerModelId: "dreamina-seedance-2-5-260628",
@@ -205,6 +206,9 @@ async function main(): Promise<void> {
         mediaKind: model.mediaKind,
         capabilities: model.capabilities,
         enabled: true,
+        ...(model.negotiatedDiscountBps === undefined
+          ? {}
+          : { negotiatedDiscountBps: model.negotiatedDiscountBps }),
       },
       create: {
         provider: "BYTEPLUS",
@@ -214,6 +218,9 @@ async function main(): Promise<void> {
         mediaKind: model.mediaKind,
         capabilities: model.capabilities,
         enabled: true,
+        ...(model.negotiatedDiscountBps === undefined
+          ? {}
+          : { negotiatedDiscountBps: model.negotiatedDiscountBps }),
       },
     });
 
@@ -231,6 +238,7 @@ async function main(): Promise<void> {
           providerModelId: providerModel.id,
           providerCostMicroUsd: model.providerCostMicroUsd,
           usageRates: model.usageRates,
+          providerCostBasisNote: model.providerCostBasisNote,
           customerCredits: model.customerCredits,
           fxBaisaNumerator: 769n,
           fxBaisaDenominator: 2n,

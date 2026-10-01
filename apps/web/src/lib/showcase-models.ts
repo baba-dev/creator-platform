@@ -16,18 +16,6 @@ export type ShowcaseModel = {
 
 export const showcaseModels: readonly ShowcaseModel[] = [
   {
-    id: "seedream-5-pro",
-    kind: "image",
-    name: "Seedream 5.0 Pro",
-    provider: "BytePlus",
-    description:
-      "Professional foundation generation, interactive bounding-box editing, and layer separation.",
-    badge: "Pro & Layers",
-    demoRate: "22–43 credits / image",
-    demoCredits: "22",
-    latency: "~14 sec",
-  },
-  {
     id: "seedream-5-lite",
     kind: "image",
     name: "Seedream 5.0 Lite",
@@ -50,6 +38,18 @@ export const showcaseModels: readonly ShowcaseModel[] = [
     demoRate: "22 credits / image",
     demoCredits: "22",
     latency: "~9 sec",
+  },
+  {
+    id: "seedream-4-0",
+    kind: "image",
+    name: "Seedream 4.0",
+    provider: "BytePlus",
+    description:
+      "Versatile foundation image generation with balanced styling and prompt fidelity.",
+    badge: "Foundation",
+    demoRate: "15 credits / image",
+    demoCredits: "15",
+    latency: "~8 sec",
   },
   {
     id: "seedance-2-5",

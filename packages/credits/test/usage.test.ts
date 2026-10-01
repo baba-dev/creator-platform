@@ -55,32 +55,6 @@ describe("generation pricing policies", () => {
       expect(result.providerCostMicroUsd).toBe(31500n * BigInt(count));
     },
   );
-  it("quotes Seedream 5.0 Pro dynamically for 2K and 4K resolutions", () => {
-    const proPrice = {
-      ...price,
-      pricingDimension: "REQUEST",
-      providerCostMicroUsd: 40500n,
-    };
-    const estimate2K = estimateGeneration({
-      price: proPrice,
-      mediaKind: "IMAGE",
-      providerModelId: "dola-seedream-5-0-pro-260628",
-      resolution: "2K",
-      units: 1,
-    });
-    expect(estimate2K.quote.customerCredits).toBe(22n);
-    expect(estimate2K.quote.providerCostMicroUsd).toBe(40500n);
-
-    const estimate4K = estimateGeneration({
-      price: proPrice,
-      mediaKind: "IMAGE",
-      providerModelId: "dola-seedream-5-0-pro-260628",
-      resolution: "4K",
-      units: 1,
-    });
-    expect(estimate4K.quote.customerCredits).toBe(43n);
-    expect(estimate4K.quote.providerCostMicroUsd).toBe(81000n);
-  });
   it("prices video using resolution and workflow, without an invented audio surcharge", () => {
     const input = {
       price,

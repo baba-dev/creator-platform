@@ -118,6 +118,17 @@ describe("model validation schemas", () => {
       }).success,
     ).toBe(false);
 
+    const image1KQuote = quoteRequestSchema.safeParse({
+      organizationId: "c12345678901234567890",
+      modelId: "seedream-4-0-250828",
+      resolution: "1K",
+      aspectRatio: "16:9",
+    });
+    expect(image1KQuote.success).toBe(true);
+    if (image1KQuote.success) {
+      expect(image1KQuote.data.resolution).toBe("1K");
+    }
+
     // Validates video quote parameters
     const videoQuote = quoteRequestSchema.safeParse({
       organizationId: "c12345678901234567890",

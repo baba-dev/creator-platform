@@ -136,6 +136,7 @@ export function ScriptwritingStudio({
     number | null
   >(null);
   const sequenceAudioRef = useRef<HTMLAudioElement | null>(null);
+  const voicePollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Voice Casting Booth state
   const [castingBoothOpen, setCastingBoothOpen] = useState(false);
@@ -150,6 +151,21 @@ export function ScriptwritingStudio({
   const [isSavingMasterAsset, setIsSavingMasterAsset] = useState(false);
   const [masterAssetSaved, setMasterAssetSaved] = useState(false);
   const [assembleError, setAssembleError] = useState<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (voicePollTimerRef.current) clearTimeout(voicePollTimerRef.current);
+      sequenceAudioRef.current?.pause();
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (assembledMasterAudio?.objectUrl) {
+        URL.revokeObjectURL(assembledMasterAudio.objectUrl);
+      }
+    };
+  }, [assembledMasterAudio]);
 
   function openCastingBoothForCharacter(charName: string) {
     setCastingCharacter(charName);
@@ -433,16 +449,14 @@ export function ScriptwritingStudio({
   }
 
   const pollScriptVoiceJobs = useCallback((targetScriptId: string) => {
-    let count = 0;
-    const interval = setInterval(async () => {
-      count++;
-      if (count > 25) {
-        clearInterval(interval);
-        return;
-      }
+    if (voicePollTimerRef.current) clearTimeout(voicePollTimerRef.current);
+
+    const poll = async (attempt: number): Promise<void> => {
+      if (attempt > 25) return;
       try {
         const res = await fetch(
           `/api/scripts/${encodeURIComponent(targetScriptId)}`,
+          { cache: "no-store" },
         );
         if (res.ok) {
           const data = await res.json();
@@ -454,15 +468,19 @@ export function ScriptwritingStudio({
             const anyPending = data.script.content?.scenes?.some(
               (s: SceneBlock) => s.audioJobId && !s.audioAssetId,
             );
-            if (!anyPending) {
-              clearInterval(interval);
-            }
+            if (!anyPending) return;
           }
         }
       } catch {
-        clearInterval(interval);
+        // Transient refresh failures are retried with bounded backoff.
       }
-    }, 2000);
+
+      voicePollTimerRef.current = setTimeout(() => {
+        void poll(attempt + 1);
+      }, Math.min(1500 + attempt * 250, 5000));
+    };
+
+    void poll(1);
   }, []);
 
   async function handleSynthesizeDialogue(block: SceneBlock) {
@@ -503,6 +521,8 @@ export function ScriptwritingStudio({
       setTimeout(() => setVoiceNotice(null), 5000);
     } catch (err) {
       setVoiceNotice(err instanceof Error ? err.message : "Synthesis failed.");
+    } finally {
+      setSynthesizingBlockId(null);
     }
   }
 
@@ -526,10 +546,15 @@ export function ScriptwritingStudio({
         throw new Error(errJson?.error || "Batch voice synthesis failed.");
       }
       const data = await res.json();
+      const failedCount = Number(data.failedCount ?? 0);
       setVoiceNotice(
-        `Queued ${data.queuedCount} dialogue voice jobs! Audio clips will appear in the Story Audio Timeline.`,
+        failedCount > 0
+          ? `Queued ${data.queuedCount} dialogue voice jobs; ${failedCount} line(s) could not be queued and can be retried safely.`
+          : `Queued ${data.queuedCount} dialogue voice jobs! Audio clips will appear in the Story Audio Timeline.`,
       );
-      pollScriptVoiceJobs(activeScript.id);
+      if (data.queuedCount > 0) {
+        pollScriptVoiceJobs(activeScript.id);
+      }
       setTimeout(() => setVoiceNotice(null), 6000);
     } catch (err) {
       setVoiceNotice(

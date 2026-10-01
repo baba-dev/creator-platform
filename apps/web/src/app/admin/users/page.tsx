@@ -104,7 +104,7 @@ export default async function AdminUsersPage({
   return (
     <div className="px-4 py-7 sm:px-7 lg:px-9 lg:py-9">
       <Eyebrow>Operations</Eyebrow>
-      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="font-display text-4xl font-semibold tracking-tight">
             Users
@@ -113,6 +113,11 @@ export default async function AdminUsersPage({
             Customer and platform accounts, memberships, and operational access.
           </p>
         </div>
+        {canManageUsers ? (
+          <Button asChild className="min-h-10 self-start sm:self-auto">
+            <Link href={"/admin/users/new" as Route}>Create user</Link>
+          </Button>
+        ) : null}
       </div>
 
       <form action="/admin/users" method="get" className="mt-6">

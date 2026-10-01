@@ -504,6 +504,11 @@ const textResponseSchema = z.object({
       prompt_tokens: z.number().int().nonnegative().optional(),
       completion_tokens: z.number().int().nonnegative().optional(),
       total_tokens: z.number().int().nonnegative().optional(),
+      prompt_tokens_details: z
+        .object({
+          cached_tokens: z.number().int().nonnegative().optional(),
+        })
+        .optional(),
     })
     .optional(),
 });

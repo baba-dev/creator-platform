@@ -1968,14 +1968,14 @@ export function GenerationStudio({
                   id="media-ratio"
                   value={selectedRatio}
                   onChange={(e) => setRatio(e.target.value)}
-                  disabled={busy || availableRatios.length === 0}
+                  disabled={
+                    busy || availableRatios.length === 0 || videoForcesAdaptive
+                  }
                   className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
                 >
                   {availableRatios.length ? (
-                    (activeMode === "VIDEO" && videoFirstFrameId
-                      ? ["adaptive"]
-                      : availableRatios
-                    ).map((r) => {
+                    (videoForcesAdaptive ? ["adaptive"] : availableRatios).map(
+                      (r) => {
                       const ratioLabels: Record<string, string> = {
                         "1:1": "1:1 · Square",
                         "16:9": "16:9 · Landscape (Standard)",
@@ -2008,7 +2008,12 @@ export function GenerationStudio({
                   id="media-resolution"
                   value={selectedResolution}
                   onChange={(e) => setResolution(e.target.value)}
-                  disabled={busy || availableResolutions.length === 0}
+                  disabled={
+                    busy ||
+                    availableResolutions.length === 0 ||
+                    (activeMode === "VIDEO" &&
+                      ["DRAFT", "DRAFT_FINAL"].includes(videoWorkflow))
+                  }
                   className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
                 >
                   {availableResolutions.length ? (
@@ -2024,31 +2029,54 @@ export function GenerationStudio({
 
                 {model?.mediaKind === "VIDEO" && (
                   <>
-                    <label
-                      htmlFor="video-duration"
-                      className="block text-sm font-semibold text-foreground"
-                    >
-                      Duration
-                    </label>
-                    <select
-                      id="video-duration"
-                      value={selectedDuration}
-                      onChange={(e) => setDuration(e.target.value)}
-                      disabled={busy || availableDurations.length === 0}
-                      className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
-                    >
-                      {availableDurations.length ? (
-                        availableDurations.map((value) => (
-                          <option key={value} value={value}>
-                            {value} seconds
-                          </option>
-                        ))
-                      ) : (
-                        <option>No supported durations advertised</option>
-                      )}
-                    </select>
+                    {videoWorkflow === "EDIT" ? (
+                      <div className="rounded-xl border border-border bg-card px-3 py-3">
+                        <p className="text-sm font-semibold text-foreground">
+                          Duration
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Match source clip
+                        </p>
+                      </div>
+                    ) : videoWorkflow === "DRAFT_FINAL" ? (
+                      <div className="rounded-xl border border-border bg-card px-3 py-3">
+                        <p className="text-sm font-semibold text-foreground">
+                          Duration
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Reused from the approved Draft
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        <label
+                          htmlFor="video-duration"
+                          className="block text-sm font-semibold text-foreground"
+                        >
+                          Duration
+                        </label>
+                        <select
+                          id="video-duration"
+                          value={selectedDuration}
+                          onChange={(e) => setDuration(e.target.value)}
+                          disabled={busy || availableDurations.length === 0}
+                          className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
+                        >
+                          {availableDurations.length ? (
+                            availableDurations.map((value) => (
+                              <option key={value} value={value}>
+                                {value} seconds
+                              </option>
+                            ))
+                          ) : (
+                            <option>No supported durations advertised</option>
+                          )}
+                        </select>
+                      </>
+                    )}
 
-                    {model.capabilities?.generateAudio === true ? (
+                    {model.capabilities?.generateAudio === true &&
+                    videoWorkflow !== "DRAFT_FINAL" ? (
                       <label className="flex items-center gap-3 rounded-xl border border-border bg-card px-3 py-3 text-sm font-medium text-foreground">
                         <input
                           type="checkbox"
@@ -2060,6 +2088,40 @@ export function GenerationStudio({
                           className="size-4 accent-primary"
                         />
                         Generate synchronized audio
+                      </label>
+                    ) : null}
+
+                    {model.capabilities?.outputFormatMov === true ? (
+                      <label className="grid gap-2 text-sm font-semibold text-foreground">
+                        Output container
+                        <select
+                          value={videoOutputFormat}
+                          onChange={(event) =>
+                            setVideoOutputFormat(
+                              event.target.value as "mp4" | "mov",
+                            )
+                          }
+                          disabled={busy}
+                          className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
+                        >
+                          <option value="mp4">MP4 · playback / sharing</option>
+                          <option value="mov">MOV · editing / extension</option>
+                        </select>
+                      </label>
+                    ) : null}
+
+                    {model.capabilities?.returnLastFrame === true ? (
+                      <label className="flex items-center gap-3 rounded-xl border border-border bg-card px-3 py-3 text-sm font-medium text-foreground">
+                        <input
+                          type="checkbox"
+                          checked={returnLastFrame}
+                          onChange={(event) =>
+                            setReturnLastFrame(event.target.checked)
+                          }
+                          disabled={busy}
+                          className="size-4 accent-primary"
+                        />
+                        Save final frame for “Continue scene”
                       </label>
                     ) : null}
                   </>

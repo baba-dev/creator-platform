@@ -10,7 +10,7 @@ describe("speech trial character tracking", () => {
     const mockClient: SpeechTrialDbClient = {
       generationJob: {
         aggregate: vi.fn().mockResolvedValue({
-          _sum: { billableQuantity: 0, reservedCredits: 0 },
+          _sum: { billableQuantity: 0, chargedCredits: 0 },
         }),
         count: vi.fn().mockResolvedValue(0),
       },
@@ -32,7 +32,7 @@ describe("speech trial character tracking", () => {
     const mockClient: SpeechTrialDbClient = {
       generationJob: {
         aggregate: vi.fn().mockResolvedValue({
-          _sum: { billableQuantity: 4_500, reservedCredits: 72 },
+          _sum: { billableQuantity: 4_500, chargedCredits: 72 },
         }),
         count: vi.fn().mockResolvedValue(3),
       },
@@ -52,7 +52,7 @@ describe("speech trial character tracking", () => {
     const mockClient: SpeechTrialDbClient = {
       generationJob: {
         aggregate: vi.fn().mockResolvedValue({
-          _sum: { billableQuantity: 16_000, reservedCredits: 256 },
+          _sum: { billableQuantity: 16_000, chargedCredits: 256 },
         }),
         count: vi.fn().mockResolvedValue(10),
       },
@@ -71,7 +71,7 @@ describe("speech trial character tracking", () => {
     const mockClient: SpeechTrialDbClient = {
       generationJob: {
         aggregate: vi.fn().mockResolvedValue({
-          _sum: { billableQuantity: 25_000, reservedCredits: 400 },
+          _sum: { billableQuantity: 25_000, chargedCredits: 400 },
         }),
         count: vi.fn().mockResolvedValue(15),
       },

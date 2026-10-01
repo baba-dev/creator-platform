@@ -157,7 +157,14 @@ function assertIntegerInRange(
   }
 }
 
-function validateOptions(options: PsdExportOptions): void {
+export function validatePsdExportLayout(options: {
+  width: number;
+  height: number;
+  layers: readonly Pick<
+    PsdLayerInput,
+    "name" | "width" | "height" | "top" | "left" | "opacity"
+  >[];
+}): void {
   assertIntegerInRange(options.width, 1, MAX_PSD_DIMENSION, "Canvas width");
   assertIntegerInRange(options.height, 1, MAX_PSD_DIMENSION, "Canvas height");
   if (options.width * options.height > MAX_CANVAS_PIXELS) {
@@ -190,13 +197,7 @@ function validateOptions(options: PsdExportOptions): void {
       "Layer right",
     );
 
-    const pixelCount = layer.width * layer.height;
-    if (layer.rgbaData.length !== pixelCount * 4) {
-      throw new RangeError(
-        `Layer "${layer.name}" RGBA data does not match its dimensions.`,
-      );
-    }
-    totalLayerPixels += pixelCount;
+    totalLayerPixels += layer.width * layer.height;
     if (totalLayerPixels > MAX_TOTAL_LAYER_PIXELS) {
       throw new RangeError(
         "Layer stack exceeds the browser-safe PSD pixel budget.",
@@ -211,6 +212,18 @@ function validateOptions(options: PsdExportOptions): void {
     ) {
       throw new RangeError(
         `Layer "${layer.name}" opacity must be an integer from 0 to 255.`,
+      );
+    }
+  }
+}
+
+function validateOptions(options: PsdExportOptions): void {
+  validatePsdExportLayout(options);
+  for (const layer of options.layers) {
+    const pixelCount = layer.width * layer.height;
+    if (layer.rgbaData.length !== pixelCount * 4) {
+      throw new RangeError(
+        `Layer "${layer.name}" RGBA data does not match its dimensions.`,
       );
     }
   }

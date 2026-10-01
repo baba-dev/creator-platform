@@ -1183,56 +1183,134 @@ export function createBytePlusProvider(
               },
             );
           }
+          const legacySources = [
+            ...(input.data.firstFrameImage
+              ? [
+                  {
+                    role: "FIRST_FRAME" as const,
+                    url: input.data.firstFrameImage,
+                  },
+                ]
+              : []),
+            ...(input.data.lastFrameImage
+              ? [
+                  {
+                    role: "LAST_FRAME" as const,
+                    url: input.data.lastFrameImage,
+                  },
+                ]
+              : []),
+            ...(input.data.referenceVideoUrl
+              ? [
+                  {
+                    role: "REFERENCE_VIDEO" as const,
+                    url: input.data.referenceVideoUrl,
+                  },
+                ]
+              : []),
+          ];
+          const sources =
+            input.data.sources.length > 0 ? input.data.sources : legacySources;
+          const mediaContent = sources.map((source) => {
+            switch (source.role) {
+              case "FIRST_FRAME":
+                return {
+                  type: "image_url",
+                  image_url: { url: source.url },
+                  role: "first_frame",
+                };
+              case "LAST_FRAME":
+                return {
+                  type: "image_url",
+                  image_url: { url: source.url },
+                  role: "last_frame",
+                };
+              case "REFERENCE_IMAGE":
+                return {
+                  type: "image_url",
+                  image_url: { url: source.url },
+                  role: "reference_image",
+                };
+              case "REFERENCE_AUDIO":
+                return {
+                  type: "audio_url",
+                  audio_url: { url: source.url },
+                  role: "reference_audio",
+                };
+              case "REFERENCE_VIDEO":
+              case "SOURCE_VIDEO":
+                return {
+                  type: "video_url",
+                  video_url: { url: source.url },
+                  role: "reference_video",
+                };
+            }
+          });
+          const hasReferenceMedia = sources.some((source) =>
+            ["REFERENCE_IMAGE", "REFERENCE_VIDEO", "REFERENCE_AUDIO"].includes(
+              source.role,
+            ),
+          );
+          const omniTaskType =
+            input.data.workflow === "EDIT"
+              ? "edit"
+              : input.data.workflow === "EXTEND"
+                ? "extend"
+                : input.data.workflow === "REFERENCE" ||
+                    (input.data.workflow === "DRAFT" && hasReferenceMedia) ||
+                    Boolean(input.data.referenceVideoUrl)
+                  ? "reference"
+                  : undefined;
+
+          const requestBody =
+            input.data.workflow === "DRAFT_FINAL"
+              ? {
+                  model: submission.modelId,
+                  content: [
+                    {
+                      type: "draft_task",
+                      draft_task: { id: input.data.draftProviderTaskId! },
+                    },
+                  ],
+                  resolution: "1080p",
+                  output_format: input.data.outputFormat,
+                  return_last_frame: input.data.returnLastFrame,
+                  watermark: input.data.watermark,
+                }
+              : {
+                  model: submission.modelId,
+                  content: [
+                    { type: "text", text: input.data.prompt },
+                    ...mediaContent,
+                  ],
+                  ...(omniTaskType
+                    ? { omni_reference_task_type: omniTaskType }
+                    : {}),
+                  resolution:
+                    input.data.resolution === "4K"
+                      ? "4k"
+                      : input.data.resolution,
+                  ratio: input.data.aspectRatio,
+                  duration: input.data.durationSeconds,
+                  generate_audio: input.data.generateAudio,
+                  watermark: input.data.watermark,
+                  output_format: input.data.outputFormat,
+                  return_last_frame: input.data.returnLastFrame,
+                  ...(input.data.workflow === "DRAFT"
+                    ? { draft: true }
+                    : {}),
+                  ...(input.data.seed === undefined
+                    ? {}
+                    : { seed: input.data.seed }),
+                };
+
           const response = await safeFetch(
             fetchClient,
             `${baseUrl}/contents/generations/tasks`,
             {
               method: "POST",
               headers: modelArkHeaders,
-              body: JSON.stringify({
-                model: submission.modelId,
-                content: [
-                  { type: "text", text: input.data.prompt },
-                  ...(input.data.firstFrameImage
-                    ? [
-                        {
-                          type: "image_url",
-                          image_url: { url: input.data.firstFrameImage },
-                          role: "first_frame",
-                        },
-                      ]
-                    : []),
-                  ...(input.data.lastFrameImage
-                    ? [
-                        {
-                          type: "image_url",
-                          image_url: { url: input.data.lastFrameImage },
-                          role: "last_frame",
-                        },
-                      ]
-                    : []),
-                  ...(input.data.referenceVideoUrl
-                    ? [
-                        {
-                          type: "video_url",
-                          video_url: { url: input.data.referenceVideoUrl },
-                          role: "reference_video",
-                        },
-                      ]
-                    : []),
-                ],
-                ...(input.data.referenceVideoUrl
-                  ? { omni_reference_task_type: "reference" }
-                  : {}),
-                resolution: input.data.resolution,
-                ratio: input.data.aspectRatio,
-                duration: input.data.durationSeconds,
-                generate_audio: input.data.generateAudio,
-                watermark: input.data.watermark,
-                ...(input.data.seed === undefined
-                  ? {}
-                  : { seed: input.data.seed }),
-              }),
+              body: JSON.stringify(requestBody),
             },
             timeoutMs,
             idleTimeoutMs,

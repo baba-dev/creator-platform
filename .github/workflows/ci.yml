@@ -105,23 +105,32 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --prefer-offline
 
-      - name: Set up FFmpeg
-        uses: FedericoCarboni/setup-ffmpeg@37062fbf7149fc5578d6c57e08aed62458b375d6 # v3.1
-        with:
-          ffmpeg-version: "4.4.2"
-          linking-type: static
-
-      - name: Install media fonts
-        timeout-minutes: 2
+      - name: Install media tools
+        timeout-minutes: 5
         run: |
           set -euo pipefail
-          sudo env DEBIAN_FRONTEND=noninteractive apt-fast \
-            -o Acquire::Retries=3 \
-            install --no-install-recommends -y fonts-noto-core
+          if command -v apt-fast >/dev/null 2>&1; then
+            apt_cmd=apt-fast
+          else
+            apt_cmd=apt-get
+          fi
+
+          install_media_tools() {
+            sudo env DEBIAN_FRONTEND=noninteractive "$apt_cmd" \
+              -o Acquire::Retries=3 \
+              install --no-install-recommends -y ffmpeg fonts-noto-core
+          }
+
+          # Hosted runner images already contain a package index from image build
+          # time. Avoid a network-heavy refresh on the normal path; refresh only
+          # when that cached index can no longer resolve/download the packages.
+          if ! install_media_tools; then
+            sudo apt-get -o Acquire::Retries=3 update -qq
+            install_media_tools
+          fi
+
           ffmpeg -version >/dev/null
-          ffprobe -version >/dev/null
-          fc-match "Noto Sans Devanagari" >/dev/null
-          fc-match "Noto Sans Arabic" >/dev/null
+          fc-match "Noto Sans" >/dev/null
 
       - name: Generate Prisma client
         run: pnpm db:generate

@@ -1,5 +1,11 @@
 import { db } from "@aiwa/db";
 import { estimateGeneration, type PriceSnapshot } from "@aiwa/credits";
+import {
+  validateVideoModelRequest,
+  videoRequestV2Schema,
+  type VideoRequestV2,
+  type VideoSource,
+} from "./video-contract";
 
 export class QuoteValidationError extends Error {
   constructor(
@@ -9,10 +15,14 @@ export class QuoteValidationError extends Error {
     super(message);
   }
 }
+
 interface QuoteInput {
   units: number;
   text?: string;
   billableQuantity?: number;
+  schemaVersion?: number;
+  workflow?: VideoRequestV2["workflow"];
+  sources?: VideoSource[];
   durationSeconds?: number;
   resolution?: string;
   aspectRatio?: string;
@@ -21,7 +31,43 @@ interface QuoteInput {
   firstFrameAssetId?: string;
   lastFrameAssetId?: string;
   referenceAssetIds: string[];
+  outputFormat?: "mp4" | "mov";
+  returnLastFrame?: boolean;
+  seed?: number;
+  sourceDraftJobId?: string;
+  extensionDirection?: "BEFORE" | "AFTER";
 }
+
+function legacyVideoSources(input: QuoteInput): VideoSource[] {
+  const sources: VideoSource[] = [];
+  if (input.firstFrameAssetId)
+    sources.push({
+      assetId: input.firstFrameAssetId,
+      role: "FIRST_FRAME",
+      position: sources.length,
+    });
+  if (input.lastFrameAssetId)
+    sources.push({
+      assetId: input.lastFrameAssetId,
+      role: "LAST_FRAME",
+      position: sources.length,
+    });
+  if (input.referenceVideoAssetId)
+    sources.push({
+      assetId: input.referenceVideoAssetId,
+      role: "REFERENCE_VIDEO",
+      position: sources.length,
+    });
+  return sources;
+}
+
+function inferLegacyWorkflow(input: QuoteInput): VideoRequestV2["workflow"] {
+  if (input.referenceVideoAssetId) return "REFERENCE";
+  if (input.lastFrameAssetId) return "FIRST_LAST_FRAME";
+  if (input.firstFrameAssetId) return "FRAME_TO_VIDEO";
+  return "GENERATE";
+}
+
 export async function estimateAuthorizedGeneration(
   model: { mediaKind: string; providerModelId: string; capabilities: unknown },
   activePriceVersion: PriceSnapshot,
@@ -29,17 +75,7 @@ export async function estimateAuthorizedGeneration(
   organizationId: string,
   userId: string,
 ) {
-  const {
-    units,
-    text,
-    billableQuantity,
-    durationSeconds,
-    resolution,
-    generateAudio,
-    referenceVideoAssetId,
-  } = input;
-  const session = { user: { id: userId } };
-  let inputDurationMs: number | undefined;
+  const { units, text, billableQuantity } = input;
   const caps = (
     model.capabilities &&
     typeof model.capabilities === "object" &&
@@ -47,16 +83,21 @@ export async function estimateAuthorizedGeneration(
       ? model.capabilities
       : {}
   ) as Record<string, unknown>;
-  const normalizedResolution =
-    resolution ?? (model.mediaKind === "VIDEO" ? "720p" : "2K");
-  const normalizedRatio =
+  let normalizedResolution =
+    input.resolution ?? (model.mediaKind === "VIDEO" ? "720p" : "2K");
+  let normalizedRatio =
     input.aspectRatio ?? (model.mediaKind === "VIDEO" ? "16:9" : "1:1");
+  let pricingDurationSeconds = input.durationSeconds ?? 5;
+  let pricingGenerateAudio = input.generateAudio ?? false;
+  let totalInputVideoDurationMs: number | undefined;
+
   if (model.mediaKind === "REASONING")
     throw new QuoteValidationError(
       "This model has no registered generation estimator.",
       400,
     );
-  if (model.mediaKind === "VIDEO" || model.mediaKind === "IMAGE") {
+
+  if (model.mediaKind === "IMAGE") {
     if (
       caps["resolution:" + normalizedResolution] !== true ||
       caps["aspectRatio:" + normalizedRatio] !== true
@@ -66,91 +107,252 @@ export async function estimateAuthorizedGeneration(
         400,
       );
   }
+
   if (model.mediaKind === "VIDEO") {
-    if (
-      caps["durationSeconds:" + (durationSeconds ?? 5)] !== true ||
-      (generateAudio && caps.generateAudio !== true)
-    )
+    const rawSources = input.sources ?? legacyVideoSources(input);
+    const candidate = videoRequestV2Schema.safeParse({
+      schemaVersion: 2,
+      organizationId,
+      modelId: "quote-model",
+      priceVersionId: "quote-price",
+      idempotencyKey: "00000000-0000-4000-8000-000000000000",
+      workflow: input.workflow ?? inferLegacyWorkflow(input),
+      prompt:
+        (input.workflow ?? inferLegacyWorkflow(input)) === "DRAFT_FINAL"
+          ? ""
+          : "quote-validation",
+      sources: rawSources,
+      aspectRatio: normalizedRatio,
+      resolution: normalizedResolution,
+      durationSeconds: pricingDurationSeconds,
+      generateAudio: pricingGenerateAudio,
+      outputFormat: input.outputFormat ?? "mp4",
+      returnLastFrame: input.returnLastFrame ?? true,
+      ...(input.seed === undefined ? {} : { seed: input.seed }),
+      ...(input.sourceDraftJobId
+        ? { sourceDraftJobId: input.sourceDraftJobId }
+        : {}),
+      ...(input.extensionDirection
+        ? { extensionDirection: input.extensionDirection }
+        : {}),
+    });
+    if (!candidate.success)
       throw new QuoteValidationError(
-        "Duration or audio setting is unsupported.",
+        candidate.error.issues[0]?.message ?? "Invalid video input combination.",
         400,
       );
-    const frames = [input.firstFrameAssetId, input.lastFrameAssetId].filter(
-      (id): id is string => Boolean(id),
+    const video = candidate.data;
+    const capabilityError = validateVideoModelRequest(
+      model.providerModelId,
+      model.capabilities,
+      video,
     );
-    if (
-      (input.lastFrameAssetId && !input.firstFrameAssetId) ||
-      (frames.length &&
-        (referenceVideoAssetId || normalizedRatio !== "adaptive"))
-    )
-      throw new QuoteValidationError("Invalid video input combination.", 400);
-    if (frames.length) {
-      const assets = await db.asset.findMany({
+    if (capabilityError) throw new QuoteValidationError(capabilityError, 400);
+
+    const sourceIds = video.sources.map((source) => source.assetId);
+    const assets = sourceIds.length
+      ? await db.asset.findMany({
+          where: {
+            id: { in: sourceIds },
+            organizationId,
+            status: "READY",
+            storageProvider: "LOCAL",
+            OR: [
+              { purpose: "GENERAL" },
+              { purpose: "REFERENCE_INPUT", storageOwnerUserId: userId },
+            ],
+          },
+          select: {
+            id: true,
+            mediaKind: true,
+            mimeType: true,
+            byteSize: true,
+            durationMs: true,
+            width: true,
+            height: true,
+          },
+        })
+      : [];
+    const assetById = new Map(assets.map((asset) => [asset.id, asset]));
+    if (assets.length !== sourceIds.length)
+      throw new QuoteValidationError("Source media is unavailable.", 400);
+
+    const maxVideoInputSeconds =
+      typeof caps.maxReferenceVideoDurationSeconds === "number"
+        ? caps.maxReferenceVideoDurationSeconds
+        : model.providerModelId.startsWith("dreamina-seedance-2-5-")
+          ? 30
+          : 15;
+    const maxAudioInputSeconds =
+      typeof caps.maxReferenceAudioDurationSeconds === "number"
+        ? caps.maxReferenceAudioDurationSeconds
+        : maxVideoInputSeconds;
+    let inputVideoMs = 0;
+    let inputAudioMs = 0;
+
+    for (const source of video.sources) {
+      const asset = assetById.get(source.assetId);
+      if (!asset)
+        throw new QuoteValidationError("Source media is unavailable.", 400);
+      const image =
+        source.role === "FIRST_FRAME" ||
+        source.role === "LAST_FRAME" ||
+        source.role === "REFERENCE_IMAGE";
+      const videoInput =
+        source.role === "REFERENCE_VIDEO" || source.role === "SOURCE_VIDEO";
+      const audio = source.role === "REFERENCE_AUDIO";
+      if (
+        (image && asset.mediaKind !== "IMAGE") ||
+        (videoInput && asset.mediaKind !== "VIDEO") ||
+        (audio && asset.mediaKind !== "AUDIO")
+      )
+        throw new QuoteValidationError(
+          "Source role does not match the asset type.",
+          400,
+        );
+      if (
+        image &&
+        (asset.byteSize > 20n * 1024n * 1024n ||
+          !asset.mimeType.startsWith("image/"))
+      )
+        throw new QuoteValidationError(
+          "Reference image is outside provider limits.",
+          400,
+        );
+      if (videoInput) {
+        if (
+          asset.durationMs === null ||
+          asset.durationMs < 2_000 ||
+          asset.durationMs > maxVideoInputSeconds * 1000 ||
+          asset.width === null ||
+          asset.height === null ||
+          asset.width < 300 ||
+          asset.height < 300 ||
+          asset.width * asset.height < 407_696 ||
+          asset.width * asset.height > 8_295_044 ||
+          asset.width / asset.height < 0.4 ||
+          asset.width / asset.height > 2.5 ||
+          asset.byteSize > 100_000_000n ||
+          !["video/mp4", "video/quicktime"].includes(asset.mimeType)
+        )
+          throw new QuoteValidationError(
+            "Reference video is outside provider limits.",
+            400,
+          );
+        if (
+          source.role === "SOURCE_VIDEO" &&
+          video.workflow === "EDIT" &&
+          asset.durationMs < 4_000
+        )
+          throw new QuoteValidationError(
+            "Video editing requires at least four seconds of source video.",
+            400,
+          );
+        inputVideoMs += asset.durationMs;
+      }
+      if (audio) {
+        if (
+          asset.durationMs === null ||
+          asset.durationMs < 2_000 ||
+          asset.durationMs > maxAudioInputSeconds * 1000 ||
+          asset.byteSize > 15n * 1024n * 1024n ||
+          !["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav"].includes(
+            asset.mimeType,
+          )
+        )
+          throw new QuoteValidationError(
+            "Reference audio is outside provider limits.",
+            400,
+          );
+        inputAudioMs += asset.durationMs;
+      }
+    }
+    if (inputVideoMs > maxVideoInputSeconds * 1000)
+      throw new QuoteValidationError(
+        "Combined reference video duration exceeds the model limit.",
+        400,
+      );
+    if (inputAudioMs > maxAudioInputSeconds * 1000)
+      throw new QuoteValidationError(
+        "Combined reference audio duration exceeds the model limit.",
+        400,
+      );
+
+    totalInputVideoDurationMs = inputVideoMs > 0 ? inputVideoMs : undefined;
+    normalizedResolution = video.resolution;
+    normalizedRatio = video.aspectRatio;
+    pricingDurationSeconds =
+      video.durationSeconds === -1 ? 5 : video.durationSeconds;
+    pricingGenerateAudio = video.generateAudio;
+
+    if (video.workflow === "EDIT") {
+      const source = video.sources.find((item) => item.role === "SOURCE_VIDEO");
+      const sourceAsset = source ? assetById.get(source.assetId) : undefined;
+      pricingDurationSeconds = Math.max(
+        4,
+        Math.min(30, Math.ceil((sourceAsset?.durationMs ?? 5_000) / 1000)),
+      );
+    }
+
+    if (video.workflow === "DRAFT_FINAL") {
+      const draft = await db.generationJob.findFirst({
         where: {
-          id: { in: frames },
+          id: video.sourceDraftJobId!,
           organizationId,
-          mediaKind: "IMAGE",
-          status: "READY",
-          storageProvider: "LOCAL",
-          OR: [
-            { purpose: "GENERAL" },
-            { purpose: "REFERENCE_INPUT", storageOwnerUserId: session.user.id },
-          ],
+          createdById: userId,
+          status: "SUCCEEDED",
         },
-        select: { id: true },
+        include: {
+          providerModel: { select: { providerModelId: true } },
+          inputAssets: { include: { asset: true } },
+        },
       });
       if (
-        assets.length !== new Set(frames).size ||
-        caps.firstFrame !== true ||
-        (frames.length > 1 && caps.lastFrame !== true)
+        !draft?.providerRequestId ||
+        draft.providerModel.providerModelId !== model.providerModelId ||
+        Date.now() - draft.createdAt.getTime() >= 7 * 24 * 60 * 60 * 1000
       )
-        throw new QuoteValidationError("Source image is unavailable.", 400);
+        throw new QuoteValidationError(
+          "The source Draft is unavailable or has expired.",
+          409,
+        );
+      const draftPayload = draft.requestPayload as Record<string, unknown>;
+      if (
+        draftPayload.schemaVersion !== 2 ||
+        draftPayload.workflow !== "DRAFT"
+      )
+        throw new QuoteValidationError(
+          "The selected job is not a Seedance 2.5 Draft.",
+          409,
+        );
+      pricingDurationSeconds =
+        typeof draftPayload.durationSeconds === "number"
+          ? draftPayload.durationSeconds
+          : 5;
+      normalizedRatio =
+        typeof draftPayload.aspectRatio === "string"
+          ? draftPayload.aspectRatio
+          : "16:9";
+      pricingGenerateAudio = draftPayload.generateAudio === true;
+      const originalVideoMs = draft.inputAssets.reduce(
+        (sum, item) =>
+          item.asset.mediaKind === "VIDEO"
+            ? sum + (item.asset.durationMs ?? 0)
+            : sum,
+        0,
+      );
+      totalInputVideoDurationMs =
+        originalVideoMs > 0 ? originalVideoMs : undefined;
     }
   }
-  if (referenceVideoAssetId) {
-    if (caps.referenceVideo !== true)
-      throw new QuoteValidationError("Video reference is unsupported.", 400);
-    const source = await db.asset.findFirst({
-      where: {
-        id: referenceVideoAssetId,
-        organizationId,
-        mediaKind: "VIDEO",
-        status: "READY",
-        storageProvider: "LOCAL",
-        mimeType: "video/mp4",
-        OR: [
-          { purpose: "GENERAL" },
-          { purpose: "REFERENCE_INPUT", storageOwnerUserId: session.user.id },
-        ],
-      },
-      select: { durationMs: true, width: true, height: true, byteSize: true },
-    });
-    if (
-      !source?.durationMs ||
-      source.durationMs < 2000 ||
-      source.durationMs > 30000 ||
-      source.width === null ||
-      source.height === null ||
-      source.width < 300 ||
-      source.height < 300 ||
-      source.width * source.height < 407696 ||
-      source.width * source.height > 8295044 ||
-      source.width / source.height < 0.4 ||
-      source.width / source.height > 2.5 ||
-      source.byteSize > 100000000n
-    )
-      throw new QuoteValidationError(
-        "Reference video is unavailable or outside provider limits.",
-        400,
-      );
-    inputDurationMs = source.durationMs;
-  }
+
   const referenceIds = input.referenceAssetIds;
   if (referenceIds.length && model.mediaKind !== "IMAGE")
     throw new QuoteValidationError(
       "Image references require an image model.",
       400,
     );
+
   if (model.mediaKind === "IMAGE") {
     const maxOutput =
       typeof caps.maxGeneratedImages === "number" ? caps.maxGeneratedImages : 1;
@@ -181,14 +383,15 @@ export async function estimateAuthorizedGeneration(
           storageProvider: "LOCAL",
           OR: [
             { purpose: "GENERAL" },
-            { purpose: "REFERENCE_INPUT", storageOwnerUserId: session.user.id },
+            { purpose: "REFERENCE_INPUT", storageOwnerUserId: userId },
           ],
         },
         select: { id: true, byteSize: true },
       });
       if (
         assets.length !== referenceIds.length ||
-        assets.reduce((sum, a) => sum + a.byteSize, 0n) > 80n * 1024n * 1024n
+        assets.reduce((sum, asset) => sum + asset.byteSize, 0n) >
+          80n * 1024n * 1024n
       )
         throw new QuoteValidationError(
           "Reference images are unavailable or too large.",
@@ -196,20 +399,20 @@ export async function estimateAuthorizedGeneration(
         );
     }
   }
-  let estimate: ReturnType<typeof estimateGeneration>;
+
   try {
-    estimate = estimateGeneration({
+    return estimateGeneration({
       price: activePriceVersion,
       mediaKind: model.mediaKind,
       providerModelId: model.providerModelId,
       units,
       text,
       billableQuantity,
-      durationSeconds,
+      durationSeconds: pricingDurationSeconds,
       resolution: normalizedResolution,
       aspectRatio: normalizedRatio,
-      generateAudio,
-      inputDurationMs,
+      generateAudio: pricingGenerateAudio,
+      totalInputVideoDurationMs,
       referenceImageCount: referenceIds.length,
     });
   } catch (error) {
@@ -218,6 +421,4 @@ export async function estimateAuthorizedGeneration(
       409,
     );
   }
-
-  return estimate;
 }

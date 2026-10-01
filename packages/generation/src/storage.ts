@@ -713,6 +713,7 @@ async function downloadTrustedVideo(
           contentType &&
           ![
             "video/mp4",
+            "video/quicktime",
             "application/octet-stream",
             "binary/octet-stream",
           ].includes(contentType)

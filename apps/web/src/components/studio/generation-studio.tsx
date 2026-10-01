@@ -55,15 +55,48 @@ type ReferenceAsset = {
   mimeType?: string;
   byteSize?: string;
 };
+type VideoWorkflow =
+  | "GENERATE"
+  | "FRAME_TO_VIDEO"
+  | "FIRST_LAST_FRAME"
+  | "REFERENCE"
+  | "EDIT"
+  | "EXTEND"
+  | "DRAFT"
+  | "DRAFT_FINAL";
+type VideoSourceRole =
+  | "FIRST_FRAME"
+  | "LAST_FRAME"
+  | "REFERENCE_IMAGE"
+  | "REFERENCE_VIDEO"
+  | "REFERENCE_AUDIO"
+  | "SOURCE_VIDEO";
+type VideoSourceInput = {
+  assetId: string;
+  role: VideoSourceRole;
+  position: number;
+};
 type Job = {
   id: string;
   status: string;
   errorMessage: string | null;
   reservedCredits: string;
   chargedCredits: string;
-  providerModel: { displayName: string; mediaKind: MediaKind };
+  providerModel: {
+    id: string;
+    providerModelId: string;
+    displayName: string;
+    mediaKind: MediaKind;
+  };
   project: ProjectOption | null;
-  assets: { id: string; mimeType: string }[];
+  createdAt?: string;
+  videoWorkflow?: VideoWorkflow | null;
+  draftExpiresAt?: string | null;
+  assets: {
+    id: string;
+    mimeType: string;
+    generationOutputIndex?: number | null;
+  }[];
 };
 type Studio = {
   configured: boolean;
@@ -152,10 +185,30 @@ export function GenerationStudio({
   const [references, setReferences] = useState<ReferenceAsset[]>([]);
   const [videoFrames, setVideoFrames] = useState<ReferenceAsset[]>([]);
   const [videoReferences, setVideoReferences] = useState<ReferenceAsset[]>([]);
-  const [referenceVideoAssetId, setReferenceVideoAssetId] = useState("");
+  const [videoAudioReferences, setVideoAudioReferences] = useState<
+    ReferenceAsset[]
+  >([]);
   const [referenceAssetIds, setReferenceAssetIds] = useState<string[]>([]);
+  const [videoWorkflow, setVideoWorkflow] =
+    useState<VideoWorkflow>("GENERATE");
   const [videoFirstFrameId, setVideoFirstFrameId] = useState("");
   const [videoLastFrameId, setVideoLastFrameId] = useState("");
+  const [videoReferenceImageIds, setVideoReferenceImageIds] = useState<
+    string[]
+  >([]);
+  const [videoReferenceVideoIds, setVideoReferenceVideoIds] = useState<
+    string[]
+  >([]);
+  const [videoReferenceAudioIds, setVideoReferenceAudioIds] = useState<
+    string[]
+  >([]);
+  const [videoSourceAssetId, setVideoSourceAssetId] = useState("");
+  const [sourceDraftJobId, setSourceDraftJobId] = useState("");
+  const [videoOutputFormat, setVideoOutputFormat] =
+    useState<"mp4" | "mov">("mp4");
+  const [extensionDirection, setExtensionDirection] =
+    useState<"BEFORE" | "AFTER">("AFTER");
+  const [returnLastFrame, setReturnLastFrame] = useState(true);
   const [referenceBusy, setReferenceBusy] = useState(false);
   const [referenceUrl, setReferenceUrl] = useState("");
   const [outputCount, setOutputCount] = useState(1);
@@ -212,26 +265,176 @@ export function GenerationStudio({
     () => capabilityValues(model?.capabilities, "resolution"),
     [model?.capabilities],
   );
-  const availableDurations = useMemo(
-    () => capabilityValues(model?.capabilities, "durationSeconds"),
+  const availableDurations = useMemo(() => {
+    const explicit = capabilityValues(model?.capabilities, "durationSeconds");
+    if (explicit.length > 0) return explicit;
+    if (model?.mediaKind !== "VIDEO") return [];
+    const minimum = Number(model.capabilities?.minimumDurationSeconds ?? 4);
+    const maximum = Number(model.capabilities?.maximumDurationSeconds ?? 15);
+    if (
+      !Number.isSafeInteger(minimum) ||
+      !Number.isSafeInteger(maximum) ||
+      minimum < 1 ||
+      maximum < minimum ||
+      maximum > 30
+    )
+      return [];
+    return Array.from(
+      { length: maximum - minimum + 1 },
+      (_, index) => String(minimum + index),
+    );
+  }, [model?.capabilities, model?.mediaKind]);
+
+  const videoForcesAdaptive =
+    activeMode === "VIDEO" &&
+    ["FRAME_TO_VIDEO", "FIRST_LAST_FRAME", "EDIT", "EXTEND"].includes(
+      videoWorkflow,
+    );
+  const selectedRatio = videoForcesAdaptive
+    ? "adaptive"
+    : selectSupportedCapability(model?.capabilities, "aspectRatio", ratio, [
+        "1:1",
+      ]);
+  const selectedResolution =
+    activeMode === "VIDEO" && videoWorkflow === "DRAFT"
+      ? "480p"
+      : activeMode === "VIDEO" && videoWorkflow === "DRAFT_FINAL"
+        ? "1080p"
+        : selectSupportedCapability(
+            model?.capabilities,
+            "resolution",
+            resolution,
+            [activeMode === "VIDEO" ? "720p" : "2K"],
+          );
+  const selectedDuration =
+    activeMode === "VIDEO" && videoWorkflow === "EDIT"
+      ? "-1"
+      : availableDurations.includes(duration)
+        ? duration
+        : (availableDurations[0] ?? "5");
+
+  const videoSources = useMemo<VideoSourceInput[]>(() => {
+    const sources: Omit<VideoSourceInput, "position">[] = [];
+    if (videoWorkflow === "FRAME_TO_VIDEO" && videoFirstFrameId)
+      sources.push({ assetId: videoFirstFrameId, role: "FIRST_FRAME" });
+    if (videoWorkflow === "FIRST_LAST_FRAME") {
+      if (videoFirstFrameId)
+        sources.push({ assetId: videoFirstFrameId, role: "FIRST_FRAME" });
+      if (videoLastFrameId)
+        sources.push({ assetId: videoLastFrameId, role: "LAST_FRAME" });
+    }
+    if (videoWorkflow === "REFERENCE" || videoWorkflow === "DRAFT") {
+      for (const assetId of videoReferenceImageIds)
+        sources.push({ assetId, role: "REFERENCE_IMAGE" });
+      for (const assetId of videoReferenceVideoIds)
+        sources.push({ assetId, role: "REFERENCE_VIDEO" });
+      for (const assetId of videoReferenceAudioIds)
+        sources.push({ assetId, role: "REFERENCE_AUDIO" });
+    }
+    if (
+      (videoWorkflow === "EDIT" || videoWorkflow === "EXTEND") &&
+      videoSourceAssetId
+    )
+      sources.push({ assetId: videoSourceAssetId, role: "SOURCE_VIDEO" });
+    return sources.map((source, position) => ({ ...source, position }));
+  }, [
+    videoFirstFrameId,
+    videoLastFrameId,
+    videoReferenceAudioIds,
+    videoReferenceImageIds,
+    videoReferenceVideoIds,
+    videoSourceAssetId,
+    videoWorkflow,
+  ]);
+
+  const maxVideoReferenceImages = Number(
+    model?.capabilities?.maxReferenceImages ?? 0,
+  );
+  const maxVideoReferenceVideos = Number(
+    model?.capabilities?.maxReferenceVideos ?? 0,
+  );
+  const maxVideoReferenceAudio = Number(
+    model?.capabilities?.maxReferenceAudio ?? 0,
+  );
+  const availableVideoWorkflows = useMemo(
+    () =>
+      [
+        { value: "GENERATE" as const, label: "Generate", hint: "Text → video" },
+        ...(model?.capabilities?.firstFrame === true
+          ? [
+              {
+                value: "FRAME_TO_VIDEO" as const,
+                label: "Frames",
+                hint: "Animate a start / end",
+              },
+            ]
+          : []),
+        ...(model?.capabilities?.referenceImages === true ||
+        model?.capabilities?.referenceVideo === true ||
+        model?.capabilities?.referenceAudio === true
+          ? [
+              {
+                value: "REFERENCE" as const,
+                label: "References",
+                hint: "Match multimodal guides",
+              },
+            ]
+          : []),
+        ...(model?.capabilities?.editVideo === true
+          ? [
+              {
+                value: "EDIT" as const,
+                label: "AI Edit",
+                hint: "Transform a source clip",
+              },
+            ]
+          : []),
+        ...(model?.capabilities?.extendVideo === true
+          ? [
+              {
+                value: "EXTEND" as const,
+                label: "Extend",
+                hint: "Continue before / after",
+              },
+            ]
+          : []),
+        ...(model?.capabilities?.draftMode === true
+          ? [
+              {
+                value: "DRAFT" as const,
+                label: "Draft",
+                hint: "480p review → final",
+              },
+            ]
+          : []),
+      ] satisfies Array<{
+        value: Exclude<VideoWorkflow, "FIRST_LAST_FRAME" | "DRAFT_FINAL">;
+        label: string;
+        hint: string;
+      }>,
     [model?.capabilities],
   );
+  const videoRequestReady =
+    activeMode !== "VIDEO"
+      ? true
+      : videoWorkflow === "GENERATE"
+        ? true
+        : videoWorkflow === "FRAME_TO_VIDEO"
+          ? Boolean(videoFirstFrameId)
+          : videoWorkflow === "FIRST_LAST_FRAME"
+            ? Boolean(videoFirstFrameId && videoLastFrameId)
+            : videoWorkflow === "REFERENCE"
+              ? videoSources.length > 0 &&
+                (model?.capabilities?.audioOnlyReference === true ||
+                  videoReferenceAudioIds.length === 0 ||
+                  videoReferenceImageIds.length > 0 ||
+                  videoReferenceVideoIds.length > 0)
+              : videoWorkflow === "EDIT" || videoWorkflow === "EXTEND"
+                ? Boolean(videoSourceAssetId)
+                : videoWorkflow === "DRAFT_FINAL"
+                  ? Boolean(sourceDraftJobId)
+                  : true;
 
-  const selectedRatio =
-    activeMode === "VIDEO" && videoFirstFrameId
-      ? "adaptive"
-      : selectSupportedCapability(model?.capabilities, "aspectRatio", ratio, [
-          "1:1",
-        ]);
-  const selectedResolution = selectSupportedCapability(
-    model?.capabilities,
-    "resolution",
-    resolution,
-    ["2K"],
-  );
-  const selectedDuration = availableDurations.includes(duration)
-    ? duration
-    : (availableDurations[0] ?? "5");
   const handleModeChange = useCallback(
     (mode: MediaKind) => {
       if (mode !== activeMode) {
@@ -266,13 +469,19 @@ export function GenerationStudio({
       : {}),
     ...(activeMode === "VIDEO"
       ? {
+          schemaVersion: 2,
+          workflow: videoWorkflow,
+          sources: videoSources,
           durationSeconds: Number(selectedDuration),
           generateAudio,
-          ...(videoFirstFrameId
-            ? { firstFrameAssetId: videoFirstFrameId }
+          outputFormat: videoOutputFormat,
+          returnLastFrame,
+          ...(videoWorkflow === "DRAFT_FINAL" && sourceDraftJobId
+            ? { sourceDraftJobId }
             : {}),
-          ...(videoLastFrameId ? { lastFrameAssetId: videoLastFrameId } : {}),
-          ...(referenceVideoAssetId ? { referenceVideoAssetId } : {}),
+          ...(videoWorkflow === "EXTEND"
+            ? { extensionDirection }
+            : {}),
         }
       : {}),
   });
@@ -282,7 +491,11 @@ export function GenerationStudio({
       ? quoteState
       : null;
   useEffect(() => {
-    if (!activeModelId || (activeMode === "VOICE" && !billableCharacters)) {
+    if (
+      !activeModelId ||
+      (activeMode === "VOICE" && !billableCharacters) ||
+      (activeMode === "VIDEO" && !videoRequestReady)
+    ) {
       return;
     }
     const controller = new AbortController();
@@ -339,6 +552,7 @@ export function GenerationStudio({
     billableCharacters,
     quoteRequestKey,
     quoteRefresh,
+    videoRequestReady,
   ]);
   const activeRequiredCredits = activeQuote
     ? BigInt(activeQuote.quote.reservationCredits)
@@ -348,6 +562,50 @@ export function GenerationStudio({
     activeMode === "VOICE"
       ? Boolean(data?.voiceConfigured)
       : Boolean(data?.mediaConfigured ?? data?.configured);
+
+  useEffect(() => {
+    const onWorkflow = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{
+          workflow?: "EDIT" | "EXTEND";
+          assetId?: string;
+        }>
+      ).detail;
+      if (
+        !detail ||
+        (detail.workflow !== "EDIT" && detail.workflow !== "EXTEND") ||
+        typeof detail.assetId !== "string" ||
+        !detail.assetId
+      )
+        return;
+      const preferred =
+        data?.models.find(
+          (candidate) =>
+            candidate.mediaKind === "VIDEO" &&
+            (detail.workflow === "EDIT"
+              ? candidate.capabilities?.editVideo === true
+              : candidate.capabilities?.extendVideo === true),
+        ) ?? data?.models.find((candidate) => candidate.mediaKind === "VIDEO");
+      if (!preferred) {
+        setError("No enabled video model with active pricing is available.");
+        return;
+      }
+      setActiveMode("VIDEO");
+      setModelId(preferred.id);
+      setVideoWorkflow(detail.workflow);
+      setVideoSourceAssetId(detail.assetId);
+      setSourceDraftJobId("");
+      setRatio("adaptive");
+      requestAnimationFrame(() =>
+        document
+          .getElementById("create")
+          ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      );
+    };
+    window.addEventListener("creators:video-workflow", onWorkflow);
+    return () =>
+      window.removeEventListener("creators:video-workflow", onWorkflow);
+  }, [data?.models]);
 
   useEffect(() => {
     if (
@@ -397,7 +655,7 @@ export function GenerationStudio({
         setVideoReferences(
           body.assets.filter(
             (asset) =>
-              asset.mimeType === "video/mp4" &&
+              ["video/mp4", "video/quicktime"].includes(asset.mimeType ?? "") &&
               asset.durationMs !== null &&
               asset.durationMs !== undefined &&
               asset.durationMs >= 2_000 &&
@@ -440,6 +698,50 @@ export function GenerationStudio({
       .catch(() => undefined);
     return () => controller.abort();
   }, [activeMode, organizationId, variant]);
+  useEffect(() => {
+    if (
+      variant !== "advanced" ||
+      activeMode !== "VIDEO" ||
+      model?.capabilities?.referenceAudio !== true
+    )
+      return;
+    const controller = new AbortController();
+    void fetch(
+      `/api/assets?organizationId=${encodeURIComponent(organizationId)}&mediaKind=AUDIO&limit=100`,
+      { signal: controller.signal, cache: "no-store" },
+    )
+      .then((response) =>
+        response.ok
+          ? (response.json() as Promise<{ assets: ReferenceAsset[] }>)
+          : { assets: [] },
+      )
+      .then((body) =>
+        setVideoAudioReferences(
+          body.assets.filter(
+            (asset) =>
+              asset.durationMs !== null &&
+              asset.durationMs !== undefined &&
+              asset.durationMs >= 2_000 &&
+              asset.durationMs <=
+                Number(
+                  model.capabilities?.maxReferenceAudioDurationSeconds ?? 30,
+                ) *
+                  1000 &&
+              Number(asset.byteSize) <= 15 * 1024 * 1024,
+          ),
+        ),
+      )
+      .catch(() => {
+        if (!controller.signal.aborted) setVideoAudioReferences([]);
+      });
+    return () => controller.abort();
+  }, [
+    activeMode,
+    organizationId,
+    variant,
+    model?.capabilities?.referenceAudio,
+    model?.capabilities?.maxReferenceAudioDurationSeconds,
+  ]);
 
   async function uploadReference(file: File) {
     if (referenceBusy || !canGenerate) return;
@@ -462,8 +764,22 @@ export function GenerationStudio({
       setReferences((previous) => [body.asset!, ...previous]);
       if (activeMode === "VIDEO") {
         setVideoFrames((previous) => [body.asset!, ...previous]);
-        setVideoFirstFrameId(body.asset.id);
-      } else setReferenceAssetIds((previous) => [...previous, body.asset!.id]);
+        if (videoWorkflow === "REFERENCE" || videoWorkflow === "DRAFT") {
+          setVideoReferenceImageIds((previous) =>
+            previous.includes(body.asset!.id)
+              ? previous
+              : [...previous, body.asset!.id].slice(
+                  0,
+                  Math.max(1, maxVideoReferenceImages),
+                ),
+          );
+        } else {
+          setVideoFirstFrameId(body.asset.id);
+          setVideoWorkflow("FRAME_TO_VIDEO");
+        }
+      } else {
+        setReferenceAssetIds((previous) => [...previous, body.asset!.id]);
+      }
     } catch (error) {
       setError(
         error instanceof Error ? error.message : "Reference upload failed.",
@@ -696,13 +1012,19 @@ export function GenerationStudio({
         }),
         ...(templateContext ? { templateId: templateContext.id } : {}),
         ...(model.mediaKind === "VIDEO" && {
+          schemaVersion: 2,
+          workflow: videoWorkflow,
+          sources: videoSources,
           durationSeconds: Number.parseInt(selectedDuration, 10),
           generateAudio,
-          ...(videoFirstFrameId
-            ? { firstFrameAssetId: videoFirstFrameId }
+          outputFormat: videoOutputFormat,
+          returnLastFrame,
+          ...(videoWorkflow === "DRAFT_FINAL" && sourceDraftJobId
+            ? { sourceDraftJobId }
             : {}),
-          ...(videoLastFrameId ? { lastFrameAssetId: videoLastFrameId } : {}),
-          ...(referenceVideoAssetId ? { referenceVideoAssetId } : {}),
+          ...(videoWorkflow === "EXTEND"
+            ? { extensionDirection }
+            : {}),
         }),
       };
     }
@@ -821,6 +1143,55 @@ export function GenerationStudio({
       setIsEnhancing(false);
     }
   }
+  function focusVideoWorkflow(
+    workflow: VideoWorkflow,
+    options?: {
+      sourceAssetId?: string;
+      firstFrameAssetId?: string;
+      draftJobId?: string;
+      providerModelId?: string;
+    },
+  ) {
+    setActiveMode("VIDEO");
+    const exactModel = data?.models.find(
+      (candidate) =>
+        candidate.mediaKind === "VIDEO" &&
+        candidate.providerModelId === options?.providerModelId,
+    );
+    const preferred =
+      workflow === "DRAFT_FINAL"
+        ? exactModel
+        : (exactModel ??
+          data?.models.find((candidate) => candidate.mediaKind === "VIDEO"));
+    if (!preferred) {
+      setError(
+        workflow === "DRAFT_FINAL"
+          ? "The original Draft model is not enabled with active pricing. Publish pricing for that model before rendering the final."
+          : "No enabled video model with active pricing is available.",
+      );
+      return;
+    }
+    setModelId(preferred.id);
+    setVideoWorkflow(workflow);
+    setSourceDraftJobId(options?.draftJobId ?? "");
+    setVideoSourceAssetId(options?.sourceAssetId ?? "");
+    setVideoFirstFrameId(options?.firstFrameAssetId ?? "");
+    setVideoLastFrameId("");
+    if (workflow === "DRAFT_FINAL") setResolution("1080p");
+    if (
+      workflow === "FRAME_TO_VIDEO" ||
+      workflow === "FIRST_LAST_FRAME" ||
+      workflow === "EDIT" ||
+      workflow === "EXTEND"
+    )
+      setRatio("adaptive");
+    requestAnimationFrame(() =>
+      document
+        .getElementById("create")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    );
+  }
+
 
   return (
     <section
@@ -1385,104 +1756,302 @@ export function GenerationStudio({
                 </div>
               ) : null}
 
-              {variant === "advanced" &&
-              activeMode === "VIDEO" &&
-              model?.capabilities?.referenceVideo === true ? (
-                <div className="space-y-3 rounded-2xl border border-border bg-card/75 p-4">
-                  <h3 className="text-sm font-semibold">Reference video</h3>
-                  <p className="text-xs text-muted-foreground">
-                    Guide a new clip with an eligible MP4 from your library. The
-                    displayed credits are the maximum reservation; unused
-                    credits return after provider usage is verified.
-                  </p>
-                  <label className="grid gap-2 text-xs font-semibold">
-                    Library clip
-                    <select
-                      value={referenceVideoAssetId}
-                      onChange={(event) => {
-                        setReferenceVideoAssetId(event.target.value);
-                        if (event.target.value) {
-                          setVideoFirstFrameId("");
-                          setVideoLastFrameId("");
-                        }
-                      }}
-                      className="min-h-11 rounded-xl border border-input bg-background px-3"
-                    >
-                      <option value="">No video reference</option>
-                      {videoReferences.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-              ) : null}
+              {variant === "advanced" && activeMode === "VIDEO" ? (
+                <div className="space-y-4 rounded-2xl border border-border bg-card/75 p-4">
+                  <div>
+                    <h3 className="text-sm font-semibold">Creation workflow</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Choose the creative intent first. Creators only exposes
+                      settings and source roles supported by the selected model.
+                    </p>
+                  </div>
 
-              {variant === "advanced" &&
-              activeMode === "VIDEO" &&
-              model?.capabilities?.firstFrame === true &&
-              !referenceVideoAssetId ? (
-                <div className="space-y-3 rounded-2xl border border-border bg-card/75 p-4">
-                  <h3 className="text-sm font-semibold">
-                    Guide your opening frame
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    Select a private reference image. The output follows its
-                    aspect ratio.
-                  </p>
-                  <label className="grid gap-2 text-xs font-semibold">
-                    First frame
-                    <select
-                      value={videoFirstFrameId}
-                      onChange={(event) => {
-                        setVideoFirstFrameId(event.target.value);
-                        if (!event.target.value) setVideoLastFrameId("");
-                      }}
-                      className="min-h-11 rounded-xl border border-input bg-background px-3"
-                    >
-                      <option value="">Text to video</option>
-                      {videoFrames.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {videoFirstFrameId &&
-                  model?.capabilities?.lastFrame === true ? (
-                    <label className="grid gap-2 text-xs font-semibold">
-                      Last frame (optional)
-                      <select
-                        value={videoLastFrameId}
-                        onChange={(event) =>
-                          setVideoLastFrameId(event.target.value)
-                        }
-                        className="min-h-11 rounded-xl border border-input bg-background px-3"
-                      >
-                        <option value="">No fixed ending</option>
-                        {videoFrames.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {availableVideoWorkflows.map((item) => {
+                      const selected =
+                        videoWorkflow === item.value ||
+                        (item.value === "FRAME_TO_VIDEO" &&
+                          videoWorkflow === "FIRST_LAST_FRAME");
+                      return (
+                        <button
+                          key={item.value}
+                          type="button"
+                          aria-pressed={selected}
+                          disabled={busy}
+                          onClick={() => {
+                            setVideoWorkflow(item.value);
+                            setSourceDraftJobId("");
+                            if (item.value === "FRAME_TO_VIDEO") {
+                              setVideoLastFrameId("");
+                            }
+                            if (item.value !== "DRAFT") {
+                              setVideoOutputFormat("mp4");
+                            }
+                          }}
+                          className={`rounded-xl border px-3 py-3 text-left transition ${
+                            selected
+                              ? "border-primary bg-primary/[0.08]"
+                              : "border-border bg-background hover:border-primary/40"
+                          }`}
+                        >
+                          <span className="block text-xs font-semibold text-foreground">
+                            {item.label}
+                          </span>
+                          <span className="mt-1 block text-[11px] text-muted-foreground">
+                            {item.hint}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {(videoWorkflow === "FRAME_TO_VIDEO" ||
+                    videoWorkflow === "FIRST_LAST_FRAME") && (
+                    <div className="grid gap-3 rounded-xl border border-border bg-surface-sunken p-3 sm:grid-cols-2">
+                      <label className="grid gap-2 text-xs font-semibold">
+                        First frame
+                        <select
+                          value={videoFirstFrameId}
+                          onChange={(event) => {
+                            setVideoFirstFrameId(event.target.value);
+                            if (!event.target.value) {
+                              setVideoLastFrameId("");
+                              setVideoWorkflow("FRAME_TO_VIDEO");
+                            }
+                          }}
+                          className="min-h-11 rounded-xl border border-input bg-background px-3"
+                        >
+                          <option value="">Choose an image…</option>
+                          {videoFrames.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      {model?.capabilities?.lastFrame === true ? (
+                        <label className="grid gap-2 text-xs font-semibold">
+                          Last frame
+                          <select
+                            value={videoLastFrameId}
+                            disabled={!videoFirstFrameId}
+                            onChange={(event) => {
+                              setVideoLastFrameId(event.target.value);
+                              setVideoWorkflow(
+                                event.target.value
+                                  ? "FIRST_LAST_FRAME"
+                                  : "FRAME_TO_VIDEO",
+                              );
+                            }}
+                            className="min-h-11 rounded-xl border border-input bg-background px-3"
+                          >
+                            <option value="">No fixed ending</option>
+                            {videoFrames
+                              .filter((item) => item.id !== videoFirstFrameId)
+                              .map((item) => (
+                                <option key={item.id} value={item.id}>
+                                  {item.name}
+                                </option>
+                              ))}
+                          </select>
+                        </label>
+                      ) : null}
+                      <label className="inline-flex cursor-pointer self-end rounded-xl border border-border px-3 py-3 text-xs font-semibold text-primary">
+                        {referenceBusy ? "Uploading…" : "Upload frame image"}
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          className="sr-only"
+                          disabled={busy || referenceBusy || !canGenerate}
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            if (file) void uploadReference(file);
+                            event.target.value = "";
+                          }}
+                        />
+                      </label>
+                    </div>
+                  )}
+
+                  {(videoWorkflow === "REFERENCE" ||
+                    videoWorkflow === "DRAFT") && (
+                    <div className="space-y-3 rounded-xl border border-border bg-surface-sunken p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-xs font-semibold">Reference board</p>
+                          <p className="mt-1 text-[11px] text-muted-foreground">
+                            Multi-select assets. Their visible order becomes the
+                            provider Image / Video / Audio reference order.
+                          </p>
+                        </div>
+                        <span className="text-[11px] tabular-nums text-muted-foreground">
+                          {videoSources.length} source
+                          {videoSources.length === 1 ? "" : "s"}
+                        </span>
+                      </div>
+
+                      {model?.capabilities?.referenceImages === true ? (
+                        <label className="grid gap-2 text-xs font-semibold">
+                          Images · up to {maxVideoReferenceImages}
+                          <select
+                            multiple
+                            size={Math.min(5, Math.max(3, videoFrames.length))}
+                            value={videoReferenceImageIds}
+                            onChange={(event) =>
+                              setVideoReferenceImageIds(
+                                Array.from(event.currentTarget.selectedOptions)
+                                  .map((option) => option.value)
+                                  .slice(0, maxVideoReferenceImages),
+                              )
+                            }
+                            className="min-h-24 rounded-xl border border-input bg-background px-3 py-2"
+                          >
+                            {videoFrames.map((item) => (
+                              <option key={item.id} value={item.id}>
+                                {item.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
+
+                      {model?.capabilities?.referenceVideo === true ? (
+                        <label className="grid gap-2 text-xs font-semibold">
+                          Videos · up to {maxVideoReferenceVideos}
+                          <select
+                            multiple
+                            size={Math.min(
+                              5,
+                              Math.max(3, videoReferences.length),
+                            )}
+                            value={videoReferenceVideoIds}
+                            onChange={(event) =>
+                              setVideoReferenceVideoIds(
+                                Array.from(event.currentTarget.selectedOptions)
+                                  .map((option) => option.value)
+                                  .slice(0, maxVideoReferenceVideos),
+                              )
+                            }
+                            className="min-h-24 rounded-xl border border-input bg-background px-3 py-2"
+                          >
+                            {videoReferences.map((item) => (
+                              <option key={item.id} value={item.id}>
+                                {item.name}
+                                {item.durationMs
+                                  ? ` · ${(item.durationMs / 1000).toFixed(1)}s`
+                                  : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
+
+                      {model?.capabilities?.referenceAudio === true ? (
+                        <label className="grid gap-2 text-xs font-semibold">
+                          Audio · up to {maxVideoReferenceAudio}
+                          <select
+                            multiple
+                            size={Math.min(
+                              5,
+                              Math.max(3, videoAudioReferences.length),
+                            )}
+                            value={videoReferenceAudioIds}
+                            onChange={(event) =>
+                              setVideoReferenceAudioIds(
+                                Array.from(event.currentTarget.selectedOptions)
+                                  .map((option) => option.value)
+                                  .slice(0, maxVideoReferenceAudio),
+                              )
+                            }
+                            className="min-h-24 rounded-xl border border-input bg-background px-3 py-2"
+                          >
+                            {videoAudioReferences.map((item) => (
+                              <option key={item.id} value={item.id}>
+                                {item.name}
+                                {item.durationMs
+                                  ? ` · ${(item.durationMs / 1000).toFixed(1)}s`
+                                  : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
+
+                      {model?.capabilities?.audioOnlyReference !== true &&
+                      videoReferenceAudioIds.length > 0 &&
+                      videoReferenceImageIds.length === 0 &&
+                      videoReferenceVideoIds.length === 0 ? (
+                        <p className="text-xs text-destructive">
+                          This model requires an image or video alongside audio
+                          references.
+                        </p>
+                      ) : null}
+                    </div>
+                  )}
+
+                  {(videoWorkflow === "EDIT" ||
+                    videoWorkflow === "EXTEND") && (
+                    <div className="grid gap-3 rounded-xl border border-border bg-surface-sunken p-3 sm:grid-cols-2">
+                      <label className="grid gap-2 text-xs font-semibold">
+                        Source video
+                        <select
+                          value={videoSourceAssetId}
+                          onChange={(event) =>
+                            setVideoSourceAssetId(event.target.value)
+                          }
+                          className="min-h-11 rounded-xl border border-input bg-background px-3"
+                        >
+                          <option value="">Choose a library video…</option>
+                          {videoReferences.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.name}
+                              {item.durationMs
+                                ? ` · ${(item.durationMs / 1000).toFixed(1)}s`
+                                : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      {videoWorkflow === "EXTEND" ? (
+                        <label className="grid gap-2 text-xs font-semibold">
+                          Extend
+                          <select
+                            value={extensionDirection}
+                            onChange={(event) =>
+                              setExtensionDirection(
+                                event.target.value as "BEFORE" | "AFTER",
+                              )
+                            }
+                            className="min-h-11 rounded-xl border border-input bg-background px-3"
+                          >
+                            <option value="AFTER">After the source</option>
+                            <option value="BEFORE">Before the source</option>
+                          </select>
+                        </label>
+                      ) : (
+                        <div className="rounded-xl border border-dashed border-border p-3 text-xs text-muted-foreground">
+                          Seedance preserves the source duration and aspect
+                          ratio for generative edits.
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {videoWorkflow === "DRAFT_FINAL" ? (
+                    <div className="rounded-xl border border-primary/25 bg-primary/[0.06] p-3">
+                      <p className="text-xs font-semibold text-foreground">
+                        Render approved Draft at 1080p
+                      </p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        Creators will resolve the provider Draft server-side and
+                        reuse its original prompt, sources, ratio, duration,
+                        seed and audio settings.
+                      </p>
+                      <p className="mt-2 font-mono text-[10px] text-muted-foreground">
+                        Draft job: {sourceDraftJobId || "not selected"}
+                      </p>
+                    </div>
                   ) : null}
-                  <label className="inline-flex cursor-pointer rounded-xl border border-border px-3 py-2 text-xs font-semibold text-primary">
-                    {referenceBusy ? "Uploading…" : "Upload frame image"}
-                    <input
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      className="sr-only"
-                      disabled={busy || referenceBusy || !canGenerate}
-                      onChange={(event) => {
-                        const file = event.target.files?.[0];
-                        if (file) void uploadReference(file);
-                        event.target.value = "";
-                      }}
-                    />
-                  </label>
                 </div>
               ) : null}
 
@@ -1524,14 +2093,14 @@ export function GenerationStudio({
                   id="media-ratio"
                   value={selectedRatio}
                   onChange={(e) => setRatio(e.target.value)}
-                  disabled={busy || availableRatios.length === 0}
+                  disabled={
+                    busy || availableRatios.length === 0 || videoForcesAdaptive
+                  }
                   className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
                 >
                   {availableRatios.length ? (
-                    (activeMode === "VIDEO" && videoFirstFrameId
-                      ? ["adaptive"]
-                      : availableRatios
-                    ).map((r) => {
+                    (videoForcesAdaptive ? ["adaptive"] : availableRatios).map(
+                      (r) => {
                       const ratioLabels: Record<string, string> = {
                         "1:1": "1:1 · Square",
                         "16:9": "16:9 · Landscape (Standard)",
@@ -1564,7 +2133,12 @@ export function GenerationStudio({
                   id="media-resolution"
                   value={selectedResolution}
                   onChange={(e) => setResolution(e.target.value)}
-                  disabled={busy || availableResolutions.length === 0}
+                  disabled={
+                    busy ||
+                    availableResolutions.length === 0 ||
+                    (activeMode === "VIDEO" &&
+                      ["DRAFT", "DRAFT_FINAL"].includes(videoWorkflow))
+                  }
                   className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
                 >
                   {availableResolutions.length ? (
@@ -1580,31 +2154,54 @@ export function GenerationStudio({
 
                 {model?.mediaKind === "VIDEO" && (
                   <>
-                    <label
-                      htmlFor="video-duration"
-                      className="block text-sm font-semibold text-foreground"
-                    >
-                      Duration
-                    </label>
-                    <select
-                      id="video-duration"
-                      value={selectedDuration}
-                      onChange={(e) => setDuration(e.target.value)}
-                      disabled={busy || availableDurations.length === 0}
-                      className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
-                    >
-                      {availableDurations.length ? (
-                        availableDurations.map((value) => (
-                          <option key={value} value={value}>
-                            {value} seconds
-                          </option>
-                        ))
-                      ) : (
-                        <option>No supported durations advertised</option>
-                      )}
-                    </select>
+                    {videoWorkflow === "EDIT" ? (
+                      <div className="rounded-xl border border-border bg-card px-3 py-3">
+                        <p className="text-sm font-semibold text-foreground">
+                          Duration
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Match source clip
+                        </p>
+                      </div>
+                    ) : videoWorkflow === "DRAFT_FINAL" ? (
+                      <div className="rounded-xl border border-border bg-card px-3 py-3">
+                        <p className="text-sm font-semibold text-foreground">
+                          Duration
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Reused from the approved Draft
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        <label
+                          htmlFor="video-duration"
+                          className="block text-sm font-semibold text-foreground"
+                        >
+                          Duration
+                        </label>
+                        <select
+                          id="video-duration"
+                          value={selectedDuration}
+                          onChange={(e) => setDuration(e.target.value)}
+                          disabled={busy || availableDurations.length === 0}
+                          className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
+                        >
+                          {availableDurations.length ? (
+                            availableDurations.map((value) => (
+                              <option key={value} value={value}>
+                                {value} seconds
+                              </option>
+                            ))
+                          ) : (
+                            <option>No supported durations advertised</option>
+                          )}
+                        </select>
+                      </>
+                    )}
 
-                    {model.capabilities?.generateAudio === true ? (
+                    {model.capabilities?.generateAudio === true &&
+                    videoWorkflow !== "DRAFT_FINAL" ? (
                       <label className="flex items-center gap-3 rounded-xl border border-border bg-card px-3 py-3 text-sm font-medium text-foreground">
                         <input
                           type="checkbox"
@@ -1616,6 +2213,40 @@ export function GenerationStudio({
                           className="size-4 accent-primary"
                         />
                         Generate synchronized audio
+                      </label>
+                    ) : null}
+
+                    {model.capabilities?.outputFormatMov === true ? (
+                      <label className="grid gap-2 text-sm font-semibold text-foreground">
+                        Output container
+                        <select
+                          value={videoOutputFormat}
+                          onChange={(event) =>
+                            setVideoOutputFormat(
+                              event.target.value as "mp4" | "mov",
+                            )
+                          }
+                          disabled={busy}
+                          className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
+                        >
+                          <option value="mp4">MP4 · playback / sharing</option>
+                          <option value="mov">MOV · editing / extension</option>
+                        </select>
+                      </label>
+                    ) : null}
+
+                    {model.capabilities?.returnLastFrame === true ? (
+                      <label className="flex items-center gap-3 rounded-xl border border-border bg-card px-3 py-3 text-sm font-medium text-foreground">
+                        <input
+                          type="checkbox"
+                          checked={returnLastFrame}
+                          onChange={(event) =>
+                            setReturnLastFrame(event.target.checked)
+                          }
+                          disabled={busy}
+                          className="size-4 accent-primary"
+                        />
+                        Save final frame for “Continue scene”
                       </label>
                     ) : null}
                   </>
@@ -1714,13 +2345,19 @@ export function GenerationStudio({
               !canGenerate ||
               !isConfiguredForMode ||
               !model ||
-              (activeMode === "VOICE" ? !voiceText.trim() : !prompt.trim()) ||
+              (activeMode === "VOICE"
+                ? !voiceText.trim()
+                : activeMode === "VIDEO" && videoWorkflow === "DRAFT_FINAL"
+                  ? false
+                  : !prompt.trim()) ||
               (activeMode === "VOICE" &&
                 (selectedVoiceKey === "" || activeRequiredCredits === null)) ||
               (activeMode !== "VOICE" &&
                 (!selectedRatio || !selectedResolution)) ||
               (model.mediaKind === "VIDEO" &&
-                (!selectedDuration || activeRequiredCredits === null)) ||
+                (!videoRequestReady ||
+                  !selectedDuration ||
+                  activeRequiredCredits === null)) ||
               (activeRequiredCredits !== null &&
                 BigInt(data?.balance ?? "0") < activeRequiredCredits)
             }
@@ -1879,9 +2516,11 @@ export function GenerationStudio({
                         className="mt-2 inline-flex min-h-10 items-center text-sm font-semibold text-primary"
                       >
                         Download{" "}
-                        {asset.mimeType.startsWith("video/")
-                          ? "MP4"
-                          : asset.mimeType.startsWith("audio/")
+                        {asset.mimeType === "video/quicktime"
+                          ? "MOV"
+                          : asset.mimeType.startsWith("video/")
+                            ? "MP4"
+                            : asset.mimeType.startsWith("audio/")
                             ? "MP3"
                             : asset.mimeType === "image/jpeg"
                               ? "JPEG"
@@ -1907,6 +2546,55 @@ export function GenerationStudio({
                           Edit video →
                         </Link>
                       ) : null}
+                      {asset.mimeType.startsWith("video/") &&
+                      job.status === "SUCCEEDED" ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              focusVideoWorkflow("EDIT", {
+                                sourceAssetId: asset.id,
+                                providerModelId:
+                                  job.providerModel.providerModelId,
+                              })
+                            }
+                            className="ml-4 inline-flex min-h-10 items-center text-sm font-semibold text-primary"
+                          >
+                            AI Edit →
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              focusVideoWorkflow("EXTEND", {
+                                sourceAssetId: asset.id,
+                                providerModelId:
+                                  job.providerModel.providerModelId,
+                              })
+                            }
+                            className="ml-4 inline-flex min-h-10 items-center text-sm font-semibold text-primary"
+                          >
+                            Extend →
+                          </button>
+                        </>
+                      ) : null}
+                      {job.providerModel.mediaKind === "VIDEO" &&
+                      asset.mimeType.startsWith("image/") &&
+                      asset.generationOutputIndex === 1 &&
+                      job.status === "SUCCEEDED" ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            focusVideoWorkflow("FRAME_TO_VIDEO", {
+                              firstFrameAssetId: asset.id,
+                              providerModelId:
+                                job.providerModel.providerModelId,
+                            })
+                          }
+                          className="ml-4 inline-flex min-h-10 items-center text-sm font-semibold text-primary"
+                        >
+                          Continue scene →
+                        </button>
+                      ) : null}
                     </div>
                   ))}
                   {job.errorMessage ? (
@@ -1921,6 +2609,33 @@ export function GenerationStudio({
                       your history and ask support to review it before starting
                       another attempt.
                     </p>
+                  ) : null}
+                  {job.status === "SUCCEEDED" &&
+                  job.videoWorkflow === "DRAFT" &&
+                  job.draftExpiresAt ? (
+                    <div className="mt-3 rounded-xl border border-primary/25 bg-primary/[0.06] p-3">
+                      <p className="text-xs font-semibold text-foreground">
+                        Draft approved?
+                      </p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        Final rendering is a separately quoted 1080p generation.
+                        Draft expires {new Date(job.draftExpiresAt).toLocaleString()}.
+                      </p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="mt-2"
+                        onClick={() =>
+                          focusVideoWorkflow("DRAFT_FINAL", {
+                            draftJobId: job.id,
+                            providerModelId:
+                              job.providerModel.providerModelId,
+                          })
+                        }
+                      >
+                        Quote 1080p final
+                      </Button>
+                    </div>
                   ) : null}
                   <p className="mt-2 text-xs tabular-nums text-muted-foreground">
                     {job.status === "SUCCEEDED"

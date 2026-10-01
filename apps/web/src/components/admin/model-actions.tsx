@@ -12,6 +12,46 @@ import { useEffect, useId, useRef, useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
 
+function defaultSeedanceUsageRates(
+  providerModelId?: string,
+): UsageRate[] {
+  if (providerModelId === "dreamina-seedance-2-0-mini-260615")
+    return [
+      { resolution: "480p", workflow: "GENERATE", microUsdPerThousandTokens: "3500" },
+      { resolution: "720p", workflow: "GENERATE", microUsdPerThousandTokens: "3500" },
+      { resolution: "480p", workflow: "VIDEO_INPUT", microUsdPerThousandTokens: "2100" },
+      { resolution: "720p", workflow: "VIDEO_INPUT", microUsdPerThousandTokens: "2100" },
+    ];
+  if (providerModelId === "dreamina-seedance-2-0-fast-260128")
+    return [
+      { resolution: "480p", workflow: "GENERATE", microUsdPerThousandTokens: "5600" },
+      { resolution: "720p", workflow: "GENERATE", microUsdPerThousandTokens: "5600" },
+      { resolution: "480p", workflow: "VIDEO_INPUT", microUsdPerThousandTokens: "3300" },
+      { resolution: "720p", workflow: "VIDEO_INPUT", microUsdPerThousandTokens: "3300" },
+    ];
+  if (providerModelId === "dreamina-seedance-2-0-260128")
+    return [
+      { resolution: "480p", workflow: "GENERATE", microUsdPerThousandTokens: "7000" },
+      { resolution: "720p", workflow: "GENERATE", microUsdPerThousandTokens: "7000" },
+      { resolution: "1080p", workflow: "GENERATE", microUsdPerThousandTokens: "7700" },
+      { resolution: "4K", workflow: "GENERATE", microUsdPerThousandTokens: "4000" },
+      { resolution: "480p", workflow: "VIDEO_INPUT", microUsdPerThousandTokens: "4300" },
+      { resolution: "720p", workflow: "VIDEO_INPUT", microUsdPerThousandTokens: "4300" },
+      { resolution: "1080p", workflow: "VIDEO_INPUT", microUsdPerThousandTokens: "4700" },
+      { resolution: "4K", workflow: "VIDEO_INPUT", microUsdPerThousandTokens: "2400" },
+    ];
+  if (providerModelId === "dreamina-seedance-2-5-260628")
+    return [
+      { resolution: "480p", workflow: "GENERATE", microUsdPerThousandTokens: "10700" },
+      { resolution: "720p", workflow: "GENERATE", microUsdPerThousandTokens: "10700" },
+      { resolution: "1080p", workflow: "GENERATE", microUsdPerThousandTokens: "11700" },
+      { resolution: "480p", workflow: "VIDEO_INPUT", microUsdPerThousandTokens: "6400" },
+      { resolution: "720p", workflow: "VIDEO_INPUT", microUsdPerThousandTokens: "6400" },
+      { resolution: "1080p", workflow: "VIDEO_INPUT", microUsdPerThousandTokens: "7000" },
+    ];
+  return [];
+}
+
 export function ModelActions({
   modelId,
   providerModelId,
@@ -87,30 +127,7 @@ export function ModelActions({
     typeof currentUsageRates === "object" &&
     "rates" in currentUsageRates
       ? (currentUsageRates as { rates: UsageRate[] }).rates
-      : providerModelId?.startsWith("dreamina-seedance-2-5-")
-        ? ([
-            {
-              resolution: "720p",
-              workflow: "GENERATE",
-              microUsdPerThousandTokens: "10700",
-            },
-            {
-              resolution: "1080p",
-              workflow: "GENERATE",
-              microUsdPerThousandTokens: "11700",
-            },
-            {
-              resolution: "720p",
-              workflow: "VIDEO_INPUT",
-              microUsdPerThousandTokens: "6400",
-            },
-            {
-              resolution: "1080p",
-              workflow: "VIDEO_INPUT",
-              microUsdPerThousandTokens: "7000",
-            },
-          ] as UsageRate[])
-        : [];
+      : defaultSeedanceUsageRates(providerModelId);
   const [usageRows, setUsageRows] = useState<UsageRate[]>(initialRates);
   const initialTextTiers =
     currentUsageRates &&
@@ -245,7 +262,9 @@ export function ModelActions({
           ...(mediaKind === "VIDEO" && pricingDimension === "TOKEN"
             ? {
                 usageRates: {
-                  estimator: "byteplus-video-v1",
+                  estimator: providerModelId?.startsWith("dreamina-seedance-2-")
+                    ? "byteplus-video-v2"
+                    : "byteplus-video-v1",
                   rates: usageRows,
                 },
               }
@@ -656,10 +675,10 @@ export function ModelActions({
                       Completion token rates
                     </legend>
                     <p className="text-xs text-muted-foreground">
-                      Micro-USD per 1,000 tokens. 10700 means $10.70 per million
-                      tokens. Defaults are Seedance 2.5 rates; verify your model
-                      contract before publishing. Audio has no automatic
-                      surcharge.
+                      Micro-USD per 1,000 completion tokens. Seedance 2.x
+                      defaults are model-specific list rates. Promotions and
+                      negotiated discounts should be published as separate
+                      effective price versions. Audio has no automatic surcharge.
                     </p>
                     {usageRows.map((row, index) => (
                       <div

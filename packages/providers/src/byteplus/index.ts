@@ -138,17 +138,52 @@ export const bytePlusImageInputSchema = z
     }
   });
 
+const bytePlusVideoSourceSchema = z
+  .object({
+    role: z.enum([
+      "FIRST_FRAME",
+      "LAST_FRAME",
+      "REFERENCE_IMAGE",
+      "REFERENCE_VIDEO",
+      "REFERENCE_AUDIO",
+      "SOURCE_VIDEO",
+    ]),
+    url: httpsUrlSchema,
+  })
+  .strict();
+
 export const bytePlusVideoInputSchema = z
   .object({
-    prompt: z.string().trim().min(1),
+    workflow: z
+      .enum([
+        "GENERATE",
+        "FRAME_TO_VIDEO",
+        "FIRST_LAST_FRAME",
+        "REFERENCE",
+        "EDIT",
+        "EXTEND",
+        "DRAFT",
+        "DRAFT_FINAL",
+      ])
+      .default("GENERATE"),
+    prompt: z.string().trim().max(4000).default(""),
+    sources: z.array(bytePlusVideoSourceSchema).max(50).default([]),
     aspectRatio: z
       .enum(["16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "adaptive"])
       .default("16:9"),
-    resolution: z.enum(["480p", "720p", "1080p"]).default("720p"),
-    durationSeconds: z.number().int().min(4).max(30).default(5),
+    resolution: z.enum(["480p", "720p", "1080p", "4K"]).default("720p"),
+    durationSeconds: z.number().int().min(-1).max(30).default(5),
     generateAudio: z.boolean().default(false),
     watermark: z.boolean().default(false),
+    outputFormat: z.enum(["mp4", "mov"]).default("mp4"),
+    returnLastFrame: z.boolean().default(true),
     seed: z.number().int().min(-1).max(2_147_483_647).optional(),
+    draftProviderTaskId: providerIdentifierSchema.optional(),
+    extensionDirection: z.enum(["BEFORE", "AFTER"]).optional(),
+
+    // V1 compatibility. The worker converts historical jobs to sources before
+    // submission, but keeping these inputs accepted protects direct adapter
+    // callers and old provider tests during the transition.
     firstFrameImage: z
       .string()
       .startsWith("data:image/")
@@ -159,17 +194,62 @@ export const bytePlusVideoInputSchema = z
       .startsWith("data:image/")
       .max(42 * 1024 * 1024)
       .optional(),
-    referenceVideoUrl: z.url().startsWith("https://").optional(),
+    referenceVideoUrl: httpsUrlSchema.optional(),
   })
-  .refine(
-    (input) =>
-      !input.referenceVideoUrl ||
-      (!input.firstFrameImage && !input.lastFrameImage),
-    {
-      path: ["referenceVideoUrl"],
-      message: "Video reference cannot be combined with image frames.",
-    },
-  );
+  .superRefine((input, ctx) => {
+    if (input.workflow === "DRAFT_FINAL" && !input.draftProviderTaskId) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["draftProviderTaskId"],
+        message: "Draft final rendering requires a provider Draft task.",
+      });
+    }
+    if (input.workflow !== "DRAFT_FINAL" && input.prompt.length === 0) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["prompt"],
+        message: "A video prompt is required.",
+      });
+    }
+    if (input.workflow === "EDIT") {
+      if (input.aspectRatio !== "adaptive" || input.durationSeconds !== -1) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["durationSeconds"],
+          message: "Editing requires adaptive ratio and duration -1.",
+        });
+      }
+    }
+    if (input.lastFrameImage && !input.firstFrameImage) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["lastFrameImage"],
+        message: "A legacy last frame requires a first frame.",
+      });
+    }
+    if (
+      input.referenceVideoUrl &&
+      (input.firstFrameImage || input.lastFrameImage)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["referenceVideoUrl"],
+        message: "Legacy reference video cannot be combined with frame inputs.",
+      });
+    }
+    if (
+      input.sources.length > 0 &&
+      (input.firstFrameImage ||
+        input.lastFrameImage ||
+        input.referenceVideoUrl)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["sources"],
+        message: "V2 sources cannot be combined with legacy source fields.",
+      });
+    }
+  });
 
 export const bytePlusVoiceInputSchema = z.object({
   text: z.string().trim().min(1),
@@ -311,27 +391,167 @@ export const VERIFIED_BYTEPLUS_MODELS: readonly ProviderModelDescriptor[] = [
     },
   },
   {
-    id: "dreamina-seedance-2-5-260628",
+    id: "dreamina-seedance-2-0-mini-260615",
     provider: "byteplus",
-    displayName: "Seedance 2.5",
-    description: "Cinematic video generation with optional synchronized audio.",
+    displayName: "Seedance 2.0 Mini",
+    description:
+      "Cost-efficient Seedance video generation for drafts, iteration, references, editing and extension.",
     mediaKind: "video",
     capabilities: {
       "aspectRatio:16:9": true,
       "aspectRatio:9:16": true,
       "aspectRatio:1:1": true,
+      "aspectRatio:4:3": true,
+      "aspectRatio:3:4": true,
+      "aspectRatio:21:9": true,
       "aspectRatio:adaptive": true,
+      "resolution:480p": true,
       "resolution:720p": true,
-      "resolution:1080p": true,
-      "durationSeconds:5": true,
-      "durationSeconds:10": true,
       generateAudio: true,
       firstFrame: true,
       lastFrame: true,
+      referenceImages: true,
       referenceVideo: true,
+      referenceAudio: true,
+      maxReferenceImages: 9,
+      maxReferenceVideos: 3,
+      maxReferenceAudio: 3,
+      maxReferenceVideoDurationSeconds: 15,
+      maxReferenceAudioDurationSeconds: 15,
+      audioOnlyReference: false,
+      editVideo: true,
+      extendVideo: true,
+      draftMode: false,
+      outputFormatMov: false,
+      returnLastFrame: true,
+      minimumDurationSeconds: 4,
+      maximumDurationSeconds: 15,
+      fps: 24,
+      concurrencyLimit: 10,
+    },
+  },
+  {
+    id: "dreamina-seedance-2-0-fast-260128",
+    provider: "byteplus",
+    displayName: "Seedance 2.0 Fast",
+    description:
+      "Fast Seedance iteration with multimodal references, synchronized audio, editing and extension.",
+    mediaKind: "video",
+    capabilities: {
+      "aspectRatio:16:9": true,
+      "aspectRatio:9:16": true,
+      "aspectRatio:1:1": true,
+      "aspectRatio:4:3": true,
+      "aspectRatio:3:4": true,
+      "aspectRatio:21:9": true,
+      "aspectRatio:adaptive": true,
+      "resolution:480p": true,
+      "resolution:720p": true,
+      generateAudio: true,
+      firstFrame: true,
+      lastFrame: true,
+      referenceImages: true,
+      referenceVideo: true,
+      referenceAudio: true,
+      maxReferenceImages: 9,
+      maxReferenceVideos: 3,
+      maxReferenceAudio: 3,
+      maxReferenceVideoDurationSeconds: 15,
+      maxReferenceAudioDurationSeconds: 15,
+      audioOnlyReference: false,
+      editVideo: true,
+      extendVideo: true,
+      draftMode: false,
+      outputFormatMov: false,
+      returnLastFrame: true,
+      minimumDurationSeconds: 4,
+      maximumDurationSeconds: 15,
+      fps: 24,
+      concurrencyLimit: 10,
+    },
+  },
+  {
+    id: "dreamina-seedance-2-0-260128",
+    provider: "byteplus",
+    displayName: "Seedance 2.0",
+    description:
+      "Production Seedance video generation with 1080p/4K output, references, editing and extension.",
+    mediaKind: "video",
+    capabilities: {
+      "aspectRatio:16:9": true,
+      "aspectRatio:9:16": true,
+      "aspectRatio:1:1": true,
+      "aspectRatio:4:3": true,
+      "aspectRatio:3:4": true,
+      "aspectRatio:21:9": true,
+      "aspectRatio:adaptive": true,
+      "resolution:480p": true,
+      "resolution:720p": true,
+      "resolution:1080p": true,
+      "resolution:4K": true,
+      generateAudio: true,
+      firstFrame: true,
+      lastFrame: true,
+      referenceImages: true,
+      referenceVideo: true,
+      referenceAudio: true,
+      maxReferenceImages: 9,
+      maxReferenceVideos: 3,
+      maxReferenceAudio: 3,
+      maxReferenceVideoDurationSeconds: 15,
+      maxReferenceAudioDurationSeconds: 15,
+      audioOnlyReference: false,
+      editVideo: true,
+      extendVideo: true,
+      draftMode: false,
+      outputFormatMov: false,
+      returnLastFrame: true,
+      minimumDurationSeconds: 4,
+      maximumDurationSeconds: 15,
+      fps: 24,
+      concurrencyLimit: 10,
+      concurrencyLimit4K: 1,
+    },
+  },
+  {
+    id: "dreamina-seedance-2-5-260628",
+    provider: "byteplus",
+    displayName: "Seedance 2.5",
+    description:
+      "Director-grade 30-second multimodal video generation, Draft review, editing and extension.",
+    mediaKind: "video",
+    capabilities: {
+      "aspectRatio:16:9": true,
+      "aspectRatio:9:16": true,
+      "aspectRatio:1:1": true,
+      "aspectRatio:4:3": true,
+      "aspectRatio:3:4": true,
+      "aspectRatio:21:9": true,
+      "aspectRatio:adaptive": true,
+      "resolution:480p": true,
+      "resolution:720p": true,
+      "resolution:1080p": true,
+      generateAudio: true,
+      firstFrame: true,
+      lastFrame: true,
+      referenceImages: true,
+      referenceVideo: true,
+      referenceAudio: true,
+      maxReferenceImages: 30,
+      maxReferenceVideos: 10,
+      maxReferenceAudio: 10,
+      maxReferenceVideoDurationSeconds: 30,
+      maxReferenceAudioDurationSeconds: 30,
+      audioOnlyReference: true,
+      editVideo: true,
+      extendVideo: true,
+      draftMode: true,
+      outputFormatMov: true,
+      returnLastFrame: true,
       minimumDurationSeconds: 4,
       maximumDurationSeconds: 30,
       fps: 24,
+      concurrencyLimit: 10,
     },
   },
   {
@@ -524,7 +744,12 @@ const videoCreateResponseSchema = z.object({ id: providerIdentifierSchema });
 const videoTaskResponseSchema = z.object({
   id: providerIdentifierSchema,
   status: z.string().min(1),
-  content: z.object({ video_url: httpsUrlSchema.optional() }).optional(),
+  content: z
+    .object({
+      video_url: httpsUrlSchema.optional(),
+      last_frame_url: httpsUrlSchema.optional(),
+    })
+    .optional(),
   error: z
     .object({
       code: providerErrorCodeSchema.optional(),
@@ -1150,56 +1375,134 @@ export function createBytePlusProvider(
               },
             );
           }
+          const legacySources = [
+            ...(input.data.firstFrameImage
+              ? [
+                  {
+                    role: "FIRST_FRAME" as const,
+                    url: input.data.firstFrameImage,
+                  },
+                ]
+              : []),
+            ...(input.data.lastFrameImage
+              ? [
+                  {
+                    role: "LAST_FRAME" as const,
+                    url: input.data.lastFrameImage,
+                  },
+                ]
+              : []),
+            ...(input.data.referenceVideoUrl
+              ? [
+                  {
+                    role: "REFERENCE_VIDEO" as const,
+                    url: input.data.referenceVideoUrl,
+                  },
+                ]
+              : []),
+          ];
+          const sources =
+            input.data.sources.length > 0 ? input.data.sources : legacySources;
+          const mediaContent = sources.map((source) => {
+            switch (source.role) {
+              case "FIRST_FRAME":
+                return {
+                  type: "image_url",
+                  image_url: { url: source.url },
+                  role: "first_frame",
+                };
+              case "LAST_FRAME":
+                return {
+                  type: "image_url",
+                  image_url: { url: source.url },
+                  role: "last_frame",
+                };
+              case "REFERENCE_IMAGE":
+                return {
+                  type: "image_url",
+                  image_url: { url: source.url },
+                  role: "reference_image",
+                };
+              case "REFERENCE_AUDIO":
+                return {
+                  type: "audio_url",
+                  audio_url: { url: source.url },
+                  role: "reference_audio",
+                };
+              case "REFERENCE_VIDEO":
+              case "SOURCE_VIDEO":
+                return {
+                  type: "video_url",
+                  video_url: { url: source.url },
+                  role: "reference_video",
+                };
+            }
+          });
+          const hasReferenceMedia = sources.some((source) =>
+            ["REFERENCE_IMAGE", "REFERENCE_VIDEO", "REFERENCE_AUDIO"].includes(
+              source.role,
+            ),
+          );
+          const omniTaskType =
+            input.data.workflow === "EDIT"
+              ? "edit"
+              : input.data.workflow === "EXTEND"
+                ? "extend"
+                : input.data.workflow === "REFERENCE" ||
+                    (input.data.workflow === "DRAFT" && hasReferenceMedia) ||
+                    Boolean(input.data.referenceVideoUrl)
+                  ? "reference"
+                  : undefined;
+
+          const requestBody =
+            input.data.workflow === "DRAFT_FINAL"
+              ? {
+                  model: submission.modelId,
+                  content: [
+                    {
+                      type: "draft_task",
+                      draft_task: { id: input.data.draftProviderTaskId! },
+                    },
+                  ],
+                  resolution: "1080p",
+                  output_format: input.data.outputFormat,
+                  return_last_frame: input.data.returnLastFrame,
+                  watermark: input.data.watermark,
+                }
+              : {
+                  model: submission.modelId,
+                  content: [
+                    { type: "text", text: input.data.prompt },
+                    ...mediaContent,
+                  ],
+                  ...(omniTaskType
+                    ? { omni_reference_task_type: omniTaskType }
+                    : {}),
+                  resolution:
+                    input.data.resolution === "4K"
+                      ? "4k"
+                      : input.data.resolution,
+                  ratio: input.data.aspectRatio,
+                  duration: input.data.durationSeconds,
+                  generate_audio: input.data.generateAudio,
+                  watermark: input.data.watermark,
+                  output_format: input.data.outputFormat,
+                  return_last_frame: input.data.returnLastFrame,
+                  ...(input.data.workflow === "DRAFT"
+                    ? { draft: true }
+                    : {}),
+                  ...(input.data.seed === undefined
+                    ? {}
+                    : { seed: input.data.seed }),
+                };
+
           const response = await safeFetch(
             fetchClient,
             `${baseUrl}/contents/generations/tasks`,
             {
               method: "POST",
               headers: modelArkHeaders,
-              body: JSON.stringify({
-                model: submission.modelId,
-                content: [
-                  { type: "text", text: input.data.prompt },
-                  ...(input.data.firstFrameImage
-                    ? [
-                        {
-                          type: "image_url",
-                          image_url: { url: input.data.firstFrameImage },
-                          role: "first_frame",
-                        },
-                      ]
-                    : []),
-                  ...(input.data.lastFrameImage
-                    ? [
-                        {
-                          type: "image_url",
-                          image_url: { url: input.data.lastFrameImage },
-                          role: "last_frame",
-                        },
-                      ]
-                    : []),
-                  ...(input.data.referenceVideoUrl
-                    ? [
-                        {
-                          type: "video_url",
-                          video_url: { url: input.data.referenceVideoUrl },
-                          role: "reference_video",
-                        },
-                      ]
-                    : []),
-                ],
-                ...(input.data.referenceVideoUrl
-                  ? { omni_reference_task_type: "reference" }
-                  : {}),
-                resolution: input.data.resolution,
-                ratio: input.data.aspectRatio,
-                duration: input.data.durationSeconds,
-                generate_audio: input.data.generateAudio,
-                watermark: input.data.watermark,
-                ...(input.data.seed === undefined
-                  ? {}
-                  : { seed: input.data.seed }),
-              }),
+              body: JSON.stringify(requestBody),
             },
             timeoutMs,
             idleTimeoutMs,
@@ -1400,6 +1703,7 @@ export function createBytePlusProvider(
         providerRequestId: data.id,
         status,
         outputUrls: outputUrl ? [outputUrl] : undefined,
+        lastFrameUrl: data.content?.last_frame_url,
         rawUsage: data.usage,
         errorCode:
           status === "failed"

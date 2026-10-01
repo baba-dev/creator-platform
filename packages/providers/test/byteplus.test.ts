@@ -36,6 +36,9 @@ describe("BytePlus provider adapter", () => {
       "dola-seedream-5-0-pro-260628",
       "seedream-4-5-251128",
       "seedream-4-0-250828",
+      "dreamina-seedance-2-0-mini-260615",
+      "dreamina-seedance-2-0-fast-260128",
+      "dreamina-seedance-2-0-260128",
       "dreamina-seedance-2-5-260628",
       "seed-tts-2.0",
       "dola-seed-2-1-turbo-260628",
@@ -502,6 +505,8 @@ describe("BytePlus provider adapter", () => {
       duration: 12,
       generate_audio: true,
       watermark: false,
+      output_format: "mp4",
+      return_last_frame: true,
       seed: 42,
     });
   });
@@ -558,6 +563,115 @@ describe("BytePlus provider adapter", () => {
     ).rejects.toMatchObject({ code: "INVALID_INPUT", retryable: false });
   });
 
+  it("submits ordered multimodal Seedance 2.5 reference content", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ id: "task-multimodal-1" }));
+    const provider = createBytePlusProvider({
+      ...validConfig,
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await provider.submit({
+      idempotencyKey: "video-multimodal-1",
+      modelId: "dreamina-seedance-2-5-260628",
+      mediaKind: "video",
+      input: {
+        workflow: "REFERENCE",
+        prompt: "Use Image 1, Video 1 and Audio 1",
+        sources: [
+          {
+            role: "REFERENCE_IMAGE",
+            url: "https://creator.example.com/api/provider-media/image",
+          },
+          {
+            role: "REFERENCE_VIDEO",
+            url: "https://creator.example.com/api/provider-media/video",
+          },
+          {
+            role: "REFERENCE_AUDIO",
+            url: "https://creator.example.com/api/provider-media/audio",
+          },
+        ],
+        aspectRatio: "16:9",
+        resolution: "720p",
+        durationSeconds: 8,
+        outputFormat: "mov",
+      },
+    });
+
+    const body = JSON.parse(
+      (fetchMock.mock.calls[0]![1] as RequestInit).body as string,
+    );
+    expect(body.omni_reference_task_type).toBe("reference");
+    expect(body.output_format).toBe("mov");
+    expect(body.return_last_frame).toBe(true);
+    expect(body.content).toEqual([
+      { type: "text", text: "Use Image 1, Video 1 and Audio 1" },
+      {
+        type: "image_url",
+        image_url: {
+          url: "https://creator.example.com/api/provider-media/image",
+        },
+        role: "reference_image",
+      },
+      {
+        type: "video_url",
+        video_url: {
+          url: "https://creator.example.com/api/provider-media/video",
+        },
+        role: "reference_video",
+      },
+      {
+        type: "audio_url",
+        audio_url: {
+          url: "https://creator.example.com/api/provider-media/audio",
+        },
+        role: "reference_audio",
+      },
+    ]);
+  });
+
+  it("promotes a Seedance 2.5 Draft without resending auto-reused inputs", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ id: "task-final-1" }));
+    const provider = createBytePlusProvider({
+      ...validConfig,
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await provider.submit({
+      idempotencyKey: "video-draft-final-1",
+      modelId: "dreamina-seedance-2-5-260628",
+      mediaKind: "video",
+      input: {
+        workflow: "DRAFT_FINAL",
+        prompt: "",
+        sources: [],
+        aspectRatio: "16:9",
+        resolution: "1080p",
+        durationSeconds: 5,
+        outputFormat: "mov",
+        draftProviderTaskId: "task-draft-1",
+      },
+    });
+
+    const body = JSON.parse(
+      (fetchMock.mock.calls[0]![1] as RequestInit).body as string,
+    );
+    expect(body).toEqual({
+      model: "dreamina-seedance-2-5-260628",
+      content: [
+        { type: "draft_task", draft_task: { id: "task-draft-1" } },
+      ],
+      resolution: "1080p",
+      output_format: "mov",
+      return_last_frame: true,
+      watermark: false,
+    });
+  });
+
   it("submits first and last frames with explicit BytePlus roles", async () => {
     const fetchMock = vi
       .fn()
@@ -608,7 +722,10 @@ describe("BytePlus provider adapter", () => {
         jsonResponse({
           id: "task-video-1",
           status: "succeeded",
-          content: { video_url: "https://cdn.example.com/video.mp4" },
+          content: {
+            video_url: "https://cdn.example.com/video.mp4",
+            last_frame_url: "https://cdn.example.com/last-frame.jpg",
+          },
           usage: { completion_tokens: 1 },
         }),
       );
@@ -623,6 +740,7 @@ describe("BytePlus provider adapter", () => {
     await expect(provider.getJob("task-video-1")).resolves.toMatchObject({
       status: "succeeded",
       outputUrls: ["https://cdn.example.com/video.mp4"],
+      lastFrameUrl: "https://cdn.example.com/last-frame.jpg",
     });
   });
 

@@ -53,14 +53,43 @@ type ReferenceAsset = {
   mimeType?: string;
   byteSize?: string;
 };
+type VideoWorkflow =
+  | "GENERATE"
+  | "FRAME_TO_VIDEO"
+  | "FIRST_LAST_FRAME"
+  | "REFERENCE"
+  | "EDIT"
+  | "EXTEND"
+  | "DRAFT"
+  | "DRAFT_FINAL";
+type VideoSourceRole =
+  | "FIRST_FRAME"
+  | "LAST_FRAME"
+  | "REFERENCE_IMAGE"
+  | "REFERENCE_VIDEO"
+  | "REFERENCE_AUDIO"
+  | "SOURCE_VIDEO";
+type VideoSourceInput = {
+  assetId: string;
+  role: VideoSourceRole;
+  position: number;
+};
 type Job = {
   id: string;
   status: string;
   errorMessage: string | null;
   reservedCredits: string;
   chargedCredits: string;
-  providerModel: { displayName: string; mediaKind: MediaKind };
+  providerModel: {
+    id: string;
+    providerModelId: string;
+    displayName: string;
+    mediaKind: MediaKind;
+  };
   project: ProjectOption | null;
+  createdAt?: string;
+  videoWorkflow?: VideoWorkflow | null;
+  draftExpiresAt?: string | null;
   assets: { id: string; mimeType: string }[];
 };
 type Studio = {
@@ -149,10 +178,28 @@ export function GenerationStudio({
   const [references, setReferences] = useState<ReferenceAsset[]>([]);
   const [videoFrames, setVideoFrames] = useState<ReferenceAsset[]>([]);
   const [videoReferences, setVideoReferences] = useState<ReferenceAsset[]>([]);
-  const [referenceVideoAssetId, setReferenceVideoAssetId] = useState("");
+  const [videoAudioReferences, setVideoAudioReferences] = useState<
+    ReferenceAsset[]
+  >([]);
   const [referenceAssetIds, setReferenceAssetIds] = useState<string[]>([]);
+  const [videoWorkflow, setVideoWorkflow] =
+    useState<VideoWorkflow>("GENERATE");
   const [videoFirstFrameId, setVideoFirstFrameId] = useState("");
   const [videoLastFrameId, setVideoLastFrameId] = useState("");
+  const [videoReferenceImageIds, setVideoReferenceImageIds] = useState<
+    string[]
+  >([]);
+  const [videoReferenceVideoIds, setVideoReferenceVideoIds] = useState<
+    string[]
+  >([]);
+  const [videoReferenceAudioIds, setVideoReferenceAudioIds] = useState<
+    string[]
+  >([]);
+  const [videoSourceAssetId, setVideoSourceAssetId] = useState("");
+  const [sourceDraftJobId, setSourceDraftJobId] = useState("");
+  const [videoOutputFormat, setVideoOutputFormat] =
+    useState<"mp4" | "mov">("mp4");
+  const [returnLastFrame, setReturnLastFrame] = useState(true);
   const [referenceBusy, setReferenceBusy] = useState(false);
   const [referenceUrl, setReferenceUrl] = useState("");
   const [outputCount, setOutputCount] = useState(1);

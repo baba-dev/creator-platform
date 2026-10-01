@@ -90,7 +90,11 @@ type Job = {
   createdAt?: string;
   videoWorkflow?: VideoWorkflow | null;
   draftExpiresAt?: string | null;
-  assets: { id: string; mimeType: string }[];
+  assets: {
+    id: string;
+    mimeType: string;
+    generationOutputIndex?: number | null;
+  }[];
 };
 type Studio = {
   configured: boolean;
@@ -1092,6 +1096,48 @@ export function GenerationStudio({
       setIsEnhancing(false);
     }
   }
+  function focusVideoWorkflow(
+    workflow: VideoWorkflow,
+    options?: {
+      sourceAssetId?: string;
+      firstFrameAssetId?: string;
+      draftJobId?: string;
+      providerModelId?: string;
+    },
+  ) {
+    setActiveMode("VIDEO");
+    const preferred =
+      data?.models.find(
+        (candidate) =>
+          candidate.mediaKind === "VIDEO" &&
+          candidate.providerModelId === options?.providerModelId,
+      ) ??
+      data?.models.find((candidate) => candidate.mediaKind === "VIDEO");
+    if (!preferred) {
+      setError("No enabled video model with active pricing is available.");
+      return;
+    }
+    setModelId(preferred.id);
+    setVideoWorkflow(workflow);
+    setSourceDraftJobId(options?.draftJobId ?? "");
+    setVideoSourceAssetId(options?.sourceAssetId ?? "");
+    setVideoFirstFrameId(options?.firstFrameAssetId ?? "");
+    setVideoLastFrameId("");
+    if (workflow === "DRAFT_FINAL") setResolution("1080p");
+    if (
+      workflow === "FRAME_TO_VIDEO" ||
+      workflow === "FIRST_LAST_FRAME" ||
+      workflow === "EDIT" ||
+      workflow === "EXTEND"
+    )
+      setRatio("adaptive");
+    requestAnimationFrame(() =>
+      document
+        .getElementById("create")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    );
+  }
+
 
   return (
     <section

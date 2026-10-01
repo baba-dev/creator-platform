@@ -127,6 +127,16 @@ enum AssetSourceType {
   EXTERNAL
 }
 
+enum GenerationInputRole {
+  LEGACY
+  FIRST_FRAME
+  LAST_FRAME
+  REFERENCE_IMAGE
+  REFERENCE_VIDEO
+  REFERENCE_AUDIO
+  SOURCE_VIDEO
+}
+
 enum ImageOperationStatus {
   PENDING
   PROCESSING
@@ -655,12 +665,14 @@ model GenerationInputAsset {
   generationJobId String
   assetId         String
   position        Int
+  role            GenerationInputRole @default(LEGACY)
   createdAt       DateTime      @default(now())
   generationJob   GenerationJob @relation(fields: [generationJobId], references: [id], onDelete: Cascade)
   asset           Asset         @relation(fields: [assetId], references: [id], onDelete: Restrict)
 
   @@id([generationJobId, assetId])
   @@unique([generationJobId, position])
+  @@index([generationJobId, role, position])
   @@index([assetId])
 }
 

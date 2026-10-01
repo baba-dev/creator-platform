@@ -202,10 +202,7 @@ export async function resetAdminManagedUserPassword(input: {
       },
     });
     if (!user) {
-      throw new AdminUserCredentialError(
-        "USER_NOT_FOUND",
-        "User not found.",
-      );
+      throw new AdminUserCredentialError("USER_NOT_FOUND", "User not found.");
     }
 
     assertCanResetTargetPassword(input.actor, user.platformRole);

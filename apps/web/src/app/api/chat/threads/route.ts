@@ -1,3 +1,4 @@
+import { hasOrganizationPermission } from "@aiwa/authz";
 import { db } from "@aiwa/db";
 import { chatThreadCreateSchema } from "@aiwa/validation";
 import { NextResponse } from "next/server";
@@ -13,6 +14,7 @@ export async function GET(request: Request) {
       { status: 401 },
     );
   }
+
   const url = new URL(request.url);
   const organizationId = url.searchParams.get("organizationId");
   if (!organizationId) {
@@ -60,6 +62,7 @@ export async function GET(request: Request) {
       },
     },
     orderBy: { updatedAt: "desc" },
+    take: 100,
   });
 
   return NextResponse.json(
@@ -72,6 +75,7 @@ export async function POST(request: Request) {
   if (!hasTrustedMutationOrigin(request)) {
     return NextResponse.json({ error: "Origin not allowed." }, { status: 403 });
   }
+
   const session = await getRequestSession(request.headers);
   if (!session) {
     return NextResponse.json(
@@ -93,10 +97,63 @@ export async function POST(request: Request) {
       },
       include: { organization: true },
     });
-    if (!membership || membership.organization.status !== "ACTIVE") {
+    if (
+      !membership ||
+      membership.organization.status !== "ACTIVE" ||
+      !hasOrganizationPermission(membership.role, "generation:create")
+    ) {
       return NextResponse.json(
         { error: "Workspace access denied." },
         { status: 403 },
+      );
+    }
+
+    if (input.projectId) {
+      const project = await db.project.findFirst({
+        where: {
+          id: input.projectId,
+          organizationId: input.organizationId,
+          archivedAt: null,
+        },
+        select: { id: true },
+      });
+      if (!project) {
+        return NextResponse.json(
+          { error: "Project is unavailable in this workspace." },
+          { status: 400 },
+        );
+      }
+    }
+
+    if (input.personaId) {
+      const persona = await db.persona.findFirst({
+        where: {
+          id: input.personaId,
+          organizationId: input.organizationId,
+        },
+        select: { id: true },
+      });
+      if (!persona) {
+        return NextResponse.json(
+          { error: "Persona is unavailable in this workspace." },
+          { status: 400 },
+        );
+      }
+    }
+
+    const model = await db.providerModel.findFirst({
+      where: {
+        provider: "BYTEPLUS",
+        providerModelId: input.modelId,
+        mediaKind: "TEXT",
+        enabled: true,
+      },
+      select: { id: true },
+    });
+    if (!model) {
+      return NextResponse.json(
+        { error: "Selected text model is unavailable." },
+        { status: 400 },
       );
     }
 
@@ -107,7 +164,7 @@ export async function POST(request: Request) {
         createdById: session.user.id,
         personaId: input.personaId ?? null,
         title: input.title,
-        modelId: input.modelId ?? "doubao-seed-character-260628",
+        modelId: input.modelId,
         systemPrompt: input.systemPrompt ?? null,
       },
       include: {

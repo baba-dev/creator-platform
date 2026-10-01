@@ -381,7 +381,7 @@ export async function executeTextGeneration(
               ),
             ),
         ),
-      );
+    );
   const actualCost = price.providerCostMicroUsd * actualUnits;
   const configuredCredits = priceCredits({
     ...price,

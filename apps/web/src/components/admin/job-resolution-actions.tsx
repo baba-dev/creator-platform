@@ -24,6 +24,7 @@ interface JobResolutionActionsProps {
     releaseReason?: string;
     canRefund: boolean;
     refundReason?: string;
+    maxRefundCredits?: string;
   };
 }
 

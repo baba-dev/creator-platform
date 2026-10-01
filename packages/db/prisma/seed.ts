@@ -556,7 +556,6 @@ async function main(): Promise<void> {
         description: model.description,
         mediaKind: model.mediaKind,
         capabilities: model.capabilities,
-        enabled: model.enabled ?? true,
         ...(model.negotiatedDiscountBps === undefined
           ? {}
           : { negotiatedDiscountBps: model.negotiatedDiscountBps }),
@@ -631,7 +630,6 @@ async function main(): Promise<void> {
         "task:prompt-enhancement": true,
         instructMode: true,
       },
-      enabled: true,
     },
     create: {
       provider: "NVIDIA",

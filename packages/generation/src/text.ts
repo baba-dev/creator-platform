@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import {
   calculateBillableUnits,
   estimateGeneration,
+  textProviderCostMicroUsd,
   reserveCreditsForJob,
   captureCreditsForJob,
   releaseOrRefundCredits,
@@ -77,6 +78,18 @@ export async function executeTextGeneration(
         where: { idempotencyKey: key },
       });
       if (existing) {
+        const samePayload =
+          existing.projectId === (input.projectId ?? null) &&
+          existing.templateId === templateId &&
+          existing.providerModelId === input.modelId &&
+          existing.priceVersionId === input.priceVersionId &&
+          JSON.stringify(existing.requestPayload) === JSON.stringify(payload);
+        if (!samePayload) {
+          throw new GenerationError(
+            "Request key was already used for different inputs.",
+            409,
+          );
+        }
         if (
           existing.status === "SUCCEEDED" &&
           existing.outputPayload &&
@@ -106,16 +119,18 @@ export async function executeTextGeneration(
           };
         }
         if (
-          existing.projectId !== (input.projectId ?? null) ||
-          existing.templateId !== templateId ||
-          existing.providerModelId !== input.modelId ||
-          existing.priceVersionId !== input.priceVersionId
+          existing.status === "FAILED" ||
+          existing.status === "CANCELLED"
         ) {
           throw new GenerationError(
-            "Request key was already used for different inputs.",
+            "This request key belongs to a finalized generation. Submit a new request key to retry.",
             409,
           );
         }
+        throw new GenerationError(
+          "This generation request is already being processed.",
+          409,
+        );
       }
 
       await assertAssignableProject(tx, input.organizationId, input.projectId);
@@ -344,6 +359,7 @@ export async function executeTextGeneration(
         prompt_tokens?: number;
         completion_tokens?: number;
         total_tokens?: number;
+        prompt_tokens_details?: { cached_tokens?: number };
       }
     | undefined;
 
@@ -381,7 +397,22 @@ export async function executeTextGeneration(
             ),
         ),
       );
-  const actualCost = price.providerCostMicroUsd * actualUnits;
+  const cachedPromptTokens =
+    rawUsage?.prompt_tokens_details?.cached_tokens ?? 0;
+  const hasTextRateTable =
+    price.usageRates &&
+    typeof price.usageRates === "object" &&
+    !Array.isArray(price.usageRates) &&
+    (price.usageRates as Record<string, unknown>).estimator ===
+      "byteplus-text-v1";
+  const actualCost =
+    usageIsReliable && hasTextRateTable
+      ? textProviderCostMicroUsd(price.usageRates, {
+          promptTokens: promptTokens as number,
+          completionTokens: completionTokens as number,
+          cachedPromptTokens,
+        })
+      : price.providerCostMicroUsd * actualUnits;
   const configuredCredits = priceCredits({
     ...price,
     providerCostMicroUsd: actualCost,
@@ -399,6 +430,25 @@ export async function executeTextGeneration(
     : undefined;
 
   await db.$transaction(async (tx) => {
+    const extraCredits =
+      actualCredits > job.reservedCredits
+        ? actualCredits - job.reservedCredits
+        : 0n;
+    if (extraCredits > 0n) {
+      const member = await requireMembership(
+        tx,
+        input.organizationId,
+        userId,
+        true,
+      );
+      await assertWithinMonthlySpendingCap(tx, {
+        organizationId: input.organizationId,
+        userId,
+        cap: member.monthlySpendingCapCredits,
+        additionalCredits: extraCredits,
+        now: new Date(),
+      });
+    }
     await captureCreditsForJob(tx, {
       walletId: wallet.id,
       jobId: job.id,
@@ -418,7 +468,9 @@ export async function executeTextGeneration(
         billableQuantity: totalTokens,
         actualProviderCostMicroUsd: actualCost,
         providerCostBasis: usageIsReliable
-          ? "CONFIGURED_RATE"
+          ? hasTextRateTable
+            ? "PROVIDER_USAGE"
+            : "CONFIGURED_RATE"
           : "CONFIGURED_ESTIMATE",
         completedAt: new Date(),
         outputPayload: usage

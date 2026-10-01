@@ -113,7 +113,7 @@ export const bytePlusImageInputSchema = z
   .object({
     prompt: z.string().trim().min(1),
     aspectRatio: imageAspectRatioSchema.default("1:1"),
-    resolution: z.enum(["1K", "2K", "3K", "4K"]).default("2K"),
+    resolution: z.enum(["1K", "1.5K", "2K", "3K", "4K"]).default("2K"),
     outputFormat: z.enum(["jpeg", "png"]).default("png"),
     watermark: z.boolean().default(false),
     outputCount: z.number().int().min(1).max(15).default(1),
@@ -215,6 +215,36 @@ export const VERIFIED_BYTEPLUS_MODELS: readonly ProviderModelDescriptor[] = [
       maxGeneratedImages: 15,
       maxTotalInputOutputImages: 15,
       maxReferenceImages: 14,
+    },
+  },
+  {
+    id: "dola-seedream-5-0-pro-260628",
+    provider: "byteplus",
+    displayName: "Seedream 5.0 Pro",
+    description:
+      "High-quality image generation and coordinate-guided precision editing.",
+    mediaKind: "image",
+    capabilities: {
+      "aspectRatio:1:1": true,
+      "aspectRatio:4:3": true,
+      "aspectRatio:3:4": true,
+      "aspectRatio:16:9": true,
+      "aspectRatio:9:16": true,
+      "aspectRatio:3:2": true,
+      "aspectRatio:2:3": true,
+      "aspectRatio:21:9": true,
+      "resolution:1K": true,
+      "resolution:1.5K": true,
+      "resolution:2K": true,
+      referenceImages: true,
+      maxReferenceImages: 10,
+      sequentialImages: false,
+      maxGeneratedImages: 1,
+      maxTotalInputOutputImages: 11,
+      preciseEditing: true,
+      inpainting: true,
+      outpainting: true,
+      objectReplacement: true,
     },
   },
   {
@@ -353,8 +383,60 @@ function trimTrailingSlashes(value: string): string {
 
 function mapAspectRatioToSize(
   aspectRatio: z.infer<typeof imageAspectRatioSchema>,
-  resolution: "1K" | "2K" | "3K" | "4K",
+  resolution: "1K" | "1.5K" | "2K" | "3K" | "4K",
+  modelId?: string,
 ): string {
+  if (modelId === "dola-seedream-5-0-pro-260628") {
+    const proSizes = {
+      "1K": {
+        "1:1": "1024x1024",
+        "16:9": "1424x800",
+        "9:16": "800x1424",
+        "4:3": "1152x864",
+        "3:4": "864x1152",
+        "3:2": "1248x832",
+        "2:3": "832x1248",
+        "21:9": "1568x672",
+      },
+      "1.5K": {
+        "1:1": "1536x1536",
+        "16:9": "2048x1152",
+        "9:16": "1152x2048",
+        "4:3": "1792x1344",
+        "3:4": "1344x1792",
+        "3:2": "1872x1248",
+        "2:3": "1248x1872",
+        "21:9": "2352x1008",
+      },
+      "2K": {
+        "1:1": "2048x2048",
+        "16:9": "2816x1584",
+        "9:16": "1584x2816",
+        "4:3": "2368x1776",
+        "3:4": "1776x2368",
+        "3:2": "2496x1664",
+        "2:3": "1664x2496",
+        "21:9": "3136x1344",
+      },
+    } as const;
+    if (resolution !== "1K" && resolution !== "1.5K" && resolution !== "2K") {
+      throw new ProviderRequestError(
+        "Resolution is not supported by Seedream 5.0 Pro",
+        false,
+        { code: "UNSUPPORTED_RESOLUTION" },
+      );
+    }
+    return proSizes[resolution][aspectRatio];
+  }
+
+  if (resolution === "1.5K") {
+    throw new ProviderRequestError(
+      "1.5K output is only supported by Seedream 5.0 Pro",
+      false,
+      { code: "UNSUPPORTED_RESOLUTION" },
+    );
+  }
+
   const sizes = {
     "1K": {
       "1:1": "1024x1024",
@@ -437,11 +519,23 @@ function requestUuid(idempotencyKey: string): string {
   return `${digest.slice(0, 8)}-${digest.slice(8, 12)}-4${digest.slice(13, 16)}-a${digest.slice(17, 20)}-${digest.slice(20, 32)}`;
 }
 
+export function normalizeBytePlusModelId(modelId: string): string {
+  if (
+    modelId === "seedream-5-0-pro" ||
+    modelId === "seedream-5-0-pro-260628" ||
+    modelId === "dola-seedream-5-0-pro-260628"
+  ) {
+    return "dola-seedream-5-0-pro-260628";
+  }
+  return modelId;
+}
+
 function assertModelSupportsMediaKind(
   modelId: string,
   mediaKind: MediaKind,
 ): void {
-  const model = VERIFIED_BYTEPLUS_MODELS.find((item) => item.id === modelId);
+  const normalized = normalizeBytePlusModelId(modelId);
+  const model = VERIFIED_BYTEPLUS_MODELS.find((item) => item.id === normalized);
   if (!model || model.mediaKind !== mediaKind) {
     throw new ProviderRequestError(
       "Unsupported BytePlus model for requested media kind",
@@ -713,9 +807,10 @@ export function createBytePlusProvider(
     },
 
     async submit(submission: MediaSubmission): Promise<ProviderJob> {
-      assertModelSupportsMediaKind(submission.modelId, submission.mediaKind);
+      const resolvedModelId = normalizeBytePlusModelId(submission.modelId);
+      assertModelSupportsMediaKind(resolvedModelId, submission.mediaKind);
       logger.info("Submitting BytePlus media generation job", {
-        modelId: submission.modelId,
+        modelId: resolvedModelId,
         mediaKind: submission.mediaKind,
       });
 
@@ -738,7 +833,7 @@ export function createBytePlusProvider(
           }
           const imageModel = VERIFIED_BYTEPLUS_MODELS.find(
             (model) =>
-              model.id === submission.modelId && model.mediaKind === "image",
+              model.id === resolvedModelId && model.mediaKind === "image",
           );
           if (
             imageModel?.capabilities[`resolution:${input.data.resolution}`] !==
@@ -750,6 +845,58 @@ export function createBytePlusProvider(
               { code: "UNSUPPORTED_RESOLUTION" },
             );
           }
+          const capabilityRecord =
+            imageModel?.capabilities &&
+            typeof imageModel.capabilities === "object" &&
+            !Array.isArray(imageModel.capabilities)
+              ? (imageModel.capabilities as Record<string, unknown>)
+              : {};
+          const maxReferences =
+            typeof capabilityRecord.maxReferenceImages === "number"
+              ? capabilityRecord.maxReferenceImages
+              : 0;
+          const maxOutputs =
+            typeof capabilityRecord.maxGeneratedImages === "number"
+              ? capabilityRecord.maxGeneratedImages
+              : 1;
+          const maxTotalImages =
+            typeof capabilityRecord.maxTotalInputOutputImages === "number"
+              ? capabilityRecord.maxTotalInputOutputImages
+              : maxOutputs;
+          if (input.data.referenceImages.length > maxReferences) {
+            throw new ProviderRequestError(
+              `This BytePlus image model supports at most ${maxReferences} reference images`,
+              false,
+              { code: "TOO_MANY_REFERENCE_IMAGES" },
+            );
+          }
+          if (input.data.outputCount > maxOutputs) {
+            throw new ProviderRequestError(
+              `This BytePlus image model supports at most ${maxOutputs} generated images`,
+              false,
+              { code: "TOO_MANY_OUTPUT_IMAGES" },
+            );
+          }
+          if (
+            input.data.referenceImages.length + input.data.outputCount >
+            maxTotalImages
+          ) {
+            throw new ProviderRequestError(
+              `Reference images plus generated images must not exceed ${maxTotalImages}`,
+              false,
+              { code: "TOO_MANY_IMAGES" },
+            );
+          }
+          if (
+            input.data.outputCount > 1 &&
+            capabilityRecord.sequentialImages !== true
+          ) {
+            throw new ProviderRequestError(
+              "Sequential image generation is not supported by this model",
+              false,
+              { code: "UNSUPPORTED_OUTPUT_COUNT" },
+            );
+          }
           const response = await safeFetch(
             fetchClient,
             `${baseUrl}/images/generations`,
@@ -757,13 +904,15 @@ export function createBytePlusProvider(
               method: "POST",
               headers: modelArkHeaders,
               body: JSON.stringify({
-                model: submission.modelId,
+                model: resolvedModelId,
                 prompt: input.data.prompt,
                 size: mapAspectRatioToSize(
                   input.data.aspectRatio,
                   input.data.resolution,
+                  resolvedModelId,
                 ),
-                ...(submission.modelId === "seedream-5-0-260128"
+                ...(resolvedModelId === "seedream-5-0-260128" ||
+                resolvedModelId === "dola-seedream-5-0-pro-260628"
                   ? { output_format: input.data.outputFormat }
                   : {}),
                 ...(input.data.referenceImages.length
@@ -774,15 +923,19 @@ export function createBytePlusProvider(
                           : input.data.referenceImages,
                     }
                   : {}),
-                sequential_image_generation:
-                  input.data.outputCount > 1 ? "auto" : "disabled",
-                ...(input.data.outputCount > 1
-                  ? {
-                      sequential_image_generation_options: {
-                        max_images: input.data.outputCount,
-                      },
-                    }
-                  : {}),
+                ...(resolvedModelId === "dola-seedream-5-0-pro-260628"
+                  ? {}
+                  : {
+                      sequential_image_generation:
+                        input.data.outputCount > 1 ? "auto" : "disabled",
+                      ...(input.data.outputCount > 1
+                        ? {
+                            sequential_image_generation_options: {
+                              max_images: input.data.outputCount,
+                            },
+                          }
+                        : {}),
+                    }),
                 response_format: "url",
                 watermark: input.data.watermark,
               }),
@@ -796,7 +949,7 @@ export function createBytePlusProvider(
             data.id ?? stableRequestId("image", submission.idempotencyKey);
           logger.info("BytePlus image generation succeeded", {
             providerRequestId,
-            modelId: submission.modelId,
+            modelId: resolvedModelId,
           });
           return {
             providerRequestId,

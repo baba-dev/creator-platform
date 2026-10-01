@@ -185,6 +185,9 @@ export function quoteImageGeneration(
     referenceImageCount?: number;
   },
 ): CreditQuote {
+  if (!SEEDREAM_5_PRO_IDS.has(params.providerModelId)) {
+    return quoteImageOutputs(price, params.outputCount);
+  }
   return quoteSnapshotCost(
     price,
     getImageGenerationProviderCostMicroUsd({

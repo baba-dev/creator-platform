@@ -10,7 +10,18 @@ export const BYTEPLUS_SPEECH_TRIAL_CONFIG = {
   MODEL_ID: "seed-tts-2.0",
   INITIAL_TRIAL_CHARACTERS: 19_968,
   WARNING_THRESHOLD_PERCENT: 80, // 80% = 15,974 chars
+  DEFAULT_STARTED_AT: "2026-10-01T00:00:00.000Z",
 } as const;
+
+function speechTrialStartedAt(): Date {
+  const configured = process.env.BYTEPLUS_SPEECH_TRIAL_STARTED_AT;
+  const value = configured ?? BYTEPLUS_SPEECH_TRIAL_CONFIG.DEFAULT_STARTED_AT;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error("BYTEPLUS_SPEECH_TRIAL_STARTED_AT must be a valid ISO date.");
+  }
+  return parsed;
+}
 
 export interface SpeechTrialUsage {
   initialQuota: number;
@@ -33,15 +44,16 @@ export interface SpeechTrialDbClient {
           providerModelId: string;
         };
         status: string;
+        completedAt: { gte: Date };
       };
       _sum: {
         billableQuantity: true;
-        reservedCredits: true;
+        chargedCredits: true;
       };
     }) => Promise<{
       _sum: {
         billableQuantity: number | bigint | null;
-        reservedCredits: number | bigint | null;
+        chargedCredits: number | bigint | null;
       };
     }>;
     count: (args: {
@@ -50,6 +62,7 @@ export interface SpeechTrialDbClient {
           providerModelId: string;
         };
         status: string;
+        completedAt: { gte: Date };
       };
     }) => Promise<number>;
   };
@@ -63,6 +76,7 @@ export interface SpeechTrialDbClient {
 export async function calculateSpeechTrialUsage(
   client: SpeechTrialDbClient | Prisma.TransactionClient | typeof db = db,
 ): Promise<SpeechTrialUsage> {
+  const startedAt = speechTrialStartedAt();
   const [aggregateResult, countResult] = await Promise.all([
     client.generationJob.aggregate({
       where: {
@@ -70,10 +84,11 @@ export async function calculateSpeechTrialUsage(
           providerModelId: BYTEPLUS_SPEECH_TRIAL_CONFIG.MODEL_ID,
         },
         status: "SUCCEEDED",
+        completedAt: { gte: startedAt },
       },
       _sum: {
         billableQuantity: true,
-        reservedCredits: true,
+        chargedCredits: true,
       },
     }),
     client.generationJob.count({
@@ -82,6 +97,7 @@ export async function calculateSpeechTrialUsage(
           providerModelId: BYTEPLUS_SPEECH_TRIAL_CONFIG.MODEL_ID,
         },
         status: "SUCCEEDED",
+        completedAt: { gte: startedAt },
       },
     }),
   ]);
@@ -89,7 +105,7 @@ export async function calculateSpeechTrialUsage(
   const consumedCharacters = Number(
     aggregateResult._sum?.billableQuantity ?? 0,
   );
-  const totalCreditsBilled = Number(aggregateResult._sum?.reservedCredits ?? 0);
+  const totalCreditsBilled = Number(aggregateResult._sum?.chargedCredits ?? 0);
   const initialQuota = BYTEPLUS_SPEECH_TRIAL_CONFIG.INITIAL_TRIAL_CHARACTERS;
   const remainingCharacters = Math.max(0, initialQuota - consumedCharacters);
   const consumedPercent = Number(

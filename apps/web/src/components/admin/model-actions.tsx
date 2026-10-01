@@ -254,7 +254,18 @@ export function ModelActions({
             ? {
                 usageRates: {
                   estimator: "byteplus-text-v1",
-                  tiers: textUsageTiers,
+                  tiers: textUsageTiers.map((tier) => {
+                    const {
+                      cachedInputMicroUsdPerMillionTokens,
+                      ...requiredRates
+                    } = tier;
+                    return cachedInputMicroUsdPerMillionTokens
+                      ? {
+                          ...requiredRates,
+                          cachedInputMicroUsdPerMillionTokens,
+                        }
+                      : requiredRates;
+                  }),
                 },
               }
             : {}),
@@ -575,11 +586,10 @@ export function ModelActions({
                                     i === index
                                       ? {
                                           ...row,
-                                          [key]:
-                                            event.target.value.replace(
-                                              /\D/g,
-                                              "",
-                                            ) || undefined,
+                                          [key]: event.target.value.replace(
+                                            /\D/g,
+                                            "",
+                                          ),
                                         }
                                       : row,
                                   ),

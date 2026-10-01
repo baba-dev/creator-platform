@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { MascotScene } from "@/components/process/mascot-scene";
+import { ProcessDialog } from "@/components/process/process-dialog";
 import {
   GenerationProgressDialog,
   type GenerationProgressJob,
@@ -142,26 +143,31 @@ export function GenerationActivityCenter({
 
   if (!snapshot) {
     return dialogOpen ? (
-      <div
-        role="status"
-        aria-live="polite"
-        className="fixed bottom-5 right-5 z-[70] flex max-w-[360px] items-center gap-3 rounded-2xl border border-border bg-popover p-3 text-popover-foreground shadow-lg"
+      <ProcessDialog
+        open
+        mascot={connectionIssue ? "confused" : "working"}
+        eyebrow={connectionIssue ? "Reconnecting" : "Queued"}
+        title={
+          connectionIssue
+            ? "Checking your generation"
+            : "Your creation is safely queued"
+        }
+        description={
+          connectionIssue ??
+          "Connecting to the durable generation job you just created. We will update this automatically."
+        }
+        onDismiss={() => setDialogOpen(false)}
       >
-        <MascotScene
-          kind={connectionIssue ? "confused" : "running"}
-          size="compact"
-          className="h-14 w-20"
-        />
-        <div>
-          <p className="font-display text-sm font-semibold">
-            {connectionIssue ? "Checking your generation" : "Loading status"}
-          </p>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            {connectionIssue ??
-              "Connecting to the durable generation job you just created."}
-          </p>
-        </div>
-      </div>
+        <p
+          role="status"
+          aria-live="polite"
+          className="rounded-2xl border border-border bg-surface-sunken px-4 py-3 text-center text-sm text-muted-foreground"
+        >
+          {connectionIssue
+            ? "No new request will be submitted while we reconnect."
+            : "Loading the latest generation stage…"}
+        </p>
+      </ProcessDialog>
     ) : null;
   }
 

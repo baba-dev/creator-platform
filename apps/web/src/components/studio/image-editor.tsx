@@ -819,33 +819,35 @@ export function ImageEditor({
               />
             </div>
           ) : selected ? (
-            <div className="relative mx-auto max-h-[500px] w-auto max-w-full">
-              <Image
-                src={`/api/assets/${selected.id}`}
-                alt={selected.name ?? "Source image"}
-                width={selected.width ?? 1024}
-                height={selected.height ?? 1024}
-                unoptimized
-                className="mx-auto max-h-[500px] w-auto max-w-full rounded-xl object-contain"
-              />
-              {/* Interactive Bounding Box Overlay for AI Inpainting / Replace */}
-              {workspaceMode === "ai" &&
-              (aiTool === "inpaint" || aiTool === "replace") ? (
-                <div
-                  aria-hidden="true"
-                  className="pointer-events-none absolute border-2 border-dashed border-primary bg-primary/20 shadow-lg"
-                  style={{
-                    top: `${(boxYmin / 999) * 100}%`,
-                    left: `${(boxXmin / 999) * 100}%`,
-                    height: `${((boxYmax - boxYmin) / 999) * 100}%`,
-                    width: `${((boxXmax - boxXmin) / 999) * 100}%`,
-                  }}
-                >
-                  <span className="absolute -top-6 left-0 rounded bg-primary px-1.5 py-0.5 text-[10px] font-bold text-primary-foreground">
-                    Edit Region &lt;bbox&gt;
-                  </span>
-                </div>
-              ) : null}
+            <div className="flex max-h-[500px] justify-center">
+              <div className="relative inline-block max-h-[500px] max-w-full">
+                <Image
+                  src={`/api/assets/${selected.id}`}
+                  alt={selected.name ?? "Source image"}
+                  width={selected.width ?? 1024}
+                  height={selected.height ?? 1024}
+                  unoptimized
+                  className="block h-auto max-h-[500px] w-auto max-w-full rounded-xl object-contain"
+                />
+                {/* Interactive Bounding Box Overlay for AI Inpainting / Replace */}
+                {workspaceMode === "ai" &&
+                (aiTool === "inpaint" || aiTool === "replace") ? (
+                  <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute border-2 border-dashed border-primary bg-primary/20 shadow-lg"
+                    style={{
+                      top: `${(boxYmin / 999) * 100}%`,
+                      left: `${(boxXmin / 999) * 100}%`,
+                      height: `${((boxYmax - boxYmin) / 999) * 100}%`,
+                      width: `${((boxXmax - boxXmin) / 999) * 100}%`,
+                    }}
+                  >
+                    <span className="absolute -top-6 left-0 rounded bg-primary px-1.5 py-0.5 text-[10px] font-bold text-primary-foreground">
+                      Edit Region &lt;bbox&gt;
+                    </span>
+                  </div>
+                ) : null}
+              </div>
             </div>
           ) : (
             <div className="grid min-h-64 place-items-center text-sm text-muted-foreground">

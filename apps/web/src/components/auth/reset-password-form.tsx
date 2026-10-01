@@ -45,28 +45,35 @@ export function ResetPasswordForm({
     setPending(true);
     setError(null);
 
-    const result = await authClient.resetPassword({
-      newPassword: password,
-      token,
-    });
+    try {
+      const result = await authClient.resetPassword({
+        newPassword: password,
+        token,
+      });
 
-    setPending(false);
-
-    if (result.error) {
-      const msg = result.error.message || "Failed to reset password.";
-      if (
-        result.error.status === 400 ||
-        msg.toLowerCase().includes("token") ||
-        msg.toLowerCase().includes("expired") ||
-        msg.toLowerCase().includes("invalid")
-      ) {
-        setIsTokenInvalid(true);
+      if (result.error) {
+        const message = result.error.message ?? "";
+        const normalized = message.toLowerCase();
+        const tokenFailure =
+          result.error.status === 400 ||
+          normalized.includes("token") ||
+          normalized.includes("expired") ||
+          normalized.includes("invalid");
+        if (tokenFailure) {
+          setIsTokenInvalid(true);
+          setError("This password reset link is expired or invalid.");
+        } else {
+          setError("Could not reset your password. Try again shortly.");
+        }
+        return;
       }
-      setError(msg);
-      return;
-    }
 
-    setSuccess(true);
+      setSuccess(true);
+    } catch {
+      setError("Could not reset your password. Try again shortly.");
+    } finally {
+      setPending(false);
+    }
   }
 
   if (success) {

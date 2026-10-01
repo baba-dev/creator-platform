@@ -38,9 +38,9 @@ async function lockUsage(tx: Prisma.TransactionClient, organizationId: string) {
  * Atomically reserve storage before a generation/upload accepts work.
  *
  * Organization usage is O(1) via AssetStorageUsage. Member usage is derived
- * from the authoritative Asset rows because member-level counters are not
- * required at current scale. The reservation row is locked so concurrent
- * requests cannot oversubscribe the organization quota.
+ * from authoritative originals plus variants so the member and organization
+ * quotas measure the same physical bytes. The reservation row is locked so
+ * concurrent requests cannot oversubscribe either quota.
  */
 export async function reserveAssetStorage(
   tx: Prisma.TransactionClient,
@@ -56,15 +56,12 @@ export async function reserveAssetStorage(
     throw new RangeError("Proposed asset allocation cannot be negative.");
 
   const usage = await lockUsage(tx, input.organizationId);
-  const member = await tx.asset.aggregate({
-    where: {
-      organizationId: input.organizationId,
-      storageOwnerUserId: input.userId,
-      status: { in: ["PENDING", "READY", "QUARANTINED", "DELETED", "PURGING"] },
-    },
-    _sum: { byteSize: true },
-  });
-  const memberUsed = member._sum.byteSize ?? 0n;
+  const member = await getPhysicalAssetStorageUsage(
+    tx,
+    input.organizationId,
+    input.userId,
+  );
+  const memberUsed = member.physicalBytes + member.reservedBytes;
   const memberQuota =
     input.memberQuotaBytes ?? DEFAULT_MEMBER_STORAGE_QUOTA_BYTES;
   const organizationQuota =

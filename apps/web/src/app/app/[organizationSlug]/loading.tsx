@@ -13,7 +13,12 @@ export default function WorkspaceLoading() {
   }, []);
 
   if (!visible) {
-    return <div className="min-h-[calc(100vh-64px)] bg-background" aria-hidden="true" />;
+    return (
+      <div
+        className="min-h-[calc(100vh-64px)] bg-background"
+        aria-hidden="true"
+      />
+    );
   }
 
   return (

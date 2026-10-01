@@ -105,11 +105,16 @@ export function GenerationActivityCenter({
 
   useEffect(() => {
     if (!jobId) return;
-    void refresh(jobId);
+    const initialRefresh = window.setTimeout(() => {
+      void refresh(jobId);
+    }, 0);
     const timer = window.setInterval(() => {
       void refresh(jobId);
     }, 4000);
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearTimeout(initialRefresh);
+      window.clearInterval(timer);
+    };
   }, [jobId, refresh]);
 
   async function cancel() {

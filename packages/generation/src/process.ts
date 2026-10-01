@@ -201,10 +201,15 @@ export async function processVideoSubmitJob(
 ) {
   const job = await db.generationJob.findUniqueOrThrow({
     where: { id },
-    include: { providerModel: true },
+    include: {
+      providerModel: true,
+      inputAssets: {
+        orderBy: { position: "asc" },
+        include: { asset: true },
+      },
+    },
   });
   if (job.status !== "QUEUED") return;
-
   if (job.providerModel.enabled === false) return;
 
   try {
@@ -235,87 +240,194 @@ export async function processVideoSubmitJob(
 
   try {
     const videoPayload = job.requestPayload as Record<string, unknown>;
-    const frameIds = [
-      videoPayload.firstFrameAssetId,
-      videoPayload.lastFrameAssetId,
-    ].filter((value): value is string => typeof value === "string");
-    const referenceVideoId =
-      typeof videoPayload.referenceVideoAssetId === "string"
-        ? videoPayload.referenceVideoAssetId
-        : null;
-    const inputs =
-      frameIds.length || referenceVideoId
-        ? await db.generationInputAsset.findMany({
-            where: { generationJobId: job.id },
-            include: { asset: true },
-            orderBy: { position: "asc" },
-          })
+    const isV2 = videoPayload.schemaVersion === 2;
+
+    let providerInput: Record<string, unknown>;
+    if (isV2) {
+      const sourcePayload = Array.isArray(videoPayload.sources)
+        ? videoPayload.sources
         : [];
-    if (
-      inputs.length !==
-        new Set([...frameIds, ...(referenceVideoId ? [referenceVideoId] : [])])
-          .size ||
-      inputs.some(
-        ({ asset }) =>
-          asset.organizationId !== job.organizationId ||
-          asset.status !== "READY" ||
-          (asset.purpose === "REFERENCE_INPUT" &&
-            asset.storageOwnerUserId !== job.createdById) ||
-          (asset.id === referenceVideoId
-            ? asset.mediaKind !== "VIDEO" ||
-              asset.mimeType !== "video/mp4" ||
-              asset.storageProvider !== "LOCAL"
-            : asset.mediaKind !== "IMAGE"),
-      )
-    )
-      throw new ProviderRequestError("Source image is unavailable", false, {
-        code: "REFERENCE_IMAGE_UNAVAILABLE",
-      });
-    const frameImages = await Promise.all(
-      frameIds.map(async (assetId) => {
-        const asset = inputs.find((item) => item.assetId === assetId)?.asset;
-        if (!asset)
-          throw new ProviderRequestError("Source image is unavailable", false, {
-            code: "REFERENCE_IMAGE_UNAVAILABLE",
-          });
-        return referenceImageDataUri(asset);
-      }),
-    );
-    let referenceVideoUrl: string | undefined;
-    if (referenceVideoId) {
+      if (sourcePayload.length !== job.inputAssets.length) {
+        throw new ProviderRequestError(
+          "Generation source snapshot is inconsistent",
+          false,
+          { code: "REFERENCE_MEDIA_UNAVAILABLE" },
+        );
+      }
+
+      const expectedByPosition = new Map<
+        number,
+        { assetId: string; role: string }
+      >();
+      for (const value of sourcePayload) {
+        if (!value || typeof value !== "object" || Array.isArray(value)) {
+          throw new ProviderRequestError(
+            "Generation source snapshot is invalid",
+            false,
+            { code: "REFERENCE_MEDIA_UNAVAILABLE" },
+          );
+        }
+        const source = value as Record<string, unknown>;
+        if (
+          typeof source.assetId !== "string" ||
+          typeof source.role !== "string" ||
+          typeof source.position !== "number" ||
+          !Number.isSafeInteger(source.position)
+        ) {
+          throw new ProviderRequestError(
+            "Generation source snapshot is invalid",
+            false,
+            { code: "REFERENCE_MEDIA_UNAVAILABLE" },
+          );
+        }
+        expectedByPosition.set(source.position, {
+          assetId: source.assetId,
+          role: source.role,
+        });
+      }
+
       const env = parseServerEnv();
       const base = new URL(env.APP_URL);
-      if (base.protocol !== "https:")
+      if (job.inputAssets.length > 0 && base.protocol !== "https:") {
         throw new ProviderRequestError(
-          "Provider source requires a public HTTPS app URL",
+          "Provider sources require a public HTTPS app URL",
           false,
           { code: "INVALID_PROVIDER_SOURCE" },
         );
-      const url = new URL(
-        `/api/provider-media/${encodeURIComponent(referenceVideoId)}`,
-        base,
-      );
-      url.searchParams.set("jobId", job.id);
-      url.searchParams.set(
-        "grant",
-        issueProviderMediaGrant({
-          secret: env.AUTH_SECRET,
-          jobId: job.id,
-          assetId: referenceVideoId,
+      }
+
+      const providerSources = job.inputAssets.map((input) => {
+        const expected = expectedByPosition.get(input.position);
+        const asset = input.asset;
+        if (
+          !expected ||
+          expected.assetId !== input.assetId ||
+          expected.role !== input.role ||
+          input.role === "LEGACY" ||
+          asset.organizationId !== job.organizationId ||
+          asset.status !== "READY" ||
+          asset.storageProvider !== "LOCAL" ||
+          (asset.purpose === "REFERENCE_INPUT" &&
+            asset.storageOwnerUserId !== job.createdById)
+        ) {
+          throw new ProviderRequestError(
+            "Generation source media is no longer available",
+            false,
+            { code: "REFERENCE_MEDIA_UNAVAILABLE" },
+          );
+        }
+
+        const url = new URL(
+          `/api/provider-media/${encodeURIComponent(asset.id)}`,
+          base,
+        );
+        url.searchParams.set("jobId", job.id);
+        url.searchParams.set(
+          "grant",
+          issueProviderMediaGrant({
+            secret: env.AUTH_SECRET,
+            jobId: job.id,
+            assetId: asset.id,
+          }),
+        );
+        return { role: input.role, url: url.toString() };
+      });
+
+      providerInput = {
+        ...videoPayload,
+        sources: providerSources,
+      };
+    } else {
+      // Historical V1 jobs keep their previous dispatch semantics. In
+      // particular, frame images remain inline data URIs, so an upgrade cannot
+      // strand an already-queued job merely because it predates V2 grants.
+      const frameIds = [
+        videoPayload.firstFrameAssetId,
+        videoPayload.lastFrameAssetId,
+      ].filter((value): value is string => typeof value === "string");
+      const referenceVideoId =
+        typeof videoPayload.referenceVideoAssetId === "string"
+          ? videoPayload.referenceVideoAssetId
+          : null;
+      const inputs = job.inputAssets;
+      if (
+        inputs.length !==
+          new Set([
+            ...frameIds,
+            ...(referenceVideoId ? [referenceVideoId] : []),
+          ]).size ||
+        inputs.some(
+          ({ asset }) =>
+            asset.organizationId !== job.organizationId ||
+            asset.status !== "READY" ||
+            (asset.purpose === "REFERENCE_INPUT" &&
+              asset.storageOwnerUserId !== job.createdById) ||
+            (asset.id === referenceVideoId
+              ? asset.mediaKind !== "VIDEO" ||
+                asset.mimeType !== "video/mp4" ||
+                asset.storageProvider !== "LOCAL"
+              : asset.mediaKind !== "IMAGE"),
+        )
+      ) {
+        throw new ProviderRequestError(
+          "Source media is unavailable",
+          false,
+          { code: "REFERENCE_MEDIA_UNAVAILABLE" },
+        );
+      }
+
+      const frameImages = await Promise.all(
+        frameIds.map(async (assetId) => {
+          const asset = inputs.find((item) => item.assetId === assetId)?.asset;
+          if (!asset)
+            throw new ProviderRequestError(
+              "Source image is unavailable",
+              false,
+              { code: "REFERENCE_IMAGE_UNAVAILABLE" },
+            );
+          return referenceImageDataUri(asset);
         }),
       );
-      referenceVideoUrl = url.toString();
-    }
-    const result = await provider.submit({
-      idempotencyKey: job.idempotencyKey,
-      modelId: job.providerModel.providerModelId,
-      mediaKind: "video",
-      input: {
+
+      let referenceVideoUrl: string | undefined;
+      if (referenceVideoId) {
+        const env = parseServerEnv();
+        const base = new URL(env.APP_URL);
+        if (base.protocol !== "https:")
+          throw new ProviderRequestError(
+            "Provider source requires a public HTTPS app URL",
+            false,
+            { code: "INVALID_PROVIDER_SOURCE" },
+          );
+        const url = new URL(
+          `/api/provider-media/${encodeURIComponent(referenceVideoId)}`,
+          base,
+        );
+        url.searchParams.set("jobId", job.id);
+        url.searchParams.set(
+          "grant",
+          issueProviderMediaGrant({
+            secret: env.AUTH_SECRET,
+            jobId: job.id,
+            assetId: referenceVideoId,
+          }),
+        );
+        referenceVideoUrl = url.toString();
+      }
+
+      providerInput = {
         ...videoPayload,
         ...(frameImages[0] ? { firstFrameImage: frameImages[0] } : {}),
         ...(frameImages[1] ? { lastFrameImage: frameImages[1] } : {}),
         ...(referenceVideoUrl ? { referenceVideoUrl } : {}),
-      },
+      };
+    }
+
+    const result = await provider.submit({
+      idempotencyKey: job.idempotencyKey,
+      modelId: job.providerModel.providerModelId,
+      mediaKind: "video",
+      input: providerInput,
     });
     if (result.status !== "submitted" || !result.providerRequestId)
       throw new ProviderRequestError(
@@ -362,6 +474,37 @@ export async function processVideoSubmitJob(
       },
     });
   }
+}
+
+function v2VideoInputContext(payload: Record<string, unknown>): {
+  hasVideoInput: boolean;
+  resolution: string;
+  outputFormat: "mp4" | "mov";
+  returnLastFrame: boolean;
+} {
+  const sources = Array.isArray(payload.sources) ? payload.sources : [];
+  const hasVideoSource = sources.some((value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      return false;
+    const role = (value as Record<string, unknown>).role;
+    return role === "REFERENCE_VIDEO" || role === "SOURCE_VIDEO";
+  });
+  const billing =
+    payload.draftBillingContext &&
+    typeof payload.draftBillingContext === "object" &&
+    !Array.isArray(payload.draftBillingContext)
+      ? (payload.draftBillingContext as Record<string, unknown>)
+      : null;
+  const draftHadVideo =
+    typeof billing?.totalInputVideoDurationMs === "number" &&
+    billing.totalInputVideoDurationMs > 0;
+  return {
+    hasVideoInput: hasVideoSource || draftHadVideo,
+    resolution:
+      typeof payload.resolution === "string" ? payload.resolution : "720p",
+    outputFormat: payload.outputFormat === "mov" ? "mov" : "mp4",
+    returnLastFrame: payload.returnLastFrame !== false,
+  };
 }
 
 export async function processVideoPollJob(
@@ -423,9 +566,6 @@ export async function processVideoPollJob(
     return;
   }
 
-  // Preserve the provider's billable measurement without trusting arbitrary
-  // response fields as persisted job data. A missing or malformed usage value
-  // remains unknown; it must never be inferred from the requested duration.
   const rawCompletionTokens = result.rawUsage?.completion_tokens;
   const completionTokens =
     typeof rawCompletionTokens === "number" &&
@@ -434,11 +574,15 @@ export async function processVideoPollJob(
       ? rawCompletionTokens
       : null;
   const requestPayload = job.requestPayload as Record<string, unknown>;
-  const hasReferenceVideo =
-    typeof requestPayload.referenceVideoAssetId === "string";
+  const isV2 = requestPayload.schemaVersion === 2;
+  const v2Context = v2VideoInputContext(requestPayload);
+  const hasVideoInput = isV2
+    ? v2Context.hasVideoInput
+    : typeof requestPayload.referenceVideoAssetId === "string";
   const tokenPriced = job.priceVersion.pricingDimension === "TOKEN";
+
   if (
-    (hasReferenceVideo || tokenPriced) &&
+    (hasVideoInput || tokenPriced) &&
     (completionTokens === null || completionTokens === 0)
   ) {
     await db.generationJob.updateMany({
@@ -456,17 +600,38 @@ export async function processVideoPollJob(
   if (completionTokens !== null && completionTokens > 0) {
     await db.generationJob.updateMany({
       where: { id, status: "PROCESSING" },
-      data: { outputPayload: { providerUsage: { completionTokens } } },
+      data: {
+        outputPayload: {
+          providerUsage: { completionTokens },
+          providerReturnedLastFrame: Boolean(result.lastFrameUrl),
+        },
+      },
     });
   }
 
-  let stored: Awaited<ReturnType<typeof storeVideo>>;
+  const outputFormat = isV2 ? v2Context.outputFormat : "mp4";
+  const videoObjectKey = `${id}.${outputFormat}`;
+  let storedVideo: Awaited<ReturnType<typeof storeVideo>>;
   try {
     const bytes = await downloadVideo(result.outputUrls[0]!);
-    stored = await storeVideo(`${id}.mp4`, bytes);
+    storedVideo = await storeVideo(videoObjectKey, bytes);
   } catch (error) {
     await recordStorageFailure(id, error, "video");
     throw error;
+  }
+
+  let storedLastFrame: Awaited<ReturnType<typeof storeImage>> | null = null;
+  const wantsLastFrame = isV2 && v2Context.returnLastFrame;
+  if (wantsLastFrame && result.lastFrameUrl) {
+    try {
+      const bytes = await downloadImage(result.lastFrameUrl, "jpeg");
+      storedLastFrame = await storeImage(`${id}-last-frame.jpg`, bytes);
+    } catch {
+      // The video itself is the paid primary output. A provider-side last-frame
+      // failure degrades the continuity feature but must not convert a valid
+      // video into a failed, double-billed retry.
+      storedLastFrame = null;
+    }
   }
 
   await db.$transaction(async (tx) => {
@@ -476,25 +641,31 @@ export async function processVideoPollJob(
       include: { priceVersion: true },
     });
     if (current.status !== "PROCESSING") return;
+
     const wallet = await tx.wallet.findUniqueOrThrow({
       where: { organizationId: job.organizationId },
     });
-    const resolution = requestPayload.resolution === "1080p" ? "1080p" : "720p";
+    const resolution = isV2
+      ? v2Context.resolution
+      : requestPayload.resolution === "1080p"
+        ? "1080p"
+        : "720p";
     const rate = tokenPriced
       ? selectUsageRate(
           current.priceVersion.usageRates,
           resolution,
-          hasReferenceVideo,
+          hasVideoInput,
         )
       : resolution === "1080p"
         ? current.priceVersion.videoInputRate1080p
         : current.priceVersion.videoInputRate720p;
-    if (hasReferenceVideo && !rate)
+    if (hasVideoInput && !rate)
       throw new Error(
-        "The reference-video price snapshot is missing its token rate.",
+        "The video-input price snapshot is missing its token rate.",
       );
+
     const actualCost =
-      hasReferenceVideo || tokenPriced
+      hasVideoInput || tokenPriced
         ? videoInputProviderCost(BigInt(completionTokens!), rate!)
         : null;
     const actualQuote =
@@ -513,35 +684,88 @@ export async function processVideoPollJob(
       actualQuote && actualQuote.customerCredits < current.reservedCredits
         ? actualQuote.customerCredits
         : current.reservedCredits;
+
     await captureCreditsForJob(tx, {
       walletId: wallet.id,
       jobId: id,
       amountCredits: charge,
       idempotencyKey: `generation-capture-${id}`,
-      ...(hasReferenceVideo || tokenPriced
+      ...(hasVideoInput || tokenPriced
         ? {
             metadata: {
               completionTokens,
+              rateMicroUsdPerThousandTokens: rate?.toString(),
+              workflow:
+                typeof requestPayload.workflow === "string"
+                  ? requestPayload.workflow
+                  : "LEGACY",
               cappedAtReservation: actualQuote!.customerCredits > charge,
             },
           }
         : {}),
     });
-    const pendingAsset = await tx.asset.findUniqueOrThrow({
-      where: { objectKey: `${id}.mp4` },
-      select: { byteSize: true, status: true },
+
+    const videoAsset = await tx.asset.findUniqueOrThrow({
+      where: { objectKey: videoObjectKey },
     });
-    if (pendingAsset.status === "PENDING") {
+    if (videoAsset.status === "PENDING") {
       await finalizeAssetStorage(tx, {
         organizationId: job.organizationId,
-        reservedBytes: pendingAsset.byteSize,
-        actualBytes: stored.byteSize,
+        reservedBytes: videoAsset.byteSize,
+        actualBytes: storedVideo.byteSize,
       });
+    } else if (videoAsset.status !== "READY") {
+      throw new Error("Video output reservation is not recoverable.");
     }
-    const asset = await tx.asset.update({
-      where: { objectKey: `${id}.mp4` },
-      data: { ...stored, status: "READY" },
-    });
+    const readyVideo =
+      videoAsset.status === "READY"
+        ? videoAsset
+        : await tx.asset.update({
+            where: { id: videoAsset.id },
+            data: { ...storedVideo, status: "READY" },
+          });
+
+    let readyLastFrameId: string | null = null;
+    const lastFrameAsset = wantsLastFrame
+      ? await tx.asset.findFirst({
+          where: {
+            generationJobId: id,
+            generationOutputIndex: 1,
+            mediaKind: "IMAGE",
+          },
+        })
+      : null;
+    if (lastFrameAsset?.status === "PENDING") {
+      if (storedLastFrame) {
+        await finalizeAssetStorage(tx, {
+          organizationId: job.organizationId,
+          reservedBytes: lastFrameAsset.byteSize,
+          actualBytes: storedLastFrame.byteSize,
+        });
+        const ready = await tx.asset.update({
+          where: { id: lastFrameAsset.id },
+          data: { ...storedLastFrame, status: "READY" },
+        });
+        readyLastFrameId = ready.id;
+      } else {
+        await releaseAssetStorage(tx, {
+          organizationId: job.organizationId,
+          reservedBytes: lastFrameAsset.byteSize,
+        });
+        await tx.asset.update({
+          where: { id: lastFrameAsset.id },
+          data: {
+            status: "DELETED",
+            byteSize: 0n,
+            deletedAt: new Date(),
+            purgeAfter: new Date(),
+          },
+        });
+      }
+    } else if (lastFrameAsset?.status === "READY") {
+      readyLastFrameId = lastFrameAsset.id;
+    }
+
     await tx.generationJob.update({
       where: { id },
       data: {
@@ -549,12 +773,15 @@ export async function processVideoPollJob(
         actualProviderCostMicroUsd: actualCost,
         providerCostBasis: actualCost === null ? null : "PROVIDER_USAGE",
         actualUnits:
-          tokenPriced || hasReferenceVideo
+          tokenPriced || hasVideoInput
             ? completionTokens
             : current.quotedUnits,
         completedAt: new Date(),
         outputPayload: {
           stored: true,
+          assetId: readyVideo.id,
+          ...(readyLastFrameId ? { lastFrameAssetId: readyLastFrameId } : {}),
+          providerReturnedLastFrame: Boolean(result.lastFrameUrl),
           ...(completionTokens === null
             ? {}
             : { providerUsage: { completionTokens } }),
@@ -570,11 +797,18 @@ export async function processVideoPollJob(
         action: "generation.succeeded",
         targetType: "GenerationJob",
         targetId: id,
+        metadata: {
+          workflow:
+            typeof requestPayload.workflow === "string"
+              ? requestPayload.workflow
+              : "LEGACY",
+          completionTokens,
+          chargedCredits: charge.toString(),
+          lastFrameStored: Boolean(readyLastFrameId),
+        },
       },
     });
-    if (asset?.id) {
-      await enqueueGenerationSuccess(tx, { ...job, id }, asset.id);
-    }
+    await enqueueGenerationSuccess(tx, { ...job, id }, readyVideo.id);
   });
 }
 

@@ -96,6 +96,10 @@ export async function GenerationWorkspace({
               membership.role,
               "assets:manage",
             )}
+            canGenerate={hasOrganizationPermission(
+              membership.role,
+              "generation:create",
+            )}
           />
         ) : null}
         {kind === "video" ? (

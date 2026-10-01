@@ -656,6 +656,53 @@ describe("Transactional Ledger Mutations", () => {
     expect(mock.getEntries()).toHaveLength(2);
   });
 
+  it("rejects partial reservation release so credits cannot be stranded", async () => {
+    const mock = createMockTx({
+      wallets: [
+        {
+          id: testWalletId,
+          organizationId: "org_1",
+          balanceCache: 72n,
+          version: 1,
+        },
+      ],
+      entries: [
+        {
+          id: "entry_res_1",
+          walletId: testWalletId,
+          type: "RESERVATION",
+          amountCredits: 28n,
+          balanceAfter: 72n,
+          idempotencyKey: "idem_res_1",
+          referenceType: "GENERATION_JOB",
+          referenceId: testJobId,
+          createdAt: new Date(),
+        },
+      ],
+      jobs: [
+        {
+          id: testJobId,
+          status: "CREDIT_RESERVED",
+          reservedCredits: 28n,
+          chargedCredits: 0n,
+        },
+      ],
+    });
+
+    await expect(
+      releaseOrRefundCredits(mock.tx, {
+        walletId: testWalletId,
+        jobId: testJobId,
+        amountCredits: 10n,
+        reason: "Invalid partial release",
+      }),
+    ).rejects.toThrow(InvalidAmountError);
+
+    expect(mock.getWallet(testWalletId)?.balanceCache).toBe(72n);
+    expect(mock.getJob(testJobId)?.reservedCredits).toBe(28n);
+    expect(mock.getEntries()).toHaveLength(1);
+  });
+
   it("rejects duplicate release or refund when already settled", async () => {
     const mock = createMockTx({
       wallets: [

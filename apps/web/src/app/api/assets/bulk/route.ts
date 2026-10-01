@@ -164,23 +164,16 @@ export async function POST(request: Request) {
         where: {
           tagId: input.tagId,
           tag: { organizationId: input.organizationId },
-          assetId: {
-            in: await db.asset
-              .findMany({
-                where: {
-                  id: { in: uniqueIds },
-                  organizationId: input.organizationId,
-                  OR: [
-                    { purpose: "GENERAL" },
-                    {
-                      purpose: "REFERENCE_INPUT",
-                      storageOwnerUserId: session.user.id,
-                    },
-                  ],
-                },
-                select: { id: true },
-              })
-              .then((rows) => rows.map((row) => row.id)),
+          assetId: { in: uniqueIds },
+          asset: {
+            organizationId: input.organizationId,
+            OR: [
+              { purpose: "GENERAL" },
+              {
+                purpose: "REFERENCE_INPUT",
+                storageOwnerUserId: session.user.id,
+              },
+            ],
           },
         },
       });

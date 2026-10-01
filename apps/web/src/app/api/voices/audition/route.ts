@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { hasOrganizationPermission } from "@aiwa/authz";
 import { db } from "@aiwa/db";
-import { createVoiceJob, resolvePresetVoice } from "@aiwa/generation";
+import {
+  createVoiceJob,
+  GenerationError,
+  resolvePresetVoice,
+  VoiceResolutionError,
+} from "@aiwa/generation";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getRequestSession } from "@/lib/request-auth";
@@ -105,13 +110,17 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+    if (error instanceof VoiceResolutionError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    if (error instanceof GenerationError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.status },
+      );
+    }
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to queue voice audition.",
-      },
+      { error: "Failed to queue voice audition." },
       { status: 500 },
     );
   }

@@ -59,7 +59,7 @@ async function serve(request: Request, assetId: string, head: boolean) {
     !["SUBMITTED", "PROCESSING"].includes(job.status) ||
     asset.status !== "READY" ||
     asset.storageProvider !== "LOCAL" ||
-    !["VIDEO", "AUDIO"].includes(asset.mediaKind) ||
+    !["IMAGE", "VIDEO", "AUDIO"].includes(asset.mediaKind) ||
     (asset.purpose === "REFERENCE_INPUT" &&
       asset.storageOwnerUserId !== job.createdById)
   )
@@ -68,14 +68,36 @@ async function serve(request: Request, assetId: string, head: boolean) {
   try {
     const storage = new LocalAssetStorage(env.ASSET_STORAGE_ROOT);
     const size = Number((await storage.stat(asset.objectKey)).byteSize);
-    if (!Number.isSafeInteger(size) || size <= 0 || size > 100_000_000)
+    const maximumBytes =
+      asset.mediaKind === "VIDEO"
+        ? 100_000_000
+        : asset.mediaKind === "IMAGE"
+          ? 30 * 1024 * 1024
+          : 25 * 1024 * 1024;
+    if (
+      !Number.isSafeInteger(size) ||
+      size <= 0 ||
+      size > maximumBytes
+    )
       return new Response(null, { status: 503 });
     const headers = new Headers({
       "Content-Type": asset.mimeType,
       "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",
       "X-Robots-Tag": "noindex, nofollow, noarchive",
-      "Content-Disposition": `inline; filename="${asset.id}.${asset.mediaKind === "VIDEO" ? "mp4" : "audio"}"`,
+      "Content-Disposition": `inline; filename="${asset.id}.${
+        asset.mediaKind === "VIDEO"
+          ? asset.mimeType === "video/quicktime"
+            ? "mov"
+            : "mp4"
+          : asset.mediaKind === "IMAGE"
+            ? asset.mimeType === "image/png"
+              ? "png"
+              : asset.mimeType === "image/webp"
+                ? "webp"
+                : "jpg"
+            : "audio"
+      }"`,
       "Accept-Ranges": "bytes",
     });
     let start = 0;

@@ -520,7 +520,7 @@ export function GenerationStudio({
         setVideoReferences(
           body.assets.filter(
             (asset) =>
-              asset.mimeType === "video/mp4" &&
+              ["video/mp4", "video/quicktime"].includes(asset.mimeType ?? "") &&
               asset.durationMs !== null &&
               asset.durationMs !== undefined &&
               asset.durationMs >= 2_000 &&
@@ -563,6 +563,50 @@ export function GenerationStudio({
       .catch(() => undefined);
     return () => controller.abort();
   }, [activeMode, organizationId, variant]);
+  useEffect(() => {
+    if (
+      variant !== "advanced" ||
+      activeMode !== "VIDEO" ||
+      model?.capabilities?.referenceAudio !== true
+    )
+      return;
+    const controller = new AbortController();
+    void fetch(
+      `/api/assets?organizationId=${encodeURIComponent(organizationId)}&mediaKind=AUDIO&limit=100`,
+      { signal: controller.signal, cache: "no-store" },
+    )
+      .then((response) =>
+        response.ok
+          ? (response.json() as Promise<{ assets: ReferenceAsset[] }>)
+          : { assets: [] },
+      )
+      .then((body) =>
+        setVideoAudioReferences(
+          body.assets.filter(
+            (asset) =>
+              asset.durationMs !== null &&
+              asset.durationMs !== undefined &&
+              asset.durationMs >= 2_000 &&
+              asset.durationMs <=
+                Number(
+                  model.capabilities?.maxReferenceAudioDurationSeconds ?? 30,
+                ) *
+                  1000 &&
+              Number(asset.byteSize) <= 15 * 1024 * 1024,
+          ),
+        ),
+      )
+      .catch(() => {
+        if (!controller.signal.aborted) setVideoAudioReferences([]);
+      });
+    return () => controller.abort();
+  }, [
+    activeMode,
+    organizationId,
+    variant,
+    model?.capabilities?.referenceAudio,
+    model?.capabilities?.maxReferenceAudioDurationSeconds,
+  ]);
 
   async function uploadReference(file: File) {
     if (referenceBusy || !canGenerate) return;

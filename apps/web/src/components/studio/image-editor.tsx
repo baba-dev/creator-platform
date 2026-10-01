@@ -91,6 +91,14 @@ export function ImageEditor({
   const [aiBusy, setAiBusy] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiSuccessJobId, setAiSuccessJobId] = useState<string | null>(null);
+  const [aiQuote, setAiQuote] = useState<{
+    estimatedCredits: string;
+    estimatedOmr: string;
+    canAfford: boolean;
+    canSpend: boolean;
+  } | null>(null);
+  const [aiQuotePending, setAiQuotePending] = useState(false);
+  const [aiQuoteError, setAiQuoteError] = useState<string | null>(null);
 
   // Layered Design Canvas states
   const [layers, setLayers] = useState<CanvasLayer[]>([]);
@@ -122,7 +130,9 @@ export function ImageEditor({
   } | null>(null);
 
   const selected = assets.find((asset) => asset.id === selectedId);
-  const aiCredits = aiResolution === "2K" ? 43 : 22;
+  const aiCreditsLabel = aiQuote?.estimatedCredits
+    ? `${aiQuote.estimatedCredits} credits`
+    : "Live quote";
 
   function initLayerForAsset(asset: Asset) {
     const w = asset.width ?? 1024;
@@ -264,6 +274,77 @@ export function ImageEditor({
     };
   }, [layers, workspaceMode, canvasWidth, canvasHeight]);
 
+  useEffect(() => {
+    if (!selected || !canEdit || workspaceMode !== "ai") {
+      setAiQuote(null);
+      setAiQuotePending(false);
+      setAiQuoteError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    setAiQuotePending(true);
+    setAiQuoteError(null);
+
+    const timer = window.setTimeout(() => {
+      void fetch("/api/quotes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          organizationId,
+          modelId: "dola-seedream-5-0-pro-260628",
+          units: 1,
+          resolution: aiResolution,
+          aspectRatio: aiRatio,
+          referenceAssetIds: [selected.id],
+        }),
+      })
+        .then(async (response) => {
+          const body = (await response.json()) as {
+            quote?: {
+              estimatedCredits: string;
+              estimatedOmr: string;
+            };
+            wallet?: { canAfford: boolean };
+            budget?: { canSpend: boolean };
+            error?: string;
+          };
+          if (!response.ok || !body.quote) {
+            throw new Error(body.error ?? "Live quote is unavailable.");
+          }
+          setAiQuote({
+            estimatedCredits: body.quote.estimatedCredits,
+            estimatedOmr: body.quote.estimatedOmr,
+            canAfford: body.wallet?.canAfford ?? true,
+            canSpend: body.budget?.canSpend ?? true,
+          });
+        })
+        .catch((error: unknown) => {
+          if (controller.signal.aborted) return;
+          setAiQuote(null);
+          setAiQuoteError(
+            error instanceof Error ? error.message : "Live quote is unavailable.",
+          );
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setAiQuotePending(false);
+        });
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [
+    aiRatio,
+    aiResolution,
+    canEdit,
+    organizationId,
+    selected,
+    workspaceMode,
+  ]);
+
   // Poll operation status for pixel transforms
   useEffect(() => {
     if (!operationId) return;
@@ -331,6 +412,8 @@ export function ImageEditor({
     setAttempt(null);
     setAiSuccessJobId(null);
     setAiError(null);
+    setAiQuote(null);
+    setAiQuoteError(null);
   }
 
   // Submit AI precision edit with Seedream 5.0 Pro.
@@ -387,7 +470,11 @@ export function ImageEditor({
           quoteToken: string;
           modelId: string;
           priceVersionId: string;
+          estimatedCredits: string;
+          estimatedOmr: string;
         };
+        wallet?: { canAfford: boolean };
+        budget?: { canSpend: boolean };
         error?: string;
       };
 
@@ -396,6 +483,21 @@ export function ImageEditor({
           quoteData.error ??
             "Failed to obtain price quote for Seedream 5.0 Pro.",
         );
+      }
+
+      const canAfford = quoteData.wallet?.canAfford ?? true;
+      const canSpend = quoteData.budget?.canSpend ?? true;
+      setAiQuote({
+        estimatedCredits: quoteData.quote.estimatedCredits,
+        estimatedOmr: quoteData.quote.estimatedOmr,
+        canAfford,
+        canSpend,
+      });
+      if (!canSpend) {
+        throw new Error("This edit exceeds your monthly generation spending cap.");
+      }
+      if (!canAfford) {
+        throw new Error("This workspace does not have enough credits for this edit.");
       }
 
       const genRes = await fetch("/api/generations", {
@@ -782,7 +884,7 @@ export function ImageEditor({
                   Seedream 5.0 Pro AI Tool
                 </span>
                 <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                  {aiCredits} credits
+                  {aiQuotePending ? "Quoting…" : aiCreditsLabel}
                 </span>
               </div>
 
@@ -990,9 +1092,9 @@ export function ImageEditor({
               <div className="grid grid-cols-3 gap-2">
                 {(
                   [
-                    ["1K", "1K", "22 credits"],
-                    ["1.5K", "1.5K · Recommended", "22 credits"],
-                    ["2K", "2K · Maximum", "43 credits"],
+                    ["1K", "1K", "Provider base tier"],
+                    ["1.5K", "1.5K · Recommended", "Same provider tier as 1K"],
+                    ["2K", "2K · Maximum", "Higher provider tier"],
                   ] as const
                 ).map(([value, label, price]) => (
                   <button
@@ -1013,11 +1115,44 @@ export function ImageEditor({
                 ))}
               </div>
 
+              <div
+                className="rounded-xl border border-border bg-surface-sunken px-3 py-2 text-xs text-muted-foreground"
+                aria-live="polite"
+              >
+                {aiQuotePending
+                  ? "Refreshing price…"
+                  : aiQuote
+                    ? `Estimated charge: ${aiQuote.estimatedCredits} credits · ${aiQuote.estimatedOmr} OMR`
+                    : "Price is calculated from the active model rate before submission."}
+                {aiQuote?.canAfford === false ? (
+                  <span className="mt-1 block font-semibold text-destructive">
+                    Workspace balance is too low for this edit.
+                  </span>
+                ) : null}
+                {aiQuote?.canSpend === false ? (
+                  <span className="mt-1 block font-semibold text-destructive">
+                    This edit exceeds your monthly spending cap.
+                  </span>
+                ) : null}
+                {aiQuoteError ? (
+                  <span className="mt-1 block text-destructive">
+                    {aiQuoteError}
+                  </span>
+                ) : null}
+              </div>
+
               {/* Submit AI Edit Button */}
               <Button
                 type="button"
                 className="w-full"
-                disabled={!selected || aiBusy || !canEdit}
+                disabled={
+                  !selected ||
+                  aiBusy ||
+                  !canEdit ||
+                  aiQuotePending ||
+                  aiQuote?.canAfford === false ||
+                  aiQuote?.canSpend === false
+                }
                 onClick={() => void submitAiEdit()}
               >
                 {aiBusy ? (
@@ -1026,7 +1161,9 @@ export function ImageEditor({
                   <>
                     <Icon name="sparkles" className="mr-2 size-4" />
                     Run AI Precision Edit (
-                    {aiCredits} credits)
+                    {aiQuote?.estimatedCredits
+                      ? `${aiQuote.estimatedCredits} credits`
+                      : "live quote"})
                   </>
                 )}
               </Button>

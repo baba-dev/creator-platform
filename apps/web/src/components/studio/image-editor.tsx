@@ -21,15 +21,7 @@ type Asset = {
 
 type WorkspaceMode = "ai" | "layers" | "pixel";
 type AiTool = "inpaint" | "outpaint" | "replace";
-type AiRatio =
-  | "1:1"
-  | "16:9"
-  | "9:16"
-  | "21:9"
-  | "4:3"
-  | "3:4"
-  | "3:2"
-  | "2:3";
+type AiRatio = "1:1" | "16:9" | "9:16" | "21:9" | "4:3" | "3:4" | "3:2" | "2:3";
 type PixelEditKind = "crop" | "resize" | "scale";
 
 const AI_RATIOS: readonly [AiRatio, number][] = [
@@ -86,9 +78,9 @@ export function ImageEditor({
   // AI Precision Edit states (Seedream 5.0 Pro)
   const [aiTool, setAiTool] = useState<AiTool>("inpaint");
   const [aiPrompt, setAiPrompt] = useState("");
-  const [aiResolution, setAiResolution] = useState<
-    "1K" | "1.5K" | "2K"
-  >("1.5K");
+  const [aiResolution, setAiResolution] = useState<"1K" | "1.5K" | "2K">(
+    "1.5K",
+  );
   const [aiRatio, setAiRatio] = useState<AiRatio>("1:1");
   const [boxYmin, setBoxYmin] = useState(200);
   const [boxXmin, setBoxXmin] = useState(200);
@@ -330,7 +322,9 @@ export function ImageEditor({
           if (controller.signal.aborted) return;
           setAiQuote(null);
           setAiQuoteError(
-            error instanceof Error ? error.message : "Live quote is unavailable.",
+            error instanceof Error
+              ? error.message
+              : "Live quote is unavailable.",
           );
         })
         .finally(() => {
@@ -500,10 +494,14 @@ export function ImageEditor({
         canSpend,
       });
       if (!canSpend) {
-        throw new Error("This edit exceeds your monthly generation spending cap.");
+        throw new Error(
+          "This edit exceeds your monthly generation spending cap.",
+        );
       }
       if (!canAfford) {
-        throw new Error("This workspace does not have enough credits for this edit.");
+        throw new Error(
+          "This workspace does not have enough credits for this edit.",
+        );
       }
 
       const genRes = await fetch("/api/generations", {
@@ -749,9 +747,9 @@ export function ImageEditor({
             Edit, layer, and craft.
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Use Seedream 5.0 Pro for coordinate-guided generative edits,
-            compose assets in a multi-layer canvas with Photoshop PSD export,
-            or perform deterministic pixel transforms.
+            Use Seedream 5.0 Pro for coordinate-guided generative edits, compose
+            assets in a multi-layer canvas with Photoshop PSD export, or perform
+            deterministic pixel transforms.
           </p>
         </div>
 
@@ -956,7 +954,10 @@ export function ImageEditor({
                         value={boxXmin}
                         onChange={(e) =>
                           setBoxXmin(
-                            Math.min(999, Math.max(0, Number(e.target.value) || 0)),
+                            Math.min(
+                              999,
+                              Math.max(0, Number(e.target.value) || 0),
+                            ),
                           )
                         }
                         className="min-h-9 rounded-lg border border-input bg-card px-2 text-xs text-foreground"
@@ -971,7 +972,10 @@ export function ImageEditor({
                         value={boxYmin}
                         onChange={(e) =>
                           setBoxYmin(
-                            Math.min(999, Math.max(0, Number(e.target.value) || 0)),
+                            Math.min(
+                              999,
+                              Math.max(0, Number(e.target.value) || 0),
+                            ),
                           )
                         }
                         className="min-h-9 rounded-lg border border-input bg-card px-2 text-xs text-foreground"
@@ -986,7 +990,10 @@ export function ImageEditor({
                         value={boxXmax}
                         onChange={(e) =>
                           setBoxXmax(
-                            Math.min(999, Math.max(0, Number(e.target.value) || 0)),
+                            Math.min(
+                              999,
+                              Math.max(0, Number(e.target.value) || 0),
+                            ),
                           )
                         }
                         className="min-h-9 rounded-lg border border-input bg-card px-2 text-xs text-foreground"
@@ -1001,7 +1008,10 @@ export function ImageEditor({
                         value={boxYmax}
                         onChange={(e) =>
                           setBoxYmax(
-                            Math.min(999, Math.max(0, Number(e.target.value) || 0)),
+                            Math.min(
+                              999,
+                              Math.max(0, Number(e.target.value) || 0),
+                            ),
                           )
                         }
                         className="min-h-9 rounded-lg border border-input bg-card px-2 text-xs text-foreground"
@@ -1183,7 +1193,8 @@ export function ImageEditor({
                     Run AI Precision Edit (
                     {aiQuote?.estimatedCredits
                       ? `${aiQuote.estimatedCredits} credits`
-                      : "live quote"})
+                      : "live quote"}
+                    )
                   </>
                 )}
               </Button>

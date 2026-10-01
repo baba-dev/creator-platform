@@ -6,7 +6,7 @@ import {
   parseMarginPercent,
   formatMarginPercent,
 } from "@aiwa/credits/pricing";
-import type { UsageRate } from "@aiwa/credits";
+import type { TextUsageTier, UsageRate } from "@aiwa/credits";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 
@@ -112,6 +112,31 @@ export function ModelActions({
           ] as UsageRate[])
         : [];
   const [usageRows, setUsageRows] = useState<UsageRate[]>(initialRates);
+  const initialTextTiers =
+    currentUsageRates &&
+    typeof currentUsageRates === "object" &&
+    "estimator" in currentUsageRates &&
+    (currentUsageRates as { estimator?: unknown }).estimator ===
+      "byteplus-text-v1" &&
+    "tiers" in currentUsageRates &&
+    Array.isArray((currentUsageRates as { tiers?: unknown }).tiers)
+      ? ((currentUsageRates as { tiers: TextUsageTier[] }).tiers ?? [])
+      : ([
+          {
+            maxPromptTokens: 262144,
+            inputMicroUsdPerMillionTokens: String(
+              BigInt(defaultCost || "1") * 1000n,
+            ),
+            cachedInputMicroUsdPerMillionTokens: String(
+              BigInt(defaultCost || "1") * 1000n,
+            ),
+            outputMicroUsdPerMillionTokens: String(
+              BigInt(defaultCost || "1") * 1000n,
+            ),
+          },
+        ] as TextUsageTier[]);
+  const [textUsageTiers, setTextUsageTiers] =
+    useState<TextUsageTier[]>(initialTextTiers);
   const [costNote, setCostNote] = useState(currentProviderCostBasisNote ?? "");
   const publicationKey = useRef<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -182,10 +207,23 @@ export function ModelActions({
       if (marginBps < 0 || marginBps >= 10000) {
         throw new Error("Margin percentage must be between 0% and 99.99%.");
       }
+      const textFallbackCost =
+        mediaKind === "TEXT" && pricingDimension === "TOKEN"
+          ? textUsageTiers.reduce((highest, tier) => {
+              const outputPerMillion = BigInt(
+                tier.outputMicroUsdPerMillionTokens || "0",
+              );
+              const perThousand =
+                (outputPerMillion + 999n) / 1000n;
+              return perThousand > highest ? perThousand : highest;
+            }, 0n)
+          : 0n;
       const costBigInt = BigInt(
         mediaKind === "VIDEO" && pricingDimension === "TOKEN"
           ? (usageRows[0]?.microUsdPerThousandTokens ?? "0")
-          : costMicroUsd,
+          : mediaKind === "TEXT" && pricingDimension === "TOKEN"
+            ? textFallbackCost.toString()
+            : costMicroUsd,
       );
       if (costBigInt <= 0n) {
         throw new Error("Provider cost must be positive.");
@@ -210,6 +248,14 @@ export function ModelActions({
                 usageRates: {
                   estimator: "byteplus-video-v1",
                   rates: usageRows,
+                },
+              }
+            : {}),
+          ...(mediaKind === "TEXT" && pricingDimension === "TOKEN"
+            ? {
+                usageRates: {
+                  estimator: "byteplus-text-v1",
+                  tiers: textUsageTiers,
                 },
               }
             : {}),
@@ -398,15 +444,13 @@ export function ModelActions({
                   </div>
                 ) : null}
 
-                {(pricingDimension !== "TOKEN" || mediaKind === "TEXT") && (
+                {pricingDimension !== "TOKEN" ? (
                   <div>
                     <label
                       htmlFor={`cost-${modelId}`}
                       className="block text-xs font-semibold text-foreground"
                     >
-                      {mediaKind === "TEXT" && pricingDimension === "TOKEN"
-                        ? "Provider Cost per 1,000 tokens (micro-USD)"
-                        : "Provider Cost (micro-USD)"}
+                      Provider Cost (micro-USD)
                     </label>
                     <input
                       id={`cost-${modelId}`}
@@ -420,12 +464,10 @@ export function ModelActions({
                       className="mt-1 h-9 w-full rounded-lg border border-border bg-background px-3 font-mono text-sm"
                     />
                     <p className="mt-1 text-[11px] text-muted-foreground">
-                      {mediaKind === "TEXT" && pricingDimension === "TOKEN"
-                        ? "Blended settlement rate per 1,000 total tokens. Use a conservative rate that covers your provider contract."
-                        : "1 USD = 1,000,000 micro-USD (e.g. $0.054 = 54,000)"}
+                      1 USD = 1,000,000 micro-USD (e.g. $0.054 = 54,000)
                     </p>
                   </div>
-                )}
+                ) : null}
 
                 {mediaKind === "VIDEO" && pricingDimension !== "TOKEN" ? (
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -462,6 +504,140 @@ export function ModelActions({
                     </p>
                   </div>
                 ) : null}
+
+                {mediaKind === "TEXT" && pricingDimension === "TOKEN" && (
+                  <fieldset className="space-y-3 rounded-xl border border-border p-4">
+                    <legend className="px-1 text-sm font-semibold">
+                      Text token rates
+                    </legend>
+                    <p className="text-xs text-muted-foreground">
+                      Configure provider micro-USD per 1,000,000 tokens for
+                      prompt, cached prompt and output usage. Add a second tier
+                      when the provider charges more above a context threshold.
+                      Settlement uses the provider-reported token breakdown.
+                    </p>
+                    {textUsageTiers.map((tier, index) => (
+                      <div
+                        key={index}
+                        className="grid gap-2 rounded-xl bg-surface-sunken/50 p-3 sm:grid-cols-2"
+                      >
+                        <label className="text-xs">
+                          Max prompt tokens
+                          <input
+                            aria-label={`Text tier ${index + 1} max prompt tokens`}
+                            type="number"
+                            min="1"
+                            max="1048576"
+                            required
+                            value={tier.maxPromptTokens}
+                            onChange={(event) =>
+                              setTextUsageTiers((tiers) =>
+                                tiers.map((row, i) =>
+                                  i === index
+                                    ? {
+                                        ...row,
+                                        maxPromptTokens: Number(
+                                          event.target.value,
+                                        ),
+                                      }
+                                    : row,
+                                ),
+                              )
+                            }
+                            className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-2 font-mono"
+                          />
+                        </label>
+                        {(
+                          [
+                            [
+                              "Input / M tokens",
+                              "inputMicroUsdPerMillionTokens",
+                            ],
+                            [
+                              "Cached input / M tokens",
+                              "cachedInputMicroUsdPerMillionTokens",
+                            ],
+                            [
+                              "Output / M tokens",
+                              "outputMicroUsdPerMillionTokens",
+                            ],
+                          ] as const
+                        ).map(([label, key]) => (
+                          <label key={key} className="text-xs">
+                            {label} (micro-USD)
+                            <input
+                              aria-label={`Text tier ${index + 1} ${label}`}
+                              inputMode="numeric"
+                              required={key !== "cachedInputMicroUsdPerMillionTokens"}
+                              value={tier[key] ?? ""}
+                              onChange={(event) =>
+                                setTextUsageTiers((tiers) =>
+                                  tiers.map((row, i) =>
+                                    i === index
+                                      ? {
+                                          ...row,
+                                          [key]:
+                                            event.target.value.replace(
+                                              /\D/g,
+                                              "",
+                                            ) || undefined,
+                                        }
+                                      : row,
+                                  ),
+                                )
+                              }
+                              className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-2 font-mono"
+                            />
+                          </label>
+                        ))}
+                        <div className="sm:col-span-2 flex justify-end">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            disabled={textUsageTiers.length === 1}
+                            onClick={() =>
+                              setTextUsageTiers((tiers) =>
+                                tiers.filter((_, i) => i !== index),
+                              )
+                            }
+                          >
+                            Remove tier
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={textUsageTiers.length >= 4}
+                      onClick={() =>
+                        setTextUsageTiers((tiers) => {
+                          const last = tiers.at(-1);
+                          return [
+                            ...tiers,
+                            {
+                              maxPromptTokens: Math.min(
+                                1_048_576,
+                                Math.max(
+                                  (last?.maxPromptTokens ?? 65536) + 1,
+                                  (last?.maxPromptTokens ?? 65536) * 2,
+                                ),
+                              ),
+                              inputMicroUsdPerMillionTokens:
+                                last?.inputMicroUsdPerMillionTokens ?? "",
+                              cachedInputMicroUsdPerMillionTokens:
+                                last?.cachedInputMicroUsdPerMillionTokens,
+                              outputMicroUsdPerMillionTokens:
+                                last?.outputMicroUsdPerMillionTokens ?? "",
+                            },
+                          ];
+                        })
+                      }
+                    >
+                      Add context tier
+                    </Button>
+                  </fieldset>
+                )}
 
                 {mediaKind === "VIDEO" && pricingDimension === "TOKEN" && (
                   <fieldset className="space-y-3 rounded-xl border border-border p-4">
@@ -626,7 +802,9 @@ export function ModelActions({
                     </span>
                     <span className="font-semibold text-foreground">
                       {pricingDimension === "TOKEN"
-                        ? "Calculated from actual completion tokens; see Studio estimate"
+                        ? mediaKind === "TEXT"
+                          ? "Calculated from actual input / cache / output tokens"
+                          : "Calculated from actual completion tokens; see Studio estimate"
                         : estimatedCredits
                           ? `${estimatedCredits} credits / ${
                               pricingDimension === "CHARACTER"

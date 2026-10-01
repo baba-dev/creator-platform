@@ -181,6 +181,14 @@ export function CharacterChatWorkspace({
   const recognitionRef = useRef<{ stop: () => void; start: () => void } | null>(
     null,
   );
+  const voicePollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      recognitionRef.current?.stop();
+      if (voicePollTimerRef.current) clearTimeout(voicePollTimerRef.current);
+    };
+  }, []);
 
   function toggleSpeechRecognition() {
     if (typeof window === "undefined") return;
@@ -448,16 +456,14 @@ export function CharacterChatWorkspace({
   }
 
   const pollVoiceJob = useCallback((targetThreadId: string) => {
-    let count = 0;
-    const interval = setInterval(async () => {
-      count++;
-      if (count > 25) {
-        clearInterval(interval);
-        return;
-      }
+    if (voicePollTimerRef.current) clearTimeout(voicePollTimerRef.current);
+
+    const poll = async (attempt: number): Promise<void> => {
+      if (attempt > 25) return;
       try {
         const res = await fetch(
           `/api/chat/threads/${encodeURIComponent(targetThreadId)}`,
+          { cache: "no-store" },
         );
         if (res.ok) {
           const data = await res.json();
@@ -466,15 +472,19 @@ export function CharacterChatWorkspace({
             const anyPending = data.thread.messages.some(
               (m: ChatMessage) => m.audioJobId && !m.audioAssetId,
             );
-            if (!anyPending) {
-              clearInterval(interval);
-            }
+            if (!anyPending) return;
           }
         }
       } catch {
-        clearInterval(interval);
+        // A transient refresh failure should not terminate voice progress.
       }
-    }, 2000);
+
+      voicePollTimerRef.current = setTimeout(() => {
+        void poll(attempt + 1);
+      }, Math.min(1500 + attempt * 250, 5000));
+    };
+
+    void poll(1);
   }, []);
 
   async function handleSynthesizeMessage(message: ChatMessage) {
@@ -739,7 +749,10 @@ export function CharacterChatWorkspace({
 
                 <button
                   type="button"
-                  onClick={() => setIsCallModeActive(true)}
+                  onClick={() => {
+                    setAutoVoice(true);
+                    setIsCallModeActive(true);
+                  }}
                   title="Start Talking Persona Voice Call"
                   className="inline-flex items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary transition hover:bg-primary/20"
                 >
@@ -1130,6 +1143,15 @@ export function CharacterChatWorkspace({
               )}
             </div>
 
+            {inputText.trim() ? (
+              <div className="mt-4 w-full rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-left text-xs text-foreground">
+                <span className="font-semibold text-muted-foreground">
+                  You:
+                </span>{" "}
+                {inputText}
+              </div>
+            ) : null}
+
             {/* Call Actions */}
             <div className="mt-8 flex items-center gap-4">
               <button
@@ -1143,6 +1165,17 @@ export function CharacterChatWorkspace({
                 }`}
               >
                 <Icon name="voice" className="size-5" />
+              </button>
+
+              <button
+                type="button"
+                disabled={!inputText.trim() || isSending}
+                onClick={() => {
+                  void handleSendMessage();
+                }}
+                className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-3 text-xs font-bold text-primary-foreground shadow-md transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <span>Send</span>
               </button>
 
               <button

@@ -10,7 +10,8 @@ import {
 import { auth } from "@/lib/auth";
 
 const integration =
-  process.env.DATABASE_URL && process.env.GENERATION_INTEGRATION_TEST === "true"
+  process.env.DATABASE_URL &&
+  process.env.GENERATION_INTEGRATION_TEST === "true"
     ? describe.sequential
     : describe.skip;
 

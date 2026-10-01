@@ -276,10 +276,10 @@ export function ImageEditor({
     if (!selected || !canGenerate || workspaceMode !== "ai") return;
 
     const controller = new AbortController();
-    setAiQuotePending(true);
-    setAiQuoteError(null);
 
     const timer = window.setTimeout(() => {
+      setAiQuotePending(true);
+      setAiQuoteError(null);
       void fetch("/api/quotes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

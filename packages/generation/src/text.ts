@@ -347,19 +347,57 @@ export async function executeTextGeneration(
       }
     | undefined;
 
-  const promptTokens = rawUsage?.prompt_tokens ?? 0;
-  const completionTokens = rawUsage?.completion_tokens ?? 0;
-  const totalTokens =
-    rawUsage?.total_tokens ?? (promptTokens + completionTokens || 1);
-  const usage = { promptTokens, completionTokens, totalTokens };
+  const promptTokens = rawUsage?.prompt_tokens;
+  const completionTokens = rawUsage?.completion_tokens;
+  const reportedTotalTokens = rawUsage?.total_tokens;
+  const usageIsReliable =
+    Number.isSafeInteger(promptTokens) &&
+    Number.isSafeInteger(completionTokens) &&
+    Number.isSafeInteger(reportedTotalTokens) &&
+    (promptTokens ?? -1) >= 0 &&
+    (completionTokens ?? -1) >= 0 &&
+    (reportedTotalTokens ?? 0) > 0 &&
+    (reportedTotalTokens ?? 0) >=
+      (promptTokens ?? 0) + (completionTokens ?? 0);
 
   const unitQuantity = BigInt(price.unitQuantity ?? 1000);
-  const actualUnits = calculateBillableUnits(BigInt(totalTokens), unitQuantity);
+  const fallbackBillableQuantity = Math.max(
+    1,
+    job.billableQuantity ?? input.maxTokens,
+  );
+  const totalTokens = usageIsReliable
+    ? (reportedTotalTokens as number)
+    : fallbackBillableQuantity;
+  const actualUnits = usageIsReliable
+    ? calculateBillableUnits(BigInt(totalTokens), unitQuantity)
+    : BigInt(
+        Math.max(
+          1,
+          job.quotedUnits ??
+            Number(
+              calculateBillableUnits(
+                BigInt(fallbackBillableQuantity),
+                unitQuantity,
+              ),
+            ),
+        ),
+      );
   const actualCost = price.providerCostMicroUsd * actualUnits;
-  const actualCredits = priceCredits({
+  const configuredCredits = priceCredits({
     ...price,
     providerCostMicroUsd: actualCost,
   });
+  const actualCredits =
+    usageIsReliable || job.reservedCredits <= 0n
+      ? configuredCredits
+      : job.reservedCredits;
+  const usage = usageIsReliable
+    ? {
+        promptTokens: promptTokens as number,
+        completionTokens: completionTokens as number,
+        totalTokens,
+      }
+    : undefined;
 
   await db.$transaction(async (tx) => {
     await captureCreditsForJob(tx, {
@@ -368,9 +406,8 @@ export async function executeTextGeneration(
       amountCredits: actualCredits,
       idempotencyKey: `generation-capture-${job.id}`,
       metadata: {
-        promptTokens,
-        completionTokens,
-        totalTokens,
+        ...(usage ?? {}),
+        usageFallback: !usageIsReliable,
       },
     });
 
@@ -381,12 +418,13 @@ export async function executeTextGeneration(
         actualUnits: Number(actualUnits),
         billableQuantity: totalTokens,
         actualProviderCostMicroUsd: actualCost,
-        providerCostBasis: "CONFIGURED_RATE",
+        providerCostBasis: usageIsReliable
+          ? "CONFIGURED_RATE"
+          : "CONFIGURED_ESTIMATE",
         completedAt: new Date(),
-        outputPayload: {
-          content,
-          usage,
-        },
+        outputPayload: usage
+          ? { content, usage }
+          : { content, usageEstimated: true },
         chargedCredits: actualCredits,
       },
     });
@@ -399,9 +437,8 @@ export async function executeTextGeneration(
         targetType: "GenerationJob",
         targetId: job.id,
         metadata: {
-          promptTokens,
-          completionTokens,
-          totalTokens,
+          ...(usage ?? {}),
+          usageFallback: !usageIsReliable,
           chargedCredits: actualCredits.toString(),
         },
       },

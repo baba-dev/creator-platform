@@ -80,10 +80,7 @@ jobs:
           bash -n infra/deploy/package-release.sh
 
       - name: Check formatting
-        run: |
-          pnpm exec prettier --write apps/web/src/components/process/mascot-scene.tsx apps/web/src/lib/generation-error-copy.ts docs/branding.md
-          git diff -- apps/web/src/components/process/mascot-scene.tsx apps/web/src/lib/generation-error-copy.ts docs/branding.md
-          exit 1
+        run: pnpm format:check
 
       - name: Lint
         run: pnpm lint

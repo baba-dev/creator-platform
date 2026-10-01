@@ -89,7 +89,8 @@ export function deriveGenerationExperience({
       stage: "CANCELLED",
       stageIndex: 0,
       title: "Generation cancelled",
-      description: "The queued request was cancelled and will not be processed.",
+      description:
+        "The queued request was cancelled and will not be processed.",
       etaSeconds: null,
       etaConfidence: null,
       delayed: false,

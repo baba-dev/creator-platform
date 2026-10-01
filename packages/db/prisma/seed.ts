@@ -233,8 +233,19 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
     customerCredits: 2n,
     pricingDimension: "TOKEN",
     unitQuantity: 1000,
+    usageRates: {
+          "estimator": "byteplus-text-v1",
+          "tiers": [
+                {
+                      "maxPromptTokens": 262144,
+                      "inputMicroUsdPerMillionTokens": "500000",
+                      "outputMicroUsdPerMillionTokens": "2500000",
+                      "cachedInputMicroUsdPerMillionTokens": "100000"
+                }
+          ]
+    },
     providerCostBasisNote:
-      "Conservative blended rate: $2.50/M total tokens (standard output rate; input is cheaper).",
+      "BytePlus ModelArk standard online inference: $0.50/M input, $0.10/M cached input, $2.50/M output.",
   },
   {
     providerModelId: "seed-2-0-pro-260328",
@@ -254,8 +265,25 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
     customerCredits: 2n,
     pricingDimension: "TOKEN",
     unitQuantity: 1000,
+    usageRates: {
+          "estimator": "byteplus-text-v1",
+          "tiers": [
+                {
+                      "maxPromptTokens": 131072,
+                      "inputMicroUsdPerMillionTokens": "500000",
+                      "outputMicroUsdPerMillionTokens": "3000000",
+                      "cachedInputMicroUsdPerMillionTokens": "100000"
+                },
+                {
+                      "maxPromptTokens": 262144,
+                      "inputMicroUsdPerMillionTokens": "1000000",
+                      "outputMicroUsdPerMillionTokens": "6000000",
+                      "cachedInputMicroUsdPerMillionTokens": "200000"
+                }
+          ]
+    },
     providerCostBasisNote:
-      "Conservative blended rate: $3.00/M total tokens for prompts up to 128K (standard output rate).",
+      "BytePlus ModelArk standard online inference, tiered by prompt length (<=128K / <=256K).",
   },
   {
     providerModelId: "seed-2-0-lite-260428",
@@ -274,8 +302,25 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
     customerCredits: 1n,
     pricingDimension: "TOKEN",
     unitQuantity: 1000,
+    usageRates: {
+          "estimator": "byteplus-text-v1",
+          "tiers": [
+                {
+                      "maxPromptTokens": 131072,
+                      "inputMicroUsdPerMillionTokens": "250000",
+                      "outputMicroUsdPerMillionTokens": "2000000",
+                      "cachedInputMicroUsdPerMillionTokens": "50000"
+                },
+                {
+                      "maxPromptTokens": 262144,
+                      "inputMicroUsdPerMillionTokens": "500000",
+                      "outputMicroUsdPerMillionTokens": "4000000",
+                      "cachedInputMicroUsdPerMillionTokens": "100000"
+                }
+          ]
+    },
     providerCostBasisNote:
-      "Conservative blended rate: $2.00/M total tokens for prompts up to 128K (standard output rate).",
+      "BytePlus ModelArk standard online inference, tiered by prompt length (<=128K / <=256K).",
   },
   {
     providerModelId: "seed-2-0-mini-260428",
@@ -294,8 +339,25 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
     customerCredits: 1n,
     pricingDimension: "TOKEN",
     unitQuantity: 1000,
+    usageRates: {
+          "estimator": "byteplus-text-v1",
+          "tiers": [
+                {
+                      "maxPromptTokens": 131072,
+                      "inputMicroUsdPerMillionTokens": "100000",
+                      "outputMicroUsdPerMillionTokens": "400000",
+                      "cachedInputMicroUsdPerMillionTokens": "20000"
+                },
+                {
+                      "maxPromptTokens": 262144,
+                      "inputMicroUsdPerMillionTokens": "200000",
+                      "outputMicroUsdPerMillionTokens": "800000",
+                      "cachedInputMicroUsdPerMillionTokens": "40000"
+                }
+          ]
+    },
     providerCostBasisNote:
-      "Conservative blended rate: $0.40/M total tokens for prompts up to 128K (standard output rate).",
+      "BytePlus ModelArk standard online inference, tiered by prompt length (<=128K / <=256K).",
   },
   {
     providerModelId: "seed-2-0-code-preview-260328",
@@ -314,8 +376,25 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
     customerCredits: 2n,
     pricingDimension: "TOKEN",
     unitQuantity: 1000,
+    usageRates: {
+          "estimator": "byteplus-text-v1",
+          "tiers": [
+                {
+                      "maxPromptTokens": 131072,
+                      "inputMicroUsdPerMillionTokens": "500000",
+                      "outputMicroUsdPerMillionTokens": "3000000",
+                      "cachedInputMicroUsdPerMillionTokens": "100000"
+                },
+                {
+                      "maxPromptTokens": 262144,
+                      "inputMicroUsdPerMillionTokens": "1000000",
+                      "outputMicroUsdPerMillionTokens": "6000000",
+                      "cachedInputMicroUsdPerMillionTokens": "200000"
+                }
+          ]
+    },
     providerCostBasisNote:
-      "Conservative blended rate: $3.00/M total tokens for prompts up to 128K (standard output rate).",
+      "BytePlus ModelArk standard online inference, tiered by prompt length (<=128K / <=256K).",
   },
   {
     providerModelId: "doubao-seed-character-260628",
@@ -354,9 +433,26 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
     customerCredits: 1n,
     pricingDimension: "TOKEN",
     unitQuantity: 1000,
+    usageRates: {
+          "estimator": "byteplus-text-v1",
+          "tiers": [
+                {
+                      "maxPromptTokens": 131072,
+                      "inputMicroUsdPerMillionTokens": "250000",
+                      "outputMicroUsdPerMillionTokens": "2000000",
+                      "cachedInputMicroUsdPerMillionTokens": "50000"
+                },
+                {
+                      "maxPromptTokens": 262144,
+                      "inputMicroUsdPerMillionTokens": "500000",
+                      "outputMicroUsdPerMillionTokens": "4000000",
+                      "cachedInputMicroUsdPerMillionTokens": "50000"
+                }
+          ]
+    },
     enabled: false,
     providerCostBasisNote:
-      "Retired model. Conservative legacy rate: $2.00/M total tokens; replacement: Seed 2.0 Lite.",
+      "Retired model. BytePlus standard online inference rates retained for historical pricing.",
   },
   {
     providerModelId: "seed-1-6-250915",
@@ -374,9 +470,26 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
     customerCredits: 1n,
     pricingDimension: "TOKEN",
     unitQuantity: 1000,
+    usageRates: {
+          "estimator": "byteplus-text-v1",
+          "tiers": [
+                {
+                      "maxPromptTokens": 131072,
+                      "inputMicroUsdPerMillionTokens": "250000",
+                      "outputMicroUsdPerMillionTokens": "2000000",
+                      "cachedInputMicroUsdPerMillionTokens": "50000"
+                },
+                {
+                      "maxPromptTokens": 262144,
+                      "inputMicroUsdPerMillionTokens": "500000",
+                      "outputMicroUsdPerMillionTokens": "4000000",
+                      "cachedInputMicroUsdPerMillionTokens": "50000"
+                }
+          ]
+    },
     enabled: false,
     providerCostBasisNote:
-      "Retired model. Conservative legacy rate: $2.00/M total tokens; replacement: Seed 2.0 Lite.",
+      "Retired model. BytePlus standard online inference rates retained for historical pricing.",
   },
   {
     providerModelId: "seed-1-6-flash-250715",
@@ -395,9 +508,26 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
     customerCredits: 1n,
     pricingDimension: "TOKEN",
     unitQuantity: 1000,
+    usageRates: {
+          "estimator": "byteplus-text-v1",
+          "tiers": [
+                {
+                      "maxPromptTokens": 131072,
+                      "inputMicroUsdPerMillionTokens": "75000",
+                      "outputMicroUsdPerMillionTokens": "300000",
+                      "cachedInputMicroUsdPerMillionTokens": "15000"
+                },
+                {
+                      "maxPromptTokens": 262144,
+                      "inputMicroUsdPerMillionTokens": "100000",
+                      "outputMicroUsdPerMillionTokens": "800000",
+                      "cachedInputMicroUsdPerMillionTokens": "15000"
+                }
+          ]
+    },
     enabled: false,
     providerCostBasisNote:
-      "Retired model. Conservative legacy rate: $0.30/M total tokens; replacement: Seed 2.0 Mini.",
+      "Retired model. BytePlus standard online inference rates retained for historical pricing.",
   },
 ];
 

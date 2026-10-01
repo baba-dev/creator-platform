@@ -155,6 +155,10 @@ describe.skipIf(!enabled)("generation with MariaDB and Redis", () => {
   });
   afterAll(async () => {
     await db.auditEvent.deleteMany({ where: { organizationId: orgId } });
+    await db.asset.updateMany({
+      where: { organizationId: orgId, sourceAssetId: { not: null } },
+      data: { sourceAssetId: null },
+    });
     await db.asset.deleteMany({ where: { organizationId: orgId } });
     const wallet = await db.wallet.findUnique({
       where: { organizationId: orgId },

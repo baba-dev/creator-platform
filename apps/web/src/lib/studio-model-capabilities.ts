@@ -45,6 +45,7 @@ export function referenceCapabilityLabel(
 export function resolutionLabel(value: string): string {
   const labels: Record<string, string> = {
     "1K": "1K · Compact",
+    "1.5K": "1.5K · Balanced quality",
     "2K": "2K · High resolution",
     "3K": "3K · Higher resolution",
     "4K": "4K · Maximum detail",

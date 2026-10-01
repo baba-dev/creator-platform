@@ -1063,6 +1063,20 @@ export function GenerationStudio({
               </div>
             ) : null}
 
+            {model?.providerModelId.includes("seedream-5-0-pro") ? (
+              <div className="flex flex-wrap items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-xs">
+                <span className="font-semibold text-primary">
+                  Coordinate-guided precision editing
+                </span>
+                <a
+                  href="#image-editor"
+                  className="font-semibold text-primary underline-offset-2 hover:underline"
+                >
+                  Open Precision Image Desk →
+                </a>
+              </div>
+            ) : null}
+
             <div className="grid gap-2">
               <div className="flex items-center justify-between gap-3">
                 <label

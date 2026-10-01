@@ -1,6 +1,10 @@
 import { selectUsageRate } from "@aiwa/credits";
 import { captureCreditsForJob, releaseOrRefundCredits } from "@aiwa/credits";
-import { createCreditQuote, videoInputProviderCost } from "@aiwa/credits";
+import {
+  createCreditQuote,
+  getImageGenerationProviderCostMicroUsd,
+  videoInputProviderCost,
+} from "@aiwa/credits";
 import { finalizeAssetStorage, releaseAssetStorage } from "@aiwa/assets";
 import { parseServerEnv } from "@aiwa/config";
 import { db, type Prisma } from "@aiwa/db";
@@ -659,13 +663,15 @@ export async function processImageJob(
     try {
       const referenceImages = await Promise.all(
         (job.inputAssets ?? []).map(async ({ asset }) => {
-          if (
-            asset.organizationId !== job.organizationId ||
-            asset.storageOwnerUserId !== job.createdById ||
-            asset.purpose !== "REFERENCE_INPUT" ||
-            asset.mediaKind !== "IMAGE" ||
-            asset.status !== "READY"
-          ) {
+          const usableReference =
+            asset.organizationId === job.organizationId &&
+            asset.mediaKind === "IMAGE" &&
+            asset.status === "READY" &&
+            asset.storageProvider === "LOCAL" &&
+            (asset.purpose === "GENERAL" ||
+              (asset.purpose === "REFERENCE_INPUT" &&
+                asset.storageOwnerUserId === job.createdById));
+          if (!usableReference) {
             throw new ProviderRequestError(
               "Reference image is no longer available",
               false,
@@ -895,7 +901,7 @@ export async function processImageJob(
     await tx.$queryRaw`SELECT id FROM GenerationJob WHERE id = ${id} FOR UPDATE`;
     const current = await tx.generationJob.findUniqueOrThrow({
       where: { id },
-      include: { priceVersion: true },
+      include: { priceVersion: true, providerModel: true },
     });
     if (current.status !== "PROCESSING") return;
 
@@ -965,8 +971,26 @@ export async function processImageJob(
       },
     });
 
-    const actualProviderCostMicroUsd =
-      current.priceVersion.providerCostMicroUsd * BigInt(successfulCount);
+    const requestPayload =
+      current.requestPayload &&
+      typeof current.requestPayload === "object" &&
+      !Array.isArray(current.requestPayload)
+        ? (current.requestPayload as Record<string, unknown>)
+        : {};
+    const resolution =
+      typeof requestPayload.resolution === "string"
+        ? requestPayload.resolution
+        : undefined;
+    const referenceImageCount = Array.isArray(requestPayload.referenceAssetIds)
+      ? requestPayload.referenceAssetIds.length
+      : 0;
+    const actualProviderCostMicroUsd = getImageGenerationProviderCostMicroUsd({
+      providerModelId: current.providerModel.providerModelId,
+      baseCostMicroUsd: current.priceVersion.providerCostMicroUsd,
+      resolution,
+      outputCount: successfulCount,
+      referenceImageCount,
+    });
     const readyAssets = assets.slice(0, successfulCount);
     await tx.generationJob.update({
       where: { id },

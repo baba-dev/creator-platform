@@ -126,3 +126,32 @@ changing the allowlist.
 
 The worker never logs or exposes signed provider URLs. Storage/download failures
 may log the job ID, safe error class/message, and retry count only.
+
+## Seedream 5.0 Pro
+
+Seedream 5.0 Pro uses the canonical BytePlus model ID
+`dola-seedream-5-0-pro-260628`. The application exposes the verified normal
+generation and image-to-image editing envelope:
+
+- output tiers: 1K, 1.5K and 2K; 1.5K is the recommended default because it is
+  billed at the same provider tier as 1K;
+- eight common aspect ratios are advertised by Studio, using Pro-specific
+  dimension mappings rather than the older Seedream size table;
+- up to 10 reference images and exactly one generated image per request;
+- coordinate-guided edits use `<bbox>x1 y1 x2 y2</bbox>` on the normalized 0–999
+  image coordinate grid;
+- the Precision Image Desk obtains a signed quote first, then submits the
+  internal model ID and price-version ID returned by that quote. It never
+  hard-codes the database model primary key.
+
+Seedream 5.0 Pro does **not** use sequential image generation. Provider-native
+layer decomposition is also a separate API mode with a base image plus multiple
+layer outputs, metadata and separate layer billing. The application
+intentionally does not advertise decomposition until those outputs have a
+dedicated durable asset/billing contract. The manual Layered Canvas and PSD
+export are independent of provider decomposition and remain available.
+
+The browser PSD writer emits PSD v1 RGBA raster layers with required Layer &
+Mask framing, raw-channel padding, a merged transparency channel, opacity,
+visibility and supported blend modes. It rejects malformed buffers and enforces
+browser-safe dimension/layer pixel budgets before allocating export buffers.

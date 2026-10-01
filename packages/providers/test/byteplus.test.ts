@@ -33,6 +33,7 @@ describe("BytePlus provider adapter", () => {
     const models = await createBytePlusProvider(validConfig).listModels();
     expect(models.map((model) => model.id)).toEqual([
       "seedream-5-0-260128",
+      "dola-seedream-5-0-pro-260628",
       "seedream-4-5-251128",
       "seedream-4-0-250828",
       "dreamina-seedance-2-5-260628",

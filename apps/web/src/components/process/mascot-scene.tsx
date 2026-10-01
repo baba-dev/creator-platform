@@ -43,7 +43,9 @@ export function MascotScene({
         alt=""
         fill
         unoptimized
-        sizes={size === "modal" ? "320px" : size === "surface" ? "196px" : "112px"}
+        sizes={
+          size === "modal" ? "320px" : size === "surface" ? "196px" : "112px"
+        }
         className="object-contain p-1.5"
       />
     </div>

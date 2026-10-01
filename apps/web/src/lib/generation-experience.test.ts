@@ -38,6 +38,23 @@ describe("generation experience", () => {
     expect(experience.delayed).toBe(true);
   });
 
+  it("uses a friendly provider error description for failed generations", () => {
+    const experience = deriveGenerationExperience({
+      status: "FAILED",
+      kind: "IMAGE",
+      queuedAt: new Date(0),
+      errorCode: "OutputImageSensitiveContentDetected",
+      errorMessage: "Provider rejected the image request. Credits released.",
+    });
+    expect(experience.stage).toBe("FAILED");
+    expect(experience.title).toBe(
+      "Generated image was blocked by the safety filter",
+    );
+    expect(experience.description).toContain(
+      "even when the prompt itself is acceptable",
+    );
+  });
+
   it("does not expose an ETA for terminal states", () => {
     const experience = deriveGenerationExperience({
       status: "MANUAL_REVIEW",

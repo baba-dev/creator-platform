@@ -51,6 +51,8 @@
   --color-cyan: var(--cyan);
   --color-mint: var(--mint);
   --color-on-vivid: var(--on-vivid);
+  --color-illustration-paper: var(--illustration-paper);
+  --color-illustration-paper-border: var(--illustration-paper-border);
 
   --radius-sm: 0.625rem;
   --radius-md: 0.875rem;
@@ -115,6 +117,8 @@
   --cyan: oklch(0.62 0.14 221);
   --mint: oklch(0.72 0.135 164);
   --on-vivid: oklch(0.985 0.01 88);
+  --illustration-paper: oklch(0.975 0.012 82);
+  --illustration-paper-border: oklch(0.8 0.028 78);
 
   --paper-line: oklch(0.68 0.04 255 / 0.12);
   --paper-dot: oklch(0.35 0.03 265 / 0.13);
@@ -192,6 +196,8 @@
   --cyan: oklch(0.73 0.13 221);
   --mint: oklch(0.75 0.125 164);
   --on-vivid: oklch(0.985 0.01 88);
+  --illustration-paper: oklch(0.94 0.014 82);
+  --illustration-paper-border: oklch(0.48 0.028 267);
 
   --paper-line: oklch(0.8 0.04 255 / 0.07);
   --paper-dot: oklch(0.86 0.025 84 / 0.1);

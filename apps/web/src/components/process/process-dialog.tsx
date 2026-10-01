@@ -60,7 +60,7 @@ export function ProcessDialog({
         panel.focus();
         return;
       }
-      const first = focusable[0];
+      const first = focusable[0]!;
       const last = focusable.at(-1)!;
       if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();

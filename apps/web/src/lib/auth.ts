@@ -67,30 +67,49 @@ export const auth = betterAuth({
     revokeSessionsOnPasswordReset: true,
     resetPasswordTokenExpiresIn: 60 * 60,
     sendResetPassword: async ({ user, url, token }) => {
-      // Return an already-resolved async callback without awaiting
-      // user-dependent mail work. This satisfies Better Auth's callback
-      // contract while keeping the public response path independent of mail
-      // queue latency or account-specific delivery work.
-      void enqueueMail(
-        passwordResetEmail({
-          to: user.email,
-          resetUrl: url,
+      // This is a durable outbox write, not SMTP delivery. Await it so a
+      // successful auth response never races ahead of the MailMessage row.
+      // The public route applies a uniform response floor to preserve
+      // enumeration resistance for existing vs. unknown accounts.
+      try {
+        await enqueueMail(
+          passwordResetEmail({
+            to: user.email,
+            resetUrl: url,
+            userId: user.id,
+            idempotencyKey: `password-reset:${createHash("sha256")
+              .update(token)
+              .digest("hex")}`,
+          }),
+        );
+      } catch (error) {
+        console.error("Password reset mail enqueue failed.", {
           userId: user.id,
-          idempotencyKey: `password-reset:${createHash("sha256")
-            .update(token)
-            .digest("hex")}`,
-        }),
-      ).catch(() => undefined);
+          errorName: error instanceof Error ? error.name : "UnknownError",
+          errorMessage: error instanceof Error ? error.message : "Unknown",
+        });
+        throw error;
+      }
     },
     onPasswordReset: async ({ user }) => {
-      await enqueueMail(
-        securityEventEmail({
-          to: user.email,
+      // A post-reset notification must never make an already-completed
+      // password change look unsuccessful to the user.
+      try {
+        await enqueueMail(
+          securityEventEmail({
+            to: user.email,
+            userId: user.id,
+            event: "PASSWORD_RESET",
+            idempotencyKey: `security:password-reset:${user.id}:${Date.now()}`,
+          }),
+        );
+      } catch (error) {
+        console.error("Password reset security notification enqueue failed.", {
           userId: user.id,
-          event: "PASSWORD_RESET",
-          idempotencyKey: `security:password-reset:${user.id}:${Date.now()}`,
-        }),
-      );
+          errorName: error instanceof Error ? error.name : "UnknownError",
+          errorMessage: error instanceof Error ? error.message : "Unknown",
+        });
+      }
     },
   },
   account: {

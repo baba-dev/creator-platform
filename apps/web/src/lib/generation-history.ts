@@ -139,7 +139,7 @@ export async function listGenerationHistory(
       completedAt: true,
       createdBy: { select: { id: true, name: true } },
       providerModel: {
-        select: { id: true, displayName: true, mediaKind: true, provider: true },
+        select: { displayName: true, mediaKind: true, provider: true },
       },
       project: { select: { id: true, name: true } },
       reservedCredits: true,
@@ -186,7 +186,12 @@ export async function getCustomerJob(
         select: { pricingDimension: true, creditsPerBaisa: true },
       },
       providerModel: {
-        select: { displayName: true, mediaKind: true, provider: true },
+        select: {
+          id: true,
+          displayName: true,
+          mediaKind: true,
+          provider: true,
+        },
       },
       project: { select: { id: true, name: true } },
       createdBy: { select: { id: true, name: true } },

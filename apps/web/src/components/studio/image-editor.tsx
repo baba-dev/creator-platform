@@ -273,12 +273,7 @@ export function ImageEditor({
   }, [layers, workspaceMode, canvasWidth, canvasHeight]);
 
   useEffect(() => {
-    if (!selected || !canGenerate || workspaceMode !== "ai") {
-      setAiQuote(null);
-      setAiQuotePending(false);
-      setAiQuoteError(null);
-      return;
-    }
+    if (!selected || !canGenerate || workspaceMode !== "ai") return;
 
     const controller = new AbortController();
     setAiQuotePending(true);
@@ -413,6 +408,7 @@ export function ImageEditor({
     setAiSuccessJobId(null);
     setAiError(null);
     setAiQuote(null);
+    setAiQuotePending(false);
     setAiQuoteError(null);
   }
 

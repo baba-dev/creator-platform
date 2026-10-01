@@ -60,9 +60,7 @@ describe("PATCH /api/admin/users/[userId]", () => {
       targetUserId: userId,
       role: "PLATFORM_ADMIN",
     });
-    expect(mocks.revalidatePath).toHaveBeenCalledWith(
-      `/admin/users/${userId}`,
-    );
+    expect(mocks.revalidatePath).toHaveBeenCalledWith(`/admin/users/${userId}`);
   });
 
   it("still rejects path-unsafe user IDs before mutation", async () => {

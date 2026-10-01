@@ -298,13 +298,19 @@ export function estimateGeneration(params: {
         price,
         videoInputProviderCost(estimatedTokens, rate),
       );
-      // References can alter duration/framing. Preserve the full 30s provider envelope.
+      // For video-input jobs reserve against the provider's maximum aggregate
+      // input envelope for the selected model, plus 25% estimate variance.
+      // Actual completion_tokens remains authoritative at settlement.
       const envelope = estimateVideoTokens({
         resolution,
         aspectRatio: params.aspectRatio ?? "16:9",
-        durationSeconds:
-          totalInputVideoDurationMs !== undefined ? 30 : durationSeconds,
-        totalInputVideoDurationMs,
+        durationSeconds,
+        totalInputVideoDurationMs:
+          totalInputVideoDurationMs === undefined
+            ? undefined
+            : params.providerModelId.startsWith("dreamina-seedance-2-5-")
+              ? 30_000
+              : 15_000,
         conservative: true,
       });
       reservation = quoteSnapshotCost(
@@ -316,7 +322,7 @@ export function estimateGeneration(params: {
     } else {
       if (
         params.providerModelId.startsWith("dreamina-seedance-2-5-") &&
-        params.inputDurationMs === undefined
+        totalInputVideoDurationMs === undefined
       )
         throw new RangeError(
           "Publish token pricing for Seedance 2.5 before generating.",
@@ -346,7 +352,7 @@ export function estimateGeneration(params: {
         if (!rate)
           throw new RangeError("Video-input token rate is unavailable.");
         reservation = quoteVideoInputReservation({
-          totalInputVideoDurationMs,
+          inputDurationMs: totalInputVideoDurationMs,
           resolution: resolution === "1080p" ? "1080p" : "720p",
           rateMicroUsdPerThousandTokens: rate,
           exchangeRate: {

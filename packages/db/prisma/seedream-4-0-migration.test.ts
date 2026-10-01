@@ -22,7 +22,10 @@ async function executeMigrationAgainstFixtures(): Promise<void> {
   const migration = (await readFile(migrationPath, "utf8"))
     .replaceAll("`ProviderModel`", `\`${providerTable}\``)
     .replaceAll("`ModelPriceVersion`", `\`${priceTable}\``)
-    .replaceAll("`User`", `\`${userTable}\``);
+    .replaceAll("`User`", `\`${userTable}\``)
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("--"))
+    .join("\n");
 
   for (const statement of migration
     .split(";")

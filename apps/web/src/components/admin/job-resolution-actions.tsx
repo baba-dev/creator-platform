@@ -6,6 +6,16 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/admin/primitives";
 import { Tape } from "@/components/ui/sketch";
 
+function creditAmountWithinCeiling(value: string, ceiling: string): boolean {
+  if (!/^[0-9]+$/.test(value) || !/^[0-9]+$/.test(ceiling)) return false;
+  try {
+    const amount = BigInt(value);
+    return amount > 0n && amount <= BigInt(ceiling);
+  } catch {
+    return false;
+  }
+}
+
 interface JobResolutionActionsProps {
   jobId: string;
   status: string;
@@ -73,8 +83,13 @@ export function JobResolutionActions({
   const [releaseEvidence, setReleaseEvidence] = useState("");
   const [releaseReason, setReleaseReason] = useState("");
 
-  const [refundAmount, setRefundAmount] = useState(chargedCredits);
+  const refundCeiling = permittedActions.maxRefundCredits ?? chargedCredits;
+  const [refundAmount, setRefundAmount] = useState(refundCeiling);
   const [refundReason, setRefundReason] = useState("");
+  const refundAmountValid = creditAmountWithinCeiling(
+    refundAmount,
+    refundCeiling,
+  );
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
@@ -352,6 +367,7 @@ export function JobResolutionActions({
               disabled={!canManage || !permittedActions.canRefund || isPending}
               onClick={() => {
                 setActionError(null);
+                setRefundAmount(refundCeiling);
                 setActiveDialog("refund");
               }}
             >
@@ -719,14 +735,17 @@ export function JobResolutionActions({
                 </label>
                 <input
                   type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]+"
                   required
                   value={refundAmount}
                   onChange={(e) => setRefundAmount(e.target.value)}
-                  placeholder={`Max ${chargedCredits}`}
+                  placeholder={`Max ${refundCeiling}`}
                   className="mt-1 block w-full rounded-xl border border-input bg-background px-3 py-2 text-xs font-mono"
                 />
                 <span className="text-[11px] text-muted-foreground">
-                  Total settled credits: {chargedCredits}
+                  Remaining refundable credits: {refundCeiling} · Original charge:{" "}
+                  {chargedCredits}
                 </span>
               </div>
 
@@ -756,7 +775,11 @@ export function JobResolutionActions({
                 </Button>
                 <Button
                   type="submit"
-                  disabled={isPending || refundReason.trim().length < 5}
+                  disabled={
+                    isPending ||
+                    !refundAmountValid ||
+                    refundReason.trim().length < 5
+                  }
                 >
                   {isPending ? "Refunding..." : "Confirm & Refund"}
                 </Button>

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { hasOrganizationPermission } from "@aiwa/authz";
 import { db } from "@aiwa/db";
-import { createVoiceJob } from "@aiwa/generation";
+import { createVoiceJob, GenerationError } from "@aiwa/generation";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getRequestSession } from "@/lib/request-auth";
@@ -108,11 +108,14 @@ export async function POST(
         { status: 400 },
       );
     }
+    if (error instanceof GenerationError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.status },
+      );
+    }
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : "Voice synthesis failed.",
-      },
+      { error: "Voice synthesis failed." },
       { status: 500 },
     );
   }

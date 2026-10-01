@@ -2,6 +2,10 @@
 
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
+import {
+  isPasswordResetTokenFailure,
+  validatePasswordReset,
+} from "@/lib/password-recovery";
 import type { Route } from "next";
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
@@ -33,12 +37,9 @@ export function ResetPasswordForm({
     const password = String(form.get("password") ?? "");
     const confirmPassword = String(form.get("confirmPassword") ?? "");
 
-    if (password.length < 12) {
-      setError("Password must be at least 12 characters long.");
-      return;
-    }
-    if (password !== confirmPassword) {
-      setError("Passwords do not match.");
+    const validationError = validatePasswordReset(password, confirmPassword);
+    if (validationError) {
+      setError(validationError);
       return;
     }
 
@@ -52,14 +53,12 @@ export function ResetPasswordForm({
       });
 
       if (result.error) {
-        const message = result.error.message ?? "";
-        const normalized = message.toLowerCase();
-        const tokenFailure =
-          result.error.status === 400 ||
-          normalized.includes("token") ||
-          normalized.includes("expired") ||
-          normalized.includes("invalid");
-        if (tokenFailure) {
+        if (
+          isPasswordResetTokenFailure({
+            status: result.error.status,
+            message: result.error.message,
+          })
+        ) {
           setIsTokenInvalid(true);
           setError("This password reset link is expired or invalid.");
         } else {

@@ -24,7 +24,7 @@ FROM `Organization`;
 
 UPDATE `AssetStorageUsage` AS `usage`
 SET
-  `usage`.`usedBytes` =
+  `usedBytes` =
     COALESCE((
       SELECT SUM(`asset`.`byteSize`)
       FROM `Asset` AS `asset`
@@ -38,18 +38,18 @@ SET
       WHERE `asset`.`organizationId` = `usage`.`organizationId`
         AND `asset`.`status` IN ('READY', 'QUARANTINED', 'DELETED', 'PURGING')
     ), 0),
-  `usage`.`reservedBytes` = COALESCE((
+  `reservedBytes` = COALESCE((
     SELECT SUM(`asset`.`byteSize`)
     FROM `Asset` AS `asset`
     WHERE `asset`.`organizationId` = `usage`.`organizationId`
       AND `asset`.`status` = 'PENDING'
   ), 0),
-  `usage`.`readyAssetCount` = (
+  `readyAssetCount` = (
     SELECT COUNT(*)
     FROM `Asset` AS `asset`
     WHERE `asset`.`organizationId` = `usage`.`organizationId`
       AND `asset`.`status` = 'READY'
   ),
-  `usage`.`version` = `usage`.`version` + 1,
-  `usage`.`reconciledAt` = CURRENT_TIMESTAMP(3),
-  `usage`.`updatedAt` = CURRENT_TIMESTAMP(3);
+  `version` = `version` + 1,
+  `reconciledAt` = CURRENT_TIMESTAMP(3),
+  `updatedAt` = CURRENT_TIMESTAMP(3);

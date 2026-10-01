@@ -156,3 +156,26 @@ SELECT id, providerModelId, pricingDimension, creditsPerBaisa
 FROM ModelPriceVersion
 WHERE effectiveTo IS NULL AND creditsPerBaisa <> 1;
 ```
+
+### Seedream 5.0 Pro tiered image pricing
+
+The Pro active price version stores the verified discounted `<=1.5K` output
+rate as its base `providerCostMicroUsd` (40,500 µUSD). Runtime quote,
+reservation and settlement code all derive the same request cost:
+
+- 1K / 1.5K output: base rate;
+- 2K output: 2 × base rate;
+- first input image: included;
+- each additional input image: 1/15 × base rate.
+
+At the default 769/2 baisa-per-USD FX snapshot and 25% target gross margin, an
+output with one reference is 22 credits at 1K/1.5K and 43 credits at 2K.
+Additional references increase the quote and reservation before submission.
+The worker records the same tiered amount as actual provider cost on successful
+settlement, so finance reporting does not fall back to the base price.
+
+Provider-native layer decomposition is not priced through the normal image
+generation estimator because it has separate per-layer billing and variable
+output cardinality. It must use a dedicated quote/reserve/settle contract before
+being enabled.
+

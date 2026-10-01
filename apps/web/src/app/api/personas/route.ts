@@ -42,6 +42,7 @@ export async function GET(request: Request) {
   const personas = await db.persona.findMany({
     where: { organizationId },
     orderBy: [{ isPreset: "desc" }, { createdAt: "asc" }],
+    take: 100,
   });
 
   return NextResponse.json(

@@ -1,3 +1,5 @@
+import { getGenerationErrorPresentation } from "./generation-error-copy";
+
 export type GenerationKind = "IMAGE" | "VIDEO" | "VOICE";
 export type GenerationExperienceStage =
   | "QUEUED"
@@ -45,6 +47,7 @@ export function deriveGenerationExperience({
   status,
   kind,
   queuedAt,
+  errorCode,
   errorMessage,
   historicalDurationsMs = [],
   nowMs = Date.now(),
@@ -52,6 +55,7 @@ export function deriveGenerationExperience({
   status: string;
   kind: GenerationKind;
   queuedAt: Date | string | null;
+  errorCode?: string | null;
   errorMessage?: string | null;
   historicalDurationsMs?: number[];
   nowMs?: number;
@@ -70,12 +74,17 @@ export function deriveGenerationExperience({
     };
   }
   if (status === "FAILED") {
+    const error = getGenerationErrorPresentation({
+      errorCode,
+      errorMessage,
+      status,
+    });
     return {
       stage: "FAILED",
       stageIndex: 2,
-      title: "We couldn't finish this creation",
+      title: error?.title ?? "We couldn't finish this creation",
       description:
-        errorMessage ??
+        error?.description ??
         "The generation failed safely. Check the job details before retrying.",
       etaSeconds: null,
       etaConfidence: null,
@@ -99,12 +108,17 @@ export function deriveGenerationExperience({
     };
   }
   if (status === "MANUAL_REVIEW") {
+    const error = getGenerationErrorPresentation({
+      errorCode,
+      errorMessage,
+      status,
+    });
     return {
       stage: "REVIEW",
       stageIndex: 2,
-      title: "This generation needs attention",
+      title: error?.title ?? "This generation needs attention",
       description:
-        errorMessage ??
+        error?.description ??
         "We could not safely confirm the provider result. Open the job for details.",
       etaSeconds: null,
       etaConfidence: null,

@@ -561,6 +561,50 @@ export function GenerationStudio({
       : Boolean(data?.mediaConfigured ?? data?.configured);
 
   useEffect(() => {
+    const onWorkflow = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{
+          workflow?: "EDIT" | "EXTEND";
+          assetId?: string;
+        }>
+      ).detail;
+      if (
+        !detail ||
+        (detail.workflow !== "EDIT" && detail.workflow !== "EXTEND") ||
+        typeof detail.assetId !== "string" ||
+        !detail.assetId
+      )
+        return;
+      const preferred =
+        data?.models.find(
+          (candidate) =>
+            candidate.mediaKind === "VIDEO" &&
+            (detail.workflow === "EDIT"
+              ? candidate.capabilities?.editVideo === true
+              : candidate.capabilities?.extendVideo === true),
+        ) ?? data?.models.find((candidate) => candidate.mediaKind === "VIDEO");
+      if (!preferred) {
+        setError("No enabled video model with active pricing is available.");
+        return;
+      }
+      setActiveMode("VIDEO");
+      setModelId(preferred.id);
+      setVideoWorkflow(detail.workflow);
+      setVideoSourceAssetId(detail.assetId);
+      setSourceDraftJobId("");
+      setRatio("adaptive");
+      requestAnimationFrame(() =>
+        document
+          .getElementById("create")
+          ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      );
+    };
+    window.addEventListener("creators:video-workflow", onWorkflow);
+    return () =>
+      window.removeEventListener("creators:video-workflow", onWorkflow);
+  }, [data?.models]);
+
+  useEffect(() => {
     if (
       variant !== "advanced" ||
       (activeMode !== "IMAGE" && activeMode !== "VIDEO")

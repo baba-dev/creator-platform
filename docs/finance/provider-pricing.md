@@ -40,12 +40,12 @@ retains the current version's FX; first publication uses that default. Seed
 changes apply only where no active price already exists.
 
 The source defaults use this account's verified paid rates. Seedream 4.0 uses
-27,000 micro-USD/image: the verified 10% account discount from the public
-30,000 micro-USD/image list price. At the default FX and 25% target margin this
-still rounds to 15 customer credits per successful image. Trials are not a
-zero production cost. Discount/resource-package expiry and actual consumption
-must be checked before publishing a different rate; the contract-note field
-records its source, but does **not** automatically expire discounts.
+27,000 micro-USD/image: the verified 10% account discount from the public 30,000
+micro-USD/image list price. At the default FX and 25% target margin this still
+rounds to 15 customer credits per successful image. Trials are not a zero
+production cost. Discount/resource-package expiry and actual consumption must be
+checked before publishing a different rate; the contract-note field records its
+source, but does **not** automatically expire discounts.
 
 ## Rounding and speech
 

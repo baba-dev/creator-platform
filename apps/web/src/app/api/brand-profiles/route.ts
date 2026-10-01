@@ -1,3 +1,4 @@
+import { hasOrganizationPermission } from "@aiwa/authz";
 import { db, type Prisma } from "@aiwa/db";
 import { brandProfileCreateSchema } from "@aiwa/validation";
 import { NextResponse } from "next/server";
@@ -74,7 +75,11 @@ export async function POST(request: Request) {
       },
       include: { organization: true },
     });
-    if (!membership || membership.organization.status !== "ACTIVE") {
+    if (
+      !membership ||
+      membership.organization.status !== "ACTIVE" ||
+      !hasOrganizationPermission(membership.role, "projects:write")
+    ) {
       return NextResponse.json(
         { error: "Workspace access denied." },
         { status: 403 },

@@ -163,6 +163,7 @@ export async function POST(request: Request) {
       const result = await db.assetTagAssignment.deleteMany({
         where: {
           tagId: input.tagId,
+          tag: { organizationId: input.organizationId },
           assetId: {
             in: await db.asset
               .findMany({

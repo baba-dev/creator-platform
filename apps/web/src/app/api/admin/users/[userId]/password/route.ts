@@ -1,5 +1,8 @@
 import { hasPlatformPermission } from "@aiwa/authz";
-import { adminResetPasswordSchema, cuidSchema } from "@aiwa/validation";
+import {
+  adminResetPasswordSchema,
+  userRecordIdSchema,
+} from "@aiwa/validation";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 
@@ -33,7 +36,7 @@ export async function POST(
   }
 
   const { userId } = await params;
-  if (!cuidSchema.safeParse(userId).success) {
+  if (!userRecordIdSchema.safeParse(userId).success) {
     return NextResponse.json({ error: "User not found." }, { status: 404 });
   }
 

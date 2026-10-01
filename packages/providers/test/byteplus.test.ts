@@ -86,7 +86,9 @@ describe("BytePlus provider adapter", () => {
       models.find((model) => model.id === "seedream-4-0-250828")?.capabilities,
     ).not.toHaveProperty("resolution:3K");
     expect(
-      models.find((model) => model.mediaKind === "video")?.capabilities,
+      models.find(
+        (model) => model.id === "dreamina-seedance-2-5-260628",
+      )?.capabilities,
     ).toMatchObject({
       minimumDurationSeconds: 4,
       maximumDurationSeconds: 30,

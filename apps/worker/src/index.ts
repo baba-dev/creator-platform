@@ -361,12 +361,17 @@ async function dispatchGarbageCollection() {
   if (isShuttingDown || gcDispatching) return;
   gcDispatching = true;
   try {
-    await purgeMediaAttemptOutputs();
-    await purgeExpiredAssets();
-  } catch (error) {
-    log("error", "Asset garbage collection failed; retries remain eligible", {
-      errorName: error instanceof Error ? error.name : "UnknownError",
-      errorMessage: error instanceof Error ? error.message : "Unknown",
+    await purgeMediaAttemptOutputs().catch((error: unknown) => {
+      log("error", "Media attempt cleanup failed; retries remain eligible", {
+        errorName: error instanceof Error ? error.name : "UnknownError",
+        errorMessage: error instanceof Error ? error.message : "Unknown",
+      });
+    });
+    await purgeExpiredAssets().catch((error: unknown) => {
+      log("error", "Asset purge failed; retries remain eligible", {
+        errorName: error instanceof Error ? error.name : "UnknownError",
+        errorMessage: error instanceof Error ? error.message : "Unknown",
+      });
     });
   } finally {
     gcDispatching = false;

@@ -4,7 +4,7 @@ import { defaultAssetName, reserveAssetStorage } from "@aiwa/assets";
 import {
   calculateBillableUnits,
   estimateGeneration,
-  quoteImageOutputs,
+  quoteImageGeneration,
   countBillableCharacters,
   createCreditQuote,
   reserveCreditsForJob,
@@ -49,7 +49,7 @@ export const imageRequestSchema = z
       "2:3",
       "21:9",
     ]),
-    resolution: z.enum(["1K", "2K", "3K", "4K"]).default("2K"),
+    resolution: z.enum(["1K", "1.5K", "2K", "3K", "4K"]).default("2K"),
     outputCount: z.number().int().min(1).max(15).default(1),
     referenceAssetIds: z
       .array(z.string().min(1).max(100))
@@ -425,10 +425,16 @@ export async function createImageJob(userId: string, raw: unknown) {
             where: {
               id: { in: input.referenceAssetIds },
               organizationId: input.organizationId,
-              storageOwnerUserId: userId,
-              purpose: "REFERENCE_INPUT",
               mediaKind: "IMAGE",
               status: "READY",
+              storageProvider: "LOCAL",
+              OR: [
+                { purpose: "GENERAL" },
+                {
+                  purpose: "REFERENCE_INPUT",
+                  storageOwnerUserId: userId,
+                },
+              ],
             },
             select: {
               id: true,
@@ -453,10 +459,12 @@ export async function createImageJob(userId: string, raw: unknown) {
         );
       }
 
-      const credits = quoteImageOutputs(
-        price,
-        input.outputCount,
-      ).customerCredits;
+      const credits = quoteImageGeneration(price, {
+        providerModelId: model.providerModelId,
+        resolution: input.resolution,
+        outputCount: input.outputCount,
+        referenceImageCount: input.referenceAssetIds.length,
+      }).customerCredits;
       try {
         verifyGenerationQuote(
           input.quoteToken,

@@ -249,7 +249,10 @@ export async function PATCH(
       );
     if (usageRates && model.mediaKind !== "VIDEO")
       return NextResponse.json(
-        { error: "Resolution usage-rate tables are only valid for video models." },
+        {
+          error:
+            "Resolution usage-rate tables are only valid for video models.",
+        },
         { status: 400 },
       );
     if (pricingDimension === "TOKEN" && model.mediaKind === "VIDEO") {

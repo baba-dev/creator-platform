@@ -151,6 +151,41 @@ describe("generation pricing policies", () => {
         .billableQuantity,
     ).toBe(11);
   });
+  it("supports v2 rate tables and prices aggregate reference-video duration", () => {
+    const v2Rates = { ...usageRates, estimator: "byteplus-video-v2" as const };
+    expect(parseUsageRates(v2Rates).estimator).toBe("byteplus-video-v2");
+    expect(
+      estimateVideoTokens({
+        resolution: "720p",
+        aspectRatio: "16:9",
+        durationSeconds: 5,
+        totalInputVideoDurationMs: 7_000,
+      }),
+    ).toBe(
+      estimateVideoTokens({
+        resolution: "720p",
+        aspectRatio: "16:9",
+        durationSeconds: 5,
+        inputDurationMs: 7_000,
+      }),
+    );
+    const result = estimateGeneration({
+      price: { ...price, usageRates: v2Rates },
+      mediaKind: "VIDEO",
+      providerModelId: "dreamina-seedance-2-5-260628",
+      resolution: "720p",
+      aspectRatio: "16:9",
+      durationSeconds: 5,
+      totalInputVideoDurationMs: 7_000,
+    });
+    expect(result.settlement).toBe("ACTUAL_USAGE");
+    expect(result.estimatedTokens).not.toBeNull();
+    expect(result.quote.providerCostMicroUsd).toBeGreaterThan(0n);
+    expect(result.reservation.customerCredits).toBeGreaterThan(
+      result.quote.customerCredits,
+    );
+  });
+
   it("validates rate selectors and monetary inputs without floating point", () => {
     expect(selectUsageRate(usageRates, "720p", true)).toBe(6400n);
     expect(() =>

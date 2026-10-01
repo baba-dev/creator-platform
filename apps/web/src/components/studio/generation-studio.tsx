@@ -407,6 +407,27 @@ export function GenerationStudio({
       }>,
     [model?.capabilities],
   );
+  const videoRequestReady =
+    activeMode !== "VIDEO"
+      ? true
+      : videoWorkflow === "GENERATE"
+        ? true
+        : videoWorkflow === "FRAME_TO_VIDEO"
+          ? Boolean(videoFirstFrameId)
+          : videoWorkflow === "FIRST_LAST_FRAME"
+            ? Boolean(videoFirstFrameId && videoLastFrameId)
+            : videoWorkflow === "REFERENCE"
+              ? videoSources.length > 0 &&
+                (model?.capabilities?.audioOnlyReference === true ||
+                  videoReferenceAudioIds.length === 0 ||
+                  videoReferenceImageIds.length > 0 ||
+                  videoReferenceVideoIds.length > 0)
+              : videoWorkflow === "EDIT" || videoWorkflow === "EXTEND"
+                ? Boolean(videoSourceAssetId)
+                : videoWorkflow === "DRAFT_FINAL"
+                  ? Boolean(sourceDraftJobId)
+                  : true;
+
   const handleModeChange = useCallback(
     (mode: MediaKind) => {
       if (mode !== activeMode) {
@@ -463,7 +484,11 @@ export function GenerationStudio({
       ? quoteState
       : null;
   useEffect(() => {
-    if (!activeModelId || (activeMode === "VOICE" && !billableCharacters)) {
+    if (
+      !activeModelId ||
+      (activeMode === "VOICE" && !billableCharacters) ||
+      (activeMode === "VIDEO" && !videoRequestReady)
+    ) {
       return;
     }
     const controller = new AbortController();
@@ -520,6 +545,7 @@ export function GenerationStudio({
     billableCharacters,
     quoteRequestKey,
     quoteRefresh,
+    videoRequestReady,
   ]);
   const activeRequiredCredits = activeQuote
     ? BigInt(activeQuote.quote.reservationCredits)

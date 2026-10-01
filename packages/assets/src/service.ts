@@ -145,6 +145,69 @@ export async function releaseAssetStorage(
 }
 
 /**
+ * Commit physical bytes for a newly-created derivative.
+ *
+ * Call this inside the same database transaction that creates the AssetVariant,
+ * before inserting the variant row. The shared usage-row lock serializes
+ * derivative admission with uploads/generation reservations, so optional
+ * previews cannot silently push member or organization storage over quota.
+ */
+export async function commitAssetVariantStorage(
+  tx: Prisma.TransactionClient,
+  input: {
+    organizationId: string;
+    userId?: string | null;
+    byteSize: bigint;
+    memberQuotaBytes?: bigint;
+    organizationQuotaBytes?: bigint;
+  },
+): Promise<void> {
+  if (input.byteSize < 0n)
+    throw new RangeError("Asset variant size cannot be negative.");
+
+  const usage = await lockUsage(tx, input.organizationId);
+  const organizationQuota =
+    input.organizationQuotaBytes ?? DEFAULT_ORGANIZATION_STORAGE_QUOTA_BYTES;
+  const organizationCommitted = usage.usedBytes + usage.reservedBytes;
+
+  if (organizationCommitted + input.byteSize > organizationQuota) {
+    throw new AssetQuotaExceededError(
+      "organization",
+      organizationCommitted,
+      input.byteSize,
+      organizationQuota,
+    );
+  }
+
+  if (input.userId) {
+    const member = await getPhysicalAssetStorageUsage(
+      tx,
+      input.organizationId,
+      input.userId,
+    );
+    const memberUsed = member.physicalBytes + member.reservedBytes;
+    const memberQuota =
+      input.memberQuotaBytes ?? DEFAULT_MEMBER_STORAGE_QUOTA_BYTES;
+    if (memberUsed + input.byteSize > memberQuota) {
+      throw new AssetQuotaExceededError(
+        "member",
+        memberUsed,
+        input.byteSize,
+        memberQuota,
+      );
+    }
+  }
+
+  await tx.assetStorageUsage.update({
+    where: { organizationId: input.organizationId },
+    data: {
+      usedBytes: { increment: input.byteSize },
+      version: { increment: 1 },
+    },
+  });
+}
+
+/**
  * Recompute cached organization usage from authoritative Asset and AssetVariant rows.
  * Separates physical capacity accounting (which includes variants and retained trash bytes)
  * from ready asset counts.

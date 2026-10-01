@@ -1,0 +1,69 @@
+name: BytePlus live image smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      billing_acknowledgement:
+        description:
+          Type I_UNDERSTAND_THIS_IS_BILLABLE to run one live Seedream 5.0 Lite
+          generation
+        required: true
+        type: string
+      region:
+        description: BytePlus ModelArk region to exercise
+        required: true
+        default: ap-southeast-1
+        type: choice
+        options:
+          - ap-southeast-1
+          - eu-west-1
+
+permissions:
+  contents: read
+
+concurrency:
+  group: byteplus-live-image-smoke
+  cancel-in-progress: false
+
+jobs:
+  seedream-5-lite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BYTEPLUS_API_KEY: ${{ secrets.BYTEPLUS_API_KEY }}
+      BYTEPLUS_REGION: ${{ inputs.region }}
+      BYTEPLUS_MODELARK_BASE_URL: ${{ vars.BYTEPLUS_MODELARK_BASE_URL }}
+      BYTEPLUS_LIVE_SMOKE_ACK: ${{ inputs.billing_acknowledgement }}
+      BYTEPLUS_SMOKE_OUTPUT_DIR: ${{ runner.temp }}/byteplus-smoke
+    steps:
+      - name: Verify explicit billing acknowledgement
+        shell: bash
+        run: |
+          if [ "$BYTEPLUS_LIVE_SMOKE_ACK" != "I_UNDERSTAND_THIS_IS_BILLABLE" ]; then
+            echo "Live smoke cancelled: billing acknowledgement did not match." >&2
+            exit 1
+          fi
+          if [ -z "$BYTEPLUS_API_KEY" ]; then
+            echo "Live smoke unavailable: repository secret BYTEPLUS_API_KEY is not configured." >&2
+            exit 1
+          fi
+
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.19.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run one live Seedream 5.0 Lite single-image generation
+        run: pnpm --filter @aiwa/worker smoke:byteplus

@@ -48,4 +48,21 @@ describe("Seedance provider concurrency policy", () => {
       })?.limit,
     ).toBe(4);
   });
+  it("serializes OmniHuman at the documented provider concurrency limit", () => {
+    expect(
+      seedanceConcurrencySpec({
+        providerModelId: "omnihuman-1.5",
+        capabilities: { concurrencyLimit: 1 },
+        requestPayload: {
+          schemaVersion: 2,
+          workflow: "TALKING_AVATAR",
+          resolution: "1080p",
+        },
+      }),
+    ).toEqual({
+      key: "aiwa:provider-capacity:byteplus:omnihuman-1.5:standard",
+      limit: 1,
+    });
+  });
+
 });

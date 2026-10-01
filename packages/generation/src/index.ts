@@ -694,7 +694,21 @@ export async function createVideoJob(userId: string, raw: unknown) {
           existing.templateId !== templateId ||
           existing.providerModelId !== input.modelId ||
           existing.priceVersionId !== input.priceVersionId ||
-          JSON.stringify(existing.requestPayload) !== JSON.stringify(payload)
+          JSON.stringify(
+            (() => {
+              const existingPayload =
+                existing.requestPayload &&
+                typeof existing.requestPayload === "object" &&
+                !Array.isArray(existing.requestPayload)
+                  ? { ...(existing.requestPayload as Record<string, unknown>) }
+                  : {};
+              delete existingPayload.draftProviderTaskId;
+              delete existingPayload.draftBillingContext;
+              delete existingPayload.trustedDrivingAudioDurationMs;
+              delete existingPayload.billableDurationSeconds;
+              return existingPayload;
+            })(),
+          ) !== JSON.stringify(payload)
         ) {
           throw new GenerationError(
             "Request key was already used for different inputs.",

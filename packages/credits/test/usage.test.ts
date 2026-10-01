@@ -275,4 +275,36 @@ describe("generation pricing policies", () => {
       estimate.quote.customerCredits,
     );
   });
+  it("prices OmniHuman by trusted seconds without a 1080p surcharge", () => {
+    const omniHumanPrice: PriceSnapshot = {
+      providerCostMicroUsd: 120_000n,
+      pricingDimension: "SECOND",
+      unitQuantity: 1,
+      fxBaisaNumerator: 769n,
+      fxBaisaDenominator: 2n,
+      targetMarginBps: 2500,
+      creditsPerBaisa: 1n,
+    };
+
+    const p720 = estimateGeneration({
+      price: omniHumanPrice,
+      mediaKind: "VIDEO",
+      providerModelId: "omnihuman-1.5",
+      durationSeconds: 15,
+      resolution: "720p",
+    });
+    const p1080 = estimateGeneration({
+      price: omniHumanPrice,
+      mediaKind: "VIDEO",
+      providerModelId: "omnihuman-1.5",
+      durationSeconds: 15,
+      resolution: "1080p",
+    });
+
+    expect(p720.settlement).toBe("FIXED");
+    expect(p720.units).toBe(15);
+    expect(p720.quote.customerCredits).toBe(924n);
+    expect(p1080.quote.customerCredits).toBe(924n);
+  });
+
 });

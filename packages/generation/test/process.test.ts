@@ -234,7 +234,8 @@ describe("video processing", () => {
         data: expect.objectContaining({
           status: "FAILED",
           errorCode: "InvalidParameter",
-          errorMessage: "Provider rejected the video request. Credits released.",
+          errorMessage:
+            "Provider rejected the video request. Credits released.",
         }),
       }),
     );
@@ -262,7 +263,8 @@ describe("video processing", () => {
         data: expect.objectContaining({
           status: "FAILED",
           errorCode: "TaskFailed",
-          errorMessage: "Provider did not complete the video. Credits released.",
+          errorMessage:
+            "Provider did not complete the video. Credits released.",
         }),
       }),
     );
@@ -727,7 +729,8 @@ describe("image processing", () => {
         data: expect.objectContaining({
           status: "FAILED",
           errorCode: "InvalidParameter",
-          errorMessage: "Provider rejected the image request. Credits released.",
+          errorMessage:
+            "Provider rejected the image request. Credits released.",
         }),
       }),
     );
@@ -916,7 +919,8 @@ describe("voice processing", () => {
         data: expect.objectContaining({
           status: "FAILED",
           errorCode: "SpeechForbidden",
-          errorMessage: "Provider rejected the voice request. Credits released.",
+          errorMessage:
+            "Provider rejected the voice request. Credits released.",
         }),
       }),
     );

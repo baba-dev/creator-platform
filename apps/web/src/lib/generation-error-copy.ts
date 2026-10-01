@@ -22,6 +22,45 @@ export function getGenerationErrorPresentation({
   const code = errorCode?.trim() ?? "";
 
   if (
+    code.includes("PolicyViolation") &&
+    code.includes("SensitiveContentDetected")
+  ) {
+    return {
+      title: "Content was blocked by provider policy",
+      description:
+        "The provider detected content that may conflict with its content or copyright restrictions.",
+      nextStep:
+        "Replace the affected prompt or reference media and generate again.",
+    };
+  }
+
+  if (
+    code.includes("PrivacyInformation") &&
+    code.includes("SensitiveContentDetected")
+  ) {
+    return {
+      title: "Reference media was blocked for privacy reasons",
+      description:
+        "The provider detected a real-person privacy restriction in the supplied reference media.",
+      nextStep:
+        "Use different reference media or remove the restricted reference and try again.",
+    };
+  }
+
+  if (
+    code.includes("DeepFake") &&
+    code.includes("OutputImageSensitiveContentDetected")
+  ) {
+    return {
+      title: "Generated image was blocked by the safety filter",
+      description:
+        "The provider detected output that may resemble restricted documents, credentials, or impersonation content.",
+      nextStep:
+        "Change the request so it does not ask for restricted document or identity-like output.",
+    };
+  }
+
+  if (
     code === "OutputImageSensitiveContentDetected" ||
     code.startsWith("OutputImageSensitiveContentDetected.")
   ) {
@@ -97,41 +136,15 @@ export function getGenerationErrorPresentation({
   }
 
   if (
-    code.includes("PolicyViolation") &&
-    code.includes("SensitiveContentDetected")
+    code === "InvalidParameter.TaskTypeMismatch" ||
+    code === "InvalidParameter.TaskTypeConstraint"
   ) {
     return {
-      title: "Content was blocked by provider policy",
+      title: "Prompt and generation mode do not match",
       description:
-        "The provider detected content that may conflict with its content or copyright restrictions.",
+        "The provider classified the request as a different task type from the selected video workflow.",
       nextStep:
-        "Replace the affected prompt or reference media and generate again.",
-    };
-  }
-
-  if (
-    code.includes("PrivacyInformation") &&
-    code.includes("SensitiveContentDetected")
-  ) {
-    return {
-      title: "Reference media was blocked for privacy reasons",
-      description:
-        "The provider detected a real-person privacy restriction in the supplied reference media.",
-      nextStep:
-        "Use different reference media or remove the restricted reference and try again.",
-    };
-  }
-
-  if (
-    code.includes("DeepFake") &&
-    code.includes("OutputImageSensitiveContentDetected")
-  ) {
-    return {
-      title: "Generated image was blocked by the safety filter",
-      description:
-        "The provider detected output that may resemble restricted documents, credentials, or impersonation content.",
-      nextStep:
-        "Change the request so it does not ask for restricted document or identity-like output.",
+        "Adjust the prompt or source media so they match the selected generation mode.",
     };
   }
 
@@ -147,19 +160,6 @@ export function getGenerationErrorPresentation({
         "One or more request settings were rejected by the provider or were incompatible with this generation mode.",
       nextStep:
         "Refresh the page, review the selected model settings and inputs, then try again. If it repeats, use the job reference when contacting support.",
-    };
-  }
-
-  if (
-    code === "InvalidParameter.TaskTypeMismatch" ||
-    code === "InvalidParameter.TaskTypeConstraint"
-  ) {
-    return {
-      title: "Prompt and generation mode do not match",
-      description:
-        "The provider classified the request as a different task type from the selected video workflow.",
-      nextStep:
-        "Adjust the prompt or source media so they match the selected generation mode.",
     };
   }
 

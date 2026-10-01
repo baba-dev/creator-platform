@@ -1,3 +1,4 @@
+import { hasOrganizationPermission } from "@aiwa/authz";
 import { db } from "@aiwa/db";
 import { NextResponse } from "next/server";
 import { getRequestSession } from "@/lib/request-auth";
@@ -14,19 +15,14 @@ export async function GET(
       { status: 401 },
     );
   }
-  const { threadId } = await params;
 
+  const { threadId } = await params;
   const thread = await db.chatThread.findUnique({
     where: { id: threadId },
-    include: {
-      persona: true,
-      messages: {
-        orderBy: { createdAt: "asc" },
-      },
-    },
+    include: { persona: true },
   });
 
-  if (!thread) {
+  if (!thread || thread.createdById !== session.user.id) {
     return NextResponse.json({ error: "Thread not found." }, { status: 404 });
   }
 
@@ -37,13 +33,20 @@ export async function GET(
         userId: session.user.id,
       },
     },
+    include: { organization: true },
   });
-  if (!membership) {
+  if (!membership || membership.organization.status !== "ACTIVE") {
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
   }
 
+  const newestMessages = await db.chatMessage.findMany({
+    where: { threadId },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: 200,
+  });
+
   return NextResponse.json(
-    { thread },
+    { thread: { ...thread, messages: newestMessages.reverse() } },
     { headers: { "Cache-Control": "no-store" } },
   );
 }
@@ -55,6 +58,7 @@ export async function DELETE(
   if (!hasTrustedMutationOrigin(request)) {
     return NextResponse.json({ error: "Origin not allowed." }, { status: 403 });
   }
+
   const session = await getRequestSession(request.headers);
   if (!session) {
     return NextResponse.json(
@@ -62,12 +66,14 @@ export async function DELETE(
       { status: 401 },
     );
   }
-  const { threadId } = await params;
 
+  const { threadId } = await params;
   const thread = await db.chatThread.findUnique({
     where: { id: threadId },
+    select: { id: true, organizationId: true, createdById: true },
   });
-  if (!thread) {
+
+  if (!thread || thread.createdById !== session.user.id) {
     return NextResponse.json({ error: "Thread not found." }, { status: 404 });
   }
 
@@ -78,14 +84,16 @@ export async function DELETE(
         userId: session.user.id,
       },
     },
+    include: { organization: true },
   });
-  if (!membership) {
+  if (
+    !membership ||
+    membership.organization.status !== "ACTIVE" ||
+    !hasOrganizationPermission(membership.role, "generation:create")
+  ) {
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
   }
 
-  await db.chatThread.delete({
-    where: { id: threadId },
-  });
-
+  await db.chatThread.delete({ where: { id: threadId } });
   return NextResponse.json({ success: true });
 }

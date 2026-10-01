@@ -13,6 +13,9 @@ vi.mock("@/lib/request-security", () => ({
 vi.mock("@/lib/request-auth", () => ({
   getRequestSession: mocks.getRequestSession,
 }));
+vi.mock("@/lib/organization-api", () => ({
+  organizationError: vi.fn(),
+}));
 vi.mock("@aiwa/organizations", () => ({
   setUserEmailVerified: mocks.setUserEmailVerified,
 }));

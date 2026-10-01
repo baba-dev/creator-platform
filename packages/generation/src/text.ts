@@ -468,55 +468,55 @@ export async function executeTextGeneration(
         );
       }
       const extraCredits =
-      actualCredits > job.reservedCredits
-        ? actualCredits - job.reservedCredits
-        : 0n;
-    if (extraCredits > 0n) {
-      const member = await requireMembership(
-        tx,
-        input.organizationId,
-        userId,
-        true,
-      );
-      await assertWithinMonthlySpendingCap(tx, {
-        organizationId: input.organizationId,
-        userId,
-        cap: member.monthlySpendingCapCredits,
-        additionalCredits: extraCredits,
-        now: new Date(),
+        actualCredits > job.reservedCredits
+          ? actualCredits - job.reservedCredits
+          : 0n;
+      if (extraCredits > 0n) {
+        const member = await requireMembership(
+          tx,
+          input.organizationId,
+          userId,
+          true,
+        );
+        await assertWithinMonthlySpendingCap(tx, {
+          organizationId: input.organizationId,
+          userId,
+          cap: member.monthlySpendingCapCredits,
+          additionalCredits: extraCredits,
+          now: new Date(),
+        });
+      }
+      await captureCreditsForJob(tx, {
+        walletId: wallet.id,
+        jobId: job.id,
+        amountCredits: actualCredits,
+        idempotencyKey: `generation-capture-${job.id}`,
+        metadata: {
+          ...(usage ?? {}),
+          usageFallback: !usageIsReliable,
+        },
       });
-    }
-    await captureCreditsForJob(tx, {
-      walletId: wallet.id,
-      jobId: job.id,
-      amountCredits: actualCredits,
-      idempotencyKey: `generation-capture-${job.id}`,
-      metadata: {
-        ...(usage ?? {}),
-        usageFallback: !usageIsReliable,
-      },
-    });
 
-    await tx.generationJob.update({
-      where: { id: job.id },
-      data: {
-        status: "SUCCEEDED",
-        providerRequestId: providerResponse.providerRequestId,
-        actualUnits: Number(actualUnits),
-        billableQuantity: totalTokens,
-        actualProviderCostMicroUsd: actualCost,
-        providerCostBasis: usageIsReliable
-          ? hasTextRateTable
-            ? "PROVIDER_USAGE"
-            : "CONFIGURED_RATE"
-          : "CONFIGURED_ESTIMATE",
-        completedAt: new Date(),
-        outputPayload: usage
-          ? { content, usage }
-          : { content, usageEstimated: true },
-        chargedCredits: actualCredits,
-      },
-    });
+      await tx.generationJob.update({
+        where: { id: job.id },
+        data: {
+          status: "SUCCEEDED",
+          providerRequestId: providerResponse.providerRequestId,
+          actualUnits: Number(actualUnits),
+          billableQuantity: totalTokens,
+          actualProviderCostMicroUsd: actualCost,
+          providerCostBasis: usageIsReliable
+            ? hasTextRateTable
+              ? "PROVIDER_USAGE"
+              : "CONFIGURED_RATE"
+            : "CONFIGURED_ESTIMATE",
+          completedAt: new Date(),
+          outputPayload: usage
+            ? { content, usage }
+            : { content, usageEstimated: true },
+          chargedCredits: actualCredits,
+        },
+      });
 
       await tx.auditEvent.create({
         data: {

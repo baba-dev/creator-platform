@@ -1,7 +1,7 @@
--- Expand MediaKind enum to include TEXT across relevant tables
+-- Expand the generation MediaKind enum to include TEXT.
+-- Asset.mediaKind uses the separate AssetMediaKind enum and must not be altered here.
 ALTER TABLE `ProviderModel` MODIFY COLUMN `mediaKind` ENUM('IMAGE', 'VIDEO', 'VOICE', 'REASONING', 'TEXT') NOT NULL;
 ALTER TABLE `GenerationTemplate` MODIFY COLUMN `mediaKind` ENUM('IMAGE', 'VIDEO', 'VOICE', 'REASONING', 'TEXT') NOT NULL;
-ALTER TABLE `Asset` MODIFY COLUMN `mediaKind` ENUM('IMAGE', 'VIDEO', 'VOICE', 'REASONING', 'TEXT') NOT NULL;
 
 -- Personas for Character Chat and conversational assistants
 CREATE TABLE `Persona` (

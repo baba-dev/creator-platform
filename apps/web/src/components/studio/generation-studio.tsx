@@ -713,8 +713,22 @@ export function GenerationStudio({
       setReferences((previous) => [body.asset!, ...previous]);
       if (activeMode === "VIDEO") {
         setVideoFrames((previous) => [body.asset!, ...previous]);
-        setVideoFirstFrameId(body.asset.id);
-      } else setReferenceAssetIds((previous) => [...previous, body.asset!.id]);
+        if (videoWorkflow === "REFERENCE" || videoWorkflow === "DRAFT") {
+          setVideoReferenceImageIds((previous) =>
+            previous.includes(body.asset!.id)
+              ? previous
+              : [...previous, body.asset!.id].slice(
+                  0,
+                  Math.max(1, maxVideoReferenceImages),
+                ),
+          );
+        } else {
+          setVideoFirstFrameId(body.asset.id);
+          setVideoWorkflow("FRAME_TO_VIDEO");
+        }
+      } else {
+        setReferenceAssetIds((previous) => [...previous, body.asset!.id]);
+      }
     } catch (error) {
       setError(
         error instanceof Error ? error.message : "Reference upload failed.",

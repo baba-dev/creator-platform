@@ -33,6 +33,7 @@ import { executeTextGeneration } from "../src/text";
 describe("executeTextGeneration", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    mocks.db.generationJob.updateMany.mockResolvedValue({ count: 1 });
   });
 
   it("validates input and throws error on malformed request", async () => {
@@ -61,6 +62,9 @@ describe("executeTextGeneration", () => {
       generationTemplate: { findFirst: vi.fn() },
       generationJob: {
         findUnique: vi.fn().mockResolvedValue(null),
+        findUniqueOrThrow: vi.fn().mockResolvedValue({
+          status: "PROCESSING",
+        }),
         create: vi.fn().mockResolvedValue({ id: "job_text_1" }),
         update: vi
           .fn()
@@ -288,6 +292,9 @@ describe("executeTextGeneration", () => {
       generationTemplate: { findFirst: vi.fn() },
       generationJob: {
         findUnique: vi.fn().mockResolvedValue(null),
+        findUniqueOrThrow: vi.fn().mockResolvedValue({
+          status: "PROCESSING",
+        }),
         create: vi.fn().mockResolvedValue({ id: submittedJob.id }),
         update: vi.fn().mockResolvedValue(submittedJob),
         aggregate: vi.fn().mockResolvedValue({
@@ -378,6 +385,9 @@ describe("executeTextGeneration", () => {
       generationTemplate: { findFirst: vi.fn() },
       generationJob: {
         findUnique: vi.fn().mockResolvedValue(null),
+        findUniqueOrThrow: vi.fn().mockResolvedValue({
+          status: "PROCESSING",
+        }),
         create: vi.fn().mockResolvedValue({ id: "job_text_1" }),
         update: vi
           .fn()

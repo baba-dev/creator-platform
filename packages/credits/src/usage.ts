@@ -160,9 +160,14 @@ export function textProviderCostMicroUsd(
   )
     throw new RangeError("Invalid text token usage.");
   const table = parseTextUsageRates(config);
-  const tier =
-    table.tiers.find((candidate) => usage.promptTokens <= candidate.maxPromptTokens) ??
-    table.tiers[table.tiers.length - 1]!;
+  const tier = table.tiers.find(
+    (candidate) => usage.promptTokens <= candidate.maxPromptTokens,
+  );
+  if (!tier) {
+    throw new RangeError(
+      "Prompt token usage exceeds the configured text pricing tiers.",
+    );
+  }
   const cached = usage.cachedPromptTokens ?? 0;
   const uncached = usage.promptTokens - cached;
   const inputRate = BigInt(tier.inputMicroUsdPerMillionTokens);

@@ -13,9 +13,54 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  quality:
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
+  static:
+    name: static
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    env:
+      DATABASE_URL: mysql://creator:ci-only@127.0.0.1:3306/creator_platform
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.19.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Check deployment shell syntax
+        run: |
+          bash -n infra/deploy/bootstrap-server.sh
+          bash -n infra/deploy/install-control-plane.sh
+          bash -n infra/deploy/creator-deploy
+          bash -n infra/deploy/creator-ops
+          bash -n infra/deploy/package-release.sh
+
+      - name: Check formatting
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Type-check
+        run: pnpm typecheck
+
+  test:
+    name: test
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
     services:
       mariadb:
         image: mariadb:10.6
@@ -58,12 +103,67 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Prepare media package cache key
+        id: media-package-cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          ffmpeg_version="$(apt-cache policy ffmpeg | awk '/Candidate:/ {print $2; exit}')"
+          noto_version="$(apt-cache policy fonts-noto-core | awk '/Candidate:/ {print $2; exit}')"
+          test -n "$ffmpeg_version"
+          test -n "$noto_version"
+          test "$ffmpeg_version" != "(none)"
+          test "$noto_version" != "(none)"
+          version_key="$(printf '%s-%s' "$ffmpeg_version" "$noto_version" | tr ':~+/' '____')"
+          echo "key=media-debs-${RUNNER_OS}-ubuntu-22.04-${version_key}" >> "$GITHUB_OUTPUT"
+          mkdir -p "$GITHUB_WORKSPACE/.ci-cache/apt-archives/partial"
+
+      - name: Restore media package cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ github.workspace }}/.ci-cache/apt-archives
+          key: ${{ steps.media-package-cache.outputs.key }}
 
       - name: Install media tools
-        run:
-          sudo apt-get update && sudo apt-get install --no-install-recommends -y
-          ffmpeg fonts-noto-core
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          if command -v apt-fast >/dev/null 2>&1; then
+            apt_cmd=apt-fast
+          else
+            apt_cmd=apt-get
+          fi
+
+          apt_archives="$GITHUB_WORKSPACE/.ci-cache/apt-archives"
+          mkdir -p "$apt_archives/partial"
+          sudo chown _apt:root "$apt_archives/partial"
+          sudo chmod 0700 "$apt_archives/partial"
+
+          install_media_tools() {
+            sudo env DEBIAN_FRONTEND=noninteractive "$apt_cmd" \
+              -o Acquire::Retries=3 \
+              -o Dir::Cache::archives="$apt_archives" \
+              install --no-install-recommends -y ffmpeg fonts-noto-core
+          }
+
+          # Hosted runner images already contain a package index from image build
+          # time. Avoid a network-heavy refresh on the normal path; refresh only
+          # when that cached index can no longer resolve/download the packages.
+          if ! install_media_tools; then
+            sudo apt-get -o Acquire::Retries=3 update -qq
+            install_media_tools
+          fi
+
+          ffmpeg -version >/dev/null
+          fc-match "Noto Sans" >/dev/null
+
+          # Cache only immutable package payloads. APT's lock/partial entries are
+          # runtime state and may be root-only, which prevents actions/cache from
+          # archiving the directory during its post-job save.
+          sudo rm -rf "$apt_archives/lock" "$apt_archives/partial"
+          sudo chown -R "$(id -u):$(id -g)" "$apt_archives"
 
       - name: Generate Prisma client
         run: pnpm db:generate
@@ -71,25 +171,62 @@ jobs:
       - name: Apply database migrations for integration tests
         run: pnpm --filter @aiwa/db migrate:deploy
 
-      - name: Check deployment shell syntax
-        run: |
-          bash -n infra/deploy/bootstrap-server.sh
-          bash -n infra/deploy/install-control-plane.sh
-          bash -n infra/deploy/creator-deploy
-          bash -n infra/deploy/creator-ops
-          bash -n infra/deploy/package-release.sh
-
-      - name: Check formatting
-        run: pnpm format:check
-
-      - name: Lint
-        run: pnpm lint
-
-      - name: Type-check
-        run: pnpm typecheck
-
       - name: Test
         run: pnpm test
+
+  build_release:
+    name: build-release
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    services:
+      mariadb:
+        image: mariadb:10.6
+        env:
+          MARIADB_ROOT_PASSWORD: ci-root-only
+          MARIADB_DATABASE: creator_platform
+          MARIADB_USER: creator
+          MARIADB_PASSWORD: ci-only
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd="redis-cli ping" --health-interval=5s --health-timeout=5s
+          --health-retries=20
+    env:
+      AUTH_SECRET: ci-only-auth-secret-at-least-32-characters-long
+      DATABASE_URL: mysql://creator:ci-only@127.0.0.1:3306/creator_platform
+      APP_ENV: staging
+      APP_URL: http://localhost:3000
+      APP_VERSION: ${{ github.sha }}
+      SIGNUPS_ENABLED: "true"
+      GENERATION_INTEGRATION_TEST: "true"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.19.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Apply database migrations for build validation
+        run: pnpm --filter @aiwa/db migrate:deploy
 
       - name: Build
         run: pnpm build
@@ -108,7 +245,11 @@ jobs:
           bash infra/deploy/package-release.sh "$GITHUB_SHA"
           validation_dir="$(mktemp -d)"
           trap 'rm -rf "$validation_dir"' EXIT
-          tar -xzf "creator-platform-${GITHUB_SHA}.tar.gz" -C "$validation_dir"
+          if command -v pigz >/dev/null 2>&1; then
+            tar -I pigz -xf "creator-platform-${GITHUB_SHA}.tar.gz" -C "$validation_dir"
+          else
+            tar -xzf "creator-platform-${GITHUB_SHA}.tar.gz" -C "$validation_dir"
+          fi
           test "$(cat "$validation_dir/RELEASE_LAYOUT")" = "3"
           (
             cd "$validation_dir"
@@ -127,3 +268,20 @@ jobs:
           if-no-files-found: error
           retention-days: 7
           compression-level: 0
+
+  quality:
+    name: quality
+    if: always()
+    needs: [static, test, build_release]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 2
+    steps:
+      - name: Require every CI lane to pass
+        env:
+          STATIC_RESULT: ${{ needs.static.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+          BUILD_RESULT: ${{ needs.build_release.result }}
+        run: |
+          test "$STATIC_RESULT" = "success"
+          test "$TEST_RESULT" = "success"
+          test "$BUILD_RESULT" = "success"

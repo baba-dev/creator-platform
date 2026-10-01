@@ -145,7 +145,7 @@ export async function POST(
       data: {
         metadata: {
           ...currentMeta,
-          generationJobId: job.id,
+          audioJobId: job.id,
           voiceKey: voiceKeyToUse,
         },
       },

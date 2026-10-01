@@ -151,7 +151,21 @@ export const textRequestSchema = z
     temperature: z.number().min(0).max(2).default(0.7),
     maxTokens: z.number().int().positive().max(8192).default(2048),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    const totalCharacters = value.messages.reduce(
+      (sum, message) => sum + message.content.length,
+      0,
+    );
+    if (totalCharacters > 120_000) {
+      context.addIssue({
+        code: "custom",
+        path: ["messages"],
+        message:
+          "Combined text-generation context cannot exceed 120,000 characters.",
+      });
+    }
+  });
 
 export const textModelIds = VERIFIED_BYTEPLUS_MODELS.filter(
   (m) => m.mediaKind === "text",

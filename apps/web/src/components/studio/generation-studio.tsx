@@ -1605,104 +1605,302 @@ export function GenerationStudio({
                 </div>
               ) : null}
 
-              {variant === "advanced" &&
-              activeMode === "VIDEO" &&
-              model?.capabilities?.referenceVideo === true ? (
-                <div className="space-y-3 rounded-2xl border border-border bg-card/75 p-4">
-                  <h3 className="text-sm font-semibold">Reference video</h3>
-                  <p className="text-xs text-muted-foreground">
-                    Guide a new clip with an eligible MP4 from your library. The
-                    displayed credits are the maximum reservation; unused
-                    credits return after provider usage is verified.
-                  </p>
-                  <label className="grid gap-2 text-xs font-semibold">
-                    Library clip
-                    <select
-                      value={referenceVideoAssetId}
-                      onChange={(event) => {
-                        setReferenceVideoAssetId(event.target.value);
-                        if (event.target.value) {
-                          setVideoFirstFrameId("");
-                          setVideoLastFrameId("");
-                        }
-                      }}
-                      className="min-h-11 rounded-xl border border-input bg-background px-3"
-                    >
-                      <option value="">No video reference</option>
-                      {videoReferences.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-              ) : null}
+              {variant === "advanced" && activeMode === "VIDEO" ? (
+                <div className="space-y-4 rounded-2xl border border-border bg-card/75 p-4">
+                  <div>
+                    <h3 className="text-sm font-semibold">Creation workflow</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Choose the creative intent first. Creators only exposes
+                      settings and source roles supported by the selected model.
+                    </p>
+                  </div>
 
-              {variant === "advanced" &&
-              activeMode === "VIDEO" &&
-              model?.capabilities?.firstFrame === true &&
-              !referenceVideoAssetId ? (
-                <div className="space-y-3 rounded-2xl border border-border bg-card/75 p-4">
-                  <h3 className="text-sm font-semibold">
-                    Guide your opening frame
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    Select a private reference image. The output follows its
-                    aspect ratio.
-                  </p>
-                  <label className="grid gap-2 text-xs font-semibold">
-                    First frame
-                    <select
-                      value={videoFirstFrameId}
-                      onChange={(event) => {
-                        setVideoFirstFrameId(event.target.value);
-                        if (!event.target.value) setVideoLastFrameId("");
-                      }}
-                      className="min-h-11 rounded-xl border border-input bg-background px-3"
-                    >
-                      <option value="">Text to video</option>
-                      {videoFrames.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {videoFirstFrameId &&
-                  model?.capabilities?.lastFrame === true ? (
-                    <label className="grid gap-2 text-xs font-semibold">
-                      Last frame (optional)
-                      <select
-                        value={videoLastFrameId}
-                        onChange={(event) =>
-                          setVideoLastFrameId(event.target.value)
-                        }
-                        className="min-h-11 rounded-xl border border-input bg-background px-3"
-                      >
-                        <option value="">No fixed ending</option>
-                        {videoFrames.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {availableVideoWorkflows.map((item) => {
+                      const selected =
+                        videoWorkflow === item.value ||
+                        (item.value === "FRAME_TO_VIDEO" &&
+                          videoWorkflow === "FIRST_LAST_FRAME");
+                      return (
+                        <button
+                          key={item.value}
+                          type="button"
+                          aria-pressed={selected}
+                          disabled={busy}
+                          onClick={() => {
+                            setVideoWorkflow(item.value);
+                            setSourceDraftJobId("");
+                            if (item.value === "FRAME_TO_VIDEO") {
+                              setVideoLastFrameId("");
+                            }
+                            if (item.value !== "DRAFT") {
+                              setVideoOutputFormat("mp4");
+                            }
+                          }}
+                          className={`rounded-xl border px-3 py-3 text-left transition ${
+                            selected
+                              ? "border-primary bg-primary/[0.08]"
+                              : "border-border bg-background hover:border-primary/40"
+                          }`}
+                        >
+                          <span className="block text-xs font-semibold text-foreground">
+                            {item.label}
+                          </span>
+                          <span className="mt-1 block text-[11px] text-muted-foreground">
+                            {item.hint}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {(videoWorkflow === "FRAME_TO_VIDEO" ||
+                    videoWorkflow === "FIRST_LAST_FRAME") && (
+                    <div className="grid gap-3 rounded-xl border border-border bg-surface-sunken p-3 sm:grid-cols-2">
+                      <label className="grid gap-2 text-xs font-semibold">
+                        First frame
+                        <select
+                          value={videoFirstFrameId}
+                          onChange={(event) => {
+                            setVideoFirstFrameId(event.target.value);
+                            if (!event.target.value) {
+                              setVideoLastFrameId("");
+                              setVideoWorkflow("FRAME_TO_VIDEO");
+                            }
+                          }}
+                          className="min-h-11 rounded-xl border border-input bg-background px-3"
+                        >
+                          <option value="">Choose an image…</option>
+                          {videoFrames.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      {model?.capabilities?.lastFrame === true ? (
+                        <label className="grid gap-2 text-xs font-semibold">
+                          Last frame
+                          <select
+                            value={videoLastFrameId}
+                            disabled={!videoFirstFrameId}
+                            onChange={(event) => {
+                              setVideoLastFrameId(event.target.value);
+                              setVideoWorkflow(
+                                event.target.value
+                                  ? "FIRST_LAST_FRAME"
+                                  : "FRAME_TO_VIDEO",
+                              );
+                            }}
+                            className="min-h-11 rounded-xl border border-input bg-background px-3"
+                          >
+                            <option value="">No fixed ending</option>
+                            {videoFrames
+                              .filter((item) => item.id !== videoFirstFrameId)
+                              .map((item) => (
+                                <option key={item.id} value={item.id}>
+                                  {item.name}
+                                </option>
+                              ))}
+                          </select>
+                        </label>
+                      ) : null}
+                      <label className="inline-flex cursor-pointer self-end rounded-xl border border-border px-3 py-3 text-xs font-semibold text-primary">
+                        {referenceBusy ? "Uploading…" : "Upload frame image"}
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          className="sr-only"
+                          disabled={busy || referenceBusy || !canGenerate}
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            if (file) void uploadReference(file);
+                            event.target.value = "";
+                          }}
+                        />
+                      </label>
+                    </div>
+                  )}
+
+                  {(videoWorkflow === "REFERENCE" ||
+                    videoWorkflow === "DRAFT") && (
+                    <div className="space-y-3 rounded-xl border border-border bg-surface-sunken p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-xs font-semibold">Reference board</p>
+                          <p className="mt-1 text-[11px] text-muted-foreground">
+                            Multi-select assets. Their visible order becomes the
+                            provider Image / Video / Audio reference order.
+                          </p>
+                        </div>
+                        <span className="text-[11px] tabular-nums text-muted-foreground">
+                          {videoSources.length} source
+                          {videoSources.length === 1 ? "" : "s"}
+                        </span>
+                      </div>
+
+                      {model?.capabilities?.referenceImages === true ? (
+                        <label className="grid gap-2 text-xs font-semibold">
+                          Images · up to {maxVideoReferenceImages}
+                          <select
+                            multiple
+                            size={Math.min(5, Math.max(3, videoFrames.length))}
+                            value={videoReferenceImageIds}
+                            onChange={(event) =>
+                              setVideoReferenceImageIds(
+                                Array.from(event.currentTarget.selectedOptions)
+                                  .map((option) => option.value)
+                                  .slice(0, maxVideoReferenceImages),
+                              )
+                            }
+                            className="min-h-24 rounded-xl border border-input bg-background px-3 py-2"
+                          >
+                            {videoFrames.map((item) => (
+                              <option key={item.id} value={item.id}>
+                                {item.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
+
+                      {model?.capabilities?.referenceVideo === true ? (
+                        <label className="grid gap-2 text-xs font-semibold">
+                          Videos · up to {maxVideoReferenceVideos}
+                          <select
+                            multiple
+                            size={Math.min(
+                              5,
+                              Math.max(3, videoReferences.length),
+                            )}
+                            value={videoReferenceVideoIds}
+                            onChange={(event) =>
+                              setVideoReferenceVideoIds(
+                                Array.from(event.currentTarget.selectedOptions)
+                                  .map((option) => option.value)
+                                  .slice(0, maxVideoReferenceVideos),
+                              )
+                            }
+                            className="min-h-24 rounded-xl border border-input bg-background px-3 py-2"
+                          >
+                            {videoReferences.map((item) => (
+                              <option key={item.id} value={item.id}>
+                                {item.name}
+                                {item.durationMs
+                                  ? ` · ${(item.durationMs / 1000).toFixed(1)}s`
+                                  : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
+
+                      {model?.capabilities?.referenceAudio === true ? (
+                        <label className="grid gap-2 text-xs font-semibold">
+                          Audio · up to {maxVideoReferenceAudio}
+                          <select
+                            multiple
+                            size={Math.min(
+                              5,
+                              Math.max(3, videoAudioReferences.length),
+                            )}
+                            value={videoReferenceAudioIds}
+                            onChange={(event) =>
+                              setVideoReferenceAudioIds(
+                                Array.from(event.currentTarget.selectedOptions)
+                                  .map((option) => option.value)
+                                  .slice(0, maxVideoReferenceAudio),
+                              )
+                            }
+                            className="min-h-24 rounded-xl border border-input bg-background px-3 py-2"
+                          >
+                            {videoAudioReferences.map((item) => (
+                              <option key={item.id} value={item.id}>
+                                {item.name}
+                                {item.durationMs
+                                  ? ` · ${(item.durationMs / 1000).toFixed(1)}s`
+                                  : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
+
+                      {model?.capabilities?.audioOnlyReference !== true &&
+                      videoReferenceAudioIds.length > 0 &&
+                      videoReferenceImageIds.length === 0 &&
+                      videoReferenceVideoIds.length === 0 ? (
+                        <p className="text-xs text-destructive">
+                          This model requires an image or video alongside audio
+                          references.
+                        </p>
+                      ) : null}
+                    </div>
+                  )}
+
+                  {(videoWorkflow === "EDIT" ||
+                    videoWorkflow === "EXTEND") && (
+                    <div className="grid gap-3 rounded-xl border border-border bg-surface-sunken p-3 sm:grid-cols-2">
+                      <label className="grid gap-2 text-xs font-semibold">
+                        Source video
+                        <select
+                          value={videoSourceAssetId}
+                          onChange={(event) =>
+                            setVideoSourceAssetId(event.target.value)
+                          }
+                          className="min-h-11 rounded-xl border border-input bg-background px-3"
+                        >
+                          <option value="">Choose a library video…</option>
+                          {videoReferences.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {item.name}
+                              {item.durationMs
+                                ? ` · ${(item.durationMs / 1000).toFixed(1)}s`
+                                : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      {videoWorkflow === "EXTEND" ? (
+                        <label className="grid gap-2 text-xs font-semibold">
+                          Extend
+                          <select
+                            value={extensionDirection}
+                            onChange={(event) =>
+                              setExtensionDirection(
+                                event.target.value as "BEFORE" | "AFTER",
+                              )
+                            }
+                            className="min-h-11 rounded-xl border border-input bg-background px-3"
+                          >
+                            <option value="AFTER">After the source</option>
+                            <option value="BEFORE">Before the source</option>
+                          </select>
+                        </label>
+                      ) : (
+                        <div className="rounded-xl border border-dashed border-border p-3 text-xs text-muted-foreground">
+                          Seedance preserves the source duration and aspect
+                          ratio for generative edits.
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {videoWorkflow === "DRAFT_FINAL" ? (
+                    <div className="rounded-xl border border-primary/25 bg-primary/[0.06] p-3">
+                      <p className="text-xs font-semibold text-foreground">
+                        Render approved Draft at 1080p
+                      </p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        Creators will resolve the provider Draft server-side and
+                        reuse its original prompt, sources, ratio, duration,
+                        seed and audio settings.
+                      </p>
+                      <p className="mt-2 font-mono text-[10px] text-muted-foreground">
+                        Draft job: {sourceDraftJobId || "not selected"}
+                      </p>
+                    </div>
                   ) : null}
-                  <label className="inline-flex cursor-pointer rounded-xl border border-border px-3 py-2 text-xs font-semibold text-primary">
-                    {referenceBusy ? "Uploading…" : "Upload frame image"}
-                    <input
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      className="sr-only"
-                      disabled={busy || referenceBusy || !canGenerate}
-                      onChange={(event) => {
-                        const file = event.target.files?.[0];
-                        if (file) void uploadReference(file);
-                        event.target.value = "";
-                      }}
-                    />
-                  </label>
                 </div>
               ) : null}
 

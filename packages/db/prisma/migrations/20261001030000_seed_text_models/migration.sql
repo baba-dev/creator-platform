@@ -19,7 +19,7 @@ CREATE TABLE `Persona` (
   `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `updatedAt` DATETIME(3) NOT NULL,
 
-  INDEX `Persona_organizationId_isPreset_idx`(`organizationId`, `isPreset`),
+  INDEX `Persona_organizationId_isPreset_createdAt_idx`(`organizationId`, `isPreset`, `createdAt`),
   PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -125,7 +125,7 @@ CREATE TABLE `BrandProfile` (
   `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `updatedAt` DATETIME(3) NOT NULL,
 
-  INDEX `BrandProfile_organizationId_idx`(`organizationId`),
+  INDEX `BrandProfile_organizationId_updatedAt_idx`(`organizationId`, `updatedAt`),
   PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 

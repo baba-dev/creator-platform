@@ -276,6 +276,7 @@ Long-running work uses the shared process system in
   roughly 350 ms so fast navigation does not flash a loader.
 - Delayed/recoverable/error states use the confused mascot, but status meaning
   comes from semantic colour plus explicit copy, never artwork alone.
+- Successful terminal generation uses the celebration mascot.
 - Generation ETA is learned from recent successful jobs for the same provider
   model using a conservative percentile. Sparse history uses coarse language
   such as “Usually ready within a minute”.

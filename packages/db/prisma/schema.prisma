@@ -970,7 +970,7 @@ model Persona {
   createdBy      User         @relation(fields: [createdById], references: [id], onDelete: Restrict)
   chatThreads    ChatThread[]
 
-  @@index([organizationId, isPreset])
+  @@index([organizationId, isPreset, createdAt])
 }
 
 model ChatThread {
@@ -1045,7 +1045,7 @@ model BrandProfile {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   createdBy      User         @relation(fields: [createdById], references: [id], onDelete: Restrict)
 
-  @@index([organizationId])
+  @@index([organizationId, updatedAt])
 }
 
 model StoryPlan {

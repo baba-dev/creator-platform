@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { hasOrganizationPermission } from "@aiwa/authz";
 import { db, Prisma } from "@aiwa/db";
 import { createVoiceJob, resolvePresetVoice } from "@aiwa/generation";
@@ -8,7 +8,13 @@ import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
 
 const batchSynthesizeSchema = z.object({
-  blockIds: z.array(z.string().min(1)).optional(),
+  blockIds: z
+    .array(z.string().min(1).max(64))
+    .max(100)
+    .refine((ids) => new Set(ids).size === ids.length, {
+      message: "Block ids must be unique.",
+    })
+    .optional(),
 });
 
 interface ScriptSceneBlock {
@@ -122,6 +128,7 @@ export async function POST(
     }
 
     const queuedJobs: Array<{ blockId: string; jobId: string }> = [];
+    const failedBlocks: Array<{ blockId: string; error: string }> = [];
     const updatedScenes = [...scenes];
 
     for (const block of dialogueBlocks) {
@@ -136,48 +143,81 @@ export async function POST(
         voiceKeyToUse = "jasper";
       }
 
-      const idempotencyKey = randomUUID();
-      const job = await createVoiceJob(session.user.id, {
-        organizationId: script.organizationId,
-        projectId: script.projectId,
-        modelId: voiceModel.id,
-        priceVersionId: voiceModel.priceVersions[0].id,
-        idempotencyKey,
-        text: block.text,
-        voiceKey: voiceKeyToUse,
-        speechRate: speechRateToUse,
-        format: "mp3",
-      });
+      const idempotencyKey = createHash("sha256")
+        .update(
+          [
+            "script-batch-voice-v1",
+            script.id,
+            block.id,
+            voiceModel.id,
+            voiceModel.priceVersions[0].id,
+            voiceKeyToUse,
+            String(speechRateToUse),
+            block.text,
+          ].join("\u0000"),
+        )
+        .digest("hex");
 
-      queuedJobs.push({ blockId: block.id, jobId: job.id });
-
-      const idx = updatedScenes.findIndex((s) => s.id === block.id);
-      const targetScene = updatedScenes[idx];
-      if (idx !== -1 && targetScene) {
-        updatedScenes[idx] = {
-          ...targetScene,
-          audioJobId: job.id,
+      try {
+        const job = await createVoiceJob(session.user.id, {
+          organizationId: script.organizationId,
+          projectId: script.projectId,
+          modelId: voiceModel.id,
+          priceVersionId: voiceModel.priceVersions[0].id,
+          idempotencyKey,
+          text: block.text,
           voiceKey: voiceKeyToUse,
-        };
+          speechRate: speechRateToUse,
+          format: "mp3",
+        });
+
+        queuedJobs.push({ blockId: block.id, jobId: job.id });
+
+        const idx = updatedScenes.findIndex((s) => s.id === block.id);
+        const targetScene = updatedScenes[idx];
+        if (idx !== -1 && targetScene) {
+          updatedScenes[idx] = {
+            ...targetScene,
+            audioJobId: job.id,
+            voiceKey: voiceKeyToUse,
+          };
+        }
+      } catch (error) {
+        failedBlocks.push({
+          blockId: block.id,
+          error:
+            error instanceof Error
+              ? error.message
+              : "Voice synthesis could not be queued.",
+        });
       }
     }
 
-    await db.script.update({
-      where: { id: scriptId },
-      data: {
-        content: {
-          ...content,
-          scenes: updatedScenes,
-        } as unknown as Prisma.InputJsonValue,
-      },
-    });
+    if (queuedJobs.length > 0) {
+      await db.script.update({
+        where: { id: scriptId },
+        data: {
+          content: {
+            ...content,
+            scenes: updatedScenes,
+          } as unknown as Prisma.InputJsonValue,
+        },
+      });
+    }
+
+    const partial = failedBlocks.length > 0 && queuedJobs.length > 0;
+    const status =
+      failedBlocks.length === 0 ? 202 : partial ? 207 : 422;
 
     return NextResponse.json(
       {
         jobs: queuedJobs,
         queuedCount: queuedJobs.length,
+        failed: failedBlocks,
+        failedCount: failedBlocks.length,
+        partial,
       },
-      { status: 202 },
+      { status },
     );
   } catch (error) {
     if (error instanceof z.ZodError) {

@@ -10,8 +10,7 @@ import {
 import { auth } from "@/lib/auth";
 
 const integration =
-  process.env.DATABASE_URL &&
-  process.env.GENERATION_INTEGRATION_TEST === "true"
+  process.env.DATABASE_URL && process.env.GENERATION_INTEGRATION_TEST === "true"
     ? describe.sequential
     : describe.skip;
 
@@ -60,92 +59,89 @@ integration("password recovery integration", () => {
     await db.user.deleteMany({ where: { email } });
   });
 
-  it(
-    "queues reset mail durably, resets the password, revokes sessions, and rejects token reuse",
-    async () => {
-      await auth.api.signUpEmail({
+  it("queues reset mail durably, resets the password, revokes sessions, and rejects token reuse", async () => {
+    await auth.api.signUpEmail({
+      body: {
+        name: "Password Recovery Integration",
+        email,
+        password: initialPassword,
+      },
+    });
+
+    const user = await db.user.update({
+      where: { email },
+      data: { emailVerified: true },
+      select: { id: true },
+    });
+
+    await auth.api.signInEmail({
+      body: {
+        email,
+        password: initialPassword,
+        rememberMe: true,
+      },
+    });
+
+    expect(
+      await db.session.count({ where: { userId: user.id } }),
+    ).toBeGreaterThan(0);
+
+    const startedAt = performance.now();
+    const response = await passwordResetPost(resetRequest(email));
+    const elapsedMs = performance.now() - startedAt;
+
+    expect(response.status).toBe(200);
+    expect(elapsedMs).toBeGreaterThanOrEqual(
+      PASSWORD_RESET_RESPONSE_FLOOR_MS - 20,
+    );
+
+    const resetMail = await db.mailMessage.findFirst({
+      where: {
+        recipient: email,
+        template: "auth.password_reset.v1",
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    expect(resetMail).not.toBeNull();
+    expect(resetMail?.status).toBe("PENDING");
+
+    const token = resetTokenFromMail(resetMail!.textBody);
+
+    await expect(
+      auth.api.resetPassword({
+        body: { newPassword, token },
+      }),
+    ).resolves.toBeDefined();
+
+    expect(await db.session.count({ where: { userId: user.id } })).toBe(0);
+
+    await expect(
+      auth.api.signInEmail({
         body: {
-          name: "Password Recovery Integration",
           email,
-          password: initialPassword,
+          password: newPassword,
+          rememberMe: true,
         },
-      });
+      }),
+    ).resolves.toBeDefined();
 
-      const user = await db.user.update({
-        where: { email },
-        data: { emailVerified: true },
-        select: { id: true },
-      });
-
-      await auth.api.signInEmail({
+    await expect(
+      auth.api.signInEmail({
         body: {
           email,
           password: initialPassword,
           rememberMe: true,
         },
-      });
+      }),
+    ).rejects.toBeDefined();
 
-      expect(
-        await db.session.count({ where: { userId: user.id } }),
-      ).toBeGreaterThan(0);
-
-      const startedAt = performance.now();
-      const response = await passwordResetPost(resetRequest(email));
-      const elapsedMs = performance.now() - startedAt;
-
-      expect(response.status).toBe(200);
-      expect(elapsedMs).toBeGreaterThanOrEqual(
-        PASSWORD_RESET_RESPONSE_FLOOR_MS - 20,
-      );
-
-      const resetMail = await db.mailMessage.findFirst({
-        where: {
-          recipient: email,
-          template: "auth.password_reset.v1",
-        },
-        orderBy: { createdAt: "desc" },
-      });
-
-      expect(resetMail).not.toBeNull();
-      expect(resetMail?.status).toBe("PENDING");
-
-      const token = resetTokenFromMail(resetMail!.textBody);
-
-      await expect(
-        auth.api.resetPassword({
-          body: { newPassword, token },
-        }),
-      ).resolves.toBeDefined();
-
-      expect(await db.session.count({ where: { userId: user.id } })).toBe(0);
-
-      await expect(
-        auth.api.signInEmail({
-          body: {
-            email,
-            password: newPassword,
-            rememberMe: true,
-          },
-        }),
-      ).resolves.toBeDefined();
-
-      await expect(
-        auth.api.signInEmail({
-          body: {
-            email,
-            password: initialPassword,
-            rememberMe: true,
-          },
-        }),
-      ).rejects.toBeDefined();
-
-      await expect(
-        auth.api.resetPassword({
-          body: { newPassword: "Another-Password-789!", token },
-        }),
-      ).rejects.toBeDefined();
-    },
-  );
+    await expect(
+      auth.api.resetPassword({
+        body: { newPassword: "Another-Password-789!", token },
+      }),
+    ).rejects.toBeDefined();
+  });
 
   it("rejects an expired reset token", async () => {
     const requestedAt = new Date();
@@ -175,25 +171,22 @@ integration("password recovery integration", () => {
     ).rejects.toBeDefined();
   });
 
-  it(
-    "returns the same public success envelope for an unknown account without queueing mail",
-    async () => {
-      const startedAt = performance.now();
-      const response = await passwordResetPost(resetRequest(unknownEmail));
-      const elapsedMs = performance.now() - startedAt;
+  it("returns the same public success envelope for an unknown account without queueing mail", async () => {
+    const startedAt = performance.now();
+    const response = await passwordResetPost(resetRequest(unknownEmail));
+    const elapsedMs = performance.now() - startedAt;
 
-      expect(response.status).toBe(200);
-      expect(elapsedMs).toBeGreaterThanOrEqual(
-        PASSWORD_RESET_RESPONSE_FLOOR_MS - 20,
-      );
-      expect(
-        await db.mailMessage.count({
-          where: {
-            recipient: unknownEmail,
-            template: "auth.password_reset.v1",
-          },
-        }),
-      ).toBe(0);
-    },
-  );
+    expect(response.status).toBe(200);
+    expect(elapsedMs).toBeGreaterThanOrEqual(
+      PASSWORD_RESET_RESPONSE_FLOOR_MS - 20,
+    );
+    expect(
+      await db.mailMessage.count({
+        where: {
+          recipient: unknownEmail,
+          template: "auth.password_reset.v1",
+        },
+      }),
+    ).toBe(0);
+  });
 });

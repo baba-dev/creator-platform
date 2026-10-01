@@ -105,6 +105,27 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --prefer-offline
 
+      - name: Prepare media package cache key
+        id: media-package-cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          ffmpeg_version="$(apt-cache policy ffmpeg | awk '/Candidate:/ {print $2; exit}')"
+          noto_version="$(apt-cache policy fonts-noto-core | awk '/Candidate:/ {print $2; exit}')"
+          test -n "$ffmpeg_version"
+          test -n "$noto_version"
+          test "$ffmpeg_version" != "(none)"
+          test "$noto_version" != "(none)"
+          version_key="$(printf '%s-%s' "$ffmpeg_version" "$noto_version" | tr ':~+/' '____')"
+          echo "key=media-debs-${RUNNER_OS}-ubuntu-22.04-${version_key}" >> "$GITHUB_OUTPUT"
+          mkdir -p "$RUNNER_TEMP/apt-archives/partial"
+
+      - name: Restore media package cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: ${{ steps.media-package-cache.outputs.key }}
+
       - name: Install media tools
         timeout-minutes: 5
         run: |
@@ -115,9 +136,13 @@ jobs:
             apt_cmd=apt-get
           fi
 
+          apt_archives="$RUNNER_TEMP/apt-archives"
+          mkdir -p "$apt_archives/partial"
+
           install_media_tools() {
             sudo env DEBIAN_FRONTEND=noninteractive "$apt_cmd" \
               -o Acquire::Retries=3 \
+              -o Dir::Cache::archives="$apt_archives" \
               install --no-install-recommends -y ffmpeg fonts-noto-core
           }
 

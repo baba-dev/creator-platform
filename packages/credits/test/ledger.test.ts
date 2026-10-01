@@ -604,6 +604,58 @@ describe("Transactional Ledger Mutations", () => {
     ).rejects.toThrow(ReservationAlreadySettledError);
   });
 
+  it("rejects a conflicting retry that reuses a refund idempotency key", async () => {
+    const mock = createMockTx({
+      wallets: [
+        {
+          id: testWalletId,
+          organizationId: "org_1",
+          balanceCache: 20n,
+          version: 2,
+        },
+      ],
+      entries: [
+        {
+          id: "entry_cap_1",
+          walletId: testWalletId,
+          type: "CAPTURE",
+          amountCredits: 100n,
+          balanceAfter: 0n,
+          idempotencyKey: "idem_cap_1",
+          referenceType: "GENERATION_JOB",
+          referenceId: testJobId,
+          createdAt: new Date(),
+        },
+        {
+          id: "entry_ref_1",
+          walletId: testWalletId,
+          type: "REFUND",
+          amountCredits: 20n,
+          balanceAfter: 20n,
+          idempotencyKey: "refund-retry-key",
+          referenceType: "GENERATION_JOB",
+          referenceId: testJobId,
+          reversalOfId: "entry_cap_1",
+          description: "Original refund reason",
+          createdAt: new Date(),
+        },
+      ],
+    });
+
+    await expect(
+      releaseOrRefundCredits(mock.tx, {
+        walletId: testWalletId,
+        jobId: testJobId,
+        amountCredits: 30n,
+        reason: "Different refund request",
+        idempotencyKey: "refund-retry-key",
+      }),
+    ).rejects.toThrow(IdempotencyConflictError);
+
+    expect(mock.getWallet(testWalletId)?.balanceCache).toBe(20n);
+    expect(mock.getEntries()).toHaveLength(2);
+  });
+
   it("rejects duplicate release or refund when already settled", async () => {
     const mock = createMockTx({
       wallets: [

@@ -868,9 +868,19 @@ export async function createVideoJob(userId: string, raw: unknown) {
           typeof draftPayload.durationSeconds === "number"
             ? draftPayload.durationSeconds
             : 5;
+        const draftAspectRatio = draftPayload.aspectRatio;
         pricingAspectRatio =
-          typeof draftPayload.aspectRatio === "string"
-            ? draftPayload.aspectRatio
+          typeof draftAspectRatio === "string" &&
+          [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "21:9",
+            "adaptive",
+          ].includes(draftAspectRatio)
+            ? (draftAspectRatio as VideoRequestV2["aspectRatio"])
             : "16:9";
         pricingGenerateAudio = draftPayload.generateAudio === true;
         const originalVideoMs = draft.inputAssets.reduce(
@@ -968,7 +978,7 @@ export async function createVideoJob(userId: string, raw: unknown) {
           providerModelId: model.id,
           priceVersionId: price.id,
           idempotencyKey: key,
-          requestPayload: payload,
+          requestPayload: payload as Prisma.InputJsonObject,
           status: "QUOTED",
           quotedAt: now,
           billableQuantity: pricingDurationSeconds,

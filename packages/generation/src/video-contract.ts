@@ -258,58 +258,63 @@ export const videoRequestSchema = z.union([
 export function normalizeVideoRequest(
   value: z.infer<typeof videoRequestSchema>,
 ): VideoRequestV2 {
-  if ("schemaVersion" in value && value.schemaVersion === 2) {
+  const current = videoRequestV2Schema.safeParse(value);
+  if (current.success) {
     return {
-      ...value,
-      sources: [...value.sources].sort((a, b) => a.position - b.position),
+      ...current.data,
+      sources: [...current.data.sources].sort(
+        (a, b) => a.position - b.position,
+      ),
     };
   }
+
+  const legacy = legacyVideoRequestSchema.parse(value);
   const sources: VideoSource[] = [];
-  if (value.firstFrameAssetId) {
+  if (legacy.firstFrameAssetId) {
     sources.push({
-      assetId: value.firstFrameAssetId,
+      assetId: legacy.firstFrameAssetId,
       role: "FIRST_FRAME",
       position: sources.length,
     });
   }
-  if (value.lastFrameAssetId) {
+  if (legacy.lastFrameAssetId) {
     sources.push({
-      assetId: value.lastFrameAssetId,
+      assetId: legacy.lastFrameAssetId,
       role: "LAST_FRAME",
       position: sources.length,
     });
   }
-  if (value.referenceVideoAssetId) {
+  if (legacy.referenceVideoAssetId) {
     sources.push({
-      assetId: value.referenceVideoAssetId,
+      assetId: legacy.referenceVideoAssetId,
       role: "REFERENCE_VIDEO",
       position: sources.length,
     });
   }
-  const workflow: VideoWorkflow = value.referenceVideoAssetId
+  const workflow: VideoWorkflow = legacy.referenceVideoAssetId
     ? "REFERENCE"
-    : value.lastFrameAssetId
+    : legacy.lastFrameAssetId
       ? "FIRST_LAST_FRAME"
-      : value.firstFrameAssetId
+      : legacy.firstFrameAssetId
         ? "FRAME_TO_VIDEO"
         : "GENERATE";
 
   return {
     schemaVersion: 2,
-    organizationId: value.organizationId,
-    projectId: value.projectId,
-    modelId: value.modelId,
-    priceVersionId: value.priceVersionId,
-    quoteToken: value.quoteToken,
-    idempotencyKey: value.idempotencyKey,
-    templateId: value.templateId,
+    organizationId: legacy.organizationId,
+    projectId: legacy.projectId,
+    modelId: legacy.modelId,
+    priceVersionId: legacy.priceVersionId,
+    quoteToken: legacy.quoteToken,
+    idempotencyKey: legacy.idempotencyKey,
+    templateId: legacy.templateId,
     workflow,
-    prompt: value.prompt,
+    prompt: legacy.prompt,
     sources,
-    aspectRatio: value.aspectRatio,
-    resolution: value.resolution,
-    durationSeconds: value.durationSeconds,
-    generateAudio: value.generateAudio,
+    aspectRatio: legacy.aspectRatio,
+    resolution: legacy.resolution,
+    durationSeconds: legacy.durationSeconds,
+    generateAudio: legacy.generateAudio,
     outputFormat: "mp4",
     returnLastFrame: true,
   };

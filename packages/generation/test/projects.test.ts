@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   imageRequestSchema,
+  legacyVideoRequestSchema,
   videoRequestSchema,
   voiceRequestSchema,
 } from "../src/index";
@@ -78,7 +79,7 @@ describe("project assignment request validation", () => {
       durationSeconds: 5,
       referenceVideoAssetId: "asset-video-1",
     };
-    expect(videoRequestSchema.parse(video).referenceVideoAssetId).toBe(
+    expect(legacyVideoRequestSchema.parse(video).referenceVideoAssetId).toBe(
       "asset-video-1",
     );
     expect(() =>

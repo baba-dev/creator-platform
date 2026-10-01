@@ -11,8 +11,13 @@ import { Button } from "@/components/ui/button";
 import { Eyebrow } from "@/components/ui/creative";
 import { StatusDot, Tape } from "@/components/ui/sketch";
 import { announceGenerationStarted } from "@/lib/generation-activity";
-
-type CapabilityValue = boolean | number | string;
+import {
+  capabilityValues,
+  referenceCapabilityLabel,
+  resolutionLabel,
+  selectSupportedCapability,
+  type CapabilityValue,
+} from "@/lib/studio-model-capabilities";
 type MediaKind = "IMAGE" | "VIDEO" | "VOICE";
 type PresetVoice = {
   key: string;
@@ -86,17 +91,6 @@ function statusLabel(status: string, mediaKind: MediaKind): string {
     CANCELLED: "Cancelled",
   };
   return statuses[status] ?? status;
-}
-
-function capabilityValues(
-  capabilities: Model["capabilities"],
-  prefix: string,
-): string[] {
-  if (!capabilities) return [];
-  const marker = `${prefix}:`;
-  return Object.entries(capabilities)
-    .filter(([key, value]) => key.startsWith(marker) && value === true)
-    .map(([key]) => key.slice(marker.length));
 }
 
 interface StudioQuote {
@@ -223,12 +217,15 @@ export function GenerationStudio({
   const selectedRatio =
     activeMode === "VIDEO" && videoFirstFrameId
       ? "adaptive"
-      : availableRatios.includes(ratio)
-        ? ratio
-        : (availableRatios[0] ?? "");
-  const selectedResolution = availableResolutions.includes(resolution)
-    ? resolution
-    : (availableResolutions[0] ?? "");
+      : selectSupportedCapability(model?.capabilities, "aspectRatio", ratio, [
+          "1:1",
+        ]);
+  const selectedResolution = selectSupportedCapability(
+    model?.capabilities,
+    "resolution",
+    resolution,
+    ["2K"],
+  );
   const selectedDuration = availableDurations.includes(duration)
     ? duration
     : (availableDurations[0] ?? "5");
@@ -979,21 +976,23 @@ export function GenerationStudio({
                 setModelId(nextId);
                 const nextModel = modelsForMode.find((m) => m.id === nextId);
                 if (nextModel?.capabilities) {
-                  const nextResolutions = capabilityValues(
+                  const nextResolution = selectSupportedCapability(
                     nextModel.capabilities,
                     "resolution",
+                    resolution,
+                    ["2K"],
                   );
-                  const nextFirstRes = nextResolutions[0];
-                  if (nextFirstRes && !nextResolutions.includes(resolution)) {
-                    setResolution(nextFirstRes);
+                  if (nextResolution && nextResolution !== resolution) {
+                    setResolution(nextResolution);
                   }
-                  const nextRatios = capabilityValues(
+                  const nextRatio = selectSupportedCapability(
                     nextModel.capabilities,
                     "aspectRatio",
+                    ratio,
+                    ["1:1"],
                   );
-                  const nextFirstRatio = nextRatios[0];
-                  if (nextFirstRatio && !nextRatios.includes(ratio)) {
-                    setRatio(nextFirstRatio);
+                  if (nextRatio && nextRatio !== ratio) {
+                    setRatio(nextRatio);
                   }
                 }
               }}
@@ -1050,12 +1049,11 @@ export function GenerationStudio({
                     {availableRatios.length} aspect ratios
                   </span>
                 )}
-                {model.capabilities.referenceImages === true && (
+                {referenceCapabilityLabel(model.capabilities) ? (
                   <span className="inline-flex items-center rounded-md border border-border/80 bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                    Up to {Number(model.capabilities.maxReferenceImages ?? 14)}{" "}
-                    references
+                    {referenceCapabilityLabel(model.capabilities)}
                   </span>
-                )}
+                ) : null}
                 {Number(model.capabilities.maxGeneratedImages ?? 1) > 1 && (
                   <span className="inline-flex items-center rounded-md border border-border/80 bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
                     Up to {Number(model.capabilities.maxGeneratedImages)}{" "}
@@ -1542,20 +1540,11 @@ export function GenerationStudio({
                   className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
                 >
                   {availableResolutions.length ? (
-                    availableResolutions.map((value) => {
-                      const resLabels: Record<string, string> = {
-                        "2K": "2K · Standard HD (2048px)",
-                        "3K": "3K · High Res (3072px)",
-                        "4K": "4K · Ultra HD (4096px)",
-                        "720p": "720p · HD Video",
-                        "1080p": "1080p · Full HD Video",
-                      };
-                      return (
-                        <option key={value} value={value}>
-                          {resLabels[value] ?? value}
-                        </option>
-                      );
-                    })
+                    availableResolutions.map((value) => (
+                      <option key={value} value={value}>
+                        {resolutionLabel(value)}
+                      </option>
+                    ))
                   ) : (
                     <option>No supported resolutions advertised</option>
                   )}

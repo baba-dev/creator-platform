@@ -1,10 +1,26 @@
 # Image, video, and voice generation
 
-Studio submits PNG images and asynchronous MP4 video tasks through the verified
-BytePlus adapter and synthesizes MP3 speech through the separately credentialed
-Seed Speech v3 API. Prompt enhancement targets image and video; it is not shown
-for literal voice scripts. Reference-media inputs are not enabled. The
-generation integration is exercised in CI with real MariaDB and Redis services.
+Studio submits image, asynchronous MP4 video and MP3 speech jobs through verified
+provider adapters. Seedream 5.0 Lite is requested as PNG; Seedream 4.5 and the
+current Seedream 4.0 application contract use provider-default JPEG. Prompt
+enhancement targets image and video; it is not shown for literal voice scripts.
+Tenant-owned image references and supported video reference modes are enabled
+only when the selected model advertises the corresponding capability. Generation
+integration is exercised in CI with real MariaDB and Redis services.
+
+## Image model matrix
+
+| Model | Resolutions | Ratios | Stored output | References | Related outputs | Provider prompt optimization |
+| --- | --- | --- | --- | --- | --- | --- |
+| Seedream 5.0 Lite | 2K, 3K, 4K | 1:1, 4:3, 3:4, 16:9, 9:16, 3:2, 2:3, 21:9 | PNG | Up to 14 | Up to the 15-image input/output envelope | Standard |
+| Seedream 4.5 | 2K, 4K | Same eight common ratios | JPEG | Up to 14 | Up to the 15-image input/output envelope | Standard |
+| Seedream 4.0 | 1K, 2K, 4K | Same eight common ratios | JPEG | Up to 14 | Up to the 15-image input/output envelope | Standard; provider also supports fast mode |
+
+Seedream 4.0's 1K common mappings include 1024×1024 at 1:1 and 1312×736 at
+16:9; dimensions vary by aspect ratio, so Studio labels resolution tiers rather
+than implying one fixed pixel dimension. Fast provider prompt optimization is
+documented as a lower-latency, potentially slightly lower-quality mode and is not
+yet exposed by the application.
 
 ## Deployment
 
@@ -41,7 +57,7 @@ package. No server-side dependency installation is required.
 5. The worker validates the HTTPS CDN destination against explicit BytePlus and
    documented ModelArk object-storage hosts, resolves and pins a public IPv4
    address, revalidates up to three redirects, limits downloads to 25 MiB, and
-   verifies the PNG or MP4 signature before persistence. It atomically writes
+   verifies the expected PNG, JPEG, or MP4 signature before persistence. It atomically writes
    media into shared storage. A second database transaction marks the asset
    READY, captures reserved credits and marks the job SUCCEEDED.
 6. Studio polls job history and balance. Previews/downloads authorize current
@@ -92,7 +108,7 @@ Unit tests cover definite failures, uncertain timeouts and storage retries.
 
 After deployment, use a funded workspace with enabled, priced image, video and
 voice models. Generate one of each, wait for Ready, verify in-browser MP4
-seeking and MP3 playback, and download the PNG/MP4/MP3. Confirm one RESERVATION
+seeking and MP3 playback, and download the expected PNG or JPEG image, MP4 video, and MP3 audio. Confirm one RESERVATION
 and one CAPTURE per successful job and the corresponding wallet decreases. This
 live Studio acceptance check requires the deployed server's provider key; the
 adapter smoke test alone does not prove the complete deployed flow.

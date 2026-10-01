@@ -49,7 +49,7 @@ export const imageRequestSchema = z
       "2:3",
       "21:9",
     ]),
-    resolution: z.enum(["2K", "3K", "4K"]).default("2K"),
+    resolution: z.enum(["1K", "2K", "3K", "4K"]).default("2K"),
     outputCount: z.number().int().min(1).max(15).default(1),
     referenceAssetIds: z
       .array(z.string().min(1).max(100))

@@ -113,7 +113,7 @@ export const bytePlusImageInputSchema = z
   .object({
     prompt: z.string().trim().min(1),
     aspectRatio: imageAspectRatioSchema.default("1:1"),
-    resolution: z.enum(["2K", "3K", "4K"]).default("2K"),
+    resolution: z.enum(["1K", "2K", "3K", "4K"]).default("2K"),
     outputFormat: z.enum(["jpeg", "png"]).default("png"),
     watermark: z.boolean().default(false),
     outputCount: z.number().int().min(1).max(15).default(1),
@@ -258,6 +258,7 @@ export const VERIFIED_BYTEPLUS_MODELS: readonly ProviderModelDescriptor[] = [
       "aspectRatio:3:2": true,
       "aspectRatio:2:3": true,
       "aspectRatio:21:9": true,
+      "resolution:1K": true,
       "resolution:2K": true,
       "resolution:4K": true,
       referenceImages: true,
@@ -352,9 +353,19 @@ function trimTrailingSlashes(value: string): string {
 
 function mapAspectRatioToSize(
   aspectRatio: z.infer<typeof imageAspectRatioSchema>,
-  resolution: "2K" | "3K" | "4K",
+  resolution: "1K" | "2K" | "3K" | "4K",
 ): string {
   const sizes = {
+    "1K": {
+      "1:1": "1024x1024",
+      "16:9": "1312x736",
+      "9:16": "736x1312",
+      "4:3": "1152x864",
+      "3:4": "864x1152",
+      "3:2": "1248x832",
+      "2:3": "832x1248",
+      "21:9": "1568x672",
+    },
     "2K": {
       "1:1": "2048x2048",
       "16:9": "2848x1600",
@@ -725,12 +736,16 @@ export function createBytePlusProvider(
               },
             );
           }
+          const imageModel = VERIFIED_BYTEPLUS_MODELS.find(
+            (model) =>
+              model.id === submission.modelId && model.mediaKind === "image",
+          );
           if (
-            input.data.resolution === "3K" &&
-            submission.modelId !== "seedream-5-0-260128"
+            imageModel?.capabilities[`resolution:${input.data.resolution}`] !==
+            true
           ) {
             throw new ProviderRequestError(
-              "3K output is only supported by Seedream 5.0 Lite",
+              "Resolution is not supported by this BytePlus image model",
               false,
               { code: "UNSUPPORTED_RESOLUTION" },
             );

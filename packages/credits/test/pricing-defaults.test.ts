@@ -35,7 +35,7 @@ describe("pricing defaults and model quotes", () => {
 
   it("calculates accurate quotes for seedream-4-0 (image)", () => {
     const quote = calculateModelQuote({
-      providerCostMicroUsd: 28_000n,
+      providerCostMicroUsd: 27_000n,
     });
     expect(quote.customerCredits).toBe(15n);
     expect(quote.convertedCostBaisa).toBe(11n);

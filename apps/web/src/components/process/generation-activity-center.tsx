@@ -26,7 +26,11 @@ export function GenerationActivityCenter({
   organizationId: string;
   organizationSlug: string;
 }) {
-  const [jobId, setJobId] = useState<string | null>(null);
+  const [jobId, setJobId] = useState<string | null>(() =>
+    typeof window === "undefined"
+      ? null
+      : sessionStorage.getItem(generationActivityStorageKey(organizationId)),
+  );
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [connectionIssue, setConnectionIssue] = useState<string | null>(null);
@@ -75,12 +79,6 @@ export function GenerationActivityCenter({
   );
 
   useEffect(() => {
-    const restored = sessionStorage.getItem(storageKey);
-    if (restored) {
-      setJobId(restored);
-      void refresh(restored);
-    }
-
     const onStarted = (event: Event) => {
       const detail = (
         event as CustomEvent<{ organizationId?: string; jobId?: string }>
@@ -107,6 +105,7 @@ export function GenerationActivityCenter({
 
   useEffect(() => {
     if (!jobId) return;
+    void refresh(jobId);
     const timer = window.setInterval(() => {
       void refresh(jobId);
     }, 4000);

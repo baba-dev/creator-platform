@@ -332,6 +332,9 @@ describe("executeTextGeneration", () => {
       units: 2,
       billableQuantity: 1024,
     });
+    mocks.credits.createCreditQuote.mockReturnValue({
+      customerCredits: 20n,
+    });
 
     const provider = {
       name: "byteplus" as const,

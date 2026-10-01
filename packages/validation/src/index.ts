@@ -680,10 +680,7 @@ export const brandProfileCreateSchema = z
     voiceTone: z.string().trim().max(1000).optional(),
     guidelines: z.string().trim().max(5000).optional(),
     targetAudience: z.string().trim().max(1000).optional(),
-    vocabulary: z
-      .array(z.string().trim().min(1).max(100))
-      .max(50)
-      .optional(),
+    vocabulary: z.array(z.string().trim().min(1).max(100)).max(50).optional(),
   })
   .strict();
 

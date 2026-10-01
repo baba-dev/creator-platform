@@ -256,26 +256,97 @@ export function GenerationStudio({
     () => capabilityValues(model?.capabilities, "resolution"),
     [model?.capabilities],
   );
-  const availableDurations = useMemo(
-    () => capabilityValues(model?.capabilities, "durationSeconds"),
-    [model?.capabilities],
-  );
+  const availableDurations = useMemo(() => {
+    const explicit = capabilityValues(model?.capabilities, "durationSeconds");
+    if (explicit.length > 0) return explicit;
+    if (model?.mediaKind !== "VIDEO") return [];
+    const minimum = Number(model.capabilities?.minimumDurationSeconds ?? 4);
+    const maximum = Number(model.capabilities?.maximumDurationSeconds ?? 15);
+    if (
+      !Number.isSafeInteger(minimum) ||
+      !Number.isSafeInteger(maximum) ||
+      minimum < 1 ||
+      maximum < minimum ||
+      maximum > 30
+    )
+      return [];
+    return Array.from(
+      { length: maximum - minimum + 1 },
+      (_, index) => String(minimum + index),
+    );
+  }, [model?.capabilities, model?.mediaKind]);
 
-  const selectedRatio =
-    activeMode === "VIDEO" && videoFirstFrameId
-      ? "adaptive"
-      : selectSupportedCapability(model?.capabilities, "aspectRatio", ratio, [
-          "1:1",
-        ]);
-  const selectedResolution = selectSupportedCapability(
-    model?.capabilities,
-    "resolution",
-    resolution,
-    ["2K"],
+  const videoForcesAdaptive =
+    activeMode === "VIDEO" &&
+    ["FRAME_TO_VIDEO", "FIRST_LAST_FRAME", "EDIT", "EXTEND"].includes(
+      videoWorkflow,
+    );
+  const selectedRatio = videoForcesAdaptive
+    ? "adaptive"
+    : selectSupportedCapability(model?.capabilities, "aspectRatio", ratio, [
+        "1:1",
+      ]);
+  const selectedResolution =
+    activeMode === "VIDEO" && videoWorkflow === "DRAFT"
+      ? "480p"
+      : activeMode === "VIDEO" && videoWorkflow === "DRAFT_FINAL"
+        ? "1080p"
+        : selectSupportedCapability(
+            model?.capabilities,
+            "resolution",
+            resolution,
+            [activeMode === "VIDEO" ? "720p" : "2K"],
+          );
+  const selectedDuration =
+    activeMode === "VIDEO" && videoWorkflow === "EDIT"
+      ? "-1"
+      : availableDurations.includes(duration)
+        ? duration
+        : (availableDurations[0] ?? "5");
+
+  const videoSources = useMemo<VideoSourceInput[]>(() => {
+    const sources: Omit<VideoSourceInput, "position">[] = [];
+    if (videoWorkflow === "FRAME_TO_VIDEO" && videoFirstFrameId)
+      sources.push({ assetId: videoFirstFrameId, role: "FIRST_FRAME" });
+    if (videoWorkflow === "FIRST_LAST_FRAME") {
+      if (videoFirstFrameId)
+        sources.push({ assetId: videoFirstFrameId, role: "FIRST_FRAME" });
+      if (videoLastFrameId)
+        sources.push({ assetId: videoLastFrameId, role: "LAST_FRAME" });
+    }
+    if (videoWorkflow === "REFERENCE" || videoWorkflow === "DRAFT") {
+      for (const assetId of videoReferenceImageIds)
+        sources.push({ assetId, role: "REFERENCE_IMAGE" });
+      for (const assetId of videoReferenceVideoIds)
+        sources.push({ assetId, role: "REFERENCE_VIDEO" });
+      for (const assetId of videoReferenceAudioIds)
+        sources.push({ assetId, role: "REFERENCE_AUDIO" });
+    }
+    if (
+      (videoWorkflow === "EDIT" || videoWorkflow === "EXTEND") &&
+      videoSourceAssetId
+    )
+      sources.push({ assetId: videoSourceAssetId, role: "SOURCE_VIDEO" });
+    return sources.map((source, position) => ({ ...source, position }));
+  }, [
+    videoFirstFrameId,
+    videoLastFrameId,
+    videoReferenceAudioIds,
+    videoReferenceImageIds,
+    videoReferenceVideoIds,
+    videoSourceAssetId,
+    videoWorkflow,
+  ]);
+
+  const maxVideoReferenceImages = Number(
+    model?.capabilities?.maxReferenceImages ?? 0,
   );
-  const selectedDuration = availableDurations.includes(duration)
-    ? duration
-    : (availableDurations[0] ?? "5");
+  const maxVideoReferenceVideos = Number(
+    model?.capabilities?.maxReferenceVideos ?? 0,
+  );
+  const maxVideoReferenceAudio = Number(
+    model?.capabilities?.maxReferenceAudio ?? 0,
+  );
   const handleModeChange = useCallback(
     (mode: MediaKind) => {
       if (mode !== activeMode) {

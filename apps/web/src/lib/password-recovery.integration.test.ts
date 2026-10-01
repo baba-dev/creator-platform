@@ -6,8 +6,8 @@ import { afterAll, describe, expect, it } from "vitest";
 import {
   PASSWORD_RESET_RESPONSE_FLOOR_MS,
   POST as passwordResetPost,
-} from "@/app/api/auth/[...all]/route";
-import { auth } from "@/lib/auth";
+} from "../app/api/auth/[...all]/route";
+import { auth } from "./auth";
 
 const integration =
   process.env.DATABASE_URL && process.env.GENERATION_INTEGRATION_TEST === "true"

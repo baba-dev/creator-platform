@@ -42,7 +42,10 @@ import { failImageOperation, processImageOperation } from "./image-operations";
 import { failVideoRender, processVideoRender } from "./video-renders";
 import { processReasoningJob } from "./reasoning";
 import { reapExpiredRecoveryJobs } from "./reaper";
-import { applyTenantFairness } from "./generation-dispatch";
+import {
+  applyTenantFairness,
+  interleaveGenerationWork,
+} from "./generation-dispatch";
 
 configureMediaCapacityGate(withDatabaseMediaCapacity);
 const env = parseServerEnv();
@@ -747,7 +750,7 @@ async function dispatchGeneration() {
     // Interleave submissions and polling with tenant fairness
     const fairQueued = applyTenantFairness(queuedRows);
     const fairPoll = applyTenantFairness(pollRows);
-    const jobs = [...fairQueued, ...fairPoll];
+    const jobs = interleaveGenerationWork(fairQueued, fairPoll);
 
     for (const job of jobs) {
       if (isShuttingDown) break;

@@ -35,7 +35,7 @@ vi.mock("next/cache", () => ({
 import { AdminUserCredentialError } from "@/lib/admin-user-credentials";
 import { POST } from "./route";
 
-const userId = "cm123456789012345678901234";
+const userId = "AbCdEf0123456789GhIjKlMnOpQrStUv";
 
 describe("POST /api/admin/users/[userId]/password", () => {
   beforeEach(() => {

@@ -555,30 +555,66 @@ export async function createImageJob(userId: string, raw: unknown) {
 }
 
 export async function createVideoJob(userId: string, raw: unknown) {
-  const input = videoRequestSchema.parse(raw);
-  const payload = {
-    prompt: input.prompt,
-    aspectRatio: input.aspectRatio,
-    resolution: input.resolution,
-    durationSeconds: input.durationSeconds,
-    generateAudio: input.generateAudio,
-    watermark: false,
-    ...(input.firstFrameAssetId
-      ? { firstFrameAssetId: input.firstFrameAssetId }
-      : {}),
-    ...(input.lastFrameAssetId
-      ? { lastFrameAssetId: input.lastFrameAssetId }
-      : {}),
-    ...(input.referenceVideoAssetId
-      ? { referenceVideoAssetId: input.referenceVideoAssetId }
-      : {}),
-  };
+  const parsed = videoRequestSchema.parse(raw);
+  const input = normalizeVideoRequest(parsed);
+  const isV2 = "schemaVersion" in parsed && parsed.schemaVersion === 2;
+  const payload: Record<string, unknown> = isV2
+    ? {
+        schemaVersion: 2,
+        workflow: input.workflow,
+        prompt: input.prompt,
+        sources: input.sources,
+        aspectRatio: input.aspectRatio,
+        resolution: input.resolution,
+        durationSeconds: input.durationSeconds,
+        generateAudio: input.generateAudio,
+        outputFormat: input.outputFormat,
+        returnLastFrame: input.returnLastFrame,
+        watermark: false,
+        ...(input.seed === undefined ? {} : { seed: input.seed }),
+        ...(input.sourceDraftJobId
+          ? { sourceDraftJobId: input.sourceDraftJobId }
+          : {}),
+        ...(input.extensionDirection
+          ? { extensionDirection: input.extensionDirection }
+          : {}),
+      }
+    : {
+        prompt: input.prompt,
+        aspectRatio: input.aspectRatio,
+        resolution: input.resolution,
+        durationSeconds: input.durationSeconds,
+        generateAudio: input.generateAudio,
+        watermark: false,
+        ...(input.sources.find((source) => source.role === "FIRST_FRAME")
+          ? {
+              firstFrameAssetId: input.sources.find(
+                (source) => source.role === "FIRST_FRAME",
+              )!.assetId,
+            }
+          : {}),
+        ...(input.sources.find((source) => source.role === "LAST_FRAME")
+          ? {
+              lastFrameAssetId: input.sources.find(
+                (source) => source.role === "LAST_FRAME",
+              )!.assetId,
+            }
+          : {}),
+        ...(input.sources.find((source) => source.role === "REFERENCE_VIDEO")
+          ? {
+              referenceVideoAssetId: input.sources.find(
+                (source) => source.role === "REFERENCE_VIDEO",
+              )!.assetId,
+            }
+          : {}),
+      };
+
   const key = createHash("sha256")
     .update(`${input.organizationId}:${userId}:${input.idempotencyKey}`)
     .digest("hex");
+
   return db.$transaction(
     async (tx) => {
-      // Serialize budget, quota and duplicate-request checks with organization mutations.
       await tx.$queryRaw`SELECT id FROM Organization WHERE id = ${input.organizationId} FOR UPDATE`;
       const member = await requireMembership(
         tx,
@@ -602,23 +638,14 @@ export async function createVideoJob(userId: string, raw: unknown) {
           existing.priceVersionId !== input.priceVersionId ||
           JSON.stringify(existing.requestPayload) !== JSON.stringify(payload)
         ) {
-          const old = existing.requestPayload as typeof payload;
-          if (
-            existing.projectId !== (input.projectId ?? null) ||
-            existing.templateId !== templateId ||
-            existing.providerModelId !== input.modelId ||
-            existing.priceVersionId !== input.priceVersionId ||
-            Object.entries(payload).some(
-              ([k, v]) => old[k as keyof typeof payload] !== v,
-            )
-          )
-            throw new GenerationError(
-              "Request key was already used for different inputs.",
-              409,
-            );
+          throw new GenerationError(
+            "Request key was already used for different inputs.",
+            409,
+          );
         }
         return existing;
       }
+
       await assertAssignableProject(tx, input.organizationId, input.projectId);
       const now = new Date();
       const model = await tx.providerModel.findFirst({
@@ -641,107 +668,227 @@ export async function createVideoJob(userId: string, raw: unknown) {
         },
       });
       const price = model?.priceVersions[0];
-      if (!model || !price || price.id !== input.priceVersionId)
+      if (!model || !price || price.id !== input.priceVersionId) {
         throw new GenerationError(
           "Model or price changed. Refresh the Studio and try again.",
           409,
         );
+      }
 
-      if (
-        !hasModelCapability(
-          model.capabilities,
-          `aspectRatio:${input.aspectRatio}`,
-        )
-      ) {
-        throw new GenerationError(
-          "Aspect ratio is not supported by this model.",
-        );
-      }
-      if (
-        !hasModelCapability(
-          model.capabilities,
-          `durationSeconds:${input.durationSeconds}`,
-        )
-      ) {
-        throw new GenerationError("Duration is not supported by this model.");
-      }
-      if (
-        !hasModelCapability(
-          model.capabilities,
-          `resolution:${input.resolution}`,
-        )
-      ) {
-        throw new GenerationError("Resolution is not supported by this model.");
-      }
-      if (
-        input.generateAudio &&
-        !hasModelCapability(model.capabilities, "generateAudio")
-      ) {
-        throw new GenerationError(
-          "Audio generation is not supported by this model.",
-        );
-      }
-      const frameIds = [input.firstFrameAssetId, input.lastFrameAssetId].filter(
-        (id): id is string => Boolean(id),
+      const capabilityError = validateVideoModelRequest(
+        model.providerModelId,
+        model.capabilities,
+        input,
       );
-      const frames = frameIds.length
+      if (capabilityError) throw new GenerationError(capabilityError);
+
+      const sourceIds = input.sources.map((source) => source.assetId);
+      const assets = sourceIds.length
         ? await tx.asset.findMany({
             where: {
-              id: { in: frameIds },
+              id: { in: sourceIds },
               organizationId: input.organizationId,
-              mediaKind: "IMAGE",
               status: "READY",
               storageProvider: "LOCAL",
             },
           })
         : [];
+      const assetById = new Map(assets.map((asset) => [asset.id, asset]));
       if (
-        frames.length !== new Set(frameIds).size ||
-        frames.some(
-          (frame) =>
-            frame.purpose === "REFERENCE_INPUT" &&
-            frame.storageOwnerUserId !== userId,
+        assets.length !== sourceIds.length ||
+        assets.some(
+          (asset) =>
+            asset.purpose === "REFERENCE_INPUT" &&
+            asset.storageOwnerUserId !== userId,
         )
-      )
-        throw new GenerationError("Source image is unavailable.", 404);
+      ) {
+        throw new GenerationError("Source media is unavailable.", 404);
+      }
 
-      let referenceVideo: Awaited<ReturnType<typeof tx.asset.findFirst>> = null;
-      if (input.referenceVideoAssetId) {
-        if (!hasModelCapability(model.capabilities, "referenceVideo"))
+      const capabilities =
+        model.capabilities &&
+        typeof model.capabilities === "object" &&
+        !Array.isArray(model.capabilities)
+          ? (model.capabilities as Record<string, unknown>)
+          : {};
+      const maxVideoInputSeconds =
+        typeof capabilities.maxReferenceVideoDurationSeconds === "number"
+          ? capabilities.maxReferenceVideoDurationSeconds
+          : model.providerModelId.startsWith("dreamina-seedance-2-5-")
+            ? 30
+            : 15;
+      const maxAudioInputSeconds =
+        typeof capabilities.maxReferenceAudioDurationSeconds === "number"
+          ? capabilities.maxReferenceAudioDurationSeconds
+          : maxVideoInputSeconds;
+      let totalInputVideoDurationMs = 0;
+      let totalInputAudioDurationMs = 0;
+
+      for (const source of input.sources) {
+        const asset = assetById.get(source.assetId);
+        if (!asset)
+          throw new GenerationError("Source media is unavailable.", 404);
+        const expectsImage =
+          source.role === "FIRST_FRAME" ||
+          source.role === "LAST_FRAME" ||
+          source.role === "REFERENCE_IMAGE";
+        const expectsVideo =
+          source.role === "REFERENCE_VIDEO" || source.role === "SOURCE_VIDEO";
+        const expectsAudio = source.role === "REFERENCE_AUDIO";
+
+        if (
+          (expectsImage && asset.mediaKind !== "IMAGE") ||
+          (expectsVideo && asset.mediaKind !== "VIDEO") ||
+          (expectsAudio && asset.mediaKind !== "AUDIO")
+        ) {
           throw new GenerationError(
-            "Video references are not supported by this model.",
+            `Source role ${source.role} does not match the asset type.`,
           );
-        referenceVideo = await tx.asset.findFirst({
+        }
+
+        if (expectsImage) {
+          if (
+            asset.byteSize > 20n * 1024n * 1024n ||
+            !asset.mimeType.startsWith("image/")
+          )
+            throw new GenerationError(
+              "Reference image is outside provider limits.",
+            );
+        }
+
+        if (expectsVideo) {
+          if (
+            asset.durationMs === null ||
+            asset.durationMs < 2_000 ||
+            asset.durationMs > maxVideoInputSeconds * 1000 ||
+            asset.width === null ||
+            asset.height === null ||
+            asset.width < 300 ||
+            asset.height < 300 ||
+            asset.width * asset.height < 407_696 ||
+            asset.width * asset.height > 8_295_044 ||
+            asset.width / asset.height < 0.4 ||
+            asset.width / asset.height > 2.5 ||
+            asset.byteSize > 100_000_000n ||
+            !["video/mp4", "video/quicktime"].includes(asset.mimeType)
+          )
+            throw new GenerationError(
+              "Reference video is outside provider limits.",
+            );
+          if (
+            source.role === "SOURCE_VIDEO" &&
+            input.workflow === "EDIT" &&
+            asset.durationMs < 4_000
+          )
+            throw new GenerationError(
+              "Video editing requires a source between 4 seconds and the model limit.",
+            );
+          totalInputVideoDurationMs += asset.durationMs;
+        }
+
+        if (expectsAudio) {
+          if (
+            asset.durationMs === null ||
+            asset.durationMs < 2_000 ||
+            asset.durationMs > maxAudioInputSeconds * 1000 ||
+            asset.byteSize > 15n * 1024n * 1024n ||
+            !["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav"].includes(
+              asset.mimeType,
+            )
+          )
+            throw new GenerationError(
+              "Reference audio is outside provider limits.",
+            );
+          totalInputAudioDurationMs += asset.durationMs;
+        }
+      }
+
+      if (totalInputVideoDurationMs > maxVideoInputSeconds * 1000)
+        throw new GenerationError(
+          "Combined reference video duration exceeds the model limit.",
+        );
+      if (totalInputAudioDurationMs > maxAudioInputSeconds * 1000)
+        throw new GenerationError(
+          "Combined reference audio duration exceeds the model limit.",
+        );
+
+      let pricingDurationSeconds =
+        input.durationSeconds === -1 ? 5 : input.durationSeconds;
+      let pricingAspectRatio = input.aspectRatio;
+      let pricingGenerateAudio = input.generateAudio;
+      let pricingInputVideoDurationMs =
+        totalInputVideoDurationMs > 0
+          ? totalInputVideoDurationMs
+          : undefined;
+      let draftProviderTaskId: string | undefined;
+
+      if (input.workflow === "EDIT") {
+        const source = input.sources.find(
+          (item) => item.role === "SOURCE_VIDEO",
+        );
+        const asset = source ? assetById.get(source.assetId) : undefined;
+        pricingDurationSeconds = Math.max(
+          4,
+          Math.min(30, Math.ceil((asset?.durationMs ?? 5_000) / 1000)),
+        );
+      }
+
+      if (input.workflow === "DRAFT_FINAL") {
+        const draft = await tx.generationJob.findFirst({
           where: {
-            id: input.referenceVideoAssetId,
+            id: input.sourceDraftJobId!,
             organizationId: input.organizationId,
-            mediaKind: "VIDEO",
-            status: "READY",
-            storageProvider: "LOCAL",
-            mimeType: "video/mp4",
+            createdById: userId,
+            status: "SUCCEEDED",
+            providerModelId: model.id,
+          },
+          include: {
+            inputAssets: { include: { asset: true } },
           },
         });
         if (
-          !referenceVideo ||
-          (referenceVideo.purpose === "REFERENCE_INPUT" &&
-            referenceVideo.storageOwnerUserId !== userId) ||
-          referenceVideo.durationMs === null ||
-          referenceVideo.durationMs < 2_000 ||
-          referenceVideo.durationMs > 30_000 ||
-          referenceVideo.width === null ||
-          referenceVideo.height === null ||
-          referenceVideo.width < 300 ||
-          referenceVideo.height < 300 ||
-          referenceVideo.width * referenceVideo.height < 407_696 ||
-          referenceVideo.width * referenceVideo.height > 8_295_044 ||
-          referenceVideo.width / referenceVideo.height < 0.4 ||
-          referenceVideo.width / referenceVideo.height > 2.5 ||
-          referenceVideo.byteSize > 100_000_000n
+          !draft?.providerRequestId ||
+          now.getTime() - draft.createdAt.getTime() >= 7 * 24 * 60 * 60 * 1000
         )
           throw new GenerationError(
-            "Reference video is unavailable or outside provider limits.",
-            400,
+            "The source Draft is unavailable or has expired.",
+            409,
           );
+        const draftPayload = draft.requestPayload as Record<string, unknown>;
+        if (
+          draftPayload.schemaVersion !== 2 ||
+          draftPayload.workflow !== "DRAFT"
+        )
+          throw new GenerationError(
+            "The selected job is not a Seedance 2.5 Draft.",
+            409,
+          );
+        draftProviderTaskId = draft.providerRequestId;
+        pricingDurationSeconds =
+          typeof draftPayload.durationSeconds === "number"
+            ? draftPayload.durationSeconds
+            : 5;
+        pricingAspectRatio =
+          typeof draftPayload.aspectRatio === "string"
+            ? draftPayload.aspectRatio
+            : "16:9";
+        pricingGenerateAudio = draftPayload.generateAudio === true;
+        const originalVideoMs = draft.inputAssets.reduce(
+          (sum, item) =>
+            item.asset.mediaKind === "VIDEO"
+              ? sum + (item.asset.durationMs ?? 0)
+              : sum,
+          0,
+        );
+        pricingInputVideoDurationMs =
+          originalVideoMs > 0 ? originalVideoMs : undefined;
+        payload.draftProviderTaskId = draftProviderTaskId;
+        payload.draftBillingContext = {
+          durationSeconds: pricingDurationSeconds,
+          aspectRatio: pricingAspectRatio,
+          generateAudio: pricingGenerateAudio,
+          totalInputVideoDurationMs: pricingInputVideoDurationMs ?? 0,
+        };
       }
 
       let pricing: ReturnType<typeof estimateGeneration>;
@@ -750,11 +897,11 @@ export async function createVideoJob(userId: string, raw: unknown) {
           price,
           mediaKind: "VIDEO",
           providerModelId: model.providerModelId,
-          durationSeconds: input.durationSeconds,
+          durationSeconds: pricingDurationSeconds,
           resolution: input.resolution,
-          aspectRatio: input.aspectRatio,
-          generateAudio: input.generateAudio,
-          inputDurationMs: referenceVideo?.durationMs ?? undefined,
+          aspectRatio: pricingAspectRatio,
+          generateAudio: pricingGenerateAudio,
+          totalInputVideoDurationMs: pricingInputVideoDurationMs,
         });
       } catch (error) {
         throw new GenerationError(
@@ -764,6 +911,7 @@ export async function createVideoJob(userId: string, raw: unknown) {
           409,
         );
       }
+
       const credits = pricing.reservation.customerCredits;
       try {
         verifyGenerationQuote(
@@ -773,7 +921,7 @@ export async function createVideoJob(userId: string, raw: unknown) {
             userId,
             modelId: model.id,
             priceVersionId: price.id,
-            parameters: quoteParameters(model.mediaKind, input),
+            parameters: quoteParameters(model.mediaKind, parsed),
           },
           credits,
           now,
@@ -784,6 +932,7 @@ export async function createVideoJob(userId: string, raw: unknown) {
           409,
         );
       }
+
       await assertWithinMonthlySpendingCap(tx, {
         organizationId: input.organizationId,
         userId,
@@ -791,16 +940,25 @@ export async function createVideoJob(userId: string, raw: unknown) {
         additionalCredits: credits,
         now,
       });
+
+      const outputExtension = input.outputFormat === "mov" ? "mov" : "mp4";
+      const outputMimeType =
+        input.outputFormat === "mov" ? "video/quicktime" : "video/mp4";
+      const lastFrameReservation = input.returnLastFrame
+        ? BigInt(MAX_IMAGE_BYTES)
+        : 0n;
       await reserveAssetStorage(tx, {
         organizationId: input.organizationId,
         userId,
-        proposedBytes: BigInt(MAX_VIDEO_BYTES),
+        proposedBytes: BigInt(MAX_VIDEO_BYTES) + lastFrameReservation,
       });
+
       const wallet = await tx.wallet.findUnique({
         where: { organizationId: input.organizationId },
       });
       if (!wallet)
         throw new GenerationError("Workspace wallet is unavailable.");
+
       const job = await tx.generationJob.create({
         data: {
           organizationId: input.organizationId,
@@ -813,55 +971,82 @@ export async function createVideoJob(userId: string, raw: unknown) {
           requestPayload: payload,
           status: "QUOTED",
           quotedAt: now,
-          billableQuantity: input.durationSeconds,
+          billableQuantity: pricingDurationSeconds,
           quotedUnits: pricing.units,
         },
       });
-      const sourceIds = [
-        ...new Set([
-          ...frameIds,
-          ...(referenceVideo ? [referenceVideo.id] : []),
-        ]),
-      ];
-      if (sourceIds.length)
+
+      if (input.sources.length) {
         await tx.generationInputAsset.createMany({
-          data: sourceIds.map((assetId, position) => ({
+          data: input.sources.map((source) => ({
             generationJobId: job.id,
-            assetId,
-            position,
+            assetId: source.assetId,
+            position: source.position,
+            role: source.role as VideoSourceRole,
           })),
           skipDuplicates: true,
         });
+      }
+
       await reserveCreditsForJob(tx, {
         walletId: wallet.id,
         amountCredits: credits,
         idempotencyKey: `generation-reserve-${job.id}`,
         jobId: job.id,
       });
-      await tx.asset.create({
+
+      const privateSource = assets.some(
+        (asset) => asset.purpose === "REFERENCE_INPUT",
+      );
+      const lineageSource =
+        input.sources.find((source) => source.role === "SOURCE_VIDEO") ??
+        input.sources.find((source) => source.role === "REFERENCE_VIDEO") ??
+        input.sources.find((source) => source.role === "FIRST_FRAME") ??
+        input.sources[0];
+      const videoAsset = await tx.asset.create({
         data: {
           organizationId: input.organizationId,
           projectId: input.projectId ?? null,
           storageOwnerUserId: userId,
           createdById: userId,
           generationJobId: job.id,
-          sourceAssetId:
-            input.referenceVideoAssetId ?? input.firstFrameAssetId ?? null,
-          purpose:
-            frames.some((frame) => frame.purpose === "REFERENCE_INPUT") ||
-            referenceVideo?.purpose === "REFERENCE_INPUT"
-              ? "REFERENCE_INPUT"
-              : "GENERAL",
+          generationOutputIndex: 0,
+          sourceAssetId: lineageSource?.assetId ?? null,
+          purpose: privateSource ? "REFERENCE_INPUT" : "GENERAL",
           mediaKind: "VIDEO",
           sourceType: "GENERATED",
           storageProvider: "LOCAL",
           name: defaultAssetName("VIDEO", "GENERATED"),
-          objectKey: `${job.id}.mp4`,
-          mimeType: "video/mp4",
+          objectKey: `${job.id}.${outputExtension}`,
+          mimeType: outputMimeType,
           byteSize: BigInt(MAX_VIDEO_BYTES),
           status: "PENDING",
         },
       });
+
+      if (input.returnLastFrame) {
+        await tx.asset.create({
+          data: {
+            organizationId: input.organizationId,
+            projectId: input.projectId ?? null,
+            storageOwnerUserId: userId,
+            createdById: userId,
+            generationJobId: job.id,
+            generationOutputIndex: 1,
+            sourceAssetId: videoAsset.id,
+            purpose: privateSource ? "REFERENCE_INPUT" : "GENERAL",
+            mediaKind: "IMAGE",
+            sourceType: "GENERATED",
+            storageProvider: "LOCAL",
+            name: "Generated video last frame",
+            objectKey: `${job.id}-last-frame.jpg`,
+            mimeType: "image/jpeg",
+            byteSize: BigInt(MAX_IMAGE_BYTES),
+            status: "PENDING",
+          },
+        });
+      }
+
       await tx.auditEvent.create({
         data: {
           actorUserId: userId,
@@ -869,15 +1054,21 @@ export async function createVideoJob(userId: string, raw: unknown) {
           action: "generation.queued",
           targetType: "GenerationJob",
           targetId: job.id,
+          metadata: {
+            schemaVersion: isV2 ? 2 : 1,
+            workflow: input.workflow,
+            sourceCount: input.sources.length,
+            totalInputVideoDurationMs,
+            totalInputAudioDurationMs,
+          },
         },
       });
-      // QUEUED is the durable outbox; the worker republishes it after Redis outages.
       return tx.generationJob.update({
         where: { id: job.id },
         data: { status: "QUEUED", queuedAt: now },
       });
     },
-    { isolationLevel: "ReadCommitted", timeout: 15000 },
+    { isolationLevel: "ReadCommitted", timeout: 15_000 },
   );
 }
 

@@ -72,7 +72,6 @@ export function selectUsageRate(
   return BigInt(row.microUsdPerThousandTokens);
 }
 
-
 export interface TextUsageTier {
   maxPromptTokens: number;
   inputMicroUsdPerMillionTokens: string;

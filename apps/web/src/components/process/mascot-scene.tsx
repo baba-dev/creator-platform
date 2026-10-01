@@ -2,7 +2,11 @@ import Image from "next/image";
 
 import { cn } from "@/lib/utils";
 
-export type MascotSceneKind = "working" | "running" | "confused";
+export type MascotSceneKind =
+  | "working"
+  | "running"
+  | "confused"
+  | "celebration";
 export type MascotSceneSize = "compact" | "surface" | "modal";
 
 const sources: Record<MascotSceneKind, string> = {
@@ -11,6 +15,8 @@ const sources: Record<MascotSceneKind, string> = {
   running: "/brand/mascots/creators-mascot-running-loader-terrain-loop.svg",
   confused:
     "/brand/mascots/creators-mascot-confused-long-wait-motion-arranged.svg",
+  celebration:
+    "/brand/mascots/creators-mascot-success-celebration-motion.svg",
 };
 
 const sizes: Record<MascotSceneSize, string> = {

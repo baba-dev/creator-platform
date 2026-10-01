@@ -152,7 +152,15 @@ export async function GET(request: Request) {
           quotedUnits: true,
           actualUnits: true,
           createdAt: true,
-          providerModel: { select: { displayName: true, mediaKind: true } },
+          requestPayload: true,
+          providerModel: {
+            select: {
+              id: true,
+              providerModelId: true,
+              displayName: true,
+              mediaKind: true,
+            },
+          },
           project: { select: { id: true, name: true } },
           assets: {
             where: { status: "READY", sourceType: "GENERATED" },
@@ -222,11 +230,40 @@ export async function GET(request: Request) {
         ),
         voices: listPublicPresetVoices(),
         projects,
-        jobs: jobs.map((j) => ({
-          ...j,
-          reservedCredits: j.reservedCredits.toString(),
-          chargedCredits: j.chargedCredits.toString(),
-        })),
+        jobs: jobs.map((j) => {
+          const payload =
+            j.requestPayload &&
+            typeof j.requestPayload === "object" &&
+            !Array.isArray(j.requestPayload)
+              ? (j.requestPayload as Record<string, unknown>)
+              : {};
+          const videoWorkflow =
+            j.providerModel.mediaKind === "VIDEO" &&
+            payload.schemaVersion === 2 &&
+            typeof payload.workflow === "string"
+              ? payload.workflow
+              : null;
+          return {
+            id: j.id,
+            status: j.status,
+            errorMessage: j.errorMessage,
+            reservedCredits: j.reservedCredits.toString(),
+            chargedCredits: j.chargedCredits.toString(),
+            quotedUnits: j.quotedUnits,
+            actualUnits: j.actualUnits,
+            createdAt: j.createdAt.toISOString(),
+            providerModel: j.providerModel,
+            project: j.project,
+            assets: j.assets,
+            videoWorkflow,
+            draftExpiresAt:
+              videoWorkflow === "DRAFT"
+                ? new Date(
+                    j.createdAt.getTime() + 7 * 24 * 60 * 60 * 1000,
+                  ).toISOString()
+                : null,
+          };
+        }),
       },
       { headers: { "Cache-Control": "no-store" } },
     );

@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => ({
   storeVideo: vi.fn(),
   storeAudio: vi.fn(),
   storedAssetSize: vi.fn(),
+  referenceImage: vi.fn(),
   membership: vi.fn(),
   finalizeAssetStorage: vi.fn(),
   releaseAssetStorage: vi.fn(),
@@ -59,6 +60,7 @@ vi.mock("../src/storage", () => ({
   storeVideo: mocks.storeVideo,
   storeAudio: mocks.storeAudio,
   storedAssetSize: mocks.storedAssetSize,
+  referenceImageDataUri: mocks.referenceImage,
 }));
 import {
   ProviderConfigurationError,
@@ -155,6 +157,7 @@ beforeEach(() => {
   mocks.storeVideo.mockResolvedValue({ byteSize: 200n, sha256: "video-hash" });
   mocks.storeAudio.mockResolvedValue({ byteSize: 300n, sha256: "audio-hash" });
   mocks.storedAssetSize.mockResolvedValue(300);
+  mocks.referenceImage.mockResolvedValue("data:image/png;base64,AA==");
   mocks.finalizeAssetStorage.mockResolvedValue(undefined);
   mocks.releaseAssetStorage.mockResolvedValue(undefined);
 });
@@ -553,6 +556,90 @@ describe("image processing", () => {
       }),
     );
   });
+  it("submits a normal workspace image as a safe Pro reference", async () => {
+    const p = provider();
+    vi.mocked(p.submit).mockResolvedValue({
+      status: "succeeded",
+      providerRequestId: "pro-edit-request",
+      outputUrls: ["https://cdn.bytepluscdn.com/pro-edit.png"],
+    });
+
+    const referenceJob = {
+      ...base,
+      requestPayload: {
+        prompt: "Replace the selected object",
+        resolution: "1.5K",
+        referenceAssetIds: ["source1"],
+      },
+      providerModel: {
+        id: "pro-db-model",
+        providerModelId: "dola-seedream-5-0-pro-260628",
+      },
+      priceVersion: { providerCostMicroUsd: 40_500n },
+      reservedCredits: 22n,
+      inputAssets: [
+        {
+          assetId: "source1",
+          asset: {
+            id: "source1",
+            organizationId: "org1",
+            storageOwnerUserId: "different-member",
+            purpose: "GENERAL",
+            mediaKind: "IMAGE",
+            status: "READY",
+            storageProvider: "LOCAL",
+            objectKey: "source1.png",
+            mimeType: "image/png",
+          },
+        },
+      ],
+    };
+
+    mocks.db.generationJob.findUniqueOrThrow
+      .mockResolvedValueOnce({ ...referenceJob, status: "QUEUED" })
+      .mockResolvedValueOnce({
+        ...referenceJob,
+        status: "PROCESSING",
+        outputPayload: {
+          requestedCount: 1,
+          outputs: [
+            { index: 0, url: "https://cdn.bytepluscdn.com/pro-edit.png" },
+          ],
+        },
+      });
+    const tx = transaction("PROCESSING", referenceJob);
+
+    await processImageJob("job1", p);
+
+    expect(mocks.referenceImage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        objectKey: "source1.png",
+        mimeType: "image/png",
+        storageProvider: "LOCAL",
+      }),
+    );
+    expect(p.submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelId: "dola-seedream-5-0-pro-260628",
+        input: expect.objectContaining({
+          referenceImages: ["data:image/png;base64,AA=="],
+        }),
+      }),
+    );
+    expect(mocks.capture).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ amountCredits: 22n }),
+    );
+    expect(tx.generationJob.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          actualProviderCostMicroUsd: 40_500n,
+          status: "SUCCEEDED",
+        }),
+      }),
+    );
+  });
+
   it("saves Seedream 4.5 output as its reserved JPEG asset", async () => {
     const p = provider();
     mocks.db.asset.findMany.mockResolvedValue([

@@ -490,9 +490,9 @@ export async function releaseOrRefundCredits(
         ? requireNonNegativeInteger(params.amountCredits, "amountCredits")
         : reservation.amountCredits;
 
-    if (releaseAmount === 0n || releaseAmount > reservation.amountCredits) {
+    if (releaseAmount !== reservation.amountCredits) {
       throw new InvalidAmountError(
-        `Release amount must be between 1 and ${reservation.amountCredits} credits`,
+        `Release amount must equal the full ${reservation.amountCredits}-credit reservation`,
       );
     }
 

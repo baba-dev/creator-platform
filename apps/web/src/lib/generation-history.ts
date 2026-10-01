@@ -139,7 +139,7 @@ export async function listGenerationHistory(
       completedAt: true,
       createdBy: { select: { id: true, name: true } },
       providerModel: {
-        select: { displayName: true, mediaKind: true, provider: true },
+        select: { id: true, displayName: true, mediaKind: true, provider: true },
       },
       project: { select: { id: true, name: true } },
       reservedCredits: true,
@@ -225,6 +225,7 @@ export async function getCustomerJob(
     id: job.id,
     status: job.status,
     model: job.providerModel.displayName,
+    providerModelId: job.providerModel.id,
     kind: job.providerModel.mediaKind,
     project: job.project,
     creator: job.createdBy,

@@ -12,6 +12,10 @@ WorkingDirectory=/var/www/creator-platform/current
 EnvironmentFile=/etc/aiwa-creators/creator.env
 EnvironmentFile=-/var/www/creator-platform/current/release.env
 Environment=NODE_OPTIONS=--max-old-space-size=128
+Environment=HOME=/var/www/creator-platform
+Environment=XDG_CACHE_HOME=/var/www/creator-platform/.cache
+Environment=XDG_CONFIG_HOME=/var/www/creator-platform/.config
+Environment=XDG_STATE_HOME=/var/www/creator-platform/.local/state
 CPUAccounting=true
 MemoryAccounting=true
 CPUWeight=100
@@ -30,8 +34,11 @@ UMask=0027
 NoNewPrivileges=true
 PrivateTmp=true
 PrivateDevices=true
-ProtectSystem=full
+ProtectSystem=strict
 ProtectHome=true
+ReadOnlyPaths=/var/www/creator-platform/releases /var/www/creator-platform/current
+ReadWritePaths=/var/www/creator-platform/shared /var/www/creator-platform/.cache /var/www/creator-platform/.config /var/www/creator-platform/.local/state
+InaccessiblePaths=/var/www/creator-platform/incoming
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true

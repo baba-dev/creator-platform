@@ -10,7 +10,9 @@ readonly environment_file=/etc/aiwa-creators/creator.env
 readonly backup_root=/var/backups/creator-platform
 readonly runtime_user=aiwa-creator
 readonly runtime_group=aiwa-creator
-readonly release_layout=2
+readonly release_layout=3
+readonly control_plane_version=3
+readonly control_plane_manifest=ops/control-plane.sha256
 
 log() {
   printf '[creator-deploy] %s\n' "$*"
@@ -37,7 +39,17 @@ validate_runtime() {
     && [[ -n "$(find_next_runtime "$directory")" ]]
 }
 
-validate_release() {
+validate_control_plane() {
+  local directory="$1"
+
+  [[ -f "$directory/$control_plane_manifest" ]] \
+    && (
+      cd "$directory"
+      sha256sum --check --strict --status "$control_plane_manifest"
+    )
+}
+
+validate_release_contents() {
   local directory="$1"
   local expected_sha="$2"
 
@@ -53,7 +65,75 @@ validate_release() {
     && [[ -f "$directory/ops/db/prisma/template-catalog.ts" ]] \
     && [[ -f "$directory/ops/db/prisma/templates.ts" ]] \
     && [[ -x "$directory/ops/bin/creator-deploy" ]] \
-    && [[ -x "$directory/ops/bin/creator-ops" ]]
+    && [[ -x "$directory/ops/bin/creator-ops" ]] \
+    && validate_control_plane "$directory"
+}
+
+validate_release_permissions() {
+  local directory="$1"
+  local unsafe=""
+
+  [[ "$(stat -c '%U' "$directory" 2>/dev/null)" == root ]] || return 1
+  unsafe="$(find "$directory" -xdev \( -type f -o -type d \) \
+    \( ! -user root -o -perm /022 \) -print -quit 2>/dev/null)"
+  [[ -z "$unsafe" ]] || return 1
+  unsafe="$(find "$directory" -xdev -type l ! -user root -print -quit 2>/dev/null)"
+  [[ -z "$unsafe" ]]
+}
+
+harden_release_tree() {
+  local directory="$1"
+
+  chown -hR root:"$runtime_group" "$directory"
+  chmod -R u=rwX,g=rX,o= "$directory"
+  validate_release_permissions "$directory"
+}
+
+validate_release() {
+  local directory="$1"
+  local expected_sha="$2"
+
+  validate_release_contents "$directory" "$expected_sha" \
+    && validate_release_permissions "$directory"
+}
+
+validate_release_path() {
+  local directory="$1"
+  local expected_sha=""
+
+  [[ -n "$directory" && -d "$directory" ]] || return 1
+  expected_sha="$(cat "$directory/RELEASE_SHA" 2>/dev/null || true)"
+  [[ "$expected_sha" =~ ^[0-9a-f]{40}$ ]] \
+    && validate_release "$directory" "$expected_sha"
+}
+
+validate_root_control_file() {
+  local path="$1"
+  local unsafe=""
+
+  [[ -f "$path" && ! -L "$path" ]] || return 1
+  [[ "$(stat -c '%U' "$path" 2>/dev/null)" == root ]] || return 1
+  unsafe="$(find "$path" -maxdepth 0 -perm /022 -print -quit 2>/dev/null)"
+  [[ -z "$unsafe" ]]
+}
+
+validate_installed_control_plane() {
+  local directory="$1"
+  local source_path=""
+  local installed_path=""
+
+  while IFS='|' read -r source_path installed_path; do
+    [[ -n "$source_path" && -n "$installed_path" ]] || continue
+    validate_root_control_file "$installed_path" || return 1
+    cmp -s -- "$directory/$source_path" "$installed_path" || return 1
+  done <<'CONTROL_PLANE'
+ops/bin/creator-deploy|/usr/local/sbin/creator-deploy
+ops/bin/creator-ops|/usr/local/sbin/creator-ops
+ops/systemd/creator-web.service|/etc/systemd/system/creator-web.service
+ops/systemd/creator-worker.service|/etc/systemd/system/creator-worker.service
+ops/systemd/creator-worker@.service|/etc/systemd/system/creator-worker@.service
+ops/systemd/creator-worker@media.service.d/limits.conf|/etc/systemd/system/creator-worker@media.service.d/limits.conf
+CONTROL_PLANE
 }
 
 load_environment_migrate_and_seed_templates() {
@@ -90,6 +170,11 @@ MIGRATE
 
 [[ $EUID -eq 0 ]] || fail "this command must run as root"
 
+if [[ "${1:-}" == "--version" ]]; then
+  printf '%s\n' "$control_plane_version"
+  exit 0
+fi
+
 release_sha="${1:-}"
 archive_argument="${2:-}"
 
@@ -111,6 +196,14 @@ done
 exec 9>/run/lock/creator-platform-deploy.lock
 flock -n 9 || fail "another deployment is already running"
 
+# Explicit runtime-writable state lives outside immutable releases.
+install -d -o "$runtime_user" -g "$runtime_group" -m 0750 \
+  "$application_root/shared" \
+  "$application_root/.cache" \
+  "$application_root/.cache/next" \
+  "$application_root/.config" \
+  "$application_root/.local/state"
+
 if tar -tzf "$archive_path" | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
   fail "release archive contains an unsafe path"
 fi
@@ -118,6 +211,10 @@ fi
 release_dir="$releases_root/sha-$release_sha"
 temporary_dir=""
 previous_release="$(readlink -f "$current_link" 2>/dev/null || true)"
+if [[ -n "$previous_release" ]] && ! validate_release_path "$previous_release"; then
+  log "active previous release is not trusted for rollback; fail-closed rollback will apply"
+  previous_release=""
+fi
 
 cleanup() {
   if [[ -n "$temporary_dir" && -d "$temporary_dir" ]]; then
@@ -143,10 +240,14 @@ if [[ "$release_ready" != true ]]; then
   temporary_dir="$(mktemp -d "$releases_root/.extract-${release_sha}.XXXXXX")"
   tar --no-same-owner --no-same-permissions -xzf "$archive_path" -C "$temporary_dir"
 
+  validate_release_contents "$temporary_dir" "$release_sha" \
+    || fail "extracted release failed content and control-plane integrity checks"
+  harden_release_tree "$temporary_dir" \
+    || fail "extracted release could not be made root-owned and runtime-read-only"
   validate_release "$temporary_dir" "$release_sha" \
-    || fail "extracted release failed integrity checks"
-
-  chown -R "$runtime_user:$runtime_group" "$temporary_dir"
+    || fail "extracted release failed hardened integrity checks"
+  validate_installed_control_plane "$temporary_dir" \
+    || fail "release control plane does not match the trusted root-installed control plane; bootstrap it from a trusted checkout first"
 
   install -d -o root -g root -m 0700 "$backup_root"
   backup_path="$backup_root/predeploy-$(date -u +%Y%m%dT%H%M%SZ)-${release_sha}.sql.gz"
@@ -157,21 +258,23 @@ if [[ "$release_ready" != true ]]; then
 
   log "applying database migrations and ensuring template catalog"
   load_environment_migrate_and_seed_templates "$temporary_dir"
+  validate_release "$temporary_dir" "$release_sha" \
+    || fail "release integrity changed while running deployment operations"
 
   if [[ "$replace_existing" == true ]]; then
     quarantine_dir="$releases_root/quarantine-${release_sha}-$(date -u +%Y%m%dT%H%M%SZ)"
     mv -- "$release_dir" "$quarantine_dir"
     log "moved the invalid release to $quarantine_dir"
 
-    if [[ "$previous_release" == "$release_dir" ]]; then
-      previous_release="$quarantine_dir"
-    fi
   fi
 
   mv -- "$temporary_dir" "$release_dir"
   temporary_dir=""
   log "release extracted, verified, migrated, and template catalog ensured"
 fi
+
+validate_installed_control_plane "$release_dir" \
+  || fail "active release control plane does not match the trusted root-installed control plane"
 
 # Preserve the operator-selected topology. Drain every active worker before
 # switching the shared symlink so old code cannot claim work from the new release.
@@ -200,7 +303,7 @@ mv -Tf "$new_link" "$current_link"
 rollback() {
   log "health check failed; rolling application symlink back" >&2
   systemctl stop "${worker_services[@]}" || true
-  if [[ -n "$previous_release" ]] && validate_runtime "$previous_release"; then
+  if [[ -n "$previous_release" ]] && validate_release_path "$previous_release"; then
     rollback_link="$application_root/.rollback-$release_sha"
     rm -f -- "$rollback_link"
     ln -s "$previous_release" "$rollback_link"
@@ -240,13 +343,13 @@ for unit in "${worker_services[@]}"; do
   systemctl is-active --quiet "$unit" || rollback
 done
 
-# Update the root-owned control plane only after the new release is healthy.
-install -o root -g root -m 0755 \
-  "$release_dir/ops/bin/creator-deploy" \
-  /usr/local/sbin/creator-deploy
-install -o root -g root -m 0755 \
-  "$release_dir/ops/bin/creator-ops" \
-  /usr/local/sbin/creator-ops
+# Re-check both boundaries after the release is live. Normal application
+# deployments never write the root control plane.
+if ! validate_release "$release_dir" "$release_sha" \
+  || ! validate_installed_control_plane "$release_dir"; then
+  log "release or root control-plane integrity changed after activation" >&2
+  rollback
+fi
 
 rm -f -- "$archive_path"
 log "deployment completed: $release_sha"

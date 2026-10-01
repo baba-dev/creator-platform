@@ -20,38 +20,17 @@ getent passwd "$deploy_user" >/dev/null || {
 }
 
 install -d -o root -g aiwa-creator -m 0755 /var/www/creator-platform
-install -d -o root -g aiwa-creator -m 0755 /var/www/creator-platform/releases
+install -d -o root -g aiwa-creator -m 0750 /var/www/creator-platform/releases
 install -d -o "$deploy_user" -g aiwa-creator -m 0750 /var/www/creator-platform/incoming
 install -d -o aiwa-creator -g aiwa-creator -m 0750 /var/www/creator-platform/shared
 install -d -o aiwa-creator -g aiwa-creator -m 0750 /var/www/creator-platform/.cache
+install -d -o aiwa-creator -g aiwa-creator -m 0750 /var/www/creator-platform/.cache/next
 install -d -o aiwa-creator -g aiwa-creator -m 0750 /var/www/creator-platform/.config
 install -d -o aiwa-creator -g aiwa-creator -m 0750 /var/www/creator-platform/.local/state
 install -d -o root -g aiwa-creator -m 0750 /etc/aiwa-creators
 install -d -o root -g root -m 0755 /var/www/letsencrypt
 
-install -o root -g root -m 0755 \
-  "$repository_root/infra/deploy/creator-deploy" \
-  /usr/local/sbin/creator-deploy
-
-install -o root -g root -m 0755 \
-  "$repository_root/infra/deploy/creator-ops" \
-  /usr/local/sbin/creator-ops
-
-install -o root -g root -m 0644 \
-  "$repository_root/infra/systemd/creator-web.service" \
-  /etc/systemd/system/creator-web.service
-
-install -o root -g root -m 0644 \
-  "$repository_root/infra/systemd/creator-worker.service" \
-  /etc/systemd/system/creator-worker.service
-
-install -o root -g root -m 0644 \
-  "$repository_root/infra/systemd/creator-worker@.service" \
-  /etc/systemd/system/creator-worker@.service
-install -d -o root -g root -m 0755 /etc/systemd/system/creator-worker@media.service.d
-install -o root -g root -m 0644 \
-  "$repository_root/infra/systemd/creator-worker@media.service.d/limits.conf" \
-  /etc/systemd/system/creator-worker@media.service.d/limits.conf
+bash "$repository_root/infra/deploy/install-control-plane.sh"
 
 printf '%s ALL=(root) NOPASSWD: /usr/local/sbin/creator-deploy *\n' "$deploy_user" \
   >/etc/sudoers.d/creator-platform-deploy

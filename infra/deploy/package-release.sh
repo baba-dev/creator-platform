@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 release_sha="${1:-}"
+readonly release_layout=3
 
 if [[ ! "$release_sha" =~ ^[0-9a-f]{40}$ ]]; then
   echo "Usage: $0 <40-character-git-sha>" >&2
@@ -48,6 +49,10 @@ if [[ -d apps/web/public ]]; then
   cp -a apps/web/public "$release_root/apps/web/public"
 fi
 
+# Keep Next.js' legitimate runtime cache outside the immutable release tree.
+rm -rf -- "$release_root/apps/web/.next/cache"
+ln -s /var/www/creator-platform/.cache/next "$release_root/apps/web/.next/cache"
+
 cp -a apps/worker/dist "$release_root/apps/worker/dist"
 test -f "$release_root/apps/worker/dist/byteplus-smoke.cjs"
 test -f "$release_root/apps/worker/dist/media-ops.cjs"
@@ -86,6 +91,24 @@ chmod 0755 \
   "$release_root/ops/bin/creator-deploy" \
   "$release_root/ops/bin/creator-ops"
 
+control_plane_files=(
+  ops/bin/creator-deploy
+  ops/bin/creator-ops
+  ops/systemd/creator-web.service
+  ops/systemd/creator-worker.service
+  ops/systemd/creator-worker@.service
+  ops/systemd/creator-worker@media.service.d/limits.conf
+)
+for control_plane_file in "${control_plane_files[@]}"; do
+  test -f "$release_root/$control_plane_file"
+done
+(
+  cd "$release_root"
+  sha256sum "${control_plane_files[@]}" >ops/control-plane.sha256
+  sha256sum --check --strict ops/control-plane.sha256
+)
+chmod 0644 "$release_root/ops/control-plane.sha256"
+
 test -x "$operations_root/node_modules/.bin/prisma"
 test -x "$operations_root/node_modules/.bin/tsx"
 test -f "$operations_root/prisma/schema.prisma"
@@ -103,7 +126,7 @@ next_runtime="$(
 test -n "$next_runtime"
 
 printf '%s\n' "$release_sha" >"$release_root/RELEASE_SHA"
-printf '2\n' >"$release_root/RELEASE_LAYOUT"
+printf '%s\n' "$release_layout" >"$release_root/RELEASE_LAYOUT"
 printf 'APP_VERSION=%s\n' "$release_sha" >"$release_root/release.env"
 
 tar -C "$release_root" -czf "$archive_path" .

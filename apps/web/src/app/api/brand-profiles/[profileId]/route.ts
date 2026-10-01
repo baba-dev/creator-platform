@@ -1,3 +1,4 @@
+import { hasOrganizationPermission } from "@aiwa/authz";
 import { db } from "@aiwa/db";
 import { brandProfileUpdateSchema } from "@aiwa/validation";
 import { NextResponse } from "next/server";
@@ -36,8 +37,9 @@ export async function GET(
         userId: session.user.id,
       },
     },
+    include: { organization: true },
   });
-  if (!membership) {
+  if (!membership || membership.organization.status !== "ACTIVE") {
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
   }
 
@@ -83,7 +85,11 @@ export async function PUT(
       },
       include: { organization: true },
     });
-    if (!membership || membership.organization.status !== "ACTIVE") {
+    if (
+      !membership ||
+      membership.organization.status !== "ACTIVE" ||
+      !hasOrganizationPermission(membership.role, "projects:write")
+    ) {
       return NextResponse.json({ error: "Access denied." }, { status: 403 });
     }
 
@@ -158,8 +164,13 @@ export async function DELETE(
         userId: session.user.id,
       },
     },
+    include: { organization: true },
   });
-  if (!membership) {
+  if (
+    !membership ||
+    membership.organization.status !== "ACTIVE" ||
+    !hasOrganizationPermission(membership.role, "projects:write")
+  ) {
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
   }
 

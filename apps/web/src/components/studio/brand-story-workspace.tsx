@@ -727,8 +727,11 @@ export function BrandStoryWorkspace({
                   <option value="FIVE_ACT">
                     Dramatic Five-Act (Freytag&apos;s Pyramid)
                   </option>
-                  <option value="HEROS_JOURNEY">
+                  <option value="HERO_JOURNEY">
                     The Hero&apos;s Journey (Monomyth)
+                  </option>
+                  <option value="SAVE_THE_CAT">
+                    Save the Cat (15-beat structure)
                   </option>
                 </select>
               </div>

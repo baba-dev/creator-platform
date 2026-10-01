@@ -431,18 +431,37 @@ export async function executeTextGeneration(
     !Array.isArray(price.usageRates) &&
     (price.usageRates as Record<string, unknown>).estimator ===
       "byteplus-text-v1";
-  const actualCost =
-    usageIsReliable && hasTextRateTable
-      ? textProviderCostMicroUsd(price.usageRates, {
-          promptTokens: promptTokens as number,
-          completionTokens: completionTokens as number,
-          cachedPromptTokens,
-        })
-      : price.providerCostMicroUsd * actualUnits;
-  const configuredCredits = priceCredits({
-    ...price,
-    providerCostMicroUsd: actualCost,
-  });
+  let actualCost: bigint;
+  let configuredCredits: bigint;
+  try {
+    actualCost =
+      usageIsReliable && hasTextRateTable
+        ? textProviderCostMicroUsd(price.usageRates, {
+            promptTokens: promptTokens as number,
+            completionTokens: completionTokens as number,
+            cachedPromptTokens,
+          })
+        : price.providerCostMicroUsd * actualUnits;
+    configuredCredits = priceCredits({
+      ...price,
+      providerCostMicroUsd: actualCost,
+    });
+  } catch {
+    await db.generationJob.updateMany({
+      where: { id: job.id, status: "PROCESSING" },
+      data: {
+        status: "MANUAL_REVIEW",
+        errorCode: "INVALID_SETTLEMENT_USAGE",
+        errorMessage:
+          "Provider token usage could not be safely priced. Credits remain reserved for review.",
+      },
+    });
+    throw new GenerationError(
+      "Generation completed at the provider, but its token usage requires billing review.",
+      409,
+    );
+  }
+
   const actualCredits =
     usageIsReliable || job.reservedCredits <= 0n
       ? configuredCredits
@@ -455,6 +474,31 @@ export async function executeTextGeneration(
       }
     : undefined;
 
+  if (actualCredits > job.reservedCredits) {
+    await db.generationJob.updateMany({
+      where: { id: job.id, status: "PROCESSING" },
+      data: {
+        status: "MANUAL_REVIEW",
+        errorCode: "SETTLEMENT_EXCEEDS_RESERVATION",
+        errorMessage:
+          "Actual text usage exceeded the authorized quote. The original reservation remains held for review; no additional credits were charged.",
+        actualProviderCostMicroUsd: actualCost,
+        providerCostBasis: usageIsReliable
+          ? hasTextRateTable
+            ? "PROVIDER_USAGE"
+            : "CONFIGURED_RATE"
+          : "CONFIGURED_ESTIMATE",
+        outputPayload: usage
+          ? { content, usage, settlementPending: true }
+          : { content, usageEstimated: true, settlementPending: true },
+      },
+    });
+    throw new GenerationError(
+      "Generation completed, but actual usage exceeded the authorized quote. No additional credits were charged.",
+      409,
+    );
+  }
+
   try {
     await db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM GenerationJob WHERE id = ${job.id} FOR UPDATE`;
@@ -466,25 +510,6 @@ export async function executeTextGeneration(
           "Generation state changed before settlement.",
           409,
         );
-      }
-      const extraCredits =
-        actualCredits > job.reservedCredits
-          ? actualCredits - job.reservedCredits
-          : 0n;
-      if (extraCredits > 0n) {
-        const member = await requireMembership(
-          tx,
-          input.organizationId,
-          userId,
-          true,
-        );
-        await assertWithinMonthlySpendingCap(tx, {
-          organizationId: input.organizationId,
-          userId,
-          cap: member.monthlySpendingCapCredits,
-          additionalCredits: extraCredits,
-          now: new Date(),
-        });
       }
       await captureCreditsForJob(tx, {
         walletId: wallet.id,

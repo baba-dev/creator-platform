@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { serverEnvSchema } from "@aiwa/config";
+import { ProviderRequestError } from "@aiwa/providers";
 import { createBytePlusProvider } from "@aiwa/providers/byteplus";
 
 const smokeEnvSchema = serverEnvSchema.pick({
@@ -87,12 +88,16 @@ async function main(): Promise<void> {
       aspectRatio: "1:1",
       resolution: "2K",
       outputFormat: "png",
+      outputCount: 1,
       watermark: false,
     },
   });
-  const outputUrl = job.outputUrls?.[0];
-  if (!outputUrl)
-    throw new Error("BytePlus smoke generation returned no image");
+  if (job.status !== "succeeded" || job.outputUrls?.length !== 1) {
+    throw new Error(
+      "BytePlus single-image smoke generation returned an unexpected result",
+    );
+  }
+  const outputUrl = job.outputUrls[0]!;
 
   const response = await fetch(outputUrl, {
     signal: AbortSignal.timeout(120_000),
@@ -117,6 +122,8 @@ async function main(): Promise<void> {
   console.info(
     JSON.stringify({
       status: "succeeded",
+      modelId: "seedream-5-0-260128",
+      region: env.BYTEPLUS_REGION,
       providerRequestId: job.providerRequestId,
       outputPath,
       outputBytes: bytes.byteLength,
@@ -125,10 +132,20 @@ async function main(): Promise<void> {
 }
 
 void main().catch((error: unknown) => {
+  const providerError =
+    error instanceof ProviderRequestError
+      ? {
+          errorCode: error.code ?? "PROVIDER_REJECTED",
+          retryable: error.retryable,
+          stage: error.stage ?? null,
+        }
+      : {};
   console.error(
     JSON.stringify({
       status: "failed",
+      modelId: "seedream-5-0-260128",
       errorName: error instanceof Error ? error.name : "UnknownError",
+      ...providerError,
     }),
   );
   process.exitCode = 1;

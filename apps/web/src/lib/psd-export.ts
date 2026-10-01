@@ -148,11 +148,7 @@ function assertIntegerInRange(
   maximum: number,
   label: string,
 ): void {
-  if (
-    !Number.isSafeInteger(value) ||
-    value < minimum ||
-    value > maximum
-  ) {
+  if (!Number.isSafeInteger(value) || value < minimum || value > maximum) {
     throw new RangeError(`${label} is outside the supported PSD range.`);
   }
 }
@@ -183,7 +179,12 @@ export function validatePsdExportLayout(options: {
     const top = layer.top ?? 0;
     const left = layer.left ?? 0;
     assertIntegerInRange(top, MIN_SIGNED_INT32, MAX_SIGNED_INT32, "Layer top");
-    assertIntegerInRange(left, MIN_SIGNED_INT32, MAX_SIGNED_INT32, "Layer left");
+    assertIntegerInRange(
+      left,
+      MIN_SIGNED_INT32,
+      MAX_SIGNED_INT32,
+      "Layer left",
+    );
     assertIntegerInRange(
       top + layer.height,
       MIN_SIGNED_INT32,
@@ -281,8 +282,7 @@ function compositeVisibleLayers(
         if (sourceAlpha <= 0) continue;
 
         const backdropAlpha = alpha[canvasIndex]! / 255;
-        const outputAlpha =
-          sourceAlpha + backdropAlpha * (1 - sourceAlpha);
+        const outputAlpha = sourceAlpha + backdropAlpha * (1 - sourceAlpha);
 
         const sourceChannels = [
           layer.rgbaData[sourceIndex] ?? 0,
@@ -305,9 +305,7 @@ function compositeVisibleLayers(
             sourceAlpha *
               ((1 - backdropAlpha) * source + backdropAlpha * blended);
           targetChannels[channel][canvasIndex] =
-            outputAlpha > 0
-              ? Math.round(premultiplied / outputAlpha)
-              : 0;
+            outputAlpha > 0 ? Math.round(premultiplied / outputAlpha) : 0;
         }
         alpha[canvasIndex] = Math.round(outputAlpha * 255);
       }

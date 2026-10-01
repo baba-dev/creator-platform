@@ -42,6 +42,7 @@ export async function GET(request: Request) {
   const profiles = await db.brandProfile.findMany({
     where: { organizationId },
     orderBy: { updatedAt: "desc" },
+    take: 100,
   });
 
   return NextResponse.json(

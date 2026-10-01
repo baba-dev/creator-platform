@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  cuidSchema,
-  userRecordIdSchema,
-  userSearchSchema,
-} from "../src/index";
+import { cuidSchema, userRecordIdSchema, userSearchSchema } from "../src/index";
 
 describe("userRecordIdSchema", () => {
   it("accepts mixed-case Better Auth user identifiers", () => {

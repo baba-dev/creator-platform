@@ -16,8 +16,9 @@ const directorChatSchema = z.object({
         content: z.string().min(1).max(5000),
       }),
     )
-    .min(1),
-  modelId: z.string().optional(),
+    .min(1)
+    .max(49),
+  modelId: z.string().min(1).max(100).optional(),
   temperature: z.number().min(0).max(2).optional(),
 });
 
@@ -70,6 +71,7 @@ export async function POST(request: Request) {
     const now = new Date();
     let model = await db.providerModel.findFirst({
       where: {
+        provider: "BYTEPLUS",
         providerModelId: preferredModel,
         mediaKind: "TEXT",
         enabled: true,
@@ -90,6 +92,7 @@ export async function POST(request: Request) {
       // Fallback to any enabled text model
       model = await db.providerModel.findFirst({
         where: {
+          provider: "BYTEPLUS",
           mediaKind: "TEXT",
           enabled: true,
         },

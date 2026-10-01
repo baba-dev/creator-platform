@@ -295,25 +295,35 @@ export async function executeTextGeneration(
       },
     });
   } catch (error) {
+    const outcomeUnknown =
+      !(error instanceof ProviderRequestError) || error.retryable;
+    if (outcomeUnknown) {
+      await db.generationJob.updateMany({
+        where: { id: job.id, status: "SUBMITTED" },
+        data: {
+          status: "MANUAL_REVIEW",
+          errorCode: "PROVIDER_OUTCOME_UNKNOWN",
+          errorMessage:
+            "The text provider outcome is unknown. Credits remain reserved to prevent duplicate billing; an operator can reconcile this job.",
+        },
+      });
+      throw new GenerationError(
+        "The provider response timed out or became unavailable. This request was not automatically retried to avoid duplicate billing.",
+        503,
+      );
+    }
     await db.$transaction(async (tx) => {
       await releaseOrRefundCredits(tx, {
         walletId: wallet.id,
         jobId: job.id,
-        reason:
-          error instanceof Error
-            ? error.message
-            : "Text generation provider failure",
+        reason: error.message,
       });
       await tx.generationJob.update({
         where: { id: job.id },
         data: {
           status: "FAILED",
-          errorCode:
-            error instanceof ProviderRequestError
-              ? error.code
-              : "PROVIDER_ERROR",
-          errorMessage:
-            error instanceof Error ? error.message : "Text generation failed.",
+          errorCode: error.code,
+          errorMessage: error.message,
           completedAt: new Date(),
         },
       });
@@ -464,6 +474,7 @@ export async function executeTextGeneration(
       where: { id: job.id },
       data: {
         status: "SUCCEEDED",
+        providerRequestId: providerResponse.providerRequestId,
         actualUnits: Number(actualUnits),
         billableQuantity: totalTokens,
         actualProviderCostMicroUsd: actualCost,

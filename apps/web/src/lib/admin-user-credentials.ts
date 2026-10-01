@@ -1,7 +1,4 @@
-import {
-  hasPlatformPermission,
-  type PlatformRole,
-} from "@aiwa/authz";
+import { hasPlatformPermission, type PlatformRole } from "@aiwa/authz";
 import { db } from "@aiwa/db";
 import { enqueueMail, securityEventEmail } from "@aiwa/mail";
 import { hashPassword } from "better-auth/crypto";
@@ -13,10 +10,7 @@ export type AdminUserCredentialActor = {
 
 export class AdminUserCredentialError extends Error {
   constructor(
-    public readonly code:
-      | "FORBIDDEN"
-      | "USER_NOT_FOUND"
-      | "EMAIL_EXISTS",
+    public readonly code: "FORBIDDEN" | "USER_NOT_FOUND" | "EMAIL_EXISTS",
     message: string,
   ) {
     super(message);

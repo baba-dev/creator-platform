@@ -80,8 +80,7 @@ export function GenerationProgressDialog({
               const complete =
                 experience.stage === "READY" || index < experience.stageIndex;
               const current =
-                experience.stage !== "READY" &&
-                index === experience.stageIndex;
+                experience.stage !== "READY" && index === experience.stageIndex;
               return (
                 <li key={step} className="min-w-0 text-center">
                   <div

@@ -292,7 +292,8 @@ const textUsageRatesSchema = z
             maxPromptTokens: z.number().int().positive().max(1_048_576),
             inputMicroUsdPerMillionTokens: positiveRateStringSchema,
             outputMicroUsdPerMillionTokens: positiveRateStringSchema,
-            cachedInputMicroUsdPerMillionTokens: positiveRateStringSchema.optional(),
+            cachedInputMicroUsdPerMillionTokens:
+              positiveRateStringSchema.optional(),
           })
           .strict(),
       )
@@ -304,7 +305,8 @@ const textUsageRatesSchema = z
     (value) =>
       value.tiers.every(
         (tier, index) =>
-          index === 0 || tier.maxPromptTokens > value.tiers[index - 1]!.maxPromptTokens,
+          index === 0 ||
+          tier.maxPromptTokens > value.tiers[index - 1]!.maxPromptTokens,
       ),
     "Text pricing tiers must be strictly increasing.",
   );

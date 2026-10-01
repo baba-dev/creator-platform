@@ -744,8 +744,8 @@ export function JobResolutionActions({
                   className="mt-1 block w-full rounded-xl border border-input bg-background px-3 py-2 text-xs font-mono"
                 />
                 <span className="text-[11px] text-muted-foreground">
-                  Remaining refundable credits: {refundCeiling} · Original charge:{" "}
-                  {chargedCredits}
+                  Remaining refundable credits: {refundCeiling} · Original
+                  charge: {chargedCredits}
                 </span>
               </div>
 

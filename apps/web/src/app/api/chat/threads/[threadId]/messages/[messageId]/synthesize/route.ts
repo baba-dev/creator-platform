@@ -45,7 +45,12 @@ export async function POST(
       }),
     ]);
 
-    if (!thread || !message || message.threadId !== threadId) {
+    if (
+      !thread ||
+      thread.createdById !== session.user.id ||
+      !message ||
+      message.threadId !== threadId
+    ) {
       return NextResponse.json(
         { error: "Message or thread not found." },
         { status: 404 },

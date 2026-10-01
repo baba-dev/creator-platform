@@ -234,7 +234,7 @@ export function ImageEditor({
           ctx.fillStyle = layer.color;
           ctx.fillRect(layer.left, layer.top, layer.width, layer.height);
         } else if (layer.imageUrl) {
-          await new Promise<void>((resolve, reject) => {
+          await new Promise<void>((resolve) => {
             const img = new window.Image();
             img.crossOrigin = "anonymous";
             img.onload = () => {
@@ -249,8 +249,8 @@ export function ImageEditor({
               }
               resolve();
             };
-            img.onerror = () =>
-              reject(new Error(`Could not load layer "${layer.name}".`));
+            // Preview rendering is best-effort; PSD export below fails closed.
+            img.onerror = () => resolve();
             img.src = layer.imageUrl!;
           });
         }
@@ -456,14 +456,15 @@ export function ImageEditor({
           offCtx.fillStyle = layer.color;
           offCtx.fillRect(0, 0, layer.width, layer.height);
         } else if (layer.imageUrl) {
-          await new Promise<void>((resolve) => {
+          await new Promise<void>((resolve, reject) => {
             const img = new window.Image();
             img.crossOrigin = "anonymous";
             img.onload = () => {
               offCtx.drawImage(img, 0, 0, layer.width, layer.height);
               resolve();
             };
-            img.onerror = () => resolve();
+            img.onerror = () =>
+              reject(new Error(`Could not load layer "${layer.name}".`));
             img.src = layer.imageUrl!;
           });
         }

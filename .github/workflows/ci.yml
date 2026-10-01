@@ -80,11 +80,7 @@ jobs:
           bash -n infra/deploy/package-release.sh
 
       - name: Check formatting
-        run: |
-          pnpm exec prettier apps/web/src/lib/password-recovery.integration.test.ts --write
-          git diff -- apps/web/src/lib/password-recovery.integration.test.ts
-          git diff --quiet -- apps/web/src/lib/password-recovery.integration.test.ts
-          pnpm format:check
+        run: pnpm format:check
 
       - name: Lint
         run: pnpm lint

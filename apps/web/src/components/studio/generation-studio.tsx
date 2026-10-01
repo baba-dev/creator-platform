@@ -1150,15 +1150,22 @@ export function GenerationStudio({
     },
   ) {
     setActiveMode("VIDEO");
+    const exactModel = data?.models.find(
+      (candidate) =>
+        candidate.mediaKind === "VIDEO" &&
+        candidate.providerModelId === options?.providerModelId,
+    );
     const preferred =
-      data?.models.find(
-        (candidate) =>
-          candidate.mediaKind === "VIDEO" &&
-          candidate.providerModelId === options?.providerModelId,
-      ) ??
-      data?.models.find((candidate) => candidate.mediaKind === "VIDEO");
+      workflow === "DRAFT_FINAL"
+        ? exactModel
+        : (exactModel ??
+          data?.models.find((candidate) => candidate.mediaKind === "VIDEO"));
     if (!preferred) {
-      setError("No enabled video model with active pricing is available.");
+      setError(
+        workflow === "DRAFT_FINAL"
+          ? "The original Draft model is not enabled with active pricing. Publish pricing for that model before rendering the final."
+          : "No enabled video model with active pricing is available.",
+      );
       return;
     }
     setModelId(preferred.id);
@@ -2497,9 +2504,11 @@ export function GenerationStudio({
                         className="mt-2 inline-flex min-h-10 items-center text-sm font-semibold text-primary"
                       >
                         Download{" "}
-                        {asset.mimeType.startsWith("video/")
-                          ? "MP4"
-                          : asset.mimeType.startsWith("audio/")
+                        {asset.mimeType === "video/quicktime"
+                          ? "MOV"
+                          : asset.mimeType.startsWith("video/")
+                            ? "MP4"
+                            : asset.mimeType.startsWith("audio/")
                             ? "MP3"
                             : asset.mimeType === "image/jpeg"
                               ? "JPEG"

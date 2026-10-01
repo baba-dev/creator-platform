@@ -36,6 +36,7 @@ interface LedgerEntryRecord {
   metadata?: unknown;
   createdAt: Date;
   reversedBy?: LedgerEntryRecord | null;
+  reversals?: LedgerEntryRecord[];
 }
 
 interface GenerationJobRecord {
@@ -115,7 +116,7 @@ function createMockTx(initialData?: {
             referenceId?: string;
             type?: string;
           };
-          include?: { reversedBy?: boolean };
+          include?: { reversedBy?: boolean; reversals?: boolean };
         }) => {
           const found = entries.find((e) => {
             if (where.walletId && e.walletId !== where.walletId) return false;
@@ -132,6 +133,11 @@ function createMockTx(initialData?: {
           if (include?.reversedBy) {
             const rev = entries.find((e) => e.reversalOfId === found.id);
             copy.reversedBy = rev ? { ...rev } : null;
+          }
+          if (include?.reversals) {
+            copy.reversals = entries
+              .filter((e) => e.reversalOfId === found.id)
+              .map((e) => ({ ...e }));
           }
           return copy;
         },
@@ -521,6 +527,180 @@ describe("Transactional Ledger Mutations", () => {
     expect(refund.reversalOfId).toBe("entry_cap_1");
 
     expect(mock.getWallet(testWalletId)?.balanceCache).toBe(100n);
+  });
+
+  it("supports multiple partial refunds up to the cumulative capture ceiling", async () => {
+    const mock = createMockTx({
+      wallets: [
+        {
+          id: testWalletId,
+          organizationId: "org_1",
+          balanceCache: 0n,
+          version: 1,
+        },
+      ],
+      entries: [
+        {
+          id: "entry_cap_1",
+          walletId: testWalletId,
+          type: "CAPTURE",
+          amountCredits: 100n,
+          balanceAfter: 0n,
+          idempotencyKey: "idem_cap_1",
+          referenceType: "GENERATION_JOB",
+          referenceId: testJobId,
+          createdAt: new Date(),
+        },
+      ],
+    });
+
+    // First partial refund of 20 credits
+    const refund1 = await releaseOrRefundCredits(mock.tx, {
+      walletId: testWalletId,
+      jobId: testJobId,
+      amountCredits: 20n,
+      reason: "Partial refund 1",
+    });
+    expect(refund1.amountCredits).toBe(20n);
+    expect(mock.getWallet(testWalletId)?.balanceCache).toBe(20n);
+
+    // Second partial refund of 30 credits
+    const refund2 = await releaseOrRefundCredits(mock.tx, {
+      walletId: testWalletId,
+      jobId: testJobId,
+      amountCredits: 30n,
+      reason: "Partial refund 2",
+    });
+    expect(refund2.amountCredits).toBe(30n);
+    expect(mock.getWallet(testWalletId)?.balanceCache).toBe(50n);
+
+    // Attempting to refund 60 credits when only 50 remain should be rejected
+    await expect(
+      releaseOrRefundCredits(mock.tx, {
+        walletId: testWalletId,
+        jobId: testJobId,
+        amountCredits: 60n,
+        reason: "Too large",
+      }),
+    ).rejects.toThrow(InvalidAmountError);
+
+    // Final refund of remaining 50 credits
+    const refund3 = await releaseOrRefundCredits(mock.tx, {
+      walletId: testWalletId,
+      jobId: testJobId,
+      amountCredits: 50n,
+      reason: "Final refund",
+    });
+    expect(refund3.amountCredits).toBe(50n);
+    expect(mock.getWallet(testWalletId)?.balanceCache).toBe(100n);
+
+    // Subsequent refund when fully refunded should be rejected
+    await expect(
+      releaseOrRefundCredits(mock.tx, {
+        walletId: testWalletId,
+        jobId: testJobId,
+        reason: "Already settled",
+      }),
+    ).rejects.toThrow(ReservationAlreadySettledError);
+  });
+
+  it("rejects a conflicting retry that reuses a refund idempotency key", async () => {
+    const mock = createMockTx({
+      wallets: [
+        {
+          id: testWalletId,
+          organizationId: "org_1",
+          balanceCache: 20n,
+          version: 2,
+        },
+      ],
+      entries: [
+        {
+          id: "entry_cap_1",
+          walletId: testWalletId,
+          type: "CAPTURE",
+          amountCredits: 100n,
+          balanceAfter: 0n,
+          idempotencyKey: "idem_cap_1",
+          referenceType: "GENERATION_JOB",
+          referenceId: testJobId,
+          createdAt: new Date(),
+        },
+        {
+          id: "entry_ref_1",
+          walletId: testWalletId,
+          type: "REFUND",
+          amountCredits: 20n,
+          balanceAfter: 20n,
+          idempotencyKey: "refund-retry-key",
+          referenceType: "GENERATION_JOB",
+          referenceId: testJobId,
+          reversalOfId: "entry_cap_1",
+          description: "Original refund reason",
+          createdAt: new Date(),
+        },
+      ],
+    });
+
+    await expect(
+      releaseOrRefundCredits(mock.tx, {
+        walletId: testWalletId,
+        jobId: testJobId,
+        amountCredits: 30n,
+        reason: "Different refund request",
+        idempotencyKey: "refund-retry-key",
+      }),
+    ).rejects.toThrow(IdempotencyConflictError);
+
+    expect(mock.getWallet(testWalletId)?.balanceCache).toBe(20n);
+    expect(mock.getEntries()).toHaveLength(2);
+  });
+
+  it("rejects partial reservation release so credits cannot be stranded", async () => {
+    const mock = createMockTx({
+      wallets: [
+        {
+          id: testWalletId,
+          organizationId: "org_1",
+          balanceCache: 72n,
+          version: 1,
+        },
+      ],
+      entries: [
+        {
+          id: "entry_res_1",
+          walletId: testWalletId,
+          type: "RESERVATION",
+          amountCredits: 28n,
+          balanceAfter: 72n,
+          idempotencyKey: "idem_res_1",
+          referenceType: "GENERATION_JOB",
+          referenceId: testJobId,
+          createdAt: new Date(),
+        },
+      ],
+      jobs: [
+        {
+          id: testJobId,
+          status: "CREDIT_RESERVED",
+          reservedCredits: 28n,
+          chargedCredits: 0n,
+        },
+      ],
+    });
+
+    await expect(
+      releaseOrRefundCredits(mock.tx, {
+        walletId: testWalletId,
+        jobId: testJobId,
+        amountCredits: 10n,
+        reason: "Invalid partial release",
+      }),
+    ).rejects.toThrow(InvalidAmountError);
+
+    expect(mock.getWallet(testWalletId)?.balanceCache).toBe(72n);
+    expect(mock.getJob(testJobId)?.reservedCredits).toBe(28n);
+    expect(mock.getEntries()).toHaveLength(1);
   });
 
   it("rejects duplicate release or refund when already settled", async () => {

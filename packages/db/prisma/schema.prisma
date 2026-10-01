@@ -325,16 +325,17 @@ model LedgerEntry {
   idempotencyKey String          @unique
   referenceType  String?
   referenceId    String?
-  reversalOfId   String?         @unique
+  reversalOfId   String?
   description    String?         @db.Text
   metadata       Json?
   createdAt      DateTime        @default(now())
   wallet         Wallet          @relation(fields: [walletId], references: [id], onDelete: Restrict)
   reversalOf     LedgerEntry?    @relation("LedgerReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
-  reversedBy     LedgerEntry?    @relation("LedgerReversal")
+  reversals      LedgerEntry[]   @relation("LedgerReversal")
 
   @@index([walletId, createdAt])
   @@index([referenceType, referenceId])
+  @@index([reversalOfId])
 }
 
 model ManualPayment {

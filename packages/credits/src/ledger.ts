@@ -228,18 +228,27 @@ export async function captureCreditsForJob(
       referenceId: params.jobId,
       type: "RESERVATION",
     },
-    include: { reversedBy: true },
+    include: { reversals: true },
   });
 
   if (!reservation) {
     throw new ReservationNotFoundError(params.jobId);
   }
 
-  if (reservation.reversedBy) {
-    throw new ReservationAlreadySettledError(
-      params.jobId,
-      reservation.reversedBy.type,
+  const hasReversal =
+    (reservation.reversals?.length ?? 0) > 0 ||
+    Boolean(
+      "reversedBy" in reservation &&
+      (reservation as Record<string, unknown>).reversedBy,
     );
+
+  if (hasReversal) {
+    const settledType =
+      reservation.reversals?.[0]?.type ??
+      ((reservation as Record<string, unknown>).reversedBy as { type?: string })
+        ?.type ??
+      "SETTLED";
+    throw new ReservationAlreadySettledError(params.jobId, settledType);
   }
 
   const existingCapture = await tx.ledgerEntry.findFirst({
@@ -322,6 +331,11 @@ export async function releaseOrRefundCredits(
   tx: Prisma.TransactionClient,
   params: ReleaseOrRefundCreditsParams,
 ): Promise<LedgerEntry> {
+  // Serialize all settlement decisions for this wallet before reading reversal
+  // totals. This makes cumulative refund ceilings safe even when callers do
+  // not already hold the generation-job row lock.
+  const wallet = await lockAndGetWallet(tx, params.walletId);
+
   const capture = await tx.ledgerEntry.findFirst({
     where: {
       walletId: params.walletId,
@@ -329,38 +343,62 @@ export async function releaseOrRefundCredits(
       referenceId: params.jobId,
       type: "CAPTURE",
     },
-    include: { reversedBy: true },
+    include: { reversals: true },
   });
 
   if (capture) {
-    if (capture.reversedBy) {
-      if (
-        params.idempotencyKey &&
-        capture.reversedBy.idempotencyKey === params.idempotencyKey
-      ) {
-        return capture.reversedBy;
-      }
-      throw new ReservationAlreadySettledError(
-        params.jobId,
-        capture.reversedBy.type,
+    if (params.idempotencyKey) {
+      const match = capture.reversals.find(
+        (r) => r.idempotencyKey === params.idempotencyKey,
       );
+      if (match) {
+        const requestedAmount =
+          params.amountCredits === undefined
+            ? undefined
+            : requireNonNegativeInteger(params.amountCredits, "amountCredits");
+        if (
+          match.type !== "REFUND" ||
+          (requestedAmount !== undefined &&
+            match.amountCredits !== requestedAmount) ||
+          match.description !== params.reason
+        ) {
+          throw new IdempotencyConflictError(
+            params.idempotencyKey,
+            "Existing refund does not match requested parameters",
+          );
+        }
+        return match;
+      }
+    }
+
+    const existingRefunds = capture.reversals.filter(
+      (r) => r.type === "REFUND",
+    );
+    const alreadyRefunded = existingRefunds.reduce(
+      (sum, r) => sum + r.amountCredits,
+      0n,
+    );
+    const remainingRefundable = capture.amountCredits - alreadyRefunded;
+
+    if (remainingRefundable <= 0n) {
+      throw new ReservationAlreadySettledError(params.jobId, "REFUND");
     }
 
     const refundAmount =
       params.amountCredits !== undefined
         ? requireNonNegativeInteger(params.amountCredits, "amountCredits")
-        : capture.amountCredits;
+        : remainingRefundable;
 
-    if (refundAmount === 0n || refundAmount > capture.amountCredits) {
+    if (refundAmount === 0n || refundAmount > remainingRefundable) {
       throw new InvalidAmountError(
-        `Refund amount must be between 1 and ${capture.amountCredits} credits`,
+        `Refund amount must be between 1 and ${remainingRefundable} credits`,
       );
     }
 
-    const wallet = await lockAndGetWallet(tx, params.walletId);
     const balanceAfter = wallet.balanceCache + refundAmount;
     const idempotencyKey =
-      params.idempotencyKey ?? `refund-${params.jobId}-${capture.id}`;
+      params.idempotencyKey ??
+      `refund-${params.jobId}-${capture.id}-${existingRefunds.length + 1}`;
 
     const metadataJson =
       typeof params.metadata === "object" && params.metadata !== null
@@ -404,20 +442,46 @@ export async function releaseOrRefundCredits(
       referenceId: params.jobId,
       type: "RESERVATION",
     },
-    include: { reversedBy: true },
+    include: { reversals: true },
   });
 
   if (reservation) {
-    if (reservation.reversedBy) {
-      if (
-        params.idempotencyKey &&
-        reservation.reversedBy.idempotencyKey === params.idempotencyKey
-      ) {
-        return reservation.reversedBy;
+    const reservationReversals =
+      reservation.reversals ??
+      ("reversedBy" in reservation &&
+      (reservation as Record<string, unknown>).reversedBy
+        ? [(reservation as Record<string, unknown>).reversedBy as LedgerEntry]
+        : []);
+    if (reservationReversals.length > 0) {
+      if (params.idempotencyKey) {
+        const match = reservationReversals.find(
+          (r) => r.idempotencyKey === params.idempotencyKey,
+        );
+        if (match) {
+          const requestedAmount =
+            params.amountCredits === undefined
+              ? undefined
+              : requireNonNegativeInteger(
+                  params.amountCredits,
+                  "amountCredits",
+                );
+          if (
+            match.type !== "RELEASE" ||
+            (requestedAmount !== undefined &&
+              match.amountCredits !== requestedAmount) ||
+            match.description !== params.reason
+          ) {
+            throw new IdempotencyConflictError(
+              params.idempotencyKey,
+              "Existing release does not match requested parameters",
+            );
+          }
+          return match;
+        }
       }
       throw new ReservationAlreadySettledError(
         params.jobId,
-        reservation.reversedBy.type,
+        reservationReversals[0]!.type,
       );
     }
 
@@ -426,13 +490,12 @@ export async function releaseOrRefundCredits(
         ? requireNonNegativeInteger(params.amountCredits, "amountCredits")
         : reservation.amountCredits;
 
-    if (releaseAmount === 0n || releaseAmount > reservation.amountCredits) {
+    if (releaseAmount !== reservation.amountCredits) {
       throw new InvalidAmountError(
-        `Release amount must be between 1 and ${reservation.amountCredits} credits`,
+        `Release amount must equal the full ${reservation.amountCredits}-credit reservation`,
       );
     }
 
-    const wallet = await lockAndGetWallet(tx, params.walletId);
     const balanceAfter = wallet.balanceCache + releaseAmount;
     const idempotencyKey =
       params.idempotencyKey ?? `release-${params.jobId}-${reservation.id}`;

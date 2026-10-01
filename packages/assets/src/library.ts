@@ -260,17 +260,24 @@ function purgeDate(now = new Date()): Date {
 
 export async function trashAssets(
   tx: Prisma.TransactionClient,
-  input: { organizationId: string; assetIds: string[] },
+  input: { organizationId: string; assetIds: string[]; userId?: string },
 ): Promise<number> {
   if (input.assetIds.length > MAX_ASSET_BULK_SELECTION)
     throw new Error("Too many assets selected.");
   const now = new Date();
+  const where: Prisma.AssetWhereInput = {
+    id: { in: input.assetIds },
+    organizationId: input.organizationId,
+    status: "READY",
+  };
+  if (input.userId) {
+    where.OR = [
+      { purpose: "GENERAL" },
+      { purpose: "REFERENCE_INPUT", storageOwnerUserId: input.userId },
+    ];
+  }
   const result = await tx.asset.updateMany({
-    where: {
-      id: { in: input.assetIds },
-      organizationId: input.organizationId,
-      status: "READY",
-    },
+    where,
     data: {
       status: "DELETED",
       deletedAt: now,
@@ -291,7 +298,7 @@ export async function trashAssets(
 
 export async function restoreAssets(
   tx: Prisma.TransactionClient,
-  input: { organizationId: string; assetIds: string[] },
+  input: { organizationId: string; assetIds: string[]; userId?: string },
 ): Promise<number> {
   if (input.assetIds.length > MAX_ASSET_BULK_SELECTION)
     throw new Error("Too many assets selected.");
@@ -304,6 +311,13 @@ export async function restoreAssets(
       organizationId: input.organizationId,
     });
     if (!asset || asset.status !== "DELETED") continue;
+    if (
+      input.userId &&
+      asset.purpose === "REFERENCE_INPUT" &&
+      asset.storageOwnerUserId !== input.userId
+    ) {
+      continue;
+    }
 
     await tx.asset.update({
       where: { id: asset.id },
@@ -381,6 +395,12 @@ export async function completeAssetPurge(
   const asset = await lockAssetRow(tx, input);
   if (!asset || asset.status !== "PURGING") return false;
 
+  const variants = await tx.assetVariant.findMany({
+    where: { assetId: asset.id },
+    select: { byteSize: true },
+  });
+  const variantsBytes = variants.reduce((sum, v) => sum + v.byteSize, 0n);
+
   await tx.assetVariant.deleteMany({ where: { assetId: asset.id } });
   await tx.asset.update({
     where: { id: asset.id },
@@ -394,7 +414,7 @@ export async function completeAssetPurge(
   await tx.assetStorageUsage.updateMany({
     where: { organizationId: asset.organizationId },
     data: {
-      usedBytes: { decrement: asset.byteSize },
+      usedBytes: { decrement: asset.byteSize + variantsBytes },
       version: { increment: 1 },
     },
   });
@@ -409,6 +429,7 @@ export async function assignAssets(
     assetIds: string[];
     projectId?: string | null;
     folderId?: string | null;
+    userId?: string;
   },
 ): Promise<number> {
   if (input.assetIds.length > MAX_ASSET_BULK_SELECTION)
@@ -435,12 +456,19 @@ export async function assignAssets(
     ...("projectId" in input ? { projectId: input.projectId ?? null } : {}),
     ...("folderId" in input ? { folderId: input.folderId ?? null } : {}),
   };
+  const where: Prisma.AssetWhereInput = {
+    id: { in: input.assetIds },
+    organizationId: input.organizationId,
+    status: { in: ["READY", "DELETED"] },
+  };
+  if (input.userId) {
+    where.OR = [
+      { purpose: "GENERAL" },
+      { purpose: "REFERENCE_INPUT", storageOwnerUserId: input.userId },
+    ];
+  }
   const result = await tx.asset.updateMany({
-    where: {
-      id: { in: input.assetIds },
-      organizationId: input.organizationId,
-      status: { in: ["READY", "DELETED"] },
-    },
+    where,
     data,
   });
   return result.count;

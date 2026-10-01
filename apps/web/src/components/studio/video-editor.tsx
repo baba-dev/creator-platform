@@ -66,6 +66,10 @@ export function VideoEditor({
   const [link, setLink] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reviewState, setReviewState] = useState<{
+    renderId: string;
+    message: string;
+  } | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const clip =
     document.clips.find((item) => item.id === selectedClip) ??
@@ -129,10 +133,15 @@ export function VideoEditor({
           setMessage("Your video is ready.");
           void loadAssets().catch(() => undefined);
         } else if (data.processingState === "REVIEW") {
-          setMessage("Export needs support review.");
-          setError(
-            "Your source is safe. Contact support before retrying this export.",
-          );
+          setRenderId(null);
+          setBusy(false);
+          setReviewState({
+            renderId,
+            message:
+              "Your source media is safe. This export is paused pending support review before retrying.",
+          });
+          setMessage(null);
+          setError(null);
         } else if (
           data.status === "FAILED" ||
           data.processingState === "FAILED"
@@ -260,6 +269,7 @@ export function VideoEditor({
     if (!saved) return;
     setBusy(true);
     setError(null);
+    setReviewState(null);
     setMessage("Render queued. You can leave this page after it starts.");
     try {
       const response = await fetch(`/api/video-edits/${saved.id}/render`, {
@@ -611,6 +621,34 @@ export function VideoEditor({
               >
                 Download MP4
               </a>
+            </div>
+          ) : null}
+          {reviewState ? (
+            <div
+              role="status"
+              className="rounded-xl border border-warning/40 bg-warning/10 p-4 text-sm space-y-2"
+            >
+              <div className="font-semibold text-warning-foreground">
+                Export Under Review
+              </div>
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                {reviewState.message}
+              </p>
+              <div className="flex items-center gap-3 pt-1">
+                <a
+                  className="font-semibold text-primary underline text-xs"
+                  href={`mailto:support@aiwa.dev?subject=${encodeURIComponent(`Video Export Review - Render ${reviewState.renderId}`)}`}
+                >
+                  Contact Support
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setReviewState(null)}
+                  className="text-xs text-muted-foreground hover:text-foreground underline"
+                >
+                  Dismiss
+                </button>
+              </div>
             </div>
           ) : null}
           {message ? (

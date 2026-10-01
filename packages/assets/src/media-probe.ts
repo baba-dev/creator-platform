@@ -1,11 +1,21 @@
 import { execFile } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { promisify } from "node:util";
 
 const run = promisify(execFile);
+
+export interface ProbedMediaMetadata {
+  durationMs: number | null;
+  width: number | null;
+  height: number | null;
+}
+
 export async function probeUploadedMedia(
   path: string,
   kind: "VIDEO" | "AUDIO",
-) {
+): Promise<ProbedMediaMetadata> {
   const { stdout } = await run(
     "ffprobe",
     [
@@ -54,4 +64,51 @@ export async function probeUploadedMedia(
     width: video?.width ?? null,
     height: video?.height ?? null,
   };
+}
+
+export async function probeUploadedBuffer(
+  bytes: Buffer,
+  kind: "VIDEO" | "AUDIO",
+  extension = kind === "VIDEO" ? "mp4" : "mp3",
+): Promise<ProbedMediaMetadata> {
+  const root = await mkdtemp(join(tmpdir(), "aiwa-probe-"));
+  const tempPath = join(root, `probe.${extension}`);
+  try {
+    await writeFile(tempPath, bytes);
+    return await probeUploadedMedia(tempPath, kind);
+  } finally {
+    await rm(root, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
+export async function inspectAndProbeUploadedMedia(input: {
+  path?: string;
+  bytes?: Buffer;
+  kind: "IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT" | "OTHER";
+  extension?: string;
+  imageInspector?: (
+    source: Buffer | string,
+  ) => Promise<{ width: number | null; height: number | null }>;
+}): Promise<ProbedMediaMetadata> {
+  if (input.kind === "VIDEO" || input.kind === "AUDIO") {
+    if (input.path) {
+      return await probeUploadedMedia(input.path, input.kind);
+    }
+    if (input.bytes) {
+      return await probeUploadedBuffer(
+        input.bytes,
+        input.kind,
+        input.extension,
+      );
+    }
+    throw new Error("Either path or bytes must be provided to probe media.");
+  }
+  if (input.kind === "IMAGE") {
+    if (input.imageInspector) {
+      const img = await input.imageInspector(input.bytes ?? input.path!);
+      return { width: img.width, height: img.height, durationMs: null };
+    }
+    return { width: null, height: null, durationMs: null };
+  }
+  return { width: null, height: null, durationMs: null };
 }

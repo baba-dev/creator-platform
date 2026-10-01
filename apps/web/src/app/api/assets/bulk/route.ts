@@ -91,6 +91,7 @@ export async function POST(request: Request) {
         trashAssets(tx, {
           organizationId: input.organizationId,
           assetIds: uniqueIds,
+          userId: session.user.id,
         }),
       );
     } else if (input.action === "restore") {
@@ -98,6 +99,7 @@ export async function POST(request: Request) {
         restoreAssets(tx, {
           organizationId: input.organizationId,
           assetIds: uniqueIds,
+          userId: session.user.id,
         }),
       );
     } else if (input.action === "project") {
@@ -106,6 +108,7 @@ export async function POST(request: Request) {
           organizationId: input.organizationId,
           assetIds: uniqueIds,
           projectId: input.projectId,
+          userId: session.user.id,
         }),
       );
     } else if (input.action === "folder") {
@@ -114,6 +117,7 @@ export async function POST(request: Request) {
           organizationId: input.organizationId,
           assetIds: uniqueIds,
           folderId: input.folderId,
+          userId: session.user.id,
         }),
       );
     } else if (input.action === "add-tag") {
@@ -134,6 +138,13 @@ export async function POST(request: Request) {
             id: { in: uniqueIds },
             organizationId: input.organizationId,
             status: { in: ["READY", "DELETED"] },
+            OR: [
+              { purpose: "GENERAL" },
+              {
+                purpose: "REFERENCE_INPUT",
+                storageOwnerUserId: session.user.id,
+              },
+            ],
           },
           select: { id: true },
         });
@@ -152,16 +163,17 @@ export async function POST(request: Request) {
       const result = await db.assetTagAssignment.deleteMany({
         where: {
           tagId: input.tagId,
-          assetId: {
-            in: await db.asset
-              .findMany({
-                where: {
-                  id: { in: uniqueIds },
-                  organizationId: input.organizationId,
-                },
-                select: { id: true },
-              })
-              .then((rows) => rows.map((row) => row.id)),
+          tag: { organizationId: input.organizationId },
+          assetId: { in: uniqueIds },
+          asset: {
+            organizationId: input.organizationId,
+            OR: [
+              { purpose: "GENERAL" },
+              {
+                purpose: "REFERENCE_INPUT",
+                storageOwnerUserId: session.user.id,
+              },
+            ],
           },
         },
       });

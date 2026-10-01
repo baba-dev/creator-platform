@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
 import type { Route } from "next";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
@@ -149,9 +150,23 @@ export function SignInForm({ returnTo }: SignInFormProps) {
         />
       </label>
 
-      <label className="block text-xs font-bold text-foreground/90">
-        Password
+      <div>
+        <div className="flex items-center justify-between">
+          <label
+            htmlFor="sign-in-password"
+            className="block text-xs font-bold text-foreground/90"
+          >
+            Password
+          </label>
+          <Link
+            href={"/forgot-password" as Route}
+            className="text-xs font-semibold text-primary hover:underline"
+          >
+            Forgot password?
+          </Link>
+        </div>
         <input
+          id="sign-in-password"
           className={inputClassName}
           name="password"
           type="password"
@@ -161,7 +176,7 @@ export function SignInForm({ returnTo }: SignInFormProps) {
           required
           placeholder="Your password"
         />
-      </label>
+      </div>
 
       {error ? (
         <p

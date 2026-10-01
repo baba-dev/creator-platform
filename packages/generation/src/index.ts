@@ -210,6 +210,50 @@ export async function requireMembership(
     throw new GenerationError("Workspace access denied.", 403);
   return member;
 }
+
+export async function assertWithinMonthlySpendingCap(
+  tx: Prisma.TransactionClient,
+  params: {
+    organizationId: string;
+    userId: string;
+    cap: bigint | null;
+    additionalCredits: bigint;
+    now?: Date;
+  },
+): Promise<void> {
+  if (params.cap === null) return;
+
+  const { start, end } = muscatCalendarMonth(params.now ?? new Date());
+  const [succeededAgg, inFlightAgg] = await Promise.all([
+    tx.generationJob.aggregate({
+      where: {
+        organizationId: params.organizationId,
+        createdById: params.userId,
+        createdAt: { gte: start, lt: end },
+        status: "SUCCEEDED",
+      },
+      _sum: { chargedCredits: true },
+    }),
+    tx.generationJob.aggregate({
+      where: {
+        organizationId: params.organizationId,
+        createdById: params.userId,
+        createdAt: { gte: start, lt: end },
+        status: { notIn: ["CANCELLED", "FAILED", "DRAFT", "SUCCEEDED"] },
+      },
+      _sum: { reservedCredits: true },
+    }),
+  ]);
+
+  const spent =
+    (succeededAgg._sum.chargedCredits ?? 0n) +
+    (inFlightAgg._sum.reservedCredits ?? 0n);
+
+  if (spent + params.additionalCredits > params.cap) {
+    throw new GenerationError("Monthly spending cap exceeded.");
+  }
+}
+
 export async function createImageJob(userId: string, raw: unknown) {
   const input = imageRequestSchema.parse(raw);
   const payload = {
@@ -432,26 +476,13 @@ export async function createImageJob(userId: string, raw: unknown) {
           409,
         );
       }
-      const { start, end } = muscatCalendarMonth(now);
-      const jobs = await tx.generationJob.findMany({
-        where: {
-          organizationId: input.organizationId,
-          createdById: userId,
-          createdAt: { gte: start, lt: end },
-          status: { notIn: ["CANCELLED", "FAILED", "DRAFT"] },
-        },
-        select: { status: true, reservedCredits: true, chargedCredits: true },
+      await assertWithinMonthlySpendingCap(tx, {
+        organizationId: input.organizationId,
+        userId,
+        cap: member.monthlySpendingCapCredits,
+        additionalCredits: credits,
+        now,
       });
-      const spent = jobs.reduce(
-        (n, j) =>
-          n + (j.status === "SUCCEEDED" ? j.chargedCredits : j.reservedCredits),
-        0n,
-      );
-      if (
-        member.monthlySpendingCapCredits !== null &&
-        spent + credits > member.monthlySpendingCapCredits
-      )
-        throw new GenerationError("Monthly spending cap exceeded.");
       await reserveAssetStorage(tx, {
         organizationId: input.organizationId,
         userId,
@@ -778,26 +809,13 @@ export async function createVideoJob(userId: string, raw: unknown) {
           409,
         );
       }
-      const { start, end } = muscatCalendarMonth(now);
-      const jobs = await tx.generationJob.findMany({
-        where: {
-          organizationId: input.organizationId,
-          createdById: userId,
-          createdAt: { gte: start, lt: end },
-          status: { notIn: ["CANCELLED", "FAILED", "DRAFT"] },
-        },
-        select: { status: true, reservedCredits: true, chargedCredits: true },
+      await assertWithinMonthlySpendingCap(tx, {
+        organizationId: input.organizationId,
+        userId,
+        cap: member.monthlySpendingCapCredits,
+        additionalCredits: credits,
+        now,
       });
-      const spent = jobs.reduce(
-        (n, j) =>
-          n + (j.status === "SUCCEEDED" ? j.chargedCredits : j.reservedCredits),
-        0n,
-      );
-      if (
-        member.monthlySpendingCapCredits !== null &&
-        spent + credits > member.monthlySpendingCapCredits
-      )
-        throw new GenerationError("Monthly spending cap exceeded.");
       await reserveAssetStorage(tx, {
         organizationId: input.organizationId,
         userId,
@@ -1026,26 +1044,13 @@ export async function createVoiceJob(userId: string, raw: unknown) {
           409,
         );
       }
-      const { start, end } = muscatCalendarMonth(now);
-      const jobs = await tx.generationJob.findMany({
-        where: {
-          organizationId: input.organizationId,
-          createdById: userId,
-          createdAt: { gte: start, lt: end },
-          status: { notIn: ["CANCELLED", "FAILED", "DRAFT"] },
-        },
-        select: { status: true, reservedCredits: true, chargedCredits: true },
+      await assertWithinMonthlySpendingCap(tx, {
+        organizationId: input.organizationId,
+        userId,
+        cap: member.monthlySpendingCapCredits,
+        additionalCredits: credits,
+        now,
       });
-      const spent = jobs.reduce(
-        (n, j) =>
-          n + (j.status === "SUCCEEDED" ? j.chargedCredits : j.reservedCredits),
-        0n,
-      );
-      if (
-        member.monthlySpendingCapCredits !== null &&
-        spent + credits > member.monthlySpendingCapCredits
-      )
-        throw new GenerationError("Monthly spending cap exceeded.");
       await reserveAssetStorage(tx, {
         organizationId: input.organizationId,
         userId,

@@ -25,6 +25,7 @@ export function resolveTemplatePrompt(
   promptTemplate: string,
   variables: TemplateVariable[],
   values: Record<string, TemplateValue>,
+  mediaKind?: "IMAGE" | "VIDEO" | "VOICE",
 ): { prompt: string; referenceAssetIds: string[] } {
   const known = new Set(variables.map((variable) => variable.key));
   for (const key of Object.keys(values)) {
@@ -86,8 +87,13 @@ export function resolveTemplatePrompt(
 
   if (/{{\s*[a-z][a-zA-Z0-9_]*\s*}}/.test(prompt))
     throw new Error("Template contains unresolved variables.");
-  if (!prompt || prompt.length > 4096)
-    throw new Error("Resolved template prompt is invalid.");
+
+  const maxPromptLength = mediaKind === "VOICE" ? 4096 : 2000;
+  if (!prompt) throw new Error("Resolved template prompt is empty.");
+  if (prompt.length > maxPromptLength)
+    throw new Error(
+      `Resolved template prompt is too long; maximum is ${maxPromptLength} characters.`,
+    );
   return { prompt, referenceAssetIds };
 }
 
@@ -108,6 +114,14 @@ export function modelSupportsTemplate(
 ): boolean {
   if (model.mediaKind !== mediaKind) return false;
   if (mediaKind === "VOICE") return true;
+
+  const capabilityRecord =
+    model.capabilities &&
+    typeof model.capabilities === "object" &&
+    !Array.isArray(model.capabilities)
+      ? (model.capabilities as Record<string, unknown>)
+      : {};
+
   if (
     defaults.aspectRatio &&
     !capability(model.capabilities, `aspectRatio:${defaults.aspectRatio}`)
@@ -133,7 +147,37 @@ export function modelSupportsTemplate(
     !capability(model.capabilities, "generateAudio")
   )
     return false;
-  if (referenceCount > 0 && !capability(model.capabilities, "referenceImages"))
-    return false;
+
+  const maxReferencesRaw = capabilityRecord.maxReferenceImages;
+  const maxReferences =
+    typeof maxReferencesRaw === "number" ? maxReferencesRaw : 0;
+
+  if (referenceCount > 0) {
+    if (!capability(model.capabilities, "referenceImages")) return false;
+    if (referenceCount > maxReferences) return false;
+  }
+
+  if (mediaKind === "IMAGE") {
+    const outputCount = defaults.outputCount ?? 1;
+    const maxGeneratedImages =
+      typeof capabilityRecord.maxGeneratedImages === "number"
+        ? capabilityRecord.maxGeneratedImages
+        : 1;
+    const maxTotalImages =
+      typeof capabilityRecord.maxTotalInputOutputImages === "number"
+        ? capabilityRecord.maxTotalInputOutputImages
+        : maxGeneratedImages;
+
+    if (outputCount > 1 && capabilityRecord.sequentialImages !== true) {
+      return false;
+    }
+    if (outputCount > maxGeneratedImages) {
+      return false;
+    }
+    if (referenceCount + outputCount > maxTotalImages) {
+      return false;
+    }
+  }
+
   return true;
 }

@@ -65,7 +65,7 @@ export default async function PaymentDetailPage({
     payment.ledgerEntryId
       ? db.ledgerEntry.findUnique({
           where: { id: payment.ledgerEntryId },
-          include: { reversedBy: true },
+          include: { reversals: true },
         })
       : null,
     db.wallet.findUnique({
@@ -85,7 +85,7 @@ export default async function PaymentDetailPage({
     }),
   ]);
   const ledgerEntries = ledgerEntry
-    ? [ledgerEntry, ...(ledgerEntry.reversedBy ? [ledgerEntry.reversedBy] : [])]
+    ? [ledgerEntry, ...(ledgerEntry.reversals ?? [])]
     : [];
 
   return (

@@ -38,9 +38,9 @@ async function lockUsage(tx: Prisma.TransactionClient, organizationId: string) {
  * Atomically reserve storage before a generation/upload accepts work.
  *
  * Organization usage is O(1) via AssetStorageUsage. Member usage is derived
- * from the authoritative Asset rows because member-level counters are not
- * required at current scale. The reservation row is locked so concurrent
- * requests cannot oversubscribe the organization quota.
+ * from authoritative originals plus variants so the member and organization
+ * quotas measure the same physical bytes. The reservation row is locked so
+ * concurrent requests cannot oversubscribe either quota.
  */
 export async function reserveAssetStorage(
   tx: Prisma.TransactionClient,
@@ -56,15 +56,12 @@ export async function reserveAssetStorage(
     throw new RangeError("Proposed asset allocation cannot be negative.");
 
   const usage = await lockUsage(tx, input.organizationId);
-  const member = await tx.asset.aggregate({
-    where: {
-      organizationId: input.organizationId,
-      storageOwnerUserId: input.userId,
-      status: { in: ["PENDING", "READY", "QUARANTINED"] },
-    },
-    _sum: { byteSize: true },
-  });
-  const memberUsed = member._sum.byteSize ?? 0n;
+  const member = await getPhysicalAssetStorageUsage(
+    tx,
+    input.organizationId,
+    input.userId,
+  );
+  const memberUsed = member.physicalBytes + member.reservedBytes;
   const memberQuota =
     input.memberQuotaBytes ?? DEFAULT_MEMBER_STORAGE_QUOTA_BYTES;
   const organizationQuota =
@@ -148,19 +145,92 @@ export async function releaseAssetStorage(
 }
 
 /**
- * Recompute cached organization usage from authoritative Asset rows.
- * Intended for maintenance/admin reconciliation, not request-path accounting.
+ * Commit physical bytes for a newly-created derivative.
+ *
+ * Call this inside the same database transaction that creates the AssetVariant,
+ * before inserting the variant row. The shared usage-row lock serializes
+ * derivative admission with uploads/generation reservations, so optional
+ * previews cannot silently push member or organization storage over quota.
+ */
+export async function commitAssetVariantStorage(
+  tx: Prisma.TransactionClient,
+  input: {
+    organizationId: string;
+    userId?: string | null;
+    byteSize: bigint;
+    memberQuotaBytes?: bigint;
+    organizationQuotaBytes?: bigint;
+  },
+): Promise<void> {
+  if (input.byteSize < 0n)
+    throw new RangeError("Asset variant size cannot be negative.");
+
+  const usage = await lockUsage(tx, input.organizationId);
+  const organizationQuota =
+    input.organizationQuotaBytes ?? DEFAULT_ORGANIZATION_STORAGE_QUOTA_BYTES;
+  const organizationCommitted = usage.usedBytes + usage.reservedBytes;
+
+  if (organizationCommitted + input.byteSize > organizationQuota) {
+    throw new AssetQuotaExceededError(
+      "organization",
+      organizationCommitted,
+      input.byteSize,
+      organizationQuota,
+    );
+  }
+
+  if (input.userId) {
+    const member = await getPhysicalAssetStorageUsage(
+      tx,
+      input.organizationId,
+      input.userId,
+    );
+    const memberUsed = member.physicalBytes + member.reservedBytes;
+    const memberQuota =
+      input.memberQuotaBytes ?? DEFAULT_MEMBER_STORAGE_QUOTA_BYTES;
+    if (memberUsed + input.byteSize > memberQuota) {
+      throw new AssetQuotaExceededError(
+        "member",
+        memberUsed,
+        input.byteSize,
+        memberQuota,
+      );
+    }
+  }
+
+  await tx.assetStorageUsage.update({
+    where: { organizationId: input.organizationId },
+    data: {
+      usedBytes: { increment: input.byteSize },
+      version: { increment: 1 },
+    },
+  });
+}
+
+/**
+ * Recompute cached organization usage from authoritative Asset and AssetVariant rows.
+ * Separates physical capacity accounting (which includes variants and retained trash bytes)
+ * from ready asset counts.
  */
 export async function reconcileAssetStorageUsage(
   tx: Prisma.TransactionClient,
   organizationId: string,
 ): Promise<void> {
   await lockUsage(tx, organizationId);
-  const [used, pending, ready] = await Promise.all([
+  const [usedAssets, usedVariants, pending, ready] = await Promise.all([
     tx.asset.aggregate({
       where: {
         organizationId,
         status: { in: ["READY", "QUARANTINED", "DELETED", "PURGING"] },
+      },
+      _sum: { byteSize: true },
+    }),
+    tx.assetVariant.aggregate({
+      where: {
+        asset: {
+          organizationId,
+          status: { in: ["READY", "QUARANTINED", "DELETED", "PURGING"] },
+        },
       },
       _sum: { byteSize: true },
     }),
@@ -172,14 +242,86 @@ export async function reconcileAssetStorageUsage(
       where: { organizationId, status: "READY" },
     }),
   ]);
+
+  const totalPhysicalUsed =
+    (usedAssets._sum.byteSize ?? 0n) + (usedVariants._sum.byteSize ?? 0n);
+
   await tx.assetStorageUsage.update({
     where: { organizationId },
     data: {
-      usedBytes: used._sum.byteSize ?? 0n,
+      usedBytes: totalPhysicalUsed,
       reservedBytes: pending._sum.byteSize ?? 0n,
       readyAssetCount: ready,
       reconciledAt: new Date(),
       version: { increment: 1 },
     },
   });
+}
+
+export async function getLogicalAssetStorageUsage(
+  tx: Prisma.TransactionClient,
+  organizationId: string,
+  userId?: string,
+): Promise<{ logicalBytes: bigint; readyAssetCount: number }> {
+  const [active, readyCount] = await Promise.all([
+    tx.asset.aggregate({
+      where: {
+        organizationId,
+        ...(userId ? { storageOwnerUserId: userId } : {}),
+        status: { in: ["READY", "QUARANTINED"] },
+      },
+      _sum: { byteSize: true },
+    }),
+    tx.asset.count({
+      where: {
+        organizationId,
+        ...(userId ? { storageOwnerUserId: userId } : {}),
+        status: "READY",
+      },
+    }),
+  ]);
+  return {
+    logicalBytes: active._sum.byteSize ?? 0n,
+    readyAssetCount: readyCount,
+  };
+}
+
+export async function getPhysicalAssetStorageUsage(
+  tx: Prisma.TransactionClient,
+  organizationId: string,
+  userId?: string,
+): Promise<{ physicalBytes: bigint; reservedBytes: bigint }> {
+  const [usedAssets, usedVariants, pending] = await Promise.all([
+    tx.asset.aggregate({
+      where: {
+        organizationId,
+        ...(userId ? { storageOwnerUserId: userId } : {}),
+        status: { in: ["READY", "QUARANTINED", "DELETED", "PURGING"] },
+      },
+      _sum: { byteSize: true },
+    }),
+    tx.assetVariant.aggregate({
+      where: {
+        asset: {
+          organizationId,
+          ...(userId ? { storageOwnerUserId: userId } : {}),
+          status: { in: ["READY", "QUARANTINED", "DELETED", "PURGING"] },
+        },
+      },
+      _sum: { byteSize: true },
+    }),
+    tx.asset.aggregate({
+      where: {
+        organizationId,
+        ...(userId ? { storageOwnerUserId: userId } : {}),
+        status: "PENDING",
+      },
+      _sum: { byteSize: true },
+    }),
+  ]);
+  return {
+    physicalBytes:
+      (usedAssets._sum.byteSize ?? 0n) + (usedVariants._sum.byteSize ?? 0n),
+    reservedBytes: pending._sum.byteSize ?? 0n,
+  };
 }

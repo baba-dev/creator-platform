@@ -3,7 +3,11 @@ import {
   completeMediaTask,
   recordMediaOutput,
 } from "./media-tasks";
-import { claimExpiredAssetForPurge, completeAssetPurge } from "@aiwa/assets";
+import {
+  claimExpiredAssetForPurge,
+  commitAssetVariantStorage,
+  completeAssetPurge,
+} from "@aiwa/assets";
 import {
   createAssetVariantObjectKey,
   LocalAssetStorage,
@@ -36,6 +40,11 @@ async function saveVariant(input: {
       const asset = await tx.asset.findUnique({ where: { id: input.assetId } });
       if (!asset || asset.status !== "READY")
         throw new Error("Asset is no longer available.");
+      await commitAssetVariantStorage(tx, {
+        organizationId: input.organizationId,
+        userId: asset.storageOwnerUserId,
+        byteSize: stored.byteSize,
+      });
       await tx.assetVariant.create({
         data: {
           assetId: input.assetId,
@@ -213,13 +222,31 @@ export async function purgeExpiredAssets(limit = 50): Promise<number> {
 
   let purged = 0;
   for (const candidate of candidates) {
-    const claimed = await db.$transaction((tx) =>
-      claimExpiredAssetForPurge(tx, {
+    let claimed: Awaited<ReturnType<typeof claimExpiredAssetForPurge>> = null;
+    try {
+      claimed = await db.$transaction((tx) =>
+        claimExpiredAssetForPurge(tx, {
+          assetId: candidate.id,
+          organizationId: candidate.organizationId,
+          now,
+        }),
+      );
+    } catch (claimError) {
+      console.error("Failed to claim asset for purge; applying backoff.", {
         assetId: candidate.id,
-        organizationId: candidate.organizationId,
-        now,
-      }),
-    );
+        error: claimError,
+      });
+      await db.asset
+        .updateMany({
+          where: {
+            id: candidate.id,
+            status: { in: ["DELETED", "PURGING"] },
+          },
+          data: { purgeAfter: new Date(Date.now() + 15 * 60_000) },
+        })
+        .catch(() => undefined);
+      continue;
+    }
     if (!claimed) continue;
 
     try {
@@ -227,21 +254,41 @@ export async function purgeExpiredAssets(limit = 50): Promise<number> {
         await storage.delete(variant.objectKey);
       }
       await storage.delete(claimed.objectKey);
-    } catch {
-      // Keep PURGING so a later maintenance pass can retry idempotent deletes.
-      console.error("Asset purge deletion failed; retry remains eligible.", {
+    } catch (deleteError) {
+      // Record failure with bounded retry / backoff so this item does not block others every cycle
+      console.error("Asset purge deletion failed; applying retry backoff.", {
         assetId: claimed.id,
+        error: deleteError,
       });
+      await db.asset
+        .updateMany({
+          where: { id: claimed.id, status: "PURGING" },
+          data: { purgeAfter: new Date(Date.now() + 15 * 60_000) },
+        })
+        .catch(() => undefined);
       continue;
     }
 
-    const completed = await db.$transaction((tx) =>
-      completeAssetPurge(tx, {
+    try {
+      const completed = await db.$transaction((tx) =>
+        completeAssetPurge(tx, {
+          assetId: claimed.id,
+          organizationId: claimed.organizationId,
+        }),
+      );
+      if (completed) purged += 1;
+    } catch (completeError) {
+      console.error("Failed to complete asset purge; applying backoff.", {
         assetId: claimed.id,
-        organizationId: claimed.organizationId,
-      }),
-    );
-    if (completed) purged += 1;
+        error: completeError,
+      });
+      await db.asset
+        .updateMany({
+          where: { id: claimed.id, status: "PURGING" },
+          data: { purgeAfter: new Date(Date.now() + 15 * 60_000) },
+        })
+        .catch(() => undefined);
+    }
   }
 
   return purged;
@@ -259,14 +306,22 @@ export async function purgeMediaAttemptOutputs(limit = 50): Promise<void> {
   });
   for (const attempt of attempts) {
     const objectKey = attempt.outputObjectKey!;
-    const [asset, variant] = await Promise.all([
-      db.asset.findUnique({ where: { objectKey } }),
-      db.assetVariant.findUnique({ where: { objectKey } }),
-    ]);
-    if (!asset && !variant) await storage.delete(objectKey);
-    await db.mediaTaskAttempt.updateMany({
-      where: { id: attempt.id, outputObjectKey: objectKey },
-      data: { outputObjectKey: null },
-    });
+    try {
+      const [asset, variant] = await Promise.all([
+        db.asset.findUnique({ where: { objectKey } }),
+        db.assetVariant.findUnique({ where: { objectKey } }),
+      ]);
+      if (!asset && !variant) await storage.delete(objectKey);
+      await db.mediaTaskAttempt.updateMany({
+        where: { id: attempt.id, outputObjectKey: objectKey },
+        data: { outputObjectKey: null },
+      });
+    } catch (error) {
+      // Keep the output key attached so a later maintenance pass can retry.
+      console.error("Media attempt output cleanup failed; retry retained.", {
+        attemptId: attempt.id,
+        error,
+      });
+    }
   }
 }

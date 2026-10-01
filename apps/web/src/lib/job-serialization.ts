@@ -51,12 +51,35 @@ export function serializeJobDetails(data: RawJobDetails | null) {
             amountCredits: entry.reversalOf.amountCredits.toString(),
           }
         : null,
-      reversedBy: entry.reversedBy
-        ? {
-            ...entry.reversedBy,
-            amountCredits: entry.reversedBy.amountCredits.toString(),
-          }
-        : null,
+      reversals:
+        "reversals" in entry && Array.isArray(entry.reversals)
+          ? entry.reversals.map(
+              (r: { id: string; type: string; amountCredits: bigint }) => ({
+                ...r,
+                amountCredits: r.amountCredits.toString(),
+              }),
+            )
+          : [],
+      reversedBy:
+        "reversals" in entry &&
+        Array.isArray(entry.reversals) &&
+        entry.reversals[0]
+          ? {
+              ...entry.reversals[0],
+              amountCredits: entry.reversals[0].amountCredits.toString(),
+            }
+          : "reversedBy" in entry && entry.reversedBy
+            ? {
+                ...(entry.reversedBy as {
+                  id: string;
+                  type: string;
+                  amountCredits: bigint;
+                }),
+                amountCredits: (
+                  entry.reversedBy as { amountCredits: bigint }
+                ).amountCredits.toString(),
+              }
+            : null,
     })),
     auditEvents,
     permittedActions,

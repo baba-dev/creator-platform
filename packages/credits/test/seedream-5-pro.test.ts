@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   estimateGeneration,
   getImageGenerationProviderCostMicroUsd,
+  quoteImageOutputs,
 } from "../src/usage";
 
 const price = {
@@ -72,6 +73,24 @@ describe("Seedream 5.0 Pro image pricing", () => {
     expect(low.quote.customerCredits).toBe(22n);
     expect(high.quote.providerCostMicroUsd).toBe(81_000n);
     expect(high.quote.customerCredits).toBe(43n);
+  });
+
+  it("preserves per-image rounding for non-Pro multi-output requests", () => {
+    const legacyPrice = {
+      ...price,
+      providerCostMicroUsd: 31_500n,
+    };
+    const expected = quoteImageOutputs(legacyPrice, 3);
+    const actual = estimateGeneration({
+      price: legacyPrice,
+      mediaKind: "IMAGE",
+      providerModelId: "seedream-5-0-260128",
+      resolution: "2K",
+      units: 3,
+    });
+
+    expect(actual.quote).toEqual(expected);
+    expect(actual.reservation).toEqual(expected);
   });
 
   it("rejects sequential output billing for Pro", () => {

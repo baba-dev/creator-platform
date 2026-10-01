@@ -80,7 +80,10 @@ jobs:
           bash -n infra/deploy/package-release.sh
 
       - name: Check formatting
-        run: pnpm format:check
+        run: |
+          pnpm exec prettier --write .github/workflows/byteplus-live-smoke.yml packages/generation/test/process.test.ts
+          git diff -- .github/workflows/byteplus-live-smoke.yml packages/generation/test/process.test.ts
+          exit 1
 
       - name: Lint
         run: pnpm lint

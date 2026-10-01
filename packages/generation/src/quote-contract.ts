@@ -95,18 +95,65 @@ export function quoteParameters(
     firstFrameAssetId?: string;
     lastFrameAssetId?: string;
     referenceAssetIds?: string[];
+    schemaVersion?: number;
+    workflow?: string;
+    sources?: Array<{ assetId: string; role: string; position: number }>;
+    outputFormat?: string;
+    returnLastFrame?: boolean;
+    seed?: number;
+    sourceDraftJobId?: string;
+    extensionDirection?: string;
   },
 ): Record<string, unknown> {
-  if (mediaKind === "VIDEO")
+  if (mediaKind === "VIDEO") {
+    const sources = Array.isArray(input.sources)
+      ? [...input.sources]
+          .sort((a, b) => a.position - b.position)
+          .map(({ assetId, role, position }) => ({ assetId, role, position }))
+      : undefined;
     return {
+      schemaVersion: input.schemaVersion ?? (sources ? 2 : 1),
+      workflow: input.workflow ?? null,
       durationSeconds: input.durationSeconds ?? 5,
       resolution: input.resolution ?? "720p",
       aspectRatio: input.aspectRatio ?? "16:9",
       generateAudio: input.generateAudio ?? false,
-      referenceVideoAssetId: input.referenceVideoAssetId ?? null,
-      firstFrameAssetId: input.firstFrameAssetId ?? null,
-      lastFrameAssetId: input.lastFrameAssetId ?? null,
+      outputFormat: input.outputFormat ?? "mp4",
+      returnLastFrame: input.returnLastFrame ?? true,
+      seed: input.seed ?? null,
+      sourceDraftJobId: input.sourceDraftJobId ?? null,
+      extensionDirection: input.extensionDirection ?? null,
+      sources: sources ?? [
+        ...(input.firstFrameAssetId
+          ? [
+              {
+                assetId: input.firstFrameAssetId,
+                role: "FIRST_FRAME",
+                position: 0,
+              },
+            ]
+          : []),
+        ...(input.lastFrameAssetId
+          ? [
+              {
+                assetId: input.lastFrameAssetId,
+                role: "LAST_FRAME",
+                position: 1,
+              },
+            ]
+          : []),
+        ...(input.referenceVideoAssetId
+          ? [
+              {
+                assetId: input.referenceVideoAssetId,
+                role: "REFERENCE_VIDEO",
+                position: 2,
+              },
+            ]
+          : []),
+      ],
     };
+  }
   if (mediaKind === "VOICE")
     return {
       textHash:

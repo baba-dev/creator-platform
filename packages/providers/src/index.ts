@@ -28,6 +28,7 @@ export interface ProviderJob {
   readonly providerRequestId: string;
   readonly status: ProviderJobStatus;
   readonly outputUrls?: readonly string[];
+  readonly lastFrameUrl?: string;
   readonly inlineOutputs?: readonly ProviderInlineOutput[];
   readonly textOutput?: { readonly content: string };
   readonly rawUsage?: Readonly<Record<string, unknown>>;

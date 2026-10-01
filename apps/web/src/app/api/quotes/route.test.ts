@@ -110,6 +110,7 @@ describe("authoritative quote API", () => {
         "aspectRatio:16:9": true,
         "durationSeconds:5": true,
         generateAudio: true,
+        returnLastFrame: true,
       },
       priceVersions: [
         {

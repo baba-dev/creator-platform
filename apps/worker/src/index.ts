@@ -31,7 +31,13 @@ import {
 } from "@aiwa/mail/transport";
 import { createBytePlusProvider } from "@aiwa/providers/byteplus";
 import { createNvidiaProvider } from "@aiwa/providers/nvidia";
-import { Queue, Worker, type Processor, type WorkerOptions } from "bullmq";
+import {
+  DelayedError,
+  Queue,
+  Worker,
+  type Processor,
+  type WorkerOptions,
+} from "bullmq";
 import Redis from "ioredis";
 import {
   processAssetDerivatives,
@@ -46,10 +52,18 @@ import {
   applyTenantFairness,
   interleaveGenerationWork,
 } from "./generation-dispatch";
+import {
+  acquireProviderLease,
+  releaseProviderLease,
+  renewProviderLease,
+  seedanceConcurrencySpec,
+  type ProviderConcurrencySpec,
+} from "./provider-concurrency";
 
 configureMediaCapacityGate(withDatabaseMediaCapacity);
 const env = parseServerEnv();
 const instanceId = randomUUID();
+const PROVIDER_CAPACITY_RETRY_MS = 15_000;
 sharp.concurrency(env.MEDIA_THREADS);
 sharp.cache({ memory: 32, files: 0, items: 32 });
 const selectedQueues = workerQueues(env.WORKER_ROLE);
@@ -175,9 +189,46 @@ const bytePlusProvider = hasBytePlus
     })
   : null;
 
+async function videoProviderLeaseSpec(
+  jobId: string,
+): Promise<ProviderConcurrencySpec | null> {
+  const job = await db.generationJob.findUnique({
+    where: { id: jobId },
+    select: {
+      requestPayload: true,
+      providerModel: {
+        select: {
+          providerModelId: true,
+          capabilities: true,
+        },
+      },
+    },
+  });
+  if (!job) return null;
+  return seedanceConcurrencySpec({
+    providerModelId: job.providerModel.providerModelId,
+    capabilities: job.providerModel.capabilities,
+    requestPayload: job.requestPayload,
+  });
+}
+
+async function releaseVideoLeaseIfTerminal(
+  jobId: string,
+  spec: ProviderConcurrencySpec | null,
+): Promise<void> {
+  if (!spec) return;
+  const current = await db.generationJob.findUnique({
+    where: { id: jobId },
+    select: { status: true },
+  });
+  if (!current || current.status !== "PROCESSING") {
+    await releaseProviderLease(redis, spec, jobId);
+  }
+}
+
 const generationWorker = createWorker(
   "generation",
-  async (job) => {
+  async (job, token) => {
     if (!bytePlusProvider)
       throw new Error("Generation provider is not configured");
     if (typeof job.data.jobId !== "string" || job.data.jobId !== job.id)
@@ -186,12 +237,41 @@ const generationWorker = createWorker(
       case "image":
         await processImageJob(job.data.jobId, bytePlusProvider);
         return;
-      case "video-submit":
-        await processVideoSubmitJob(job.data.jobId, bytePlusProvider);
+      case "video-submit": {
+        const spec = await videoProviderLeaseSpec(job.data.jobId);
+        if (
+          spec &&
+          !(await acquireProviderLease(redis, spec, job.data.jobId))
+        ) {
+          if (!token)
+            throw new Error("Generation queue lock token is unavailable");
+          const retryAt = Date.now() + PROVIDER_CAPACITY_RETRY_MS;
+          await job.moveToDelayed(retryAt, token);
+          log("info", "Video submission deferred by provider capacity", {
+            generationJobId: job.data.jobId,
+            providerCapacityKey: spec.key,
+            providerOperatingLimit: spec.limit,
+            retryAt: new Date(retryAt).toISOString(),
+          });
+          throw new DelayedError();
+        }
+        try {
+          await processVideoSubmitJob(job.data.jobId, bytePlusProvider);
+        } finally {
+          await releaseVideoLeaseIfTerminal(job.data.jobId, spec);
+        }
         return;
-      case "video-poll":
-        await processVideoPollJob(job.data.jobId, bytePlusProvider);
+      }
+      case "video-poll": {
+        const spec = await videoProviderLeaseSpec(job.data.jobId);
+        if (spec) await renewProviderLease(redis, spec, job.data.jobId);
+        try {
+          await processVideoPollJob(job.data.jobId, bytePlusProvider);
+        } finally {
+          await releaseVideoLeaseIfTerminal(job.data.jobId, spec);
+        }
         return;
+      }
       case "voice":
         await processVoiceJob(job.data.jobId, bytePlusProvider);
         return;

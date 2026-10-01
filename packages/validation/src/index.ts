@@ -258,7 +258,7 @@ const positiveRateStringSchema = z
 
 const videoUsageRatesSchema = z
   .object({
-    estimator: z.literal("byteplus-video-v1"),
+    estimator: z.enum(["byteplus-video-v1", "byteplus-video-v2"]),
     rates: z
       .array(
         z
@@ -346,40 +346,103 @@ export const publishPriceVersionSchema = z.object({
     .optional(),
 });
 
-export const quoteRequestSchema = z.object({
-  organizationId: cuidSchema,
-  modelId: z.string().trim().min(1).max(128),
-  units: z.coerce.number().int().positive().max(8_192).default(1),
-  billableQuantity: z.coerce
-    .number()
-    .int()
-    .nonnegative()
-    .max(1_000_000)
-    .optional(),
-  text: z.string().max(120_000).optional(),
-  durationSeconds: z.coerce.number().int().min(4).max(30).optional(),
-  aspectRatio: z
-    .enum([
-      "1:1",
-      "16:9",
-      "9:16",
-      "4:3",
-      "3:4",
-      "3:2",
-      "2:3",
-      "21:9",
-      "adaptive",
-    ])
-    .optional(),
-  referenceAssetIds: z.array(cuidSchema).max(14).default([]),
-  firstFrameAssetId: cuidSchema.optional(),
-  lastFrameAssetId: cuidSchema.optional(),
-  resolution: z
-    .enum(["480p", "720p", "1080p", "1K", "1.5K", "2K", "3K", "4K"])
-    .optional(),
-  generateAudio: z.boolean().optional(),
-  referenceVideoAssetId: cuidSchema.optional(),
-});
+export const videoQuoteSourceSchema = z
+  .object({
+    assetId: cuidSchema,
+    role: z.enum([
+      "FIRST_FRAME",
+      "LAST_FRAME",
+      "REFERENCE_IMAGE",
+      "REFERENCE_VIDEO",
+      "REFERENCE_AUDIO",
+      "SOURCE_VIDEO",
+    ]),
+    position: z.number().int().min(0).max(49),
+  })
+  .strict();
+
+export const quoteRequestSchema = z
+  .object({
+    organizationId: cuidSchema,
+    modelId: z.string().trim().min(1).max(128),
+    units: z.coerce.number().int().positive().max(8_192).default(1),
+    billableQuantity: z.coerce
+      .number()
+      .int()
+      .nonnegative()
+      .max(1_000_000)
+      .optional(),
+    text: z.string().max(120_000).optional(),
+    schemaVersion: z.literal(2).optional(),
+    workflow: z
+      .enum([
+        "GENERATE",
+        "FRAME_TO_VIDEO",
+        "FIRST_LAST_FRAME",
+        "REFERENCE",
+        "EDIT",
+        "EXTEND",
+        "DRAFT",
+        "DRAFT_FINAL",
+      ])
+      .optional(),
+    sources: z.array(videoQuoteSourceSchema).max(50).optional(),
+    durationSeconds: z.coerce.number().int().min(-1).max(30).optional(),
+    aspectRatio: z
+      .enum([
+        "1:1",
+        "16:9",
+        "9:16",
+        "4:3",
+        "3:4",
+        "3:2",
+        "2:3",
+        "21:9",
+        "adaptive",
+      ])
+      .optional(),
+    referenceAssetIds: z.array(cuidSchema).max(14).default([]),
+    firstFrameAssetId: cuidSchema.optional(),
+    lastFrameAssetId: cuidSchema.optional(),
+    resolution: z
+      .enum(["480p", "720p", "1080p", "1K", "1.5K", "2K", "3K", "4K"])
+      .optional(),
+    generateAudio: z.boolean().optional(),
+    referenceVideoAssetId: cuidSchema.optional(),
+    outputFormat: z.enum(["mp4", "mov"]).optional(),
+    returnLastFrame: z.boolean().optional(),
+    seed: z.coerce.number().int().min(-1).max(2_147_483_647).optional(),
+    sourceDraftJobId: cuidSchema.optional(),
+    extensionDirection: z.enum(["BEFORE", "AFTER"]).optional(),
+  })
+  .superRefine((value, context) => {
+    const sources = value.sources ?? [];
+    if (
+      new Set(sources.map((source) => source.assetId)).size !== sources.length
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["sources"],
+        message: "Video source assets must be unique.",
+      });
+    }
+    if (
+      new Set(sources.map((source) => source.position)).size !== sources.length
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["sources"],
+        message: "Video source positions must be unique.",
+      });
+    }
+    if (value.schemaVersion === 2 && !value.workflow) {
+      context.addIssue({
+        code: "custom",
+        path: ["workflow"],
+        message: "Video V2 quotes require a workflow.",
+      });
+    }
+  });
 
 export const paymentMethodSchema = z.enum(["CASH", "CHEQUE"]);
 export const paymentStatusSchema = z.enum([

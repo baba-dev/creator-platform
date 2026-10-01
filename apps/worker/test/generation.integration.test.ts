@@ -47,8 +47,9 @@ const orgId = `${id}-org`,
   userId = `${id}-user`,
   modelId = `${id}-model`,
   priceId = `${id}-price`,
-  videoModelId = `${id}-video-model`,
+  videoModelId = "byteplus-seedance-2-5",
   videoPriceId = `${id}-video-price`;
+let videoModelWasEnabled = false;
 let directory: string;
 const request = () => ({
   organizationId: orgId,
@@ -116,21 +117,14 @@ describe.skipIf(!enabled)("generation with MariaDB and Redis", () => {
       },
     });
 
-    await db.providerModel.create({
-      data: {
-        id: videoModelId,
-        provider: "BYTEPLUS",
-        providerModelId: "dreamina-seedance-2-5-260628",
-        mediaKind: "VIDEO",
-        displayName: "Test Video",
-        description: "Test Video",
-        capabilities: {
-          "aspectRatio:16:9": true,
-          "resolution:1080p": true,
-          "durationSeconds:5": true,
-        },
-        enabled: true,
-      },
+    const migratedVideoModel = await db.providerModel.findUniqueOrThrow({
+      where: { id: videoModelId },
+      select: { enabled: true },
+    });
+    videoModelWasEnabled = migratedVideoModel.enabled;
+    await db.providerModel.update({
+      where: { id: videoModelId },
+      data: { enabled: true },
     });
     await db.modelPriceVersion.create({
       data: {
@@ -161,6 +155,10 @@ describe.skipIf(!enabled)("generation with MariaDB and Redis", () => {
   });
   afterAll(async () => {
     await db.auditEvent.deleteMany({ where: { organizationId: orgId } });
+    await db.asset.updateMany({
+      where: { organizationId: orgId, sourceAssetId: { not: null } },
+      data: { sourceAssetId: null },
+    });
     await db.asset.deleteMany({ where: { organizationId: orgId } });
     const wallet = await db.wallet.findUnique({
       where: { organizationId: orgId },
@@ -175,8 +173,10 @@ describe.skipIf(!enabled)("generation with MariaDB and Redis", () => {
     await db.modelPriceVersion.deleteMany({
       where: { providerModelId: { in: [modelId, videoModelId] } },
     });
-    await db.providerModel.deleteMany({
-      where: { id: { in: [modelId, videoModelId] } },
+    await db.providerModel.deleteMany({ where: { id: modelId } });
+    await db.providerModel.update({
+      where: { id: videoModelId },
+      data: { enabled: videoModelWasEnabled },
     });
     await db.wallet.deleteMany({ where: { organizationId: orgId } });
     await db.membership.deleteMany({ where: { organizationId: orgId } });

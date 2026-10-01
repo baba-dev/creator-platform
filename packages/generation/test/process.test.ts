@@ -82,6 +82,7 @@ const base = {
   requestPayload: { prompt: "test" },
   providerModel: { providerModelId: "seedream-5-0-260128" },
   priceVersion: { providerCostMicroUsd: 54_000n },
+  inputAssets: [],
   quotedUnits: 1,
   reservedCredits: 28n,
 };
@@ -107,14 +108,23 @@ function transaction(
     wallet: { findUniqueOrThrow: vi.fn().mockResolvedValue({ id: "wallet1" }) },
     asset: {
       findUniqueOrThrow: vi.fn().mockResolvedValue({
+        id: "video-asset",
+        objectKey: "job1.mp4",
         byteSize: 25_000_000n,
         status: "PENDING",
       }),
       aggregate: vi.fn().mockResolvedValue({
         _sum: { byteSize: 25_000_000n },
       }),
-      update: vi.fn(),
+      update: vi.fn().mockImplementation(({ where, data }) =>
+        Promise.resolve({
+          id: where.id ?? "video-asset",
+          objectKey: where.objectKey ?? "job1.mp4",
+          ...data,
+        }),
+      ),
       updateMany: vi.fn(),
+      findFirst: vi.fn().mockResolvedValue(null),
       findMany: vi.fn().mockResolvedValue([
         {
           id: "asset1",
@@ -283,22 +293,24 @@ describe("video processing", () => {
       ...base,
       status: "QUEUED",
       requestPayload: { prompt: "test", referenceVideoAssetId: "source1" },
-    });
-    mocks.db.generationInputAsset.findMany.mockResolvedValue([
-      {
-        assetId: "source1",
-        asset: {
-          id: "source1",
-          organizationId: "org1",
-          status: "READY",
-          mediaKind: "VIDEO",
-          mimeType: "video/mp4",
-          storageProvider: "LOCAL",
-          purpose: "REFERENCE_INPUT",
-          storageOwnerUserId: "user1",
+      inputAssets: [
+        {
+          assetId: "source1",
+          position: 0,
+          role: "LEGACY",
+          asset: {
+            id: "source1",
+            organizationId: "org1",
+            status: "READY",
+            mediaKind: "VIDEO",
+            mimeType: "video/mp4",
+            storageProvider: "LOCAL",
+            purpose: "REFERENCE_INPUT",
+            storageOwnerUserId: "user1",
+          },
         },
-      },
-    ]);
+      ],
+    });
     await processVideoSubmitJob("job1", p);
     expect(p.submit).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -361,7 +373,7 @@ describe("video processing", () => {
       expect.objectContaining({ amountCredits: 28n }),
     );
     expect(tx.asset.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { objectKey: "job1.mp4" } }),
+      expect.objectContaining({ where: { id: "video-asset" } }),
     );
     expect(tx.generationJob.update).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -369,6 +381,8 @@ describe("video processing", () => {
           actualUnits: 1,
           outputPayload: {
             stored: true,
+            assetId: "video-asset",
+            providerReturnedLastFrame: false,
             providerUsage: { completionTokens: 183_104 },
           },
         }),
@@ -396,7 +410,11 @@ describe("video processing", () => {
     expect(tx.generationJob.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          outputPayload: { stored: true },
+          outputPayload: {
+            stored: true,
+            assetId: "video-asset",
+            providerReturnedLastFrame: false,
+          },
         }),
       }),
     );
@@ -439,7 +457,12 @@ describe("video processing", () => {
       tx,
       expect.objectContaining({
         amountCredits: expect.any(BigInt),
-        metadata: { completionTokens: 183_104, cappedAtReservation: false },
+        metadata: {
+          completionTokens: 183_104,
+          rateMicroUsdPerThousandTokens: "6400",
+          workflow: "LEGACY",
+          cappedAtReservation: false,
+        },
       }),
     );
     expect(mocks.capture.mock.calls[0]?.[1].amountCredits).toBeLessThan(4_000n);
@@ -514,7 +537,12 @@ describe("video processing", () => {
       tx,
       expect.objectContaining({
         amountCredits: 4_000n,
-        metadata: { completionTokens: 9_000_000, cappedAtReservation: true },
+        metadata: {
+          completionTokens: 9_000_000,
+          rateMicroUsdPerThousandTokens: "6400",
+          workflow: "LEGACY",
+          cappedAtReservation: true,
+        },
       }),
     );
   });
@@ -1324,6 +1352,8 @@ describe("ordinary token-priced video settlement", () => {
           amountCredits: tokens === 108000 ? 594n : 1000n,
           metadata: {
             completionTokens: tokens,
+            rateMicroUsdPerThousandTokens: "10700",
+            workflow: "LEGACY",
             cappedAtReservation: tokens !== 108000,
           },
         }),

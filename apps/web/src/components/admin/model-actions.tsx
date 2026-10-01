@@ -70,7 +70,10 @@ export function ModelActions({
   const [marginPercent, setMarginPercent] = useState(defaultMargin);
   const [pricingDimension, setPricingDimension] = useState<
     "REQUEST" | "CHARACTER" | "SECOND" | "TOKEN"
-  >(currentPricingDimension ?? (mediaKind === "VIDEO" ? "SECOND" : "REQUEST"));
+>(
+    currentPricingDimension ??
+      (mediaKind === "VIDEO" ? "SECOND" : mediaKind === "TEXT" ? "TOKEN" : "REQUEST"),
+  );
   const [unitQuantity, setUnitQuantity] = useState(
     String(currentUnitQuantity ?? (mediaKind === "VIDEO" ? 5 : 1000)),
   );
@@ -176,7 +179,7 @@ export function ModelActions({
         throw new Error("Margin percentage must be between 0% and 99.99%.");
       }
       const costBigInt = BigInt(
-        pricingDimension === "TOKEN"
+        mediaKind === "VIDEO" && pricingDimension === "TOKEN"
           ? (usageRows[0]?.microUsdPerThousandTokens ?? "0")
           : costMicroUsd,
       );
@@ -198,7 +201,7 @@ export function ModelActions({
             publicationKey.current ??
             (publicationKey.current = crypto.randomUUID()),
           providerCostMicroUsd: costBigInt.toString(),
-          ...(pricingDimension === "TOKEN"
+          ...(mediaKind === "VIDEO" && pricingDimension === "TOKEN"
             ? {
                 usageRates: {
                   estimator: "byteplus-video-v1",
@@ -347,13 +350,19 @@ export function ModelActions({
                         Per request{mediaKind === "VIDEO" ? " (flat)" : ""}
                       </option>
                     )}
+                    {(!mediaKind ||
+                      mediaKind === "VIDEO" ||
+                      mediaKind === "TEXT") && (
+                      <option value="TOKEN">
+                        {mediaKind === "TEXT"
+                          ? "Per token block"
+                          : "Per completion token"}
+                      </option>
+                    )}
                     {(!mediaKind || mediaKind === "VIDEO") && (
-                      <>
-                        <option value="TOKEN">Per completion token</option>
-                        <option value="SECOND">
-                          Per duration block (seconds)
-                        </option>
-                      </>
+                      <option value="SECOND">
+                        Per duration block (seconds)
+                      </option>
                     )}
                     {(!mediaKind || mediaKind === "VOICE") && (
                       <option value="CHARACTER">Per character block</option>
@@ -385,13 +394,15 @@ export function ModelActions({
                   </div>
                 ) : null}
 
-                {pricingDimension !== "TOKEN" && (
+                {(pricingDimension !== "TOKEN" || mediaKind === "TEXT") && (
                   <div>
                     <label
                       htmlFor={`cost-${modelId}`}
                       className="block text-xs font-semibold text-foreground"
                     >
-                      Provider Cost (micro-USD)
+                      {mediaKind === "TEXT" && pricingDimension === "TOKEN"
+                        ? "Provider Cost per 1,000 tokens (micro-USD)"
+                        : "Provider Cost (micro-USD)"}
                     </label>
                     <input
                       id={`cost-${modelId}`}
@@ -405,7 +416,9 @@ export function ModelActions({
                       className="mt-1 h-9 w-full rounded-lg border border-border bg-background px-3 font-mono text-sm"
                     />
                     <p className="mt-1 text-[11px] text-muted-foreground">
-                      1 USD = 1,000,000 micro-USD (e.g. $0.054 = 54,000)
+                      {mediaKind === "TEXT" && pricingDimension === "TOKEN"
+                        ? "Blended settlement rate per 1,000 total tokens. Use a conservative rate that covers your provider contract."
+                        : "1 USD = 1,000,000 micro-USD (e.g. $0.054 = 54,000)"}
                     </p>
                   </div>
                 )}

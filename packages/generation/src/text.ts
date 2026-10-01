@@ -364,6 +364,22 @@ export async function executeTextGeneration(
     );
   }
 
+  const recordedProviderResult = await db.generationJob.updateMany({
+    where: { id: job.id, status: "SUBMITTED" },
+    data: {
+      status: "PROCESSING",
+      providerRequestId: providerResponse.providerRequestId,
+      errorCode: null,
+      errorMessage: null,
+    },
+  });
+  if (!recordedProviderResult.count) {
+    throw new GenerationError(
+      "Generation state changed before provider settlement.",
+      409,
+    );
+  }
+
   const rawUsage = providerResponse.rawUsage as
     | {
         prompt_tokens?: number;
@@ -439,8 +455,19 @@ export async function executeTextGeneration(
       }
     : undefined;
 
-  await db.$transaction(async (tx) => {
-    const extraCredits =
+  try {
+    await db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM GenerationJob WHERE id = ${job.id} FOR UPDATE`;
+      const currentJob = await tx.generationJob.findUniqueOrThrow({
+        where: { id: job.id },
+      });
+      if (currentJob.status !== "PROCESSING") {
+        throw new GenerationError(
+          "Generation state changed before settlement.",
+          409,
+        );
+      }
+      const extraCredits =
       actualCredits > job.reservedCredits
         ? actualCredits - job.reservedCredits
         : 0n;
@@ -491,21 +518,41 @@ export async function executeTextGeneration(
       },
     });
 
-    await tx.auditEvent.create({
-      data: {
-        organizationId: input.organizationId,
-        actorUserId: userId,
-        action: "generation.succeeded",
-        targetType: "GenerationJob",
-        targetId: job.id,
-        metadata: {
-          ...(usage ?? {}),
-          usageFallback: !usageIsReliable,
-          chargedCredits: actualCredits.toString(),
+      await tx.auditEvent.create({
+        data: {
+          organizationId: input.organizationId,
+          actorUserId: userId,
+          action: "generation.succeeded",
+          targetType: "GenerationJob",
+          targetId: job.id,
+          metadata: {
+            ...(usage ?? {}),
+            usageFallback: !usageIsReliable,
+            chargedCredits: actualCredits.toString(),
+          },
         },
+      });
+    });
+  } catch (error) {
+    await db.generationJob.updateMany({
+      where: { id: job.id, status: "PROCESSING" },
+      data: {
+        status: "MANUAL_REVIEW",
+        errorCode: "SETTLEMENT_REVIEW_REQUIRED",
+        errorMessage:
+          "The provider completed this text generation, but billing settlement requires review. Credits remain reserved.",
+        outputPayload: usage
+          ? { content, usage, settlementPending: true }
+          : { content, usageEstimated: true, settlementPending: true },
       },
     });
-  });
+    throw error instanceof GenerationError
+      ? error
+      : new GenerationError(
+          "Generation completed at the provider, but billing settlement requires review.",
+          409,
+        );
+  }
 
   return {
     jobId: job.id,

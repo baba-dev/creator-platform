@@ -381,6 +381,15 @@ Successful output is written under
 `/var/www/creator-platform/shared/byteplus-smoke/` with owner-only file
 permissions.
 
+The repository also includes an opt-in **BytePlus live image smoke** GitHub
+Actions workflow. It is never triggered by push or pull request because the
+generation is billable. Run it manually only after reviewing provider-adapter
+changes, type `I_UNDERSTAND_THIS_IS_BILLABLE`, and ensure the repository
+`BYTEPLUS_API_KEY` secret is configured. The smoke makes exactly one Seedream
+5.0 Lite 2K PNG request with `outputCount = 1`. On a provider failure it logs
+only sanitized diagnostics (`errorCode`, retryability and submission stage);
+provider response bodies, prompts, output URLs and credentials are not logged.
+
 ## Staging
 
 The staging environment is hosted at:

@@ -66,10 +66,11 @@ export const auth = betterAuth({
     autoSignIn: false,
     revokeSessionsOnPasswordReset: true,
     resetPasswordTokenExpiresIn: 60 * 60,
-    sendResetPassword: ({ user, url, token }) => {
-      // Do not await user-dependent mail work on this public endpoint. Keeping
-      // the response path independent of account existence reduces timing
-      // differences while the durable mail queue handles delivery.
+    sendResetPassword: async ({ user, url, token }) => {
+      // Return an already-resolved async callback without awaiting
+      // user-dependent mail work. This satisfies Better Auth's callback
+      // contract while keeping the public response path independent of mail
+      // queue latency or account-specific delivery work.
       void enqueueMail(
         passwordResetEmail({
           to: user.email,

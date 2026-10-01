@@ -8,8 +8,7 @@ export type MascotSceneSize = "compact" | "surface" | "modal";
 const sources: Record<MascotSceneKind, string> = {
   working:
     "/brand/mascots/creators-mascot-working-laptop-queued-laptop-float.svg",
-  running:
-    "/brand/mascots/creators-mascot-running-loader-terrain-loop.svg",
+  running: "/brand/mascots/creators-mascot-running-loader-terrain-loop.svg",
   confused:
     "/brand/mascots/creators-mascot-confused-long-wait-motion-arranged.svg",
 };

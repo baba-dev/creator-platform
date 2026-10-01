@@ -636,6 +636,7 @@ export const chatThreadCreateSchema = z
 export const chatMessageCreateSchema = z
   .object({
     content: z.string().trim().min(1).max(8000),
+    idempotencyKey: idempotencyKeySchema.optional(),
   })
   .strict();
 

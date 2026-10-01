@@ -349,6 +349,64 @@ export function GenerationStudio({
   const maxVideoReferenceAudio = Number(
     model?.capabilities?.maxReferenceAudio ?? 0,
   );
+  const availableVideoWorkflows = useMemo(
+    () =>
+      [
+        { value: "GENERATE" as const, label: "Generate", hint: "Text → video" },
+        ...(model?.capabilities?.firstFrame === true
+          ? [
+              {
+                value: "FRAME_TO_VIDEO" as const,
+                label: "Frames",
+                hint: "Animate a start / end",
+              },
+            ]
+          : []),
+        ...(model?.capabilities?.referenceImages === true ||
+        model?.capabilities?.referenceVideo === true ||
+        model?.capabilities?.referenceAudio === true
+          ? [
+              {
+                value: "REFERENCE" as const,
+                label: "References",
+                hint: "Match multimodal guides",
+              },
+            ]
+          : []),
+        ...(model?.capabilities?.editVideo === true
+          ? [
+              {
+                value: "EDIT" as const,
+                label: "AI Edit",
+                hint: "Transform a source clip",
+              },
+            ]
+          : []),
+        ...(model?.capabilities?.extendVideo === true
+          ? [
+              {
+                value: "EXTEND" as const,
+                label: "Extend",
+                hint: "Continue before / after",
+              },
+            ]
+          : []),
+        ...(model?.capabilities?.draftMode === true
+          ? [
+              {
+                value: "DRAFT" as const,
+                label: "Draft",
+                hint: "480p review → final",
+              },
+            ]
+          : []),
+      ] satisfies Array<{
+        value: Exclude<VideoWorkflow, "FIRST_LAST_FRAME" | "DRAFT_FINAL">;
+        label: string;
+        hint: string;
+      }>,
+    [model?.capabilities],
+  );
   const handleModeChange = useCallback(
     (mode: MediaKind) => {
       if (mode !== activeMode) {

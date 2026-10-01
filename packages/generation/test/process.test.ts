@@ -212,6 +212,62 @@ describe("video processing", () => {
     );
   });
 
+  it("releases credits and preserves a definite video submission provider code", async () => {
+    const p = provider();
+    vi.mocked(p.submit).mockRejectedValue(
+      new ProviderRequestError("rejected video", false, {
+        code: "InvalidParameter",
+      }),
+    );
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+      ...base,
+      status: "QUEUED",
+    });
+    const tx = transaction("SUBMITTED");
+
+    await processVideoSubmitJob("job1", p);
+
+    expect(mocks.release).toHaveBeenCalledTimes(1);
+    expect(mocks.capture).not.toHaveBeenCalled();
+    expect(tx.generationJob.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "FAILED",
+          errorCode: "InvalidParameter",
+          errorMessage: "Provider rejected the video request. Credits released.",
+        }),
+      }),
+    );
+  });
+
+  it("preserves an asynchronous video provider failure code", async () => {
+    const p = provider();
+    vi.mocked(p.getJob).mockResolvedValue({
+      status: "failed",
+      providerRequestId: "video-request-1",
+      errorCode: "TaskFailed",
+    });
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+      ...base,
+      status: "PROCESSING",
+      providerRequestId: "video-request-1",
+    });
+    const tx = transaction("PROCESSING");
+
+    await processVideoPollJob("job1", p);
+
+    expect(mocks.release).toHaveBeenCalledTimes(1);
+    expect(tx.generationJob.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "FAILED",
+          errorCode: "TaskFailed",
+          errorMessage: "Provider did not complete the video. Credits released.",
+        }),
+      }),
+    );
+  });
+
   it("submits only a linked private source video through a scoped grant", async () => {
     const p = provider();
     vi.mocked(p.submit).mockResolvedValue({
@@ -650,10 +706,12 @@ describe("image processing", () => {
     expect(mocks.capture).not.toHaveBeenCalled();
   });
 
-  it("releases credits on definite provider rejection", async () => {
+  it("releases credits and preserves the provider code on definite image rejection", async () => {
     const p = provider();
     vi.mocked(p.submit).mockRejectedValue(
-      new ProviderRequestError("rejected", false),
+      new ProviderRequestError("rejected", false, {
+        code: "InvalidParameter",
+      }),
     );
     mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
       ...base,
@@ -664,6 +722,15 @@ describe("image processing", () => {
     expect(mocks.release).toHaveBeenCalledTimes(1);
     expect(mocks.capture).not.toHaveBeenCalled();
     expect(tx.asset.updateMany).toHaveBeenCalled();
+    expect(tx.generationJob.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "FAILED",
+          errorCode: "InvalidParameter",
+          errorMessage: "Provider rejected the image request. Credits released.",
+        }),
+      }),
+    );
   });
   it("releases the reservation when the worker has no image provider credentials", async () => {
     const p = provider();
@@ -824,7 +891,9 @@ describe("voice processing", () => {
   it("releases credits on definite non-retryable provider rejection", async () => {
     const p = provider();
     vi.mocked(p.submit).mockRejectedValue(
-      new ProviderRequestError("Rejected speech", false),
+      new ProviderRequestError("Rejected speech", false, {
+        code: "SpeechForbidden",
+      }),
     );
     mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
       ...voiceBase,
@@ -842,6 +911,15 @@ describe("voice processing", () => {
       }),
     );
     expect(mocks.capture).not.toHaveBeenCalled();
+    expect(tx.generationJob.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "FAILED",
+          errorCode: "SpeechForbidden",
+          errorMessage: "Provider rejected the voice request. Credits released.",
+        }),
+      }),
+    );
     expect(tx.asset.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { generationJobId: "job1", status: "PENDING" },

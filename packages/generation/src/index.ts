@@ -23,6 +23,7 @@ export * from "./reconciliation";
 export * from "./cancel";
 export * from "./quote-contract";
 export * from "./text";
+export * from "./speech-trial";
 import { verifyGenerationQuote, quoteParameters } from "./quote-contract";
 
 export const MAX_IMAGE_BYTES = 25 * 1024 * 1024;

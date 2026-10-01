@@ -25,6 +25,7 @@
     "@aiwa/authz": "workspace:*",
     "@aiwa/config": "workspace:*",
     "@aiwa/organizations": "workspace:*",
+    "@aiwa/observability": "workspace:*",
     "@aiwa/providers": "workspace:*",
     "sharp": "0.35.4",
     "zod": "^4.1.12"

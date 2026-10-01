@@ -4,6 +4,7 @@ import {
   type PlatformRole,
 } from "@aiwa/authz";
 import { db } from "@aiwa/db";
+import { calculateSpeechTrialUsage } from "@aiwa/generation";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -438,7 +439,7 @@ async function renderSection(
       OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
     };
     const canManage = hasPlatformPermission(role, "models:manage");
-    const [rows, total] = await Promise.all([
+    const [rows, total, trialUsage] = await Promise.all([
       db.providerModel.findMany({
         where,
         select: {
@@ -473,6 +474,7 @@ async function renderSection(
         take: PAGE_SIZE,
       }),
       db.providerModel.count({ where }),
+      calculateSpeechTrialUsage(db),
     ]);
     return (
       <ListResult
@@ -482,6 +484,81 @@ async function renderSection(
         total={total}
         query={query}
       >
+        <div className="mb-6 rounded-2xl border border-border bg-card/60 p-4 sm:p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-semibold text-foreground">
+                  BytePlus Seed Speech TTS 2.0 Trial Quota
+                </h2>
+                <StatusBadge
+                  tone={
+                    trialUsage.isExhausted
+                      ? "danger"
+                      : trialUsage.isWarning
+                        ? "warning"
+                        : "success"
+                  }
+                >
+                  {trialUsage.isExhausted
+                    ? "Trial Cap Exhausted"
+                    : trialUsage.isWarning
+                      ? "Quota Warning (>80%)"
+                      : "Active Trial Quota"}
+                </StatusBadge>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Internal provider subsidy tracking (19,968 characters initial
+                pool). Customer billing remains standard (16 credits per 1,000
+                characters).
+              </p>
+            </div>
+            <div className="flex items-center gap-4 text-xs font-mono">
+              <div>
+                <span className="text-muted-foreground">Used: </span>
+                <strong className="text-foreground">
+                  {trialUsage.consumedCharacters.toLocaleString()}
+                </strong>
+                <span className="text-muted-foreground">
+                  {" "}
+                  / {trialUsage.initialQuota.toLocaleString()} chars
+                </span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Remaining: </span>
+                <strong className="text-foreground">
+                  {trialUsage.remainingCharacters.toLocaleString()}
+                </strong>
+              </div>
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className={`h-full transition-all duration-300 ${
+                  trialUsage.isExhausted
+                    ? "bg-destructive"
+                    : trialUsage.isWarning
+                      ? "bg-warning"
+                      : "bg-primary"
+                }`}
+                style={{
+                  width: `${Math.min(100, trialUsage.consumedPercent)}%`,
+                }}
+              />
+            </div>
+            <div className="mt-1.5 flex justify-between text-[11px] text-muted-foreground">
+              <span>
+                {trialUsage.consumedPercent}% consumed (
+                {trialUsage.succeededJobsCount} succeeded jobs)
+              </span>
+              <span>
+                Provider cost saved: $
+                {trialUsage.estimatedCostSavedUsd.toFixed(4)} USD
+              </span>
+            </div>
+          </div>
+        </div>
         <DataTable label="Model catalog">
           <TableHead
             labels={[
@@ -497,6 +574,7 @@ async function renderSection(
           <tbody className="divide-y divide-border">
             {rows.map((row) => {
               const price = row.priceVersions[0];
+              const isSeedSpeech = row.providerModelId === "seed-tts-2.0";
               return (
                 <tr key={row.id}>
                   <Cell>
@@ -508,6 +586,16 @@ async function renderSection(
                     >
                       {row.description}
                     </p>
+                    {isSeedSpeech ? (
+                      <div className="mt-1.5">
+                        <span className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/60 px-2 py-0.5 text-[10px] font-mono text-muted-foreground">
+                          Trial pool:{" "}
+                          {trialUsage.consumedCharacters.toLocaleString()} /{" "}
+                          {trialUsage.initialQuota.toLocaleString()} chars (
+                          {trialUsage.consumedPercent}%)
+                        </span>
+                      </div>
+                    ) : null}
                   </Cell>
                   <Cell>{titleCase(row.provider)}</Cell>
                   <Cell>{titleCase(row.mediaKind)}</Cell>

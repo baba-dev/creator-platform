@@ -44,9 +44,47 @@ export async function GET(
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: 200,
   });
+  const messages = newestMessages.reverse();
+
+  const jobIds = messages
+    .map((m) => {
+      const meta = m.metadata as Record<string, unknown> | null;
+      return (meta?.audioJobId ?? meta?.generationJobId) as string | undefined;
+    })
+    .filter((id): id is string => typeof id === "string");
+
+  const assets = jobIds.length
+    ? await db.asset.findMany({
+        where: {
+          generationJobId: { in: jobIds },
+          mediaKind: "AUDIO",
+          status: "READY",
+        },
+        select: { id: true, generationJobId: true },
+      })
+    : [];
+
+  const assetByJobId = new Map(assets.map((a) => [a.generationJobId, a.id]));
+
+  const enrichedMessages = messages.map((m) => {
+    const meta = (m.metadata as Record<string, unknown> | null) ?? {};
+    const audioJobId = (meta.audioJobId ?? meta.generationJobId) as
+      string | undefined;
+    const audioAssetId = audioJobId ? assetByJobId.get(audioJobId) : undefined;
+    return {
+      ...m,
+      audioJobId,
+      audioAssetId,
+    };
+  });
 
   return NextResponse.json(
-    { thread: { ...thread, messages: newestMessages.reverse() } },
+    {
+      thread: {
+        ...thread,
+        messages: enrichedMessages,
+      },
+    },
     { headers: { "Cache-Control": "no-store" } },
   );
 }

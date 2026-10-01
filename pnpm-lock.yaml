@@ -257,6 +257,9 @@ importers:
       '@aiwa/mail':
         specifier: workspace:*
         version: link:../mail
+      '@aiwa/observability':
+        specifier: workspace:*
+        version: link:../observability
       '@aiwa/organizations':
         specifier: workspace:*
         version: link:../organizations

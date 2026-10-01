@@ -1,26 +1,24 @@
 import { randomUUID } from "node:crypto";
 import { hasOrganizationPermission } from "@aiwa/authz";
-import { db, type Prisma } from "@aiwa/db";
-import { createVoiceJob, GenerationError } from "@aiwa/generation";
+import { db } from "@aiwa/db";
+import { createVoiceJob, resolvePresetVoice } from "@aiwa/generation";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
 
-const synthesizeSchema = z.object({
-  text: z.string().trim().min(1).max(4000),
-  voiceKey: z.string().trim().min(1).max(100).default("jasper"),
+const auditionSchema = z.object({
+  organizationId: z.string().min(1),
+  voiceKey: z.string().min(1).max(100),
+  text: z.string().trim().min(1).max(300),
   speechRate: z.number().min(0.5).max(2.0).default(1.0),
-  blockId: z.string().optional(),
 });
 
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ scriptId: string }> },
-) {
+export async function POST(request: Request) {
   if (!hasTrustedMutationOrigin(request)) {
     return NextResponse.json({ error: "Origin not allowed." }, { status: 403 });
   }
+
   const session = await getRequestSession(request.headers);
   if (!session) {
     return NextResponse.json(
@@ -28,25 +26,21 @@ export async function POST(
       { status: 401 },
     );
   }
-  const { scriptId } = await params;
 
   try {
-    const script = await db.script.findUnique({
-      where: { id: scriptId },
-    });
-    if (!script) {
-      return NextResponse.json({ error: "Script not found." }, { status: 404 });
-    }
+    const body = await request.json();
+    const input = auditionSchema.parse(body);
 
     const membership = await db.membership.findUnique({
       where: {
         organizationId_userId: {
-          organizationId: script.organizationId,
+          organizationId: input.organizationId,
           userId: session.user.id,
         },
       },
       include: { organization: true },
     });
+
     if (
       !membership ||
       membership.organization.status !== "ACTIVE" ||
@@ -55,15 +49,13 @@ export async function POST(
       return NextResponse.json({ error: "Access denied." }, { status: 403 });
     }
 
-    const json = await request.json();
-    const input = synthesizeSchema.parse(json);
-
-    // Look up default voice model
+    const preset = resolvePresetVoice(input.voiceKey);
     const now = new Date();
+
     const voiceModel = await db.providerModel.findFirst({
       where: {
+        providerModelId: { in: [...preset.supportedModels] },
         mediaKind: "VOICE",
-        provider: "BYTEPLUS",
         enabled: true,
       },
       include: {
@@ -80,15 +72,15 @@ export async function POST(
 
     if (!voiceModel || !voiceModel.priceVersions[0]) {
       return NextResponse.json(
-        { error: "Voice synthesis model is not configured." },
+        { error: "Voice synthesis model not configured or active." },
         { status: 503 },
       );
     }
 
     const idempotencyKey = randomUUID();
+
     const job = await createVoiceJob(session.user.id, {
-      organizationId: script.organizationId,
-      projectId: script.projectId,
+      organizationId: input.organizationId,
       modelId: voiceModel.id,
       priceVersionId: voiceModel.priceVersions[0].id,
       idempotencyKey,
@@ -98,51 +90,28 @@ export async function POST(
       format: "mp3",
     });
 
-    if (
-      input.blockId &&
-      typeof script.content === "object" &&
-      script.content !== null
-    ) {
-      const content = script.content as {
-        scenes?: Array<Record<string, unknown>>;
-      };
-      if (Array.isArray(content.scenes)) {
-        const updatedScenes = content.scenes.map((scene) =>
-          scene.id === input.blockId
-            ? { ...scene, audioJobId: job.id, voiceKey: input.voiceKey }
-            : scene,
-        );
-        await db.script.update({
-          where: { id: scriptId },
-          data: {
-            content: {
-              ...content,
-              scenes: updatedScenes,
-            } as unknown as Prisma.InputJsonValue,
-          },
-        });
-      }
-    }
-
     return NextResponse.json(
-      { jobId: job.id, status: job.status, blockId: input.blockId },
+      {
+        jobId: job.id,
+        status: job.status,
+        voiceKey: input.voiceKey,
+      },
       { status: 202 },
     );
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: "Invalid synthesis parameters.", issues: error.issues },
+        { error: "Invalid audition parameters.", issues: error.issues },
         { status: 400 },
       );
     }
-    if (error instanceof GenerationError) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: error.status },
-      );
-    }
     return NextResponse.json(
-      { error: "Voice synthesis failed." },
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to queue voice audition.",
+      },
       { status: 500 },
     );
   }

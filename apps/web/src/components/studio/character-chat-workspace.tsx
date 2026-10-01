@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Annotation, CreativeSurface, Eyebrow } from "@/components/ui/creative";
 import { Icon } from "@/components/ui/icon";
+import { StatusBadge } from "@/components/admin/primitives";
+import { AudioWaveformPlayer } from "@/components/ui/audio-waveform-player";
+import { VoiceCastingBooth } from "@/components/ui/voice-casting-booth";
 
 interface Persona {
   id: string;
@@ -33,8 +36,13 @@ interface ChatMessage {
   content: string;
   tokensUsed: number | null;
   createdAt: string;
+  audioJobId?: string | null;
+  audioAssetId?: string | null;
   metadata?: {
     chargedCredits?: number;
+    generationJobId?: string;
+    audioJobId?: string;
+    voiceKey?: string;
     usage?: {
       promptTokens: number;
       completionTokens: number;
@@ -42,6 +50,65 @@ interface ChatMessage {
     };
   } | null;
 }
+
+export const VERIFIED_VOICES = [
+  {
+    key: "jasper",
+    name: "Jasper",
+    lang: "English (US)",
+    gender: "Male",
+    style: "Passionate & high-spirited",
+  },
+  {
+    key: "charlotte",
+    name: "Charlotte",
+    lang: "English (UK)",
+    gender: "Female",
+    style: "Bright & crisp",
+  },
+  {
+    key: "kayla",
+    name: "Kayla",
+    lang: "English (US)",
+    gender: "Female",
+    style: "Enthusiastic & outgoing",
+  },
+  {
+    key: "sunny",
+    name: "Sunny (Myra)",
+    lang: "English (US)",
+    gender: "Female",
+    style: "Crisp & lively",
+  },
+  {
+    key: "zendaya",
+    name: "Zendaya",
+    lang: "English (US)",
+    gender: "Female",
+    style: "Relaxed & approachable",
+  },
+  {
+    key: "sharron",
+    name: "Sharron",
+    lang: "English (US)",
+    gender: "Female",
+    style: "Gentle & calm",
+  },
+  {
+    key: "vivi",
+    name: "Vivi",
+    lang: "Chinese (Mandarin)",
+    gender: "Female",
+    style: "Youthful & vibrant",
+  },
+  {
+    key: "xiaohe",
+    name: "Xiaohe (Amber)",
+    lang: "Chinese (Mandarin)",
+    gender: "Female",
+    style: "Warm & natural",
+  },
+];
 
 const SEED_TEXT_MODELS = [
   {
@@ -92,11 +159,113 @@ export function CharacterChatWorkspace({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isCreatingPersona, setIsCreatingPersona] = useState(false);
 
+  // Auto-voice & speech synthesis state
+  const [autoVoice, setAutoVoice] = useState(false);
+  const [synthesizingMsgId, setSynthesizingMsgId] = useState<string | null>(
+    null,
+  );
+
   // New Persona form state
   const [newPersonaName, setNewPersonaName] = useState("");
   const [newPersonaTag, setNewPersonaTag] = useState("");
   const [newPersonaDesc, setNewPersonaDesc] = useState("");
   const [newPersonaPrompt, setNewPersonaPrompt] = useState("");
+  const [newPersonaVoiceKey, setNewPersonaVoiceKey] = useState("jasper");
+
+  // Voice Casting Booth state
+  const [castingBoothOpen, setCastingBoothOpen] = useState(false);
+
+  // Dictation & Voice Call mode state
+  const [isListening, setIsListening] = useState(false);
+  const [isCallModeActive, setIsCallModeActive] = useState(false);
+  const recognitionRef = useRef<{ stop: () => void; start: () => void } | null>(
+    null,
+  );
+
+  function toggleSpeechRecognition() {
+    if (typeof window === "undefined") return;
+    const windowWithSpeech = window as unknown as {
+      SpeechRecognition?: new () => {
+        continuous: boolean;
+        interimResults: boolean;
+        lang: string;
+        onresult: (e: {
+          resultIndex: number;
+          results: Array<{ 0: { transcript: string } }>;
+        }) => void;
+        onerror: () => void;
+        onend: () => void;
+        start: () => void;
+        stop: () => void;
+      };
+      webkitSpeechRecognition?: new () => {
+        continuous: boolean;
+        interimResults: boolean;
+        lang: string;
+        onresult: (e: {
+          resultIndex: number;
+          results: Array<{ 0: { transcript: string } }>;
+        }) => void;
+        onerror: () => void;
+        onend: () => void;
+        start: () => void;
+        stop: () => void;
+      };
+    };
+
+    const SpeechRecognition =
+      windowWithSpeech.SpeechRecognition ||
+      windowWithSpeech.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      setErrorMessage(
+        "Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari.",
+      );
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = "en-US";
+
+      recognition.onresult = (event) => {
+        let transcript = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const item = event.results[i];
+          if (item?.[0]?.transcript) {
+            transcript += item[0].transcript;
+          }
+        }
+        if (transcript.trim()) {
+          setInputText((prev) =>
+            prev ? `${prev} ${transcript.trim()}` : transcript.trim(),
+          );
+        }
+      };
+
+      recognition.onerror = () => {
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognition.start();
+      recognitionRef.current = recognition;
+      setIsListening(true);
+    } catch {
+      setIsListening(false);
+    }
+  }
 
   // Load personas and threads on mount
   useEffect(() => {
@@ -231,7 +400,7 @@ export function CharacterChatWorkspace({
 
     // Optimistic user message
     const tempUserMsg: ChatMessage = {
-      id: `temp-${Date.now()}`,
+      id: `temp-${messages.length + 1}`,
       role: "user",
       content: userText,
       tokensUsed: null,
@@ -248,6 +417,7 @@ export function CharacterChatWorkspace({
           body: JSON.stringify({
             content: userText,
             idempotencyKey: clientRequestId,
+            autoVoice,
           }),
         },
       );
@@ -262,6 +432,10 @@ export function CharacterChatWorkspace({
         const filtered = prev.filter((m) => m.id !== tempUserMsg.id);
         return [...filtered, data.userMessage, data.message];
       });
+
+      if (data.audioJobId && threadId) {
+        pollVoiceJob(threadId);
+      }
     } catch (err) {
       setErrorMessage(
         err instanceof Error
@@ -270,6 +444,70 @@ export function CharacterChatWorkspace({
       );
     } finally {
       setIsSending(false);
+    }
+  }
+
+  const pollVoiceJob = useCallback((targetThreadId: string) => {
+    let count = 0;
+    const interval = setInterval(async () => {
+      count++;
+      if (count > 25) {
+        clearInterval(interval);
+        return;
+      }
+      try {
+        const res = await fetch(
+          `/api/chat/threads/${encodeURIComponent(targetThreadId)}`,
+        );
+        if (res.ok) {
+          const data = await res.json();
+          if (data.thread?.messages) {
+            setMessages(data.thread.messages);
+            const anyPending = data.thread.messages.some(
+              (m: ChatMessage) => m.audioJobId && !m.audioAssetId,
+            );
+            if (!anyPending) {
+              clearInterval(interval);
+            }
+          }
+        }
+      } catch {
+        clearInterval(interval);
+      }
+    }, 2000);
+  }, []);
+
+  async function handleSynthesizeMessage(message: ChatMessage) {
+    if (!activeThreadId || synthesizingMsgId) return;
+    setSynthesizingMsgId(message.id);
+    try {
+      const res = await fetch(
+        `/api/chat/threads/${encodeURIComponent(activeThreadId)}/messages/${encodeURIComponent(message.id)}/synthesize`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            voiceKey: selectedPersona?.voiceKey || "jasper",
+          }),
+        },
+      );
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.error || "Voice synthesis failed");
+      }
+      const data = await res.json();
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === message.id ? { ...m, audioJobId: data.jobId } : m,
+        ),
+      );
+      pollVoiceJob(activeThreadId);
+    } catch (err) {
+      setErrorMessage(
+        err instanceof Error ? err.message : "Voice synthesis failed.",
+      );
+    } finally {
+      setSynthesizingMsgId(null);
     }
   }
 
@@ -287,6 +525,7 @@ export function CharacterChatWorkspace({
           tag: newPersonaTag.trim() || undefined,
           description: newPersonaDesc.trim() || undefined,
           systemPrompt: newPersonaPrompt.trim(),
+          voiceKey: newPersonaVoiceKey,
           modelId: selectedModel,
         }),
       });
@@ -300,6 +539,7 @@ export function CharacterChatWorkspace({
         setNewPersonaTag("");
         setNewPersonaDesc("");
         setNewPersonaPrompt("");
+        setNewPersonaVoiceKey("jasper");
       }
     } catch (err) {
       console.error("Failed to create persona", err);
@@ -351,6 +591,20 @@ export function CharacterChatWorkspace({
             <Icon name="plus" className="size-3.5" />
             New Persona
           </Button>
+
+          <button
+            type="button"
+            onClick={() => setAutoVoice(!autoVoice)}
+            className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+              autoVoice
+                ? "border-primary/50 bg-primary/10 text-primary shadow-xs"
+                : "border-border bg-card text-muted-foreground hover:border-border/80 hover:text-foreground"
+            }`}
+            title="Automatically synthesize speech audio for each character response via Seed Speech TTS 2.0"
+          >
+            <Icon name="voice" className="size-3.5" />
+            <span>Auto-Voice {autoVoice ? "ON" : "OFF"}</span>
+          </button>
 
           <Button
             size="sm"
@@ -468,10 +722,30 @@ export function CharacterChatWorkspace({
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                {selectedPersona.voiceKey && (
+                  <span className="flex items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                    <Icon name="voice" className="size-3" />
+                    <span>
+                      {VERIFIED_VOICES.find(
+                        (v) => v.key === selectedPersona.voiceKey,
+                      )?.name || selectedPersona.voiceKey}
+                    </span>
+                  </span>
+                )}
                 <span className="rounded-md border border-border bg-card px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
                   {SEED_TEXT_MODELS.find((m) => m.id === selectedModel)?.name ||
                     selectedModel}
                 </span>
+
+                <button
+                  type="button"
+                  onClick={() => setIsCallModeActive(true)}
+                  title="Start Talking Persona Voice Call"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary transition hover:bg-primary/20"
+                >
+                  <Icon name="voice" className="size-3.5" />
+                  <span>Voice Call</span>
+                </button>
               </div>
             </div>
           )}
@@ -545,6 +819,49 @@ export function CharacterChatWorkspace({
                           )}
                         </div>
                       ) : null}
+
+                      {/* Voiced reply audio player or synthesis trigger */}
+                      {!isUser && (
+                        <>
+                          {msg.audioAssetId ? (
+                            <AudioWaveformPlayer
+                              src={`/api/assets/${msg.audioAssetId}`}
+                              speakerName={selectedPersona?.name || "Persona"}
+                              voiceName="Seed TTS 2.0"
+                              className="mt-2.5 max-w-lg"
+                            />
+                          ) : msg.audioJobId || synthesizingMsgId === msg.id ? (
+                            <div className="mt-2.5 flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-primary">
+                              <span className="size-2 animate-ping rounded-full bg-primary" />
+                              <span className="text-[11px] font-medium">
+                                Synthesizing voice reply (Seed TTS 2.0)...
+                              </span>
+                            </div>
+                          ) : canGenerate ? (
+                            <div className="mt-2.5 flex items-center justify-between border-t border-border/50 pt-2">
+                              <button
+                                type="button"
+                                onClick={() => handleSynthesizeMessage(msg)}
+                                disabled={
+                                  isSending || Boolean(synthesizingMsgId)
+                                }
+                                className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary transition hover:border-primary/60 hover:bg-primary/20"
+                              >
+                                <Icon name="voice" className="size-3" />
+                                <span>Voice Reply (TTS 2.0)</span>
+                              </button>
+                              <span className="text-[10px] text-muted-foreground">
+                                Voice:{" "}
+                                {selectedPersona?.voiceKey
+                                  ? VERIFIED_VOICES.find(
+                                      (v) => v.key === selectedPersona.voiceKey,
+                                    )?.name || selectedPersona.voiceKey
+                                  : "Jasper"}
+                              </span>
+                            </div>
+                          ) : null}
+                        </>
+                      )}
                     </div>
                   </div>
                 );
@@ -598,6 +915,22 @@ export function CharacterChatWorkspace({
                 className="w-full resize-none rounded-xl border border-border bg-card p-3 pr-24 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
               <div className="absolute right-3 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={toggleSpeechRecognition}
+                  title={
+                    isListening
+                      ? "Listening... Click to stop"
+                      : "Voice Dictation (Speech-to-Text)"
+                  }
+                  className={`grid size-8 place-items-center rounded-lg transition ${
+                    isListening
+                      ? "bg-destructive text-destructive-foreground animate-pulse"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  }`}
+                >
+                  <Icon name="voice" className="size-4" />
+                </button>
                 <Button
                   type="submit"
                   size="sm"
@@ -669,6 +1002,37 @@ export function CharacterChatWorkspace({
               </div>
 
               <div>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-semibold text-foreground">
+                    Seed Speech Voice (TTS 2.0) *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setCastingBoothOpen(true)}
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
+                  >
+                    <Icon name="voice" className="size-3" />
+                    <span>Audition in Booth →</span>
+                  </button>
+                </div>
+                <select
+                  value={newPersonaVoiceKey}
+                  onChange={(e) => setNewPersonaVoiceKey(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-border bg-surface-sunken p-2.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  {VERIFIED_VOICES.map((v) => (
+                    <option key={v.key} value={v.key}>
+                      {v.name} ({v.lang} • {v.style})
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Voice used when generating speech replies via Seed Speech TTS
+                  2.0.
+                </p>
+              </div>
+
+              <div>
                 <label className="block text-xs font-semibold text-foreground">
                   System Prompt (Personality & Rules) *
                 </label>
@@ -695,6 +1059,121 @@ export function CharacterChatWorkspace({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Talking Persona Call Mode Modal */}
+      {isCallModeActive && selectedPersona && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-background/90 p-4 backdrop-blur-lg"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Talking Persona Call"
+        >
+          <div className="relative flex w-full max-w-lg flex-col items-center rounded-3xl border border-border bg-card p-8 shadow-2xl text-center">
+            <div className="mb-4 flex items-center gap-2">
+              <StatusBadge tone="success">Live Persona Call</StatusBadge>
+              <span className="font-mono text-xs text-muted-foreground">
+                Seed TTS 2.0
+              </span>
+            </div>
+
+            {/* Animated Sketch Audio Waveform Ring Avatar */}
+            <div className="relative my-4">
+              <div className="absolute inset-0 -m-4 animate-ping rounded-full bg-primary/10 opacity-75" />
+              <div className="absolute inset-0 -m-8 animate-pulse rounded-full border border-primary/20" />
+
+              <div className="relative grid size-28 place-items-center rounded-full border-2 border-primary/40 bg-primary/15 font-display text-3xl font-bold text-primary shadow-lg">
+                {selectedPersona.name.charAt(0)}
+              </div>
+            </div>
+
+            <h3 className="font-display mt-2 text-2xl font-bold text-foreground">
+              {selectedPersona.name}
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              {selectedPersona.tag ||
+                selectedPersona.description ||
+                "AI Companion"}
+            </p>
+
+            {/* Status indicator */}
+            <div className="mt-4 flex items-center gap-2 rounded-full border border-border bg-surface-sunken px-3.5 py-1 text-xs">
+              <span className="size-2 animate-pulse rounded-full bg-success" />
+              <span className="font-medium text-muted-foreground">
+                {isSending
+                  ? "Persona speaking..."
+                  : isListening
+                    ? "Listening to you..."
+                    : "Connected"}
+              </span>
+            </div>
+
+            {/* Latest Message Transcript */}
+            <div className="mt-6 w-full rounded-2xl border border-border/60 bg-surface-sunken/40 p-4 text-left">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                Recent Exchange
+              </span>
+              <p className="mt-1 text-xs italic leading-relaxed text-foreground/90">
+                {messages.slice(-1)[0]?.content ||
+                  `Say hello to start speaking with ${selectedPersona.name}`}
+              </p>
+
+              {messages.slice(-1)[0]?.audioAssetId && (
+                <div className="mt-3">
+                  <AudioWaveformPlayer
+                    src={`/api/assets/${messages.slice(-1)[0]!.audioAssetId}`}
+                    speakerName={selectedPersona.name}
+                    voiceName="Seed TTS 2.0"
+                    autoPlay
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Call Actions */}
+            <div className="mt-8 flex items-center gap-4">
+              <button
+                type="button"
+                onClick={toggleSpeechRecognition}
+                title={isListening ? "Mute Microphone" : "Unmute Microphone"}
+                className={`grid size-12 place-items-center rounded-full shadow-md transition ${
+                  isListening
+                    ? "bg-primary text-primary-foreground"
+                    : "border border-border bg-card text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Icon name="voice" className="size-5" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCallModeActive(false);
+                  if (isListening) toggleSpeechRecognition();
+                }}
+                className="inline-flex items-center gap-2 rounded-full bg-destructive px-6 py-3 text-xs font-bold text-destructive-foreground shadow-md transition hover:bg-destructive/90"
+              >
+                <span>End Call</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Voice Casting Booth Modal */}
+      {castingBoothOpen && (
+        <VoiceCastingBooth
+          isOpen={castingBoothOpen}
+          onClose={() => setCastingBoothOpen(false)}
+          organizationId={organizationId}
+          characterName={newPersonaName || "New Persona"}
+          currentVoiceKey={newPersonaVoiceKey}
+          initialTestPhrase={
+            newPersonaPrompt.slice(0, 140) ||
+            "Hello! I am ready to step into character and speak with you."
+          }
+          onSelectVoice={(chosenKey) => setNewPersonaVoiceKey(chosenKey)}
+        />
       )}
     </div>
   );

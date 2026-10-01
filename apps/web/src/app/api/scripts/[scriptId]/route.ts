@@ -44,8 +44,40 @@ export async function GET(
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
   }
 
+  const content =
+    (script.content as { scenes?: Array<{ audioJobId?: string }> }) || {};
+  const jobIds = (content.scenes ?? [])
+    .map((s) => s.audioJobId)
+    .filter((id): id is string => typeof id === "string");
+
+  const assets = jobIds.length
+    ? await db.asset.findMany({
+        where: {
+          generationJobId: { in: jobIds },
+          mediaKind: "AUDIO",
+          status: "READY",
+        },
+        select: { id: true, generationJobId: true },
+      })
+    : [];
+
+  const assetByJobId = new Map(assets.map((a) => [a.generationJobId, a.id]));
+
+  const enrichedScenes = (content.scenes ?? []).map((s) => ({
+    ...s,
+    audioAssetId: s.audioJobId ? assetByJobId.get(s.audioJobId) : undefined,
+  }));
+
   return NextResponse.json(
-    { script },
+    {
+      script: {
+        ...script,
+        content: {
+          ...content,
+          scenes: enrichedScenes,
+        },
+      },
+    },
     { headers: { "Cache-Control": "no-store" } },
   );
 }

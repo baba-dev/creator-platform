@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { hasOrganizationPermission } from "@aiwa/authz";
 import { db } from "@aiwa/db";
-import { executeTextGeneration, GenerationError } from "@aiwa/generation";
+import {
+  createVoiceJob,
+  executeTextGeneration,
+  GenerationError,
+} from "@aiwa/generation";
 import { chatMessageCreateSchema } from "@aiwa/validation";
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
@@ -27,7 +31,13 @@ export async function POST(
   const { threadId } = await params;
 
   try {
-    const input = chatMessageCreateSchema.parse(await request.json());
+    const body = await request.json();
+    const input = chatMessageCreateSchema.parse(body);
+    const autoVoice =
+      typeof body === "object" &&
+      body !== null &&
+      "autoVoice" in body &&
+      (body as Record<string, unknown>).autoVoice === true;
     const thread = await db.chatThread.findUnique({
       where: { id: threadId },
       include: { persona: true },
@@ -127,6 +137,47 @@ export async function POST(
       maxTokens: 2048,
     });
 
+    let audioJobId: string | undefined;
+    if (autoVoice && genResult.content.trim()) {
+      try {
+        const voiceModel = await db.providerModel.findFirst({
+          where: {
+            mediaKind: "VOICE",
+            provider: "BYTEPLUS",
+            providerModelId: "seed-tts-2.0",
+            enabled: true,
+          },
+          include: {
+            priceVersions: {
+              where: {
+                effectiveFrom: { lte: now },
+                OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
+              },
+              orderBy: { effectiveFrom: "desc" },
+              take: 1,
+            },
+          },
+        });
+        if (voiceModel?.priceVersions[0]) {
+          const voiceKey = thread.persona?.voiceKey || "jasper";
+          const vJob = await createVoiceJob(session.user.id, {
+            organizationId: thread.organizationId,
+            projectId: thread.projectId,
+            modelId: voiceModel.id,
+            priceVersionId: voiceModel.priceVersions[0].id,
+            idempotencyKey: randomUUID(),
+            text: genResult.content,
+            voiceKey,
+            speechRate: 1.0,
+            format: "mp3",
+          });
+          audioJobId = vJob.id;
+        }
+      } catch {
+        // Non-fatal auto-voice dispatch failure
+      }
+    }
+
     const persisted = await db.$transaction(async (tx) => {
       const userMessage = await tx.chatMessage.create({
         data: {
@@ -149,6 +200,7 @@ export async function POST(
             generationJobId: genResult.jobId,
             chargedCredits: genResult.chargedCredits,
             usage: genResult.usage,
+            ...(audioJobId ? { audioJobId } : {}),
             ...(input.idempotencyKey
               ? { clientRequestId: input.idempotencyKey }
               : {}),
@@ -167,7 +219,11 @@ export async function POST(
     return NextResponse.json(
       {
         userMessage: persisted.userMessage,
-        message: persisted.assistantMessage,
+        message: {
+          ...persisted.assistantMessage,
+          audioJobId,
+        },
+        audioJobId,
         usage: genResult.usage,
         chargedCredits: genResult.chargedCredits,
       },

@@ -1,9 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { CreativeSurface, Eyebrow } from "@/components/ui/creative";
 import { Icon } from "@/components/ui/icon";
+import { StatusBadge } from "@/components/admin/primitives";
+import { AudioWaveformPlayer } from "@/components/ui/audio-waveform-player";
+import { VoiceCastingBooth } from "@/components/ui/voice-casting-booth";
+import {
+  assembleMasterStoryAudio,
+  type AssembledAudioResult,
+} from "@/lib/audio-assembly";
 
 interface SceneBlock {
   id: string;
@@ -11,6 +18,14 @@ interface SceneBlock {
   character?: string;
   parenthetical?: string;
   text: string;
+  voiceKey?: string;
+  audioJobId?: string;
+  audioAssetId?: string;
+}
+
+interface CharacterVoiceAssignment {
+  voiceKey: string;
+  speechRate?: number;
 }
 
 interface ScriptDocument {
@@ -20,16 +35,69 @@ interface ScriptDocument {
   targetDurationSeconds?: number | null;
   content: {
     scenes: SceneBlock[];
+    voiceAssignments?: Record<string, CharacterVoiceAssignment>;
   };
   createdAt: string;
   updatedAt: string;
 }
 
-const VOICES = [
-  { key: "ar-om-salim", name: "Salim (Omani Arabic, Warm)" },
-  { key: "ar-om-shatha", name: "Shatha (Omani Arabic, Natural)" },
-  { key: "en-us-alex", name: "Alex (English, Conversational)" },
-  { key: "en-us-emma", name: "Emma (English, Expressive)" },
+export const VERIFIED_VOICES = [
+  {
+    key: "jasper",
+    name: "Jasper",
+    lang: "English (US)",
+    gender: "Male",
+    style: "Passionate & high-spirited",
+  },
+  {
+    key: "charlotte",
+    name: "Charlotte",
+    lang: "English (UK)",
+    gender: "Female",
+    style: "Bright & crisp",
+  },
+  {
+    key: "kayla",
+    name: "Kayla",
+    lang: "English (US)",
+    gender: "Female",
+    style: "Enthusiastic & outgoing",
+  },
+  {
+    key: "sunny",
+    name: "Sunny (Myra)",
+    lang: "English (US)",
+    gender: "Female",
+    style: "Crisp & lively",
+  },
+  {
+    key: "zendaya",
+    name: "Zendaya",
+    lang: "English (US)",
+    gender: "Female",
+    style: "Relaxed & approachable",
+  },
+  {
+    key: "sharron",
+    name: "Sharron",
+    lang: "English (US)",
+    gender: "Female",
+    style: "Gentle & calm",
+  },
+  {
+    key: "vivi",
+    name: "Vivi",
+    lang: "Chinese (Mandarin)",
+    gender: "Female",
+    style: "Youthful & vibrant",
+  },
+  {
+    key: "xiaohe",
+    name: "Xiaohe (Amber)",
+    lang: "Chinese (Mandarin)",
+    gender: "Female",
+    style: "Warm & natural",
+  },
 ];
 
 export function ScriptwritingStudio({
@@ -52,12 +120,118 @@ export function ScriptwritingStudio({
     "dialogue",
   );
 
-  // Voice synthesis modal/state
+  // Voice synthesis & multi-voice timeline state
+  const [activeTab, setActiveTab] = useState<
+    "screenplay" | "timeline" | "cast"
+  >("screenplay");
   const [synthesizingBlockId, setSynthesizingBlockId] = useState<string | null>(
     null,
   );
-  const [selectedVoice, setSelectedVoice] = useState<string>("ar-om-salim");
+  const [selectedVoice, setSelectedVoice] = useState<string>("jasper");
   const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
+
+  // Sequential story player state
+  const [isPlayingSequence, setIsPlayingSequence] = useState(false);
+  const [currentPlayingBlockIndex, setCurrentPlayingBlockIndex] = useState<
+    number | null
+  >(null);
+  const sequenceAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Voice Casting Booth state
+  const [castingBoothOpen, setCastingBoothOpen] = useState(false);
+  const [castingCharacter, setCastingCharacter] = useState<string | null>(null);
+  const [castingInitialPhrase, setCastingInitialPhrase] = useState("");
+
+  // Master story audio assembly state
+  const [interLinePause, setInterLinePause] = useState<number>(1.0);
+  const [isAssemblingAudio, setIsAssemblingAudio] = useState(false);
+  const [assembledMasterAudio, setAssembledMasterAudio] =
+    useState<AssembledAudioResult | null>(null);
+  const [isSavingMasterAsset, setIsSavingMasterAsset] = useState(false);
+  const [masterAssetSaved, setMasterAssetSaved] = useState(false);
+  const [assembleError, setAssembleError] = useState<string | null>(null);
+
+  function openCastingBoothForCharacter(charName: string) {
+    setCastingCharacter(charName);
+    const lastLine = activeScript?.content.scenes
+      .filter(
+        (s) =>
+          s.type === "dialogue" &&
+          (s.character || "").toUpperCase().trim() === charName,
+      )
+      .slice(-1)[0]?.text;
+    setCastingInitialPhrase(
+      lastLine || "I am ready to perform this character's story.",
+    );
+    setCastingBoothOpen(true);
+  }
+
+  async function handleExportMasterAudio() {
+    if (dialogueBlocksWithAudio.length === 0) return;
+    setIsAssemblingAudio(true);
+    setAssembleError(null);
+    setMasterAssetSaved(false);
+
+    try {
+      const clips = dialogueBlocksWithAudio.map((b) => ({
+        id: b.id,
+        url: `/api/assets/${b.audioAssetId}`,
+        speaker: b.character,
+        text: b.text,
+      }));
+
+      const result = await assembleMasterStoryAudio({
+        clips,
+        pauseDurationSeconds: interLinePause,
+      });
+      setAssembledMasterAudio(result);
+    } catch (err) {
+      setAssembleError(
+        err instanceof Error
+          ? err.message
+          : "Failed to assemble master story audio.",
+      );
+    } finally {
+      setIsAssemblingAudio(false);
+    }
+  }
+
+  async function handleSaveMasterAudioToAssetLibrary() {
+    if (!assembledMasterAudio || !activeScript) return;
+    setIsSavingMasterAsset(true);
+    setAssembleError(null);
+
+    try {
+      const cleanTitle = activeScript.title
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, "-")
+        .slice(0, 50);
+      const fileName = `${cleanTitle}-master-story.wav`;
+
+      const res = await fetch("/api/assets/media-upload", {
+        method: "POST",
+        headers: {
+          "x-organization-id": organizationId,
+          "x-file-name": fileName,
+          "content-length": String(assembledMasterAudio.blob.size),
+        },
+        body: assembledMasterAudio.blob,
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to upload master story audio.");
+      }
+
+      setMasterAssetSaved(true);
+    } catch (err) {
+      setAssembleError(
+        err instanceof Error ? err.message : "Failed to save to Asset Library.",
+      );
+    } finally {
+      setIsSavingMasterAsset(false);
+    }
+  }
 
   const handleCreateNewScript = useCallback(
     async (isInitial = false) => {
@@ -258,9 +432,47 @@ export function ScriptwritingStudio({
     }
   }
 
+  const pollScriptVoiceJobs = useCallback((targetScriptId: string) => {
+    let count = 0;
+    const interval = setInterval(async () => {
+      count++;
+      if (count > 25) {
+        clearInterval(interval);
+        return;
+      }
+      try {
+        const res = await fetch(
+          `/api/scripts/${encodeURIComponent(targetScriptId)}`,
+        );
+        if (res.ok) {
+          const data = await res.json();
+          if (data.script) {
+            setActiveScript(data.script);
+            setScripts((prev) =>
+              prev.map((s) => (s.id === data.script.id ? data.script : s)),
+            );
+            const anyPending = data.script.content?.scenes?.some(
+              (s: SceneBlock) => s.audioJobId && !s.audioAssetId,
+            );
+            if (!anyPending) {
+              clearInterval(interval);
+            }
+          }
+        }
+      } catch {
+        clearInterval(interval);
+      }
+    }, 2000);
+  }, []);
+
   async function handleSynthesizeDialogue(block: SceneBlock) {
     if (!activeScript || !block.text.trim()) return;
     setVoiceNotice("Synthesizing audio via BytePlus Seed Speech TTS 2.0...");
+
+    const charName = (block.character || "").toUpperCase().trim();
+    const assignment = activeScript.content.voiceAssignments?.[charName];
+    const voiceToUse = selectedVoice || assignment?.voiceKey || "jasper";
+    const speedToUse = assignment?.speechRate ?? 1.0;
 
     try {
       const res = await fetch(
@@ -270,7 +482,9 @@ export function ScriptwritingStudio({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             text: block.text,
-            voiceKey: selectedVoice,
+            voiceKey: voiceToUse,
+            speechRate: speedToUse,
+            blockId: block.id,
           }),
         },
       );
@@ -282,13 +496,124 @@ export function ScriptwritingStudio({
 
       const data = await res.json();
       setVoiceNotice(
-        `Speech generation queued! Job ID: ${data.jobId.slice(0, 8)}... (Track in Speech Studio or Activity Center)`,
+        `Speech generation queued! Job ID: ${data.jobId.slice(0, 8)}... (Tracking in Audio Timeline)`,
       );
-      setTimeout(() => setVoiceNotice(null), 6000);
       setSynthesizingBlockId(null);
+      pollScriptVoiceJobs(activeScript.id);
+      setTimeout(() => setVoiceNotice(null), 5000);
     } catch (err) {
       setVoiceNotice(err instanceof Error ? err.message : "Synthesis failed.");
     }
+  }
+
+  async function handleBatchSynthesize() {
+    if (!activeScript || isGenerating) return;
+    setIsGenerating(true);
+    setVoiceNotice(
+      "Batch synthesizing all dialogue lines via BytePlus Seed Speech TTS 2.0...",
+    );
+    try {
+      const res = await fetch(
+        `/api/scripts/${encodeURIComponent(activeScript.id)}/synthesize-batch`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        },
+      );
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.error || "Batch voice synthesis failed.");
+      }
+      const data = await res.json();
+      setVoiceNotice(
+        `Queued ${data.queuedCount} dialogue voice jobs! Audio clips will appear in the Story Audio Timeline.`,
+      );
+      pollScriptVoiceJobs(activeScript.id);
+      setTimeout(() => setVoiceNotice(null), 6000);
+    } catch (err) {
+      setVoiceNotice(
+        err instanceof Error ? err.message : "Batch synthesis failed.",
+      );
+    } finally {
+      setIsGenerating(false);
+    }
+  }
+
+  // Extract unique character names from dialogue blocks
+  const characters = Array.from(
+    new Set(
+      (activeScript?.content.scenes || [])
+        .filter((b) => b.type === "dialogue" && b.character?.trim())
+        .map((b) => b.character!.toUpperCase().trim()),
+    ),
+  );
+
+  function handleAssignVoice(
+    charName: string,
+    voiceKey: string,
+    speechRate: number = 1.0,
+  ) {
+    if (!activeScript) return;
+    const currentAssignments = activeScript.content.voiceAssignments || {};
+    const updatedAssignments = {
+      ...currentAssignments,
+      [charName]: { voiceKey, speechRate },
+    };
+    setActiveScript({
+      ...activeScript,
+      content: {
+        ...activeScript.content,
+        voiceAssignments: updatedAssignments,
+      },
+    });
+  }
+
+  // Master sequence audio player
+  const dialogueBlocksWithAudio = (activeScript?.content.scenes || []).filter(
+    (b) => b.type === "dialogue" && b.audioAssetId,
+  );
+
+  function stopSequence() {
+    if (sequenceAudioRef.current) {
+      sequenceAudioRef.current.pause();
+      sequenceAudioRef.current.currentTime = 0;
+    }
+    setIsPlayingSequence(false);
+    setCurrentPlayingBlockIndex(null);
+  }
+
+  function playSequenceFromIndex(index: number) {
+    if (index >= dialogueBlocksWithAudio.length) {
+      stopSequence();
+      return;
+    }
+    const block = dialogueBlocksWithAudio[index];
+    if (!block || !block.audioAssetId) {
+      if (block) {
+        playSequenceFromIndex(index + 1);
+      } else {
+        stopSequence();
+      }
+      return;
+    }
+    setCurrentPlayingBlockIndex(index);
+    setIsPlayingSequence(true);
+
+    if (!sequenceAudioRef.current) {
+      sequenceAudioRef.current = new Audio();
+    }
+    const audio = sequenceAudioRef.current;
+    audio.src = `/api/assets/${block.audioAssetId}`;
+    audio.onended = () => {
+      setTimeout(() => {
+        playSequenceFromIndex(index + 1);
+      }, 400);
+    };
+    audio.onerror = () => {
+      playSequenceFromIndex(index + 1);
+    };
+    audio.play().catch(() => stopSequence());
   }
 
   // Calculate estimated reading time
@@ -383,7 +708,7 @@ export function ScriptwritingStudio({
           </div>
         </div>
 
-        {/* Center: Screenplay Page Editor */}
+        {/* Center: Screenplay Page Editor, Audio Timeline, and Character Cast */}
         <CreativeSurface className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {activeScript && (
             <>
@@ -422,61 +747,79 @@ export function ScriptwritingStudio({
                 </div>
               </div>
 
-              {/* Screenplay Content Canvas */}
-              <div className="flex-1 space-y-4 overflow-y-auto p-6 font-mono text-xs sm:p-8">
-                {activeScript.content.scenes.map((block) => (
-                  <div
-                    key={block.id}
-                    className="group relative rounded-xl border border-transparent p-2 transition hover:border-border hover:bg-card/40"
-                  >
-                    {/* Slugline */}
-                    {block.type === "slugline" && (
-                      <input
-                        type="text"
-                        value={block.text}
-                        onChange={(e) =>
-                          handleUpdateBlock(block.id, { text: e.target.value })
-                        }
-                        className="w-full bg-transparent font-bold uppercase tracking-wider text-foreground focus:outline-none"
-                      />
-                    )}
+              {/* View Tabs */}
+              <div className="flex items-center gap-1 border-b border-border bg-surface-sunken/20 px-6 py-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("screenplay")}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                    activeTab === "screenplay"
+                      ? "bg-card text-foreground shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Screenplay Editor
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("timeline")}
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                    activeTab === "timeline"
+                      ? "bg-card text-foreground shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Icon name="voice" className="size-3.5" />
+                  <span>Story Audio Timeline</span>
+                  {dialogueBlocksWithAudio.length > 0 && (
+                    <span className="rounded-full bg-primary/15 px-1.5 py-0.2 text-[10px] font-bold text-primary">
+                      {dialogueBlocksWithAudio.length}
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("cast")}
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                    activeTab === "cast"
+                      ? "bg-card text-foreground shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Icon name="chat" className="size-3.5" />
+                  <span>Character Voice Cast</span>
+                  {characters.length > 0 && (
+                    <span className="rounded-full bg-primary/15 px-1.5 py-0.2 text-[10px] font-bold text-primary">
+                      {characters.length}
+                    </span>
+                  )}
+                </button>
+              </div>
 
-                    {/* Action Line */}
-                    {block.type === "action" && (
-                      <textarea
-                        rows={2}
-                        value={block.text}
-                        onChange={(e) =>
-                          handleUpdateBlock(block.id, { text: e.target.value })
-                        }
-                        className="w-full resize-none bg-transparent leading-relaxed text-foreground/90 focus:outline-none"
-                      />
-                    )}
-
-                    {/* Dialogue Line */}
-                    {block.type === "dialogue" && (
-                      <div className="mx-auto max-w-md space-y-1 text-center">
+              {/* View 1: Screenplay Editor Canvas */}
+              {activeTab === "screenplay" && (
+                <div className="flex-1 space-y-4 overflow-y-auto p-6 font-mono text-xs sm:p-8">
+                  {activeScript.content.scenes.map((block) => (
+                    <div
+                      key={block.id}
+                      className="group relative rounded-xl border border-transparent p-2 transition hover:border-border hover:bg-card/40"
+                    >
+                      {/* Slugline */}
+                      {block.type === "slugline" && (
                         <input
                           type="text"
-                          value={block.character || "CHARACTER"}
+                          value={block.text}
                           onChange={(e) =>
                             handleUpdateBlock(block.id, {
-                              character: e.target.value.toUpperCase(),
+                              text: e.target.value,
                             })
                           }
-                          className="w-full bg-transparent text-center font-bold uppercase text-primary focus:outline-none"
+                          className="w-full bg-transparent font-bold uppercase tracking-wider text-foreground focus:outline-none"
                         />
-                        <input
-                          type="text"
-                          value={block.parenthetical || ""}
-                          placeholder="(parenthetical)"
-                          onChange={(e) =>
-                            handleUpdateBlock(block.id, {
-                              parenthetical: e.target.value,
-                            })
-                          }
-                          className="w-full bg-transparent text-center text-[11px] italic text-muted-foreground focus:outline-none"
-                        />
+                      )}
+
+                      {/* Action Line */}
+                      {block.type === "action" && (
                         <textarea
                           rows={2}
                           value={block.text}
@@ -485,63 +828,548 @@ export function ScriptwritingStudio({
                               text: e.target.value,
                             })
                           }
-                          className="w-full resize-none bg-transparent text-center leading-relaxed text-foreground focus:outline-none"
+                          className="w-full resize-none bg-transparent leading-relaxed text-foreground/90 focus:outline-none"
                         />
+                      )}
 
-                        {/* Synthesize Button right on dialogue */}
-                        <div className="pt-1">
-                          <button
-                            onClick={() => setSynthesizingBlockId(block.id)}
-                            className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-0.5 text-[10px] font-semibold text-primary transition hover:bg-primary/20"
-                          >
-                            <Icon name="voice" className="size-3" />
-                            Synthesize Line (TTS 2.0)
-                          </button>
+                      {/* Dialogue Line */}
+                      {block.type === "dialogue" && (
+                        <div className="mx-auto max-w-md space-y-1 text-center font-sans">
+                          <input
+                            type="text"
+                            value={block.character || "CHARACTER"}
+                            onChange={(e) =>
+                              handleUpdateBlock(block.id, {
+                                character: e.target.value.toUpperCase(),
+                              })
+                            }
+                            className="w-full bg-transparent text-center font-bold uppercase text-primary focus:outline-none"
+                          />
+                          <input
+                            type="text"
+                            value={block.parenthetical || ""}
+                            placeholder="(parenthetical)"
+                            onChange={(e) =>
+                              handleUpdateBlock(block.id, {
+                                parenthetical: e.target.value,
+                              })
+                            }
+                            className="w-full bg-transparent text-center text-[11px] italic text-muted-foreground focus:outline-none"
+                          />
+                          <textarea
+                            rows={2}
+                            value={block.text}
+                            onChange={(e) =>
+                              handleUpdateBlock(block.id, {
+                                text: e.target.value,
+                              })
+                            }
+                            className="w-full resize-none bg-transparent text-center font-mono leading-relaxed text-foreground focus:outline-none"
+                          />
+
+                          {/* Inline Audio Player or Synthesize Button */}
+                          <div className="pt-1.5">
+                            {block.audioAssetId ? (
+                              <AudioWaveformPlayer
+                                src={`/api/assets/${block.audioAssetId}`}
+                                speakerName={block.character}
+                                voiceName="Seed TTS 2.0"
+                                className="mt-2"
+                              />
+                            ) : block.audioJobId ? (
+                              <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-[10px] font-medium text-primary">
+                                <span className="size-1.5 animate-ping rounded-full bg-primary" />
+                                <span>Synthesizing voice audio...</span>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setSynthesizingBlockId(block.id)}
+                                className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-0.5 text-[10px] font-semibold text-primary transition hover:bg-primary/20"
+                              >
+                                <Icon name="voice" className="size-3" />
+                                Synthesize Line (TTS 2.0)
+                              </button>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
 
-                    {/* Block Action Controls */}
-                    <div className="absolute top-2 right-2 hidden gap-1 opacity-80 group-hover:flex">
+                      {/* Block Action Controls */}
+                      <div className="absolute top-2 right-2 hidden gap-1 opacity-80 group-hover:flex">
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveBlock(block.id)}
+                          className="rounded p-1 text-destructive hover:bg-destructive/10"
+                          title="Remove Block"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Add Block Toolbar */}
+                  <div className="flex justify-center gap-2 border-t border-border/50 pt-4 font-sans">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => handleAddBlock("slugline")}
+                      className="text-xs"
+                    >
+                      + Scene Heading
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => handleAddBlock("action")}
+                      className="text-xs"
+                    >
+                      + Action
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => handleAddBlock("dialogue")}
+                      className="text-xs"
+                    >
+                      + Dialogue
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* View 2: Story Audio Timeline & Sequence Player */}
+              {activeTab === "timeline" && (
+                <div className="flex flex-1 flex-col overflow-hidden p-6 sm:p-8">
+                  {/* Master Sequencer Bar */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary/30 bg-primary/5 p-4">
+                    <div className="flex items-center gap-3">
                       <button
-                        onClick={() => handleRemoveBlock(block.id)}
-                        className="rounded p-1 text-destructive hover:bg-destructive/10"
-                        title="Remove Block"
+                        type="button"
+                        onClick={() => {
+                          if (isPlayingSequence) {
+                            stopSequence();
+                          } else {
+                            playSequenceFromIndex(0);
+                          }
+                        }}
+                        disabled={dialogueBlocksWithAudio.length === 0}
+                        className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition shadow-xs ${
+                          isPlayingSequence
+                            ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            : "bg-primary text-primary-foreground hover:bg-primary/90"
+                        } disabled:opacity-50`}
                       >
-                        ✕
+                        <Icon
+                          name={isPlayingSequence ? "activity" : "voice"}
+                          className="size-4"
+                        />
+                        <span>
+                          {isPlayingSequence
+                            ? "Stop Sequence"
+                            : "Play Full Story / Scene"}
+                        </span>
                       </button>
+
+                      {isPlayingSequence &&
+                        currentPlayingBlockIndex !== null && (
+                          <div className="flex items-center gap-2 text-xs font-semibold text-primary">
+                            <span className="size-2 animate-ping rounded-full bg-primary" />
+                            <span>
+                              Playing line {currentPlayingBlockIndex + 1} of{" "}
+                              {dialogueBlocksWithAudio.length}:{" "}
+                              {dialogueBlocksWithAudio[currentPlayingBlockIndex]
+                                ?.character || "Character"}
+                            </span>
+                          </div>
+                        )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      {/* Inter-Line Pause Pacing Selector */}
+                      <label className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-2.5 py-1 text-xs font-semibold text-foreground">
+                        <span className="text-muted-foreground">Pause:</span>
+                        <select
+                          value={interLinePause}
+                          onChange={(e) =>
+                            setInterLinePause(Number.parseFloat(e.target.value))
+                          }
+                          className="bg-transparent text-xs font-bold text-foreground focus:outline-none"
+                        >
+                          <option value="0.5">0.5s (Fast)</option>
+                          <option value="1.0">1.0s (Natural)</option>
+                          <option value="1.5">1.5s (Dramatic)</option>
+                          <option value="2.0">2.0s (Theatrical)</option>
+                        </select>
+                      </label>
+
+                      {/* Export Master Story Audio Button */}
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={handleExportMasterAudio}
+                        disabled={
+                          dialogueBlocksWithAudio.length === 0 ||
+                          isAssemblingAudio
+                        }
+                        className="gap-1.5 text-xs font-semibold shadow-xs"
+                      >
+                        {isAssemblingAudio ? (
+                          <>
+                            <span className="size-2 animate-ping rounded-full bg-primary-foreground" />
+                            <span>Assembling Story Audio...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Icon name="wand" className="size-3.5" />
+                            <span>Export Master Audio</span>
+                          </>
+                        )}
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={handleBatchSynthesize}
+                        disabled={isGenerating}
+                        className="gap-1.5 text-xs font-semibold"
+                      >
+                        <Icon name="voice" className="size-3.5" />
+                        <span>Synthesize All Lines</span>
+                      </Button>
                     </div>
                   </div>
-                ))}
 
-                {/* Add Block Toolbar */}
-                <div className="flex justify-center gap-2 border-t border-border/50 pt-4 font-sans">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => handleAddBlock("slugline")}
-                    className="text-xs"
-                  >
-                    + Scene Heading
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => handleAddBlock("action")}
-                    className="text-xs"
-                  >
-                    + Action
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => handleAddBlock("dialogue")}
-                    className="text-xs"
-                  >
-                    + Dialogue
-                  </Button>
+                  {/* Assembled Master Story Audio Card */}
+                  {assembledMasterAudio && (
+                    <div className="mt-4 rounded-2xl border border-primary/30 bg-primary/5 p-4 sm:p-5">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-sm font-bold text-foreground">
+                              Master Story Audio Track
+                            </h4>
+                            <StatusBadge tone="success">
+                              {assembledMasterAudio.totalClipsCount} dialogue
+                              lines merged
+                            </StatusBadge>
+                          </div>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Concatenated with {interLinePause}s inter-line
+                            pacing (Duration:{" "}
+                            {Math.round(assembledMasterAudio.durationSeconds)}
+                            s). Ready to download or persist to your Asset
+                            Library.
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={assembledMasterAudio.objectUrl}
+                            download={`${activeScript.title.toLowerCase().replace(/[^a-z0-9_-]/g, "-")}-master-story.wav`}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground transition hover:bg-muted"
+                          >
+                            <Icon
+                              name="upload"
+                              className="size-3.5 rotate-180"
+                            />
+                            <span>Download WAV</span>
+                          </a>
+
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={handleSaveMasterAudioToAssetLibrary}
+                            disabled={isSavingMasterAsset || masterAssetSaved}
+                            className="gap-1.5 text-xs font-semibold"
+                          >
+                            {masterAssetSaved ? (
+                              <>
+                                <Icon
+                                  name="check"
+                                  className="size-3.5 text-success"
+                                />
+                                <span>Saved to Library</span>
+                              </>
+                            ) : isSavingMasterAsset ? (
+                              <span>Saving Asset...</span>
+                            ) : (
+                              <>
+                                <Icon name="assets" className="size-3.5" />
+                                <span>Save to Asset Library</span>
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="mt-3.5">
+                        <AudioWaveformPlayer
+                          src={assembledMasterAudio.objectUrl}
+                          speakerName="Master Story Track"
+                          voiceName={`${interLinePause}s Pacing`}
+                          title={activeScript.title}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Assembly Error Notice */}
+                  {assembleError && (
+                    <div className="mt-3 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+                      {assembleError}
+                    </div>
+                  )}
+
+                  {/* Timeline Blocks */}
+                  <div className="mt-4 flex-1 space-y-3 overflow-y-auto pr-1">
+                    {activeScript.content.scenes.map((block, idx) => {
+                      const charName = (block.character || "")
+                        .toUpperCase()
+                        .trim();
+                      const assignedVoice =
+                        activeScript.content.voiceAssignments?.[charName];
+
+                      return (
+                        <div
+                          key={block.id}
+                          className={`flex items-start gap-4 rounded-xl border p-3.5 transition ${
+                            isPlayingSequence &&
+                            dialogueBlocksWithAudio[
+                              currentPlayingBlockIndex ?? -1
+                            ]?.id === block.id
+                              ? "border-primary bg-primary/10 shadow-md ring-2 ring-primary/30"
+                              : "border-border bg-card/60"
+                          }`}
+                        >
+                          <div className="grid size-7 shrink-0 place-items-center rounded-lg bg-surface-sunken text-xs font-bold text-muted-foreground">
+                            {idx + 1}
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            {block.type === "slugline" && (
+                              <div className="text-xs font-bold uppercase tracking-wider text-primary">
+                                {block.text}
+                              </div>
+                            )}
+
+                            {block.type === "action" && (
+                              <div className="text-xs italic text-muted-foreground">
+                                {block.text}
+                              </div>
+                            )}
+
+                            {block.type === "dialogue" && (
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-bold text-foreground">
+                                    {block.character || "CHARACTER"}
+                                  </span>
+                                  {block.parenthetical && (
+                                    <span className="text-[11px] italic text-muted-foreground">
+                                      ({block.parenthetical})
+                                    </span>
+                                  )}
+                                  <span className="flex items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                                    <Icon name="voice" className="size-2.5" />
+                                    <span>
+                                      {assignedVoice
+                                        ? VERIFIED_VOICES.find(
+                                            (v) =>
+                                              v.key === assignedVoice.voiceKey,
+                                          )?.name || assignedVoice.voiceKey
+                                        : "Jasper"}
+                                      {assignedVoice?.speechRate &&
+                                      assignedVoice.speechRate !== 1
+                                        ? ` (${assignedVoice.speechRate}x)`
+                                        : ""}
+                                    </span>
+                                  </span>
+                                </div>
+
+                                <p className="mt-1 text-xs leading-relaxed text-foreground/90">
+                                  &quot;{block.text}&quot;
+                                </p>
+
+                                <div className="mt-2.5">
+                                  {block.audioAssetId ? (
+                                    <AudioWaveformPlayer
+                                      src={`/api/assets/${block.audioAssetId}`}
+                                      speakerName={block.character}
+                                      voiceName="Seed TTS 2.0"
+                                      className="max-w-xl"
+                                    />
+                                  ) : block.audioJobId ? (
+                                    <div className="inline-flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-2.5 py-1 text-xs text-primary">
+                                      <span className="size-1.5 animate-ping rounded-full bg-primary" />
+                                      <span>
+                                        Synthesizing audio (Seed TTS 2.0)...
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleSynthesizeDialogue(block)
+                                      }
+                                      className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-0.5 text-[10px] font-semibold text-primary transition hover:bg-primary/20"
+                                    >
+                                      <Icon name="voice" className="size-3" />
+                                      Synthesize Line
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {/* View 3: Character Voice Cast Manager */}
+              {activeTab === "cast" && (
+                <div className="flex-1 overflow-y-auto p-6 sm:p-8">
+                  <div className="max-w-2xl">
+                    <Eyebrow>Character Voice Cast</Eyebrow>
+                    <h3 className="font-display mt-1 text-lg font-bold text-foreground">
+                      Assign Seed Speech Voices to Script Roles
+                    </h3>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Map each character to a distinct BytePlus Seed Speech TTS
+                      2.0 voice and playback speed. All dialogues for that
+                      character will automatically synthesize with the assigned
+                      voice.
+                    </p>
+
+                    {characters.length === 0 ? (
+                      <div className="mt-6 rounded-2xl border border-dashed border-border p-8 text-center">
+                        <Icon
+                          name="chat"
+                          className="mx-auto size-8 text-muted-foreground/50"
+                        />
+                        <h4 className="mt-2 text-sm font-semibold text-foreground">
+                          No characters found in script
+                        </h4>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Add dialogue blocks in the Screenplay Editor with
+                          character names (e.g. HAMED, LAYLA) to configure their
+                          voices.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="mt-6 space-y-4">
+                        {characters.map((charName) => {
+                          const assignment = activeScript.content
+                            .voiceAssignments?.[charName] || {
+                            voiceKey: "jasper",
+                            speechRate: 1.0,
+                          };
+                          const lineCount = activeScript.content.scenes.filter(
+                            (s) =>
+                              s.type === "dialogue" &&
+                              (s.character || "").toUpperCase().trim() ===
+                                charName,
+                          ).length;
+
+                          return (
+                            <div
+                              key={charName}
+                              className="rounded-2xl border border-border bg-card p-4 shadow-xs"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <h4 className="text-sm font-bold text-foreground">
+                                    {charName}
+                                  </h4>
+                                  <span className="text-[11px] text-muted-foreground">
+                                    {lineCount} dialogue{" "}
+                                    {lineCount === 1 ? "line" : "lines"}
+                                  </span>
+                                </div>
+                                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-bold text-primary">
+                                  {VERIFIED_VOICES.find(
+                                    (v) => v.key === assignment.voiceKey,
+                                  )?.gender === "Female"
+                                    ? "Female"
+                                    : "Male"}
+                                </span>
+                              </div>
+
+                              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                                <div>
+                                  <div className="flex items-center justify-between">
+                                    <label className="block text-xs font-semibold text-foreground">
+                                      Assigned Voice
+                                    </label>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        openCastingBoothForCharacter(charName)
+                                      }
+                                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
+                                    >
+                                      <Icon name="voice" className="size-3" />
+                                      <span>Audition in Booth →</span>
+                                    </button>
+                                  </div>
+                                  <select
+                                    value={assignment.voiceKey}
+                                    onChange={(e) =>
+                                      handleAssignVoice(
+                                        charName,
+                                        e.target.value,
+                                        assignment.speechRate ?? 1.0,
+                                      )
+                                    }
+                                    className="mt-1 w-full rounded-xl border border-border bg-surface-sunken p-2.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                                  >
+                                    {VERIFIED_VOICES.map((v) => (
+                                      <option key={v.key} value={v.key}>
+                                        {v.name} ({v.lang} • {v.style})
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                <div>
+                                  <label className="block text-xs font-semibold text-foreground">
+                                    Speech Rate ({assignment.speechRate ?? 1.0}
+                                    ×)
+                                  </label>
+                                  <select
+                                    value={String(assignment.speechRate ?? 1.0)}
+                                    onChange={(e) =>
+                                      handleAssignVoice(
+                                        charName,
+                                        assignment.voiceKey,
+                                        parseFloat(e.target.value),
+                                      )
+                                    }
+                                    className="mt-1 w-full rounded-xl border border-border bg-surface-sunken p-2.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                                  >
+                                    <option value="0.75">
+                                      0.75× (Deliberate)
+                                    </option>
+                                    <option value="1.0">1.0× (Normal)</option>
+                                    <option value="1.25">
+                                      1.25× (Energetic)
+                                    </option>
+                                    <option value="1.5">1.5× (Fast)</option>
+                                  </select>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </>
           )}
         </CreativeSurface>
@@ -659,9 +1487,9 @@ export function ScriptwritingStudio({
                       onChange={(e) => setSelectedVoice(e.target.value)}
                       className="mt-1 w-full rounded-xl border border-border bg-card p-2.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                     >
-                      {VOICES.map((v) => (
+                      {VERIFIED_VOICES.map((v) => (
                         <option key={v.key} value={v.key}>
-                          {v.name}
+                          {v.name} ({v.lang} • {v.style})
                         </option>
                       ))}
                     </select>
@@ -687,6 +1515,31 @@ export function ScriptwritingStudio({
             })()}
           </div>
         </div>
+      )}
+
+      {/* Voice Casting Booth Modal */}
+      {castingBoothOpen && castingCharacter && (
+        <VoiceCastingBooth
+          isOpen={castingBoothOpen}
+          onClose={() => setCastingBoothOpen(false)}
+          organizationId={organizationId}
+          characterName={castingCharacter}
+          currentVoiceKey={
+            activeScript?.content.voiceAssignments?.[castingCharacter]
+              ?.voiceKey || "jasper"
+          }
+          initialTestPhrase={castingInitialPhrase}
+          onSelectVoice={(chosenKey, chosenRate) => {
+            handleAssignVoice(
+              castingCharacter,
+              chosenKey,
+              chosenRate ??
+                activeScript?.content.voiceAssignments?.[castingCharacter]
+                  ?.speechRate ??
+                1.0,
+            );
+          }}
+        />
       )}
     </div>
   );

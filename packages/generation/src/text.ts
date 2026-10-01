@@ -357,8 +357,7 @@ export async function executeTextGeneration(
     (promptTokens ?? -1) >= 0 &&
     (completionTokens ?? -1) >= 0 &&
     (reportedTotalTokens ?? 0) > 0 &&
-    (reportedTotalTokens ?? 0) >=
-      (promptTokens ?? 0) + (completionTokens ?? 0);
+    (reportedTotalTokens ?? 0) >= (promptTokens ?? 0) + (completionTokens ?? 0);
 
   const unitQuantity = BigInt(price.unitQuantity ?? 1000);
   const fallbackBillableQuantity = Math.max(
@@ -381,7 +380,7 @@ export async function executeTextGeneration(
               ),
             ),
         ),
-    );
+      );
   const actualCost = price.providerCostMicroUsd * actualUnits;
   const configuredCredits = priceCredits({
     ...price,

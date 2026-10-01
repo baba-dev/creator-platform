@@ -10,6 +10,8 @@ import { ProcessFeedback } from "@/components/process/process-feedback";
 import { Button } from "@/components/ui/button";
 import { Eyebrow } from "@/components/ui/creative";
 import { StatusDot, Tape } from "@/components/ui/sketch";
+import { AudioWaveformPlayer } from "@/components/ui/audio-waveform-player";
+import { VoiceCastingBooth } from "@/components/ui/voice-casting-booth";
 import { announceGenerationStarted } from "@/lib/generation-activity";
 import {
   capabilityValues,
@@ -128,6 +130,7 @@ export function GenerationStudio({
   const [voiceText, setVoiceText] = useState("");
   const [voiceKey, setVoiceKey] = useState("jasper");
   const [speechRate, setSpeechRate] = useState(1.0);
+  const [isVoiceBoothOpen, setIsVoiceBoothOpen] = useState(false);
   const [quoteState, setQuoteState] = useState<{
     key: string;
     quote: StudioQuote;
@@ -1138,12 +1141,23 @@ export function GenerationStudio({
               </div>
 
               <div className={variant === "quick" ? "hidden" : "space-y-4"}>
-                <label
-                  htmlFor="voice-preset"
-                  className="block text-sm font-semibold text-foreground"
-                >
-                  Preset voice
-                </label>
+                <div className="flex items-center justify-between">
+                  <label
+                    htmlFor="voice-preset"
+                    className="block text-sm font-semibold text-foreground"
+                  >
+                    Preset voice
+                  </label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsVoiceBoothOpen(true)}
+                    className="text-xs font-semibold text-primary hover:text-primary/80"
+                  >
+                    Audition in Booth →
+                  </Button>
+                </div>
                 <select
                   id="voice-preset"
                   value={selectedVoiceKey}
@@ -1845,13 +1859,11 @@ export function GenerationStudio({
                           className="max-h-96 w-full rounded-xl bg-muted object-contain"
                         />
                       ) : asset.mimeType.startsWith("audio/") ? (
-                        <div className="rounded-xl border border-border bg-surface-sunken p-3">
-                          <audio
+                        <div className="mt-3">
+                          <AudioWaveformPlayer
                             src={`/api/assets/${asset.id}`}
-                            controls
-                            preload="metadata"
-                            aria-label={`Generated voice from ${job.providerModel.displayName}`}
-                            className="w-full"
+                            voiceName={job.providerModel.displayName}
+                            title={`${job.providerModel.displayName} Speech`}
                           />
                         </div>
                       ) : (
@@ -1923,6 +1935,20 @@ export function GenerationStudio({
           </div>
         ) : null}
       </div>
+
+      {isVoiceBoothOpen ? (
+        <VoiceCastingBooth
+          isOpen={isVoiceBoothOpen}
+          onClose={() => setIsVoiceBoothOpen(false)}
+          onSelectVoice={(key, rate) => {
+            setVoiceKey(key);
+            if (rate) setSpeechRate(rate);
+          }}
+          currentVoiceKey={selectedVoiceKey}
+          organizationId={organizationId}
+          initialTestPhrase={voiceText}
+        />
+      ) : null}
     </section>
   );
 }

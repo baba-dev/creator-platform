@@ -21,6 +21,10 @@ import {
 import { requireMembership } from "./index";
 import { issueProviderMediaGrant } from "./provider-media-grant";
 import {
+  calculateSpeechTrialUsage,
+  logSpeechTrialTelemetry,
+} from "./speech-trial";
+import {
   downloadImage,
   downloadVideo,
   ImageStorageError,
@@ -1256,10 +1260,12 @@ async function finalizeVoiceJob(
   },
   stored: { byteSize: bigint; sha256: string },
 ) {
+  let finalBillableQuantity: number | null = null;
   await db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM GenerationJob WHERE id = ${id} FOR UPDATE`;
     const current = await tx.generationJob.findUniqueOrThrow({ where: { id } });
     if (current.status !== "PROCESSING") return;
+    finalBillableQuantity = current.billableQuantity;
     const wallet = await tx.wallet.findUniqueOrThrow({
       where: { organizationId: job.organizationId },
     });
@@ -1321,4 +1327,13 @@ async function finalizeVoiceJob(
       await enqueueGenerationSuccess(tx, { ...job, id }, asset.id);
     }
   });
+
+  if (typeof finalBillableQuantity === "number") {
+    try {
+      const trialUsage = await calculateSpeechTrialUsage();
+      logSpeechTrialTelemetry(id, finalBillableQuantity, trialUsage);
+    } catch {
+      // Non-fatal telemetry logging
+    }
+  }
 }

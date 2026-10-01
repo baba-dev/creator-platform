@@ -66,11 +66,13 @@ export function ImageEditor({
   organizationId,
   organizationSlug,
   canEdit,
+  canGenerate,
   initialAssetId,
 }: {
   organizationId: string;
   organizationSlug: string;
   canEdit: boolean;
+  canGenerate: boolean;
   initialAssetId?: string;
 }) {
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -275,7 +277,7 @@ export function ImageEditor({
   }, [layers, workspaceMode, canvasWidth, canvasHeight]);
 
   useEffect(() => {
-    if (!selected || !canEdit || workspaceMode !== "ai") {
+    if (!selected || !canGenerate || workspaceMode !== "ai") {
       setAiQuote(null);
       setAiQuotePending(false);
       setAiQuoteError(null);
@@ -339,7 +341,7 @@ export function ImageEditor({
   }, [
     aiRatio,
     aiResolution,
-    canEdit,
+    canGenerate,
     organizationId,
     selected,
     workspaceMode,
@@ -418,7 +420,7 @@ export function ImageEditor({
 
   // Submit AI precision edit with Seedream 5.0 Pro.
   async function submitAiEdit() {
-    if (!selected || aiBusy || !canEdit) return;
+    if (!selected || aiBusy || !canGenerate) return;
     setAiBusy(true);
     setAiError(null);
     setAiSuccessJobId(null);
@@ -1148,7 +1150,7 @@ export function ImageEditor({
                 disabled={
                   !selected ||
                   aiBusy ||
-                  !canEdit ||
+                  !canGenerate ||
                   aiQuotePending ||
                   aiQuote?.canAfford === false ||
                   aiQuote?.canSpend === false

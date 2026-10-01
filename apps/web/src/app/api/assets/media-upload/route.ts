@@ -8,7 +8,7 @@ import {
   finalizeUploadedAsset,
   inspectAssetUpload,
 } from "@aiwa/assets";
-import { probeUploadedMedia } from "@aiwa/assets/media-probe";
+import { inspectAndProbeUploadedMedia } from "@aiwa/assets/media-probe";
 import { createAssetObjectKey, LocalAssetStorage } from "@aiwa/assets/storage";
 import { parseServerEnv } from "@aiwa/config";
 import { db } from "@aiwa/db";
@@ -98,10 +98,11 @@ export async function POST(request: Request) {
     if (!["VIDEO", "AUDIO"].includes(inspected.mediaKind))
       throw new Error("Choose an MP4, MP3 or WAV file.");
     assertUploadSize(inspected.mediaKind, BigInt(bytes));
-    const media = await probeUploadedMedia(
+    const media = await inspectAndProbeUploadedMedia({
       path,
-      inspected.mediaKind as "VIDEO" | "AUDIO",
-    );
+      kind: inspected.mediaKind,
+      extension: inspected.extension,
+    });
     const objectKey = createAssetObjectKey(organizationId, inspected.extension);
     pending = await db.$transaction((tx) =>
       createPendingUpload(tx, {

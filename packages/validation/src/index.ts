@@ -119,6 +119,7 @@ export const userPlatformRoleFilterSchema = z.enum([
   "PLATFORM_OWNER",
 ]);
 export const userSearchSchema = paginationSchema.extend({
+  cursor: userRecordIdSchema.optional(),
   search: z.string().trim().max(120).default(""),
   status: userStatusFilterSchema.default("all"),
   role: userPlatformRoleFilterSchema.default("all"),

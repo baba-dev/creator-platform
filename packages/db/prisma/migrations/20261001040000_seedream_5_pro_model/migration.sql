@@ -70,7 +70,7 @@ SELECT
   'byteplusseedream5proprice20261001',
   model.`id`,
   40500,
-  'Verified AIWA BytePlus Seedream 5.0 Pro rate: 10% discount; base is <=1.5K output. 2K is 2x and additional inputs after the first are 1/15th of base.',
+  'Verified AIWA BytePlus Seedream 5.0 Pro rate: 10% discount, with base at <=1.5K output. 2K is 2x and additional inputs after the first are 1/15th of base.',
   22,
   769,
   2,

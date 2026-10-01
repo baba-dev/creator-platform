@@ -17,11 +17,19 @@ import {
 import { VERIFIED_BYTEPLUS_MODELS } from "@aiwa/providers/byteplus";
 import { z } from "zod";
 import { resolvePresetVoice, VoiceResolutionError } from "./voices";
+import {
+  normalizeVideoRequest,
+  validateVideoModelRequest,
+  videoRequestSchema,
+  type VideoRequestV2,
+  type VideoSourceRole,
+} from "./video-contract";
 
 export * from "./voices";
 export * from "./reconciliation";
 export * from "./cancel";
 export * from "./quote-contract";
+export * from "./video-contract";
 import { verifyGenerationQuote, quoteParameters } from "./quote-contract";
 
 export const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
@@ -60,46 +68,6 @@ export const imageRequestSchema = z
       }),
   })
   .strict();
-
-export const videoRequestSchema = z
-  .object({
-    organizationId: z.string().min(1).max(100),
-    projectId: z.string().min(1).max(100).nullable().optional(),
-    modelId: z.string().min(1).max(100),
-    priceVersionId: z.string().min(1).max(100),
-    quoteToken: z.string().min(1).max(2048).optional(),
-    idempotencyKey: z.uuid(),
-    templateId: z.string().min(1).max(100).optional(),
-    prompt: z.string().trim().min(1).max(2000),
-    aspectRatio: z.enum(["16:9", "9:16", "1:1", "4:3", "3:4", "adaptive"]),
-    resolution: z.enum(["720p", "1080p"]).default("1080p"),
-    durationSeconds: z.number().int().min(1).max(30),
-    generateAudio: z.boolean().default(false),
-    firstFrameAssetId: z.string().min(1).max(100).optional(),
-    lastFrameAssetId: z.string().min(1).max(100).optional(),
-    referenceVideoAssetId: z.string().min(1).max(100).optional(),
-  })
-  .strict()
-  .refine((value) => !value.lastFrameAssetId || value.firstFrameAssetId, {
-    path: ["lastFrameAssetId"],
-    message: "Choose a first frame before a last frame.",
-  })
-  .refine(
-    (value) =>
-      !value.referenceVideoAssetId ||
-      (!value.firstFrameAssetId && !value.lastFrameAssetId),
-    {
-      path: ["referenceVideoAssetId"],
-      message: "Choose reference video or image frames.",
-    },
-  )
-  .refine(
-    (value) => !value.firstFrameAssetId || value.aspectRatio === "adaptive",
-    {
-      path: ["aspectRatio"],
-      message: "Image-to-video uses the source image ratio.",
-    },
-  );
 
 export const voiceRequestSchema = z
   .object({

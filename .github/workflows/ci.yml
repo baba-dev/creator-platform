@@ -118,12 +118,12 @@ jobs:
           test "$noto_version" != "(none)"
           version_key="$(printf '%s-%s' "$ffmpeg_version" "$noto_version" | tr ':~+/' '____')"
           echo "key=media-debs-${RUNNER_OS}-ubuntu-22.04-${version_key}" >> "$GITHUB_OUTPUT"
-          mkdir -p "$RUNNER_TEMP/apt-archives/partial"
+          mkdir -p "$GITHUB_WORKSPACE/.ci-cache/apt-archives/partial"
 
       - name: Restore media package cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ${{ runner.temp }}/apt-archives
+          path: ${{ github.workspace }}/.ci-cache/apt-archives
           key: ${{ steps.media-package-cache.outputs.key }}
 
       - name: Install media tools
@@ -136,8 +136,10 @@ jobs:
             apt_cmd=apt-get
           fi
 
-          apt_archives="$RUNNER_TEMP/apt-archives"
+          apt_archives="$GITHUB_WORKSPACE/.ci-cache/apt-archives"
           mkdir -p "$apt_archives/partial"
+          sudo chown _apt:root "$apt_archives/partial"
+          sudo chmod 0700 "$apt_archives/partial"
 
           install_media_tools() {
             sudo env DEBIAN_FRONTEND=noninteractive "$apt_cmd" \
@@ -156,6 +158,12 @@ jobs:
 
           ffmpeg -version >/dev/null
           fc-match "Noto Sans" >/dev/null
+
+          # Cache only immutable package payloads. APT's lock/partial entries are
+          # runtime state and may be root-only, which prevents actions/cache from
+          # archiving the directory during its post-job save.
+          sudo rm -rf "$apt_archives/lock" "$apt_archives/partial"
+          sudo chown -R "$(id -u):$(id -g)" "$apt_archives"
 
       - name: Generate Prisma client
         run: pnpm db:generate

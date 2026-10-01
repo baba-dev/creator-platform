@@ -13,7 +13,15 @@ const brandGenerateSchema = z.object({
   industry: z.string().max(100).optional(),
   vision: z.string().max(1000).optional(),
   targetMarket: z.string().max(200).optional(),
-  modelId: z.string().optional(),
+  modelId: z.string().min(1).max(100).optional(),
+});
+
+const generatedBrandProfileSchema = z.object({
+  tagline: z.string().max(200).default(""),
+  voiceTone: z.string().max(1000).default(""),
+  guidelines: z.string().max(5000).default(""),
+  targetAudience: z.string().max(1000).default(""),
+  vocabulary: z.array(z.string().min(1).max(100)).max(50).default([]),
 });
 
 const BRAND_STRATEGIST_SYSTEM_PROMPT = `You are an elite Brand Strategist and Creative Identity Architect.
@@ -65,6 +73,7 @@ export async function POST(request: Request) {
     const now = new Date();
     let model = await db.providerModel.findFirst({
       where: {
+        provider: "BYTEPLUS",
         providerModelId: preferredModel,
         mediaKind: "TEXT",
         enabled: true,
@@ -83,7 +92,7 @@ export async function POST(request: Request) {
 
     if (!model || !model.priceVersions[0]) {
       model = await db.providerModel.findFirst({
-        where: { mediaKind: "TEXT", enabled: true },
+        where: { provider: "BYTEPLUS", mediaKind: "TEXT", enabled: true },
         include: {
           priceVersions: {
             where: {
@@ -129,7 +138,7 @@ ${input.targetMarket ? `Target Market: ${input.targetMarket}` : ""}`;
         .replace(/^```json\s*/i, "")
         .replace(/```\s*$/i, "")
         .trim();
-      parsedResult = JSON.parse(cleanJson);
+      parsedResult = generatedBrandProfileSchema.parse(JSON.parse(cleanJson));
     } catch {
       parsedResult = {
         tagline: "",

@@ -225,6 +225,7 @@ export function CharacterChatWorkspace({
     }
 
     const userText = inputText.trim();
+    const clientRequestId = crypto.randomUUID();
     setInputText("");
     setIsSending(true);
 
@@ -246,6 +247,7 @@ export function CharacterChatWorkspace({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             content: userText,
+            idempotencyKey: clientRequestId,
           }),
         },
       );

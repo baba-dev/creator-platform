@@ -1,5 +1,8 @@
 import { addMember } from "@aiwa/organizations";
-import { attachUserMembershipSchema, cuidSchema } from "@aiwa/validation";
+import {
+  attachUserMembershipSchema,
+  userRecordIdSchema,
+} from "@aiwa/validation";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { organizationError } from "@/lib/organization-api";
@@ -23,7 +26,7 @@ export async function POST(
   }
 
   const { userId } = await params;
-  if (!cuidSchema.safeParse(userId).success) {
+  if (!userRecordIdSchema.safeParse(userId).success) {
     return NextResponse.json({ error: "User not found." }, { status: 404 });
   }
 

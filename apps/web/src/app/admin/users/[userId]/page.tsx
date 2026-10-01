@@ -13,6 +13,7 @@ import {
   UserAccessActions,
   UserPlatformRoleForm,
 } from "@/components/admin/user-actions";
+import { UserPasswordResetForm } from "@/components/admin/user-credential-forms";
 import { StatusBadge } from "@/components/admin/primitives";
 import { formatBinaryBytes } from "@/lib/format-bytes";
 import { requirePlatformPermission } from "@/lib/request-auth";
@@ -212,6 +213,14 @@ export default async function AdminUserDetailPage({
             isSelf={isSelf}
             canManage={canManageUsers}
             canVerifyEmail={isPlatformOwner}
+          />
+
+          <UserPasswordResetForm
+            userId={user.id}
+            userName={user.name}
+            targetRole={user.platformRole}
+            canManage={canManageUsers}
+            isPlatformOwner={isPlatformOwner}
           />
 
           {/* Active Sessions List */}

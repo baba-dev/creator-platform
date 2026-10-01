@@ -1,5 +1,5 @@
 import { setUserEmailVerified } from "@aiwa/organizations";
-import { cuidSchema } from "@aiwa/validation";
+import { userRecordIdSchema } from "@aiwa/validation";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -45,7 +45,7 @@ export async function POST(
   }
 
   const { userId } = await params;
-  if (!cuidSchema.safeParse(userId).success) {
+  if (!userRecordIdSchema.safeParse(userId).success) {
     return NextResponse.json({ error: "User not found." }, { status: 404 });
   }
 

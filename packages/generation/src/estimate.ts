@@ -156,11 +156,15 @@ export async function estimateAuthorizedGeneration(
       typeof caps.maxGeneratedImages === "number" ? caps.maxGeneratedImages : 1;
     const maxReferences =
       typeof caps.maxReferenceImages === "number" ? caps.maxReferenceImages : 0;
+    const maxTotalImages =
+      typeof caps.maxTotalInputOutputImages === "number"
+        ? caps.maxTotalInputOutputImages
+        : maxOutput;
     if (
       (referenceIds.length > 0 && caps.referenceImages !== true) ||
       units > maxOutput ||
       referenceIds.length > maxReferences ||
-      units + referenceIds.length > 15 ||
+      units + referenceIds.length > maxTotalImages ||
       new Set(referenceIds).size !== referenceIds.length
     )
       throw new QuoteValidationError(

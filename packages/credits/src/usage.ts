@@ -120,6 +120,83 @@ export function quoteImageOutputs(
   };
 }
 
+const SEEDREAM_5_PRO_IDS = new Set([
+  "dola-seedream-5-0-pro-260628",
+  "seedream-5-0-pro-260628",
+  "seedream-5-0-pro",
+]);
+
+export function getImageGenerationProviderCostMicroUsd(params: {
+  providerModelId: string;
+  baseCostMicroUsd: bigint;
+  resolution?: string;
+  outputCount: number;
+  referenceImageCount?: number;
+}): bigint {
+  if (
+    !Number.isSafeInteger(params.outputCount) ||
+    params.outputCount < 1 ||
+    params.outputCount > 15
+  ) {
+    throw new RangeError("Invalid image count.");
+  }
+
+  const references = params.referenceImageCount ?? 0;
+  if (
+    !Number.isSafeInteger(references) ||
+    references < 0 ||
+    references > 14
+  ) {
+    throw new RangeError("Invalid reference image count.");
+  }
+
+  if (!SEEDREAM_5_PRO_IDS.has(params.providerModelId)) {
+    return params.baseCostMicroUsd * BigInt(params.outputCount);
+  }
+  if (params.outputCount !== 1) {
+    throw new RangeError(
+      "Seedream 5.0 Pro supports one generated image per request.",
+    );
+  }
+
+  const resolution = params.resolution ?? "2K";
+  if (resolution !== "1K" && resolution !== "1.5K" && resolution !== "2K") {
+    throw new RangeError("Unsupported Seedream 5.0 Pro resolution.");
+  }
+
+  // The active price version stores the discounted <=1.5K output rate.
+  // BytePlus prices 2K at 2x that rate and each additional input image
+  // after the first at 1/15th of the <=1.5K output rate.
+  const outputCost =
+    resolution === "2K"
+      ? params.baseCostMicroUsd * 2n
+      : params.baseCostMicroUsd;
+  const extraReferenceCount = BigInt(Math.max(0, references - 1));
+  const referenceUnitCost = (params.baseCostMicroUsd + 14n) / 15n;
+  return outputCost + referenceUnitCost * extraReferenceCount;
+}
+
+export function quoteImageGeneration(
+  price: PriceSnapshot,
+  params: {
+    providerModelId: string;
+    resolution?: string;
+    outputCount: number;
+    referenceImageCount?: number;
+  },
+): CreditQuote {
+  return quoteSnapshotCost(
+    price,
+    getImageGenerationProviderCostMicroUsd({
+      providerModelId: params.providerModelId,
+      baseCostMicroUsd: price.providerCostMicroUsd,
+      resolution: params.resolution,
+      outputCount: params.outputCount,
+      referenceImageCount: params.referenceImageCount,
+    }),
+  );
+}
+
 /** Size estimate; provider completion_tokens remains the settlement authority. */
 export function estimateVideoTokens(params: {
   resolution: string;
@@ -181,6 +258,7 @@ export function estimateGeneration(params: {
   aspectRatio?: string;
   generateAudio?: boolean;
   inputDurationMs?: number;
+  referenceImageCount?: number;
 }): GenerationEstimate {
   const { price } = params;
   let quote: CreditQuote;
@@ -281,7 +359,12 @@ export function estimateGeneration(params: {
       }
     }
   } else if (params.mediaKind === "IMAGE") {
-    quote = quoteImageOutputs(price, units);
+    quote = quoteImageGeneration(price, {
+      providerModelId: params.providerModelId,
+      resolution: params.resolution,
+      outputCount: units,
+      referenceImageCount: params.referenceImageCount,
+    });
     reservation = quote;
   } else {
     if (price.pricingDimension === "TOKEN")

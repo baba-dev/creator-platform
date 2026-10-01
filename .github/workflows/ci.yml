@@ -37,6 +37,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --prefer-offline
 
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
       - name: Check deployment shell syntax
         run: |
           bash -n infra/deploy/bootstrap-server.sh

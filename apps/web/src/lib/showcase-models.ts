@@ -16,6 +16,18 @@ export type ShowcaseModel = {
 
 export const showcaseModels: readonly ShowcaseModel[] = [
   {
+    id: "seedream-5-pro",
+    kind: "image",
+    name: "Seedream 5.0 Pro",
+    provider: "BytePlus",
+    description:
+      "High-quality generation and coordinate-guided precision editing with multi-image references.",
+    badge: "Precision",
+    demoRate: "from 22 credits / image",
+    demoCredits: "22",
+    latency: "Provider-dependent",
+  },
+  {
     id: "seedream-5-lite",
     kind: "image",
     name: "Seedream 5.0 Lite",

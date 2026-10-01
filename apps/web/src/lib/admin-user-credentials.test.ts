@@ -22,7 +22,12 @@ const mocks = vi.hoisted(() => {
 
   return {
     tx,
-    db: { $transaction: vi.fn() },
+    db: {
+      $transaction: vi.fn(),
+      user: {
+        findUnique: vi.fn(),
+      },
+    },
     hashPassword: vi.fn(),
     enqueueMail: vi.fn(),
     securityEventEmail: vi.fn(),
@@ -52,7 +57,7 @@ describe("admin user credential service", () => {
     mocks.hashPassword.mockResolvedValue("hashed-value");
     mocks.tx.$queryRaw.mockResolvedValue([]);
     mocks.tx.session.deleteMany.mockResolvedValue({ count: 2 });
-    mocks.tx.auditEvent.create.mockResolvedValue({});
+    mocks.tx.auditEvent.create.mockResolvedValue({ id: "audit-1" });
     mocks.enqueueMail.mockResolvedValue({ id: "mail-1", created: true });
     mocks.securityEventEmail.mockReturnValue({ kind: "SECURITY" });
   });
@@ -90,9 +95,8 @@ describe("admin user credential service", () => {
   });
 
   it("does not let platform admins reset privileged account credentials", async () => {
-    mocks.tx.user.findUnique.mockResolvedValue({
+    mocks.db.user.findUnique.mockResolvedValue({
       id: "cm123456789012345678901234",
-      email: "owner@example.test",
       platformRole: "PLATFORM_OWNER",
     });
 
@@ -109,6 +113,10 @@ describe("admin user credential service", () => {
   });
 
   it("updates the credential, revokes sessions, audits, and enqueues security mail", async () => {
+    mocks.db.user.findUnique.mockResolvedValue({
+      id: "cm123456789012345678901234",
+      platformRole: "USER",
+    });
     mocks.tx.user.findUnique.mockResolvedValue({
       id: "cm123456789012345678901234",
       email: "user@example.test",

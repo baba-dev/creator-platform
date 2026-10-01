@@ -725,8 +725,12 @@ export async function withStorageAllocation<T>(input: {
   return db.$transaction(
     async (transaction) => {
       await lockedOrganization(transaction, input.organizationId);
-      const [memberAssets, memberVariants, organizationAssets, organizationVariants] =
-        await Promise.all([
+      const [
+        memberAssets,
+        memberVariants,
+        organizationAssets,
+        organizationVariants,
+      ] = await Promise.all([
           transaction.asset.aggregate({
             where: {
               organizationId: input.organizationId,

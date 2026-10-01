@@ -226,7 +226,7 @@ export const PRICING_DIMENSIONS_BY_MEDIA_KIND: Record<
   VIDEO: ["SECOND", "REQUEST", "TOKEN"],
   VOICE: ["CHARACTER", "REQUEST"],
   REASONING: ["REQUEST"],
-  TEXT: ["TOKEN", "REQUEST"],
+  TEXT: ["TOKEN"],
 } as const;
 
 export function isPricingDimensionSupportedForMedia(

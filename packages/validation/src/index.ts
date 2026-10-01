@@ -251,7 +251,14 @@ export function assertPricingDimensionMatchesMediaKind(
   }
 }
 
-export const usageRatesSchema = z
+const positiveRateStringSchema = z
+  .string()
+  .regex(/^\d{1,19}$/)
+  .refine(
+    (value) => BigInt(value) > 0n && BigInt(value) <= MAX_SIGNED_BIGINT,
+  );
+
+const videoUsageRatesSchema = z
   .object({
     estimator: z.literal("byteplus-video-v1"),
     rates: z
@@ -260,13 +267,7 @@ export const usageRatesSchema = z
           .object({
             resolution: z.enum(["480p", "720p", "1080p", "4K"]),
             workflow: z.enum(["GENERATE", "VIDEO_INPUT"]),
-            microUsdPerThousandTokens: z
-              .string()
-              .regex(/^\d{1,19}$/)
-              .refine(
-                (value) =>
-                  BigInt(value) > 0n && BigInt(value) <= MAX_SIGNED_BIGINT,
-              ),
+            microUsdPerThousandTokens: positiveRateStringSchema,
           })
           .strict(),
       )
@@ -280,6 +281,38 @@ export const usageRatesSchema = z
         .size === value.rates.length,
     "Duplicate rate selector.",
   );
+
+const textUsageRatesSchema = z
+  .object({
+    estimator: z.literal("byteplus-text-v1"),
+    tiers: z
+      .array(
+        z
+          .object({
+            maxPromptTokens: z.number().int().positive().max(1_048_576),
+            inputMicroUsdPerMillionTokens: positiveRateStringSchema,
+            outputMicroUsdPerMillionTokens: positiveRateStringSchema,
+            cachedInputMicroUsdPerMillionTokens: positiveRateStringSchema.optional(),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(4),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      value.tiers.every(
+        (tier, index) =>
+          index === 0 || tier.maxPromptTokens > value.tiers[index - 1]!.maxPromptTokens,
+      ),
+    "Text pricing tiers must be strictly increasing.",
+  );
+
+export const usageRatesSchema = z.discriminatedUnion("estimator", [
+  videoUsageRatesSchema,
+  textUsageRatesSchema,
+]);
 
 export const publishPriceVersionSchema = z.object({
   idempotencyKey: z.uuid().optional(),
@@ -316,7 +349,7 @@ export const publishPriceVersionSchema = z.object({
 export const quoteRequestSchema = z.object({
   organizationId: cuidSchema,
   modelId: z.string().trim().min(1).max(128),
-  units: z.coerce.number().int().positive().max(15).default(1),
+  units: z.coerce.number().int().positive().max(32_768).default(1),
   billableQuantity: z.coerce
     .number()
     .int()
@@ -637,6 +670,7 @@ export const chatMessageCreateSchema = z
   .object({
     content: z.string().trim().min(1).max(8000),
     idempotencyKey: idempotencyKeySchema.optional(),
+    autoVoice: z.boolean().default(false),
   })
   .strict();
 
@@ -647,12 +681,25 @@ const scriptSceneSchema = z
     character: z.string().trim().max(100).optional(),
     parenthetical: z.string().trim().max(200).optional(),
     text: z.string().trim().min(1).max(8000),
+    audioJobId: cuidSchema.optional(),
+    voiceKey: z.string().trim().min(1).max(100).optional(),
   })
   .strict();
 
 const scriptContentSchema = z
   .object({
     scenes: z.array(scriptSceneSchema).max(500),
+    voiceAssignments: z
+      .record(
+        z.string().trim().min(1).max(100),
+        z
+          .object({
+            voiceKey: z.string().trim().min(1).max(100),
+            speechRate: z.number().min(0.5).max(2).optional(),
+          })
+          .strict(),
+      )
+      .optional(),
   })
   .strict();
 

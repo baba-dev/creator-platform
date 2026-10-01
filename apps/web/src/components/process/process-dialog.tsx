@@ -81,11 +81,7 @@ export function ProcessDialog({
     <div
       className="fixed inset-0 z-[80] grid place-items-center bg-foreground/15 p-4 backdrop-blur-[3px]"
       onMouseDown={(event) => {
-        if (
-          allowDismiss &&
-          event.target === event.currentTarget &&
-          onDismiss
-        ) {
+        if (allowDismiss && event.target === event.currentTarget && onDismiss) {
           onDismiss();
         }
       }}

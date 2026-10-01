@@ -731,45 +731,45 @@ export async function withStorageAllocation<T>(input: {
         organizationAssets,
         organizationVariants,
       ] = await Promise.all([
-          transaction.asset.aggregate({
-            where: {
+        transaction.asset.aggregate({
+          where: {
+            organizationId: input.organizationId,
+            storageOwnerUserId: input.storageOwnerUserId,
+            status: {
+              in: ["PENDING", "READY", "QUARANTINED", "DELETED", "PURGING"],
+            },
+          },
+          _sum: { byteSize: true },
+        }),
+        transaction.assetVariant.aggregate({
+          where: {
+            asset: {
               organizationId: input.organizationId,
               storageOwnerUserId: input.storageOwnerUserId,
-              status: {
-                in: ["PENDING", "READY", "QUARANTINED", "DELETED", "PURGING"],
-              },
+              status: { in: ["READY", "QUARANTINED", "DELETED", "PURGING"] },
             },
-            _sum: { byteSize: true },
-          }),
-          transaction.assetVariant.aggregate({
-            where: {
-              asset: {
-                organizationId: input.organizationId,
-                storageOwnerUserId: input.storageOwnerUserId,
-                status: { in: ["READY", "QUARANTINED", "DELETED", "PURGING"] },
-              },
+          },
+          _sum: { byteSize: true },
+        }),
+        transaction.asset.aggregate({
+          where: {
+            organizationId: input.organizationId,
+            status: {
+              in: ["PENDING", "READY", "QUARANTINED", "DELETED", "PURGING"],
             },
-            _sum: { byteSize: true },
-          }),
-          transaction.asset.aggregate({
-            where: {
+          },
+          _sum: { byteSize: true },
+        }),
+        transaction.assetVariant.aggregate({
+          where: {
+            asset: {
               organizationId: input.organizationId,
-              status: {
-                in: ["PENDING", "READY", "QUARANTINED", "DELETED", "PURGING"],
-              },
+              status: { in: ["READY", "QUARANTINED", "DELETED", "PURGING"] },
             },
-            _sum: { byteSize: true },
-          }),
-          transaction.assetVariant.aggregate({
-            where: {
-              asset: {
-                organizationId: input.organizationId,
-                status: { in: ["READY", "QUARANTINED", "DELETED", "PURGING"] },
-              },
-            },
-            _sum: { byteSize: true },
-          }),
-        ]);
+          },
+          _sum: { byteSize: true },
+        }),
+      ]);
       const memberUsed =
         (memberAssets._sum.byteSize ?? 0n) +
         (memberVariants._sum.byteSize ?? 0n);

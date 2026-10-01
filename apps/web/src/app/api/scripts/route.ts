@@ -46,6 +46,7 @@ export async function GET(request: Request) {
       createdBy: { select: { id: true, name: true } },
     },
     orderBy: { updatedAt: "desc" },
+    take: 25,
   });
 
   return NextResponse.json(

@@ -87,6 +87,28 @@ export async function POST(request: Request) {
       );
     }
 
+    const model = await db.providerModel.findFirst({
+      where: {
+        provider: "BYTEPLUS",
+        providerModelId: input.modelId,
+        mediaKind: "TEXT",
+        enabled: true,
+        priceVersions: {
+          some: {
+            effectiveFrom: { lte: new Date() },
+            OR: [{ effectiveTo: null }, { effectiveTo: { gt: new Date() } }],
+          },
+        },
+      },
+      select: { id: true },
+    });
+    if (!model) {
+      return NextResponse.json(
+        { error: "Selected text model is unavailable or has no active pricing." },
+        { status: 400 },
+      );
+    }
+
     const persona = await db.persona.create({
       data: {
         organizationId: input.organizationId,

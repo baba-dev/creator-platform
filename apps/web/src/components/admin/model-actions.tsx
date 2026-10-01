@@ -213,8 +213,7 @@ export function ModelActions({
               const outputPerMillion = BigInt(
                 tier.outputMicroUsdPerMillionTokens || "0",
               );
-              const perThousand =
-                (outputPerMillion + 999n) / 1000n;
+              const perThousand = (outputPerMillion + 999n) / 1000n;
               return perThousand > highest ? perThousand : highest;
             }, 0n)
           : 0n;

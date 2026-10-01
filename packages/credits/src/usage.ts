@@ -118,9 +118,7 @@ export function parseTextUsageRates(value: unknown): TextUsageRates {
     previousMax = maxPromptTokens;
     return {
       maxPromptTokens,
-      inputMicroUsdPerMillionTokens: String(
-        row.inputMicroUsdPerMillionTokens,
-      ),
+      inputMicroUsdPerMillionTokens: String(row.inputMicroUsdPerMillionTokens),
       outputMicroUsdPerMillionTokens: String(
         row.outputMicroUsdPerMillionTokens,
       ),

@@ -104,7 +104,9 @@ export async function POST(request: Request) {
     });
     if (!model) {
       return NextResponse.json(
-        { error: "Selected text model is unavailable or has no active pricing." },
+        {
+          error: "Selected text model is unavailable or has no active pricing.",
+        },
         { status: 400 },
       );
     }

@@ -139,8 +139,7 @@ export function CharacterChatWorkspace({
       ?.id ??
     textModels[0]?.id ??
     "";
-  const [selectedModel, setSelectedModel] =
-    useState<string>(defaultTextModel);
+  const [selectedModel, setSelectedModel] = useState<string>(defaultTextModel);
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -466,9 +465,12 @@ export function CharacterChatWorkspace({
         // A transient refresh failure should not terminate voice progress.
       }
 
-      voicePollTimerRef.current = setTimeout(() => {
-        void poll(attempt + 1);
-      }, Math.min(1500 + attempt * 250, 5000));
+      voicePollTimerRef.current = setTimeout(
+        () => {
+          void poll(attempt + 1);
+        },
+        Math.min(1500 + attempt * 250, 5000),
+      );
     };
 
     void poll(1);
@@ -733,8 +735,8 @@ export function CharacterChatWorkspace({
                   </span>
                 )}
                 <span className="rounded-md border border-border bg-card px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                  {textModels.find((model) => model.id === selectedModel)?.name ||
-                    selectedModel}
+                  {textModels.find((model) => model.id === selectedModel)
+                    ?.name || selectedModel}
                 </span>
 
                 <button

@@ -254,9 +254,7 @@ export function assertPricingDimensionMatchesMediaKind(
 const positiveRateStringSchema = z
   .string()
   .regex(/^\d{1,19}$/)
-  .refine(
-    (value) => BigInt(value) > 0n && BigInt(value) <= MAX_SIGNED_BIGINT,
-  );
+  .refine((value) => BigInt(value) > 0n && BigInt(value) <= MAX_SIGNED_BIGINT);
 
 const videoUsageRatesSchema = z
   .object({

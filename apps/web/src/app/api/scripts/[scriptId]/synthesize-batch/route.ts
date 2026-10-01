@@ -219,8 +219,7 @@ export async function POST(
     }
 
     const partial = failedBlocks.length > 0 && queuedJobs.length > 0;
-    const status =
-      failedBlocks.length === 0 ? 202 : partial ? 207 : 422;
+    const status = failedBlocks.length === 0 ? 202 : partial ? 207 : 422;
 
     return NextResponse.json(
       {

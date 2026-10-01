@@ -148,7 +148,6 @@ describe("executeTextGeneration", () => {
     expect(mocks.credits.captureCreditsForJob).toHaveBeenCalled();
   });
 
-
   it("replays a succeeded request only when the idempotent payload matches", async () => {
     const payload = {
       messages: [{ role: "user", content: "Greetings!" }],
@@ -270,7 +269,6 @@ describe("executeTextGeneration", () => {
 
     expect(mocks.db.$transaction).not.toHaveBeenCalled();
   });
-
 
   it("does not charge above the authorized reservation when actual usage is higher", async () => {
     const submittedJob = {

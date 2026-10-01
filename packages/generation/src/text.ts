@@ -118,10 +118,7 @@ export async function executeTextGeneration(
             },
           };
         }
-        if (
-          existing.status === "FAILED" ||
-          existing.status === "CANCELLED"
-        ) {
+        if (existing.status === "FAILED" || existing.status === "CANCELLED") {
           throw new GenerationError(
             "This request key belongs to a finalized generation. Submit a new request key to retry.",
             409,

@@ -578,7 +578,9 @@ export function ModelActions({
                             <input
                               aria-label={`Text tier ${index + 1} ${label}`}
                               inputMode="numeric"
-                              required={key !== "cachedInputMicroUsdPerMillionTokens"}
+                              required={
+                                key !== "cachedInputMicroUsdPerMillionTokens"
+                              }
                               value={tier[key] ?? ""}
                               onChange={(event) =>
                                 setTextUsageTiers((tiers) =>

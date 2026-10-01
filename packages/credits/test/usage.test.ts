@@ -180,7 +180,6 @@ describe("generation pricing policies", () => {
     ).toThrow("must be positive");
   });
 
-
   it("prices text input, cached input and output independently", () => {
     const textRates = {
       estimator: "byteplus-text-v1",

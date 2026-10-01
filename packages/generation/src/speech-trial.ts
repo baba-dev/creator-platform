@@ -18,7 +18,9 @@ function speechTrialStartedAt(): Date {
   const value = configured ?? BYTEPLUS_SPEECH_TRIAL_CONFIG.DEFAULT_STARTED_AT;
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
-    throw new Error("BYTEPLUS_SPEECH_TRIAL_STARTED_AT must be a valid ISO date.");
+    throw new Error(
+      "BYTEPLUS_SPEECH_TRIAL_STARTED_AT must be a valid ISO date.",
+    );
   }
   return parsed;
 }

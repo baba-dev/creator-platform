@@ -248,11 +248,7 @@ export async function PATCH(
         { error: "Usage rates require TOKEN pricing." },
         { status: 400 },
       );
-    if (
-      usageRates &&
-      model.mediaKind !== "VIDEO" &&
-      model.mediaKind !== "TEXT"
-    )
+    if (usageRates && model.mediaKind !== "VIDEO" && model.mediaKind !== "TEXT")
       return NextResponse.json(
         {
           error: "Usage-rate tables are only valid for video or text models.",

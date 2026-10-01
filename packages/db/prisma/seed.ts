@@ -240,9 +240,9 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
           maxPromptTokens: 262144,
           inputMicroUsdPerMillionTokens: "500000",
           outputMicroUsdPerMillionTokens: "2500000",
-          cachedInputMicroUsdPerMillionTokens: "100000"
-        }
-      ]
+          cachedInputMicroUsdPerMillionTokens: "100000",
+        },
+      ],
     },
     providerCostBasisNote:
       "BytePlus ModelArk standard online inference: $0.50/M input, $0.10/M cached input, $2.50/M output.",
@@ -272,15 +272,15 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
           maxPromptTokens: 131072,
           inputMicroUsdPerMillionTokens: "500000",
           outputMicroUsdPerMillionTokens: "3000000",
-          cachedInputMicroUsdPerMillionTokens: "100000"
+          cachedInputMicroUsdPerMillionTokens: "100000",
         },
         {
           maxPromptTokens: 262144,
           inputMicroUsdPerMillionTokens: "1000000",
           outputMicroUsdPerMillionTokens: "6000000",
-          cachedInputMicroUsdPerMillionTokens: "200000"
-        }
-      ]
+          cachedInputMicroUsdPerMillionTokens: "200000",
+        },
+      ],
     },
     providerCostBasisNote:
       "BytePlus ModelArk standard online inference, tiered by prompt length (<=128K / <=256K).",
@@ -309,15 +309,15 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
           maxPromptTokens: 131072,
           inputMicroUsdPerMillionTokens: "250000",
           outputMicroUsdPerMillionTokens: "2000000",
-          cachedInputMicroUsdPerMillionTokens: "50000"
+          cachedInputMicroUsdPerMillionTokens: "50000",
         },
         {
           maxPromptTokens: 262144,
           inputMicroUsdPerMillionTokens: "500000",
           outputMicroUsdPerMillionTokens: "4000000",
-          cachedInputMicroUsdPerMillionTokens: "100000"
-        }
-      ]
+          cachedInputMicroUsdPerMillionTokens: "100000",
+        },
+      ],
     },
     providerCostBasisNote:
       "BytePlus ModelArk standard online inference, tiered by prompt length (<=128K / <=256K).",
@@ -346,15 +346,15 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
           maxPromptTokens: 131072,
           inputMicroUsdPerMillionTokens: "100000",
           outputMicroUsdPerMillionTokens: "400000",
-          cachedInputMicroUsdPerMillionTokens: "20000"
+          cachedInputMicroUsdPerMillionTokens: "20000",
         },
         {
           maxPromptTokens: 262144,
           inputMicroUsdPerMillionTokens: "200000",
           outputMicroUsdPerMillionTokens: "800000",
-          cachedInputMicroUsdPerMillionTokens: "40000"
-        }
-      ]
+          cachedInputMicroUsdPerMillionTokens: "40000",
+        },
+      ],
     },
     providerCostBasisNote:
       "BytePlus ModelArk standard online inference, tiered by prompt length (<=128K / <=256K).",
@@ -383,15 +383,15 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
           maxPromptTokens: 131072,
           inputMicroUsdPerMillionTokens: "500000",
           outputMicroUsdPerMillionTokens: "3000000",
-          cachedInputMicroUsdPerMillionTokens: "100000"
+          cachedInputMicroUsdPerMillionTokens: "100000",
         },
         {
           maxPromptTokens: 262144,
           inputMicroUsdPerMillionTokens: "1000000",
           outputMicroUsdPerMillionTokens: "6000000",
-          cachedInputMicroUsdPerMillionTokens: "200000"
-        }
-      ]
+          cachedInputMicroUsdPerMillionTokens: "200000",
+        },
+      ],
     },
     providerCostBasisNote:
       "BytePlus ModelArk standard online inference, tiered by prompt length (<=128K / <=256K).",
@@ -440,15 +440,15 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
           maxPromptTokens: 131072,
           inputMicroUsdPerMillionTokens: "250000",
           outputMicroUsdPerMillionTokens: "2000000",
-          cachedInputMicroUsdPerMillionTokens: "50000"
+          cachedInputMicroUsdPerMillionTokens: "50000",
         },
         {
           maxPromptTokens: 262144,
           inputMicroUsdPerMillionTokens: "500000",
           outputMicroUsdPerMillionTokens: "4000000",
-          cachedInputMicroUsdPerMillionTokens: "50000"
-        }
-      ]
+          cachedInputMicroUsdPerMillionTokens: "50000",
+        },
+      ],
     },
     enabled: false,
     providerCostBasisNote:
@@ -477,15 +477,15 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
           maxPromptTokens: 131072,
           inputMicroUsdPerMillionTokens: "250000",
           outputMicroUsdPerMillionTokens: "2000000",
-          cachedInputMicroUsdPerMillionTokens: "50000"
+          cachedInputMicroUsdPerMillionTokens: "50000",
         },
         {
           maxPromptTokens: 262144,
           inputMicroUsdPerMillionTokens: "500000",
           outputMicroUsdPerMillionTokens: "4000000",
-          cachedInputMicroUsdPerMillionTokens: "50000"
-        }
-      ]
+          cachedInputMicroUsdPerMillionTokens: "50000",
+        },
+      ],
     },
     enabled: false,
     providerCostBasisNote:
@@ -515,15 +515,15 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
           maxPromptTokens: 131072,
           inputMicroUsdPerMillionTokens: "75000",
           outputMicroUsdPerMillionTokens: "300000",
-          cachedInputMicroUsdPerMillionTokens: "15000"
+          cachedInputMicroUsdPerMillionTokens: "15000",
         },
         {
           maxPromptTokens: 262144,
           inputMicroUsdPerMillionTokens: "100000",
           outputMicroUsdPerMillionTokens: "800000",
-          cachedInputMicroUsdPerMillionTokens: "15000"
-        }
-      ]
+          cachedInputMicroUsdPerMillionTokens: "15000",
+        },
+      ],
     },
     enabled: false,
     providerCostBasisNote:

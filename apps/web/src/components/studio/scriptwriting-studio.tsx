@@ -475,9 +475,12 @@ export function ScriptwritingStudio({
         // Transient refresh failures are retried with bounded backoff.
       }
 
-      voicePollTimerRef.current = setTimeout(() => {
-        void poll(attempt + 1);
-      }, Math.min(1500 + attempt * 250, 5000));
+      voicePollTimerRef.current = setTimeout(
+        () => {
+          void poll(attempt + 1);
+        },
+        Math.min(1500 + attempt * 250, 5000),
+      );
     };
 
     void poll(1);

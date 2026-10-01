@@ -1,20 +1,11 @@
-import { redirect } from "next/navigation";
-
 import { AuthCard } from "@/components/auth/auth-card";
 import { ResetPasswordForm } from "@/components/auth/reset-password-form";
-import { getRequestSession } from "@/lib/request-auth";
 
 export default async function ResetPasswordPage({
   searchParams,
 }: {
   searchParams: Promise<{ token?: string; error?: string }>;
 }) {
-  const session = await getRequestSession();
-
-  if (session) {
-    redirect("/app");
-  }
-
   const { token, error } = await searchParams;
 
   return (

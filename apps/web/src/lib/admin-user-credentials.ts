@@ -105,6 +105,18 @@ export async function createAdminManagedUser(input: {
 
   const name = input.name.trim();
   const email = input.email.trim().toLowerCase();
+
+  const existingUser = await db.user.findUnique({
+    where: { email },
+    select: { id: true },
+  });
+  if (existingUser) {
+    throw new AdminUserCredentialError(
+      "EMAIL_EXISTS",
+      "A user with this email address already exists.",
+    );
+  }
+
   const passwordHash = await hashPassword(input.password);
 
   try {
@@ -172,6 +184,16 @@ export async function resetAdminManagedUserPassword(input: {
   password: string;
 }) {
   assertCanManageUsers(input.actor);
+
+  const preflightUser = await db.user.findUnique({
+    where: { id: input.targetUserId },
+    select: { id: true, platformRole: true },
+  });
+  if (!preflightUser) {
+    throw new AdminUserCredentialError("USER_NOT_FOUND", "User not found.");
+  }
+  assertCanResetTargetPassword(input.actor, preflightUser.platformRole);
+
   const passwordHash = await hashPassword(input.password);
 
   return db.$transaction(async (tx) => {
@@ -222,7 +244,7 @@ export async function resetAdminManagedUserPassword(input: {
       where: { userId: user.id },
     });
 
-    await tx.auditEvent.create({
+    const auditEvent = await tx.auditEvent.create({
       data: {
         actorUserId: input.actor.userId,
         action: "user.password_reset_by_admin",
@@ -231,8 +253,10 @@ export async function resetAdminManagedUserPassword(input: {
         metadata: {
           revokedSessions: revokedSessions.count,
           credentialAccountCreated: !existingAccount,
+          credentialVersion: credentialAccount.updatedAt.toISOString(),
         },
       },
+      select: { id: true },
     });
 
     await enqueueMail(
@@ -240,7 +264,7 @@ export async function resetAdminManagedUserPassword(input: {
         to: user.email,
         userId: user.id,
         event: "PASSWORD_RESET",
-        idempotencyKey: `security:admin-password-reset:${user.id}:${credentialAccount.updatedAt.getTime()}`,
+        idempotencyKey: `security:admin-password-reset:${auditEvent.id}`,
       }),
       tx,
     );

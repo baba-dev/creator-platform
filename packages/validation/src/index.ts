@@ -349,14 +349,14 @@ export const publishPriceVersionSchema = z.object({
 export const quoteRequestSchema = z.object({
   organizationId: cuidSchema,
   modelId: z.string().trim().min(1).max(128),
-  units: z.coerce.number().int().positive().max(32_768).default(1),
+  units: z.coerce.number().int().positive().max(8_192).default(1),
   billableQuantity: z.coerce
     .number()
     .int()
     .nonnegative()
     .max(1_000_000)
     .optional(),
-  text: z.string().max(4096).optional(),
+  text: z.string().max(120_000).optional(),
   durationSeconds: z.coerce.number().int().min(4).max(30).optional(),
   aspectRatio: z
     .enum([

@@ -142,11 +142,7 @@ export function getImageGenerationProviderCostMicroUsd(params: {
   }
 
   const references = params.referenceImageCount ?? 0;
-  if (
-    !Number.isSafeInteger(references) ||
-    references < 0 ||
-    references > 14
-  ) {
+  if (!Number.isSafeInteger(references) || references < 0 || references > 14) {
     throw new RangeError("Invalid reference image count.");
   }
 

@@ -4,7 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       billing_acknowledgement:
-        description: Type I_UNDERSTAND_THIS_IS_BILLABLE to run one live Seedream 5.0 Lite generation
+        description:
+          Type I_UNDERSTAND_THIS_IS_BILLABLE to run one live Seedream 5.0 Lite
+          generation
         required: true
         type: string
       region:

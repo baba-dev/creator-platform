@@ -16,9 +16,9 @@ describe("userRecordIdSchema", () => {
   });
 
   it("rejects path-unsafe identifiers", () => {
-    expect(
-      userRecordIdSchema.safeParse("../../users/other").success,
-    ).toBe(false);
+    expect(userRecordIdSchema.safeParse("../../users/other").success).toBe(
+      false,
+    );
     expect(
       userRecordIdSchema.safeParse("user id with spaces 1234567890").success,
     ).toBe(false);

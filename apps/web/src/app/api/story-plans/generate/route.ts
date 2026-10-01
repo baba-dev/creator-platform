@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { hasOrganizationPermission } from "@aiwa/authz";
 import { db } from "@aiwa/db";
 import { executeTextGeneration, GenerationError } from "@aiwa/generation";
+import { storyStructureTypeSchema } from "@aiwa/validation";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getRequestSession } from "@/lib/request-auth";
@@ -12,10 +13,31 @@ const storyGenerateSchema = z.object({
   title: z.string().min(1).max(100),
   premise: z.string().min(1).max(2000),
   genre: z.string().max(100).optional(),
-  structureType: z
-    .enum(["THREE_ACT", "FIVE_ACT", "HEROS_JOURNEY"])
-    .default("THREE_ACT"),
-  modelId: z.string().optional(),
+  structureType: storyStructureTypeSchema.default("THREE_ACT"),
+  modelId: z.string().min(1).max(100).optional(),
+});
+
+const generatedStorySchema = z.object({
+  beats: z
+    .array(
+      z.object({
+        act: z.string().min(1).max(200),
+        beat: z.string().min(1).max(200),
+        summary: z.string().min(1).max(4000),
+        conflict: z.string().max(2000).default(""),
+      }),
+    )
+    .max(100),
+  characters: z
+    .array(
+      z.object({
+        name: z.string().min(1).max(160),
+        role: z.string().max(160).default(""),
+        motivation: z.string().max(2000).default(""),
+        flaw: z.string().max(2000).default(""),
+      }),
+    )
+    .max(100),
 });
 
 const STORY_ARCHITECT_SYSTEM_PROMPT = `You are a master Narrative Designer and Story Architect.
@@ -114,6 +136,7 @@ export async function POST(request: Request) {
     const now = new Date();
     let model = await db.providerModel.findFirst({
       where: {
+        provider: "BYTEPLUS",
         providerModelId: preferredModel,
         mediaKind: "TEXT",
         enabled: true,
@@ -132,7 +155,7 @@ export async function POST(request: Request) {
 
     if (!model || !model.priceVersions[0]) {
       model = await db.providerModel.findFirst({
-        where: { mediaKind: "TEXT", enabled: true },
+        where: { provider: "BYTEPLUS", mediaKind: "TEXT", enabled: true },
         include: {
           priceVersions: {
             where: {
@@ -178,7 +201,7 @@ Premise: ${input.premise}`;
         .replace(/^```json\s*/i, "")
         .replace(/```\s*$/i, "")
         .trim();
-      parsedResult = JSON.parse(cleanJson);
+      parsedResult = generatedStorySchema.parse(JSON.parse(cleanJson));
     } catch {
       parsedResult = {
         beats: [

@@ -31,6 +31,21 @@ describe("hasModelCapability", () => {
     if (parsed.success) expect(parsed.data.resolution).toBe("1K");
   });
 
+  it("accepts 1.5K image requests at the shared admission boundary", () => {
+    const parsed = imageRequestSchema.safeParse({
+      organizationId: "org-1",
+      modelId: "model-1",
+      priceVersionId: "price-1",
+      idempotencyKey: "123e4567-e89b-42d3-a456-426614174001",
+      prompt: "A precision edit",
+      aspectRatio: "16:9",
+      resolution: "1.5K",
+    });
+
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.resolution).toBe("1.5K");
+  });
+
   it("fails closed when capabilities are missing or malformed", () => {
     expect(hasModelCapability(null, "resolution:2K")).toBe(false);
     expect(hasModelCapability([], "resolution:2K")).toBe(false);

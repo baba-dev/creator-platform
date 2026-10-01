@@ -1,3 +1,4 @@
+import { hasOrganizationPermission } from "@aiwa/authz";
 import { db } from "@aiwa/db";
 import { personaCreateSchema } from "@aiwa/validation";
 import { NextResponse } from "next/server";
@@ -39,9 +40,7 @@ export async function GET(request: Request) {
   }
 
   const personas = await db.persona.findMany({
-    where: {
-      OR: [{ organizationId }, { isPreset: true }],
-    },
+    where: { organizationId },
     orderBy: [{ isPreset: "desc" }, { createdAt: "asc" }],
   });
 
@@ -76,7 +75,11 @@ export async function POST(request: Request) {
       },
       include: { organization: true },
     });
-    if (!membership || membership.organization.status !== "ACTIVE") {
+    if (
+      !membership ||
+      membership.organization.status !== "ACTIVE" ||
+      !hasOrganizationPermission(membership.role, "generation:create")
+    ) {
       return NextResponse.json(
         { error: "Workspace access denied." },
         { status: 403 },

@@ -89,9 +89,10 @@ export function resolveTemplatePrompt(
     throw new Error("Template contains unresolved variables.");
 
   const maxPromptLength = mediaKind === "VOICE" ? 4096 : 2000;
-  if (!prompt || prompt.length > maxPromptLength)
+  if (!prompt) throw new Error("Resolved template prompt is empty.");
+  if (prompt.length > maxPromptLength)
     throw new Error(
-      `Resolved template prompt is invalid (must be between 1 and ${maxPromptLength} characters).`,
+      `Resolved template prompt is too long; maximum is ${maxPromptLength} characters.`,
     );
   return { prompt, referenceAssetIds };
 }

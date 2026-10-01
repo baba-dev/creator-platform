@@ -3,7 +3,11 @@ import {
   completeMediaTask,
   recordMediaOutput,
 } from "./media-tasks";
-import { claimExpiredAssetForPurge, completeAssetPurge } from "@aiwa/assets";
+import {
+  claimExpiredAssetForPurge,
+  commitAssetVariantStorage,
+  completeAssetPurge,
+} from "@aiwa/assets";
 import {
   createAssetVariantObjectKey,
   LocalAssetStorage,
@@ -36,6 +40,11 @@ async function saveVariant(input: {
       const asset = await tx.asset.findUnique({ where: { id: input.assetId } });
       if (!asset || asset.status !== "READY")
         throw new Error("Asset is no longer available.");
+      await commitAssetVariantStorage(tx, {
+        organizationId: input.organizationId,
+        userId: asset.storageOwnerUserId,
+        byteSize: stored.byteSize,
+      });
       await tx.assetVariant.create({
         data: {
           assetId: input.assetId,
@@ -47,13 +56,6 @@ async function saveVariant(input: {
           sha256: stored.sha256,
           width: input.width,
           height: input.height,
-        },
-      });
-      await tx.assetStorageUsage.updateMany({
-        where: { organizationId: input.organizationId },
-        data: {
-          usedBytes: { increment: stored.byteSize },
-          version: { increment: 1 },
         },
       });
       await completeMediaTask(tx);

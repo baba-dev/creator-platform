@@ -552,7 +552,12 @@ const videoCreateResponseSchema = z.object({ id: providerIdentifierSchema });
 const videoTaskResponseSchema = z.object({
   id: providerIdentifierSchema,
   status: z.string().min(1),
-  content: z.object({ video_url: httpsUrlSchema.optional() }).optional(),
+  content: z
+    .object({
+      video_url: httpsUrlSchema.optional(),
+      last_frame_url: httpsUrlSchema.optional(),
+    })
+    .optional(),
   error: z
     .object({
       code: providerErrorCodeSchema.optional(),
@@ -1367,6 +1372,7 @@ export function createBytePlusProvider(
         providerRequestId: data.id,
         status,
         outputUrls: outputUrl ? [outputUrl] : undefined,
+        lastFrameUrl: data.content?.last_frame_url,
         rawUsage: data.usage,
         errorCode:
           status === "failed"

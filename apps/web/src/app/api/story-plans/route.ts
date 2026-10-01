@@ -1,3 +1,4 @@
+import { hasOrganizationPermission } from "@aiwa/authz";
 import { db, type Prisma } from "@aiwa/db";
 import { storyPlanCreateSchema } from "@aiwa/validation";
 import { NextResponse } from "next/server";
@@ -78,11 +79,32 @@ export async function POST(request: Request) {
       },
       include: { organization: true },
     });
-    if (!membership || membership.organization.status !== "ACTIVE") {
+    if (
+      !membership ||
+      membership.organization.status !== "ACTIVE" ||
+      !hasOrganizationPermission(membership.role, "projects:write")
+    ) {
       return NextResponse.json(
         { error: "Workspace access denied." },
         { status: 403 },
       );
+    }
+
+    if (input.projectId) {
+      const project = await db.project.findFirst({
+        where: {
+          id: input.projectId,
+          organizationId: input.organizationId,
+          archivedAt: null,
+        },
+        select: { id: true },
+      });
+      if (!project) {
+        return NextResponse.json(
+          { error: "Project is unavailable in this workspace." },
+          { status: 400 },
+        );
+      }
     }
 
     const storyPlan = await db.storyPlan.create({

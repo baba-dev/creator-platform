@@ -863,13 +863,19 @@ export function GenerationStudio({
         }),
         ...(templateContext ? { templateId: templateContext.id } : {}),
         ...(model.mediaKind === "VIDEO" && {
+          schemaVersion: 2,
+          workflow: videoWorkflow,
+          sources: videoSources,
           durationSeconds: Number.parseInt(selectedDuration, 10),
           generateAudio,
-          ...(videoFirstFrameId
-            ? { firstFrameAssetId: videoFirstFrameId }
+          outputFormat: videoOutputFormat,
+          returnLastFrame,
+          ...(videoWorkflow === "DRAFT_FINAL" && sourceDraftJobId
+            ? { sourceDraftJobId }
             : {}),
-          ...(videoLastFrameId ? { lastFrameAssetId: videoLastFrameId } : {}),
-          ...(referenceVideoAssetId ? { referenceVideoAssetId } : {}),
+          ...(videoWorkflow === "EXTEND"
+            ? { extensionDirection }
+            : {}),
         }),
       };
     }

@@ -417,7 +417,9 @@ export const quoteRequestSchema = z
   })
   .superRefine((value, context) => {
     const sources = value.sources ?? [];
-    if (new Set(sources.map((source) => source.assetId)).size !== sources.length) {
+    if (
+      new Set(sources.map((source) => source.assetId)).size !== sources.length
+    ) {
       context.addIssue({
         code: "custom",
         path: ["sources"],

@@ -239,9 +239,7 @@ export const bytePlusVideoInputSchema = z
     }
     if (
       input.sources.length > 0 &&
-      (input.firstFrameImage ||
-        input.lastFrameImage ||
-        input.referenceVideoUrl)
+      (input.firstFrameImage || input.lastFrameImage || input.referenceVideoUrl)
     ) {
       ctx.addIssue({
         code: "custom",
@@ -1488,9 +1486,7 @@ export function createBytePlusProvider(
                   watermark: input.data.watermark,
                   output_format: input.data.outputFormat,
                   return_last_frame: input.data.returnLastFrame,
-                  ...(input.data.workflow === "DRAFT"
-                    ? { draft: true }
-                    : {}),
+                  ...(input.data.workflow === "DRAFT" ? { draft: true } : {}),
                   ...(input.data.seed === undefined
                     ? {}
                     : { seed: input.data.seed }),

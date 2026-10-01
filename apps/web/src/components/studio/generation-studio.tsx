@@ -189,8 +189,7 @@ export function GenerationStudio({
     ReferenceAsset[]
   >([]);
   const [referenceAssetIds, setReferenceAssetIds] = useState<string[]>([]);
-  const [videoWorkflow, setVideoWorkflow] =
-    useState<VideoWorkflow>("GENERATE");
+  const [videoWorkflow, setVideoWorkflow] = useState<VideoWorkflow>("GENERATE");
   const [videoFirstFrameId, setVideoFirstFrameId] = useState("");
   const [videoLastFrameId, setVideoLastFrameId] = useState("");
   const [videoReferenceImageIds, setVideoReferenceImageIds] = useState<
@@ -204,10 +203,12 @@ export function GenerationStudio({
   >([]);
   const [videoSourceAssetId, setVideoSourceAssetId] = useState("");
   const [sourceDraftJobId, setSourceDraftJobId] = useState("");
-  const [videoOutputFormat, setVideoOutputFormat] =
-    useState<"mp4" | "mov">("mp4");
-  const [extensionDirection, setExtensionDirection] =
-    useState<"BEFORE" | "AFTER">("AFTER");
+  const [videoOutputFormat, setVideoOutputFormat] = useState<"mp4" | "mov">(
+    "mp4",
+  );
+  const [extensionDirection, setExtensionDirection] = useState<
+    "BEFORE" | "AFTER"
+  >("AFTER");
   const [returnLastFrame, setReturnLastFrame] = useState(true);
   const [referenceBusy, setReferenceBusy] = useState(false);
   const [referenceUrl, setReferenceUrl] = useState("");
@@ -279,9 +280,8 @@ export function GenerationStudio({
       maximum > 30
     )
       return [];
-    return Array.from(
-      { length: maximum - minimum + 1 },
-      (_, index) => String(minimum + index),
+    return Array.from({ length: maximum - minimum + 1 }, (_, index) =>
+      String(minimum + index),
     );
   }, [model?.capabilities, model?.mediaKind]);
 
@@ -479,9 +479,7 @@ export function GenerationStudio({
           ...(videoWorkflow === "DRAFT_FINAL" && sourceDraftJobId
             ? { sourceDraftJobId }
             : {}),
-          ...(videoWorkflow === "EXTEND"
-            ? { extensionDirection }
-            : {}),
+          ...(videoWorkflow === "EXTEND" ? { extensionDirection } : {}),
         }
       : {}),
   });
@@ -1022,9 +1020,7 @@ export function GenerationStudio({
           ...(videoWorkflow === "DRAFT_FINAL" && sourceDraftJobId
             ? { sourceDraftJobId }
             : {}),
-          ...(videoWorkflow === "EXTEND"
-            ? { extensionDirection }
-            : {}),
+          ...(videoWorkflow === "EXTEND" ? { extensionDirection } : {}),
         }),
       };
     }
@@ -1191,7 +1187,6 @@ export function GenerationStudio({
         ?.scrollIntoView({ behavior: "smooth", block: "start" }),
     );
   }
-
 
   return (
     <section
@@ -1878,7 +1873,9 @@ export function GenerationStudio({
                     <div className="space-y-3 rounded-xl border border-border bg-surface-sunken p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
-                          <p className="text-xs font-semibold">Reference board</p>
+                          <p className="text-xs font-semibold">
+                            Reference board
+                          </p>
                           <p className="mt-1 text-[11px] text-muted-foreground">
                             Multi-select assets. Their visible order becomes the
                             provider Image / Video / Audio reference order.
@@ -1989,8 +1986,7 @@ export function GenerationStudio({
                     </div>
                   )}
 
-                  {(videoWorkflow === "EDIT" ||
-                    videoWorkflow === "EXTEND") && (
+                  {(videoWorkflow === "EDIT" || videoWorkflow === "EXTEND") && (
                     <div className="grid gap-3 rounded-xl border border-border bg-surface-sunken p-3 sm:grid-cols-2">
                       <label className="grid gap-2 text-xs font-semibold">
                         Source video
@@ -2101,23 +2097,24 @@ export function GenerationStudio({
                   {availableRatios.length ? (
                     (videoForcesAdaptive ? ["adaptive"] : availableRatios).map(
                       (r) => {
-                      const ratioLabels: Record<string, string> = {
-                        "1:1": "1:1 · Square",
-                        "16:9": "16:9 · Landscape (Standard)",
-                        "9:16": "9:16 · Portrait (Reels/Stories)",
-                        "4:3": "4:3 · Classic Display",
-                        "3:4": "3:4 · Vertical Display",
-                        "3:2": "3:2 · 35mm Photography",
-                        "2:3": "2:3 · Vertical Photo",
-                        "21:9": "21:9 · Cinematic Ultrawide",
-                        adaptive: "Adaptive · From source frame",
-                      };
-                      return (
-                        <option key={r} value={r}>
-                          {ratioLabels[r] ?? r}
-                        </option>
-                      );
-                    })
+                        const ratioLabels: Record<string, string> = {
+                          "1:1": "1:1 · Square",
+                          "16:9": "16:9 · Landscape (Standard)",
+                          "9:16": "9:16 · Portrait (Reels/Stories)",
+                          "4:3": "4:3 · Classic Display",
+                          "3:4": "3:4 · Vertical Display",
+                          "3:2": "3:2 · 35mm Photography",
+                          "2:3": "2:3 · Vertical Photo",
+                          "21:9": "21:9 · Cinematic Ultrawide",
+                          adaptive: "Adaptive · From source frame",
+                        };
+                        return (
+                          <option key={r} value={r}>
+                            {ratioLabels[r] ?? r}
+                          </option>
+                        );
+                      },
+                    )
                   ) : (
                     <option>No supported aspect ratios advertised</option>
                   )}
@@ -2521,10 +2518,10 @@ export function GenerationStudio({
                           : asset.mimeType.startsWith("video/")
                             ? "MP4"
                             : asset.mimeType.startsWith("audio/")
-                            ? "MP3"
-                            : asset.mimeType === "image/jpeg"
-                              ? "JPEG"
-                              : "PNG"}
+                              ? "MP3"
+                              : asset.mimeType === "image/jpeg"
+                                ? "JPEG"
+                                : "PNG"}
                       </a>
                       {asset.mimeType.startsWith("image/") ? (
                         <Link
@@ -2619,7 +2616,8 @@ export function GenerationStudio({
                       </p>
                       <p className="mt-1 text-[11px] text-muted-foreground">
                         Final rendering is a separately quoted 1080p generation.
-                        Draft expires {new Date(job.draftExpiresAt).toLocaleString()}.
+                        Draft expires{" "}
+                        {new Date(job.draftExpiresAt).toLocaleString()}.
                       </p>
                       <Button
                         type="button"
@@ -2628,8 +2626,7 @@ export function GenerationStudio({
                         onClick={() =>
                           focusVideoWorkflow("DRAFT_FINAL", {
                             draftJobId: job.id,
-                            providerModelId:
-                              job.providerModel.providerModelId,
+                            providerModelId: job.providerModel.providerModelId,
                           })
                         }
                       >

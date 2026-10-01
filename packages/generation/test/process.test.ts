@@ -82,6 +82,7 @@ const base = {
   requestPayload: { prompt: "test" },
   providerModel: { providerModelId: "seedream-5-0-260128" },
   priceVersion: { providerCostMicroUsd: 54_000n },
+  inputAssets: [],
   quotedUnits: 1,
   reservedCredits: 28n,
 };
@@ -107,14 +108,23 @@ function transaction(
     wallet: { findUniqueOrThrow: vi.fn().mockResolvedValue({ id: "wallet1" }) },
     asset: {
       findUniqueOrThrow: vi.fn().mockResolvedValue({
+        id: "video-asset",
+        objectKey: "job1.mp4",
         byteSize: 25_000_000n,
         status: "PENDING",
       }),
       aggregate: vi.fn().mockResolvedValue({
         _sum: { byteSize: 25_000_000n },
       }),
-      update: vi.fn(),
+      update: vi.fn().mockImplementation(({ where, data }) =>
+        Promise.resolve({
+          id: where.id ?? "video-asset",
+          objectKey: where.objectKey ?? "job1.mp4",
+          ...data,
+        }),
+      ),
       updateMany: vi.fn(),
+      findFirst: vi.fn().mockResolvedValue(null),
       findMany: vi.fn().mockResolvedValue([
         {
           id: "asset1",
@@ -283,22 +293,24 @@ describe("video processing", () => {
       ...base,
       status: "QUEUED",
       requestPayload: { prompt: "test", referenceVideoAssetId: "source1" },
-    });
-    mocks.db.generationInputAsset.findMany.mockResolvedValue([
-      {
-        assetId: "source1",
-        asset: {
-          id: "source1",
-          organizationId: "org1",
-          status: "READY",
-          mediaKind: "VIDEO",
-          mimeType: "video/mp4",
-          storageProvider: "LOCAL",
-          purpose: "REFERENCE_INPUT",
-          storageOwnerUserId: "user1",
+      inputAssets: [
+        {
+          assetId: "source1",
+          position: 0,
+          role: "LEGACY",
+          asset: {
+            id: "source1",
+            organizationId: "org1",
+            status: "READY",
+            mediaKind: "VIDEO",
+            mimeType: "video/mp4",
+            storageProvider: "LOCAL",
+            purpose: "REFERENCE_INPUT",
+            storageOwnerUserId: "user1",
+          },
         },
-      },
-    ]);
+      ],
+    });
     await processVideoSubmitJob("job1", p);
     expect(p.submit).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -860,9 +860,7 @@ export async function createVideoJob(userId: string, raw: unknown) {
       let pricingAspectRatio = input.aspectRatio;
       let pricingGenerateAudio = input.generateAudio;
       let pricingInputVideoDurationMs =
-        totalInputVideoDurationMs > 0
-          ? totalInputVideoDurationMs
-          : undefined;
+        totalInputVideoDurationMs > 0 ? totalInputVideoDurationMs : undefined;
       let draftProviderTaskId: string | undefined;
 
       if (input.workflow === "EDIT") {
@@ -914,15 +912,9 @@ export async function createVideoJob(userId: string, raw: unknown) {
         const draftAspectRatio = draftPayload.aspectRatio;
         pricingAspectRatio =
           typeof draftAspectRatio === "string" &&
-          [
-            "16:9",
-            "9:16",
-            "1:1",
-            "4:3",
-            "3:4",
-            "21:9",
-            "adaptive",
-          ].includes(draftAspectRatio)
+          ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "adaptive"].includes(
+            draftAspectRatio,
+          )
             ? (draftAspectRatio as VideoRequestV2["aspectRatio"])
             : "16:9";
         pricingGenerateAudio = draftPayload.generateAudio === true;

@@ -86,9 +86,8 @@ describe("BytePlus provider adapter", () => {
       models.find((model) => model.id === "seedream-4-0-250828")?.capabilities,
     ).not.toHaveProperty("resolution:3K");
     expect(
-      models.find(
-        (model) => model.id === "dreamina-seedance-2-5-260628",
-      )?.capabilities,
+      models.find((model) => model.id === "dreamina-seedance-2-5-260628")
+        ?.capabilities,
     ).toMatchObject({
       minimumDurationSeconds: 4,
       maximumDurationSeconds: 30,
@@ -664,9 +663,7 @@ describe("BytePlus provider adapter", () => {
     );
     expect(body).toEqual({
       model: "dreamina-seedance-2-5-260628",
-      content: [
-        { type: "draft_task", draft_task: { id: "task-draft-1" } },
-      ],
+      content: [{ type: "draft_task", draft_task: { id: "task-draft-1" } }],
       resolution: "1080p",
       output_format: "mov",
       return_last_frame: true,

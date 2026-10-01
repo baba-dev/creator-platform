@@ -7,11 +7,7 @@ export interface ProviderConcurrencySpec {
   limit: number;
 }
 
-function capabilityLimit(
-  raw: unknown,
-  key: string,
-  fallback: number,
-): number {
+function capabilityLimit(raw: unknown, key: string, fallback: number): number {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return fallback;
   const value = (raw as Record<string, unknown>)[key];
   return typeof value === "number" &&

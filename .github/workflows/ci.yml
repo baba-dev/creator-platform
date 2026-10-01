@@ -48,35 +48,6 @@ jobs:
           bash -n infra/deploy/creator-ops
           bash -n infra/deploy/package-release.sh
 
-      - name: Capture canonical Seedance formatting
-        if: github.head_ref == 'feat/seedance-2x-video-engine'
-        shell: bash
-        run: |
-          set -euo pipefail
-          files=(
-            'apps/web/src/app/api/provider-media/[assetId]/route.ts'
-            'apps/web/src/components/admin/model-actions.tsx'
-            'apps/web/src/components/studio/generation-studio.tsx'
-            'apps/worker/src/index.ts'
-            'apps/worker/src/provider-concurrency.ts'
-            'packages/credits/src/usage.ts'
-            'packages/generation/src/estimate.ts'
-            'packages/generation/src/index.ts'
-            'packages/generation/src/process.ts'
-            'packages/generation/src/quote-contract.ts'
-            'packages/generation/src/video-contract.ts'
-            'packages/generation/test/video-contract.test.ts'
-            'packages/providers/src/byteplus/index.ts'
-            'packages/providers/test/byteplus.test.ts'
-            'packages/validation/src/index.ts'
-          )
-          pnpm exec prettier --write "${files[@]}"
-          for file in "${files[@]}"; do
-            printf 'SEEDANCE_FORMAT_BEGIN:%s\n' "$file"
-            base64 -w0 "$file"
-            printf '\nSEEDANCE_FORMAT_END:%s\n' "$file"
-          done
-
       - name: Check formatting
         run: pnpm format:check
 

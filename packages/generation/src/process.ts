@@ -373,11 +373,9 @@ export async function processVideoSubmitJob(
               : asset.mediaKind !== "IMAGE"),
         )
       ) {
-        throw new ProviderRequestError(
-          "Source media is unavailable",
-          false,
-          { code: "REFERENCE_MEDIA_UNAVAILABLE" },
-        );
+        throw new ProviderRequestError("Source media is unavailable", false, {
+          code: "REFERENCE_MEDIA_UNAVAILABLE",
+        });
       }
 
       const frameImages = await Promise.all(
@@ -777,9 +775,7 @@ export async function processVideoPollJob(
         actualProviderCostMicroUsd: actualCost,
         providerCostBasis: actualCost === null ? null : "PROVIDER_USAGE",
         actualUnits:
-          tokenPriced || hasVideoInput
-            ? completionTokens
-            : current.quotedUnits,
+          tokenPriced || hasVideoInput ? completionTokens : current.quotedUnits,
         completedAt: new Date(),
         outputPayload: {
           stored: true,

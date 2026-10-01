@@ -327,7 +327,8 @@ export function estimateVideoTokens(params: {
     !Number.isSafeInteger(params.durationSeconds) ||
     params.durationSeconds < 4 ||
     params.durationSeconds > 30 ||
-    ((params.totalInputVideoDurationMs ?? params.inputDurationMs) !== undefined &&
+    ((params.totalInputVideoDurationMs ?? params.inputDurationMs) !==
+      undefined &&
       (!Number.isSafeInteger(
         params.totalInputVideoDurationMs ?? params.inputDurationMs,
       ) ||

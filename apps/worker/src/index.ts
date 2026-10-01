@@ -31,7 +31,13 @@ import {
 } from "@aiwa/mail/transport";
 import { createBytePlusProvider } from "@aiwa/providers/byteplus";
 import { createNvidiaProvider } from "@aiwa/providers/nvidia";
-import { DelayedError, Queue, Worker, type Processor, type WorkerOptions } from "bullmq";
+import {
+  DelayedError,
+  Queue,
+  Worker,
+  type Processor,
+  type WorkerOptions,
+} from "bullmq";
 import Redis from "ioredis";
 import {
   processAssetDerivatives,
@@ -258,8 +264,7 @@ const generationWorker = createWorker(
       }
       case "video-poll": {
         const spec = await videoProviderLeaseSpec(job.data.jobId);
-        if (spec)
-          await renewProviderLease(redis, spec, job.data.jobId);
+        if (spec) await renewProviderLease(redis, spec, job.data.jobId);
         try {
           await processVideoPollJob(job.data.jobId, bytePlusProvider);
         } finally {

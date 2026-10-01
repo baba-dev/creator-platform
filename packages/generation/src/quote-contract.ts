@@ -123,25 +123,35 @@ export function quoteParameters(
       seed: input.seed ?? null,
       sourceDraftJobId: input.sourceDraftJobId ?? null,
       extensionDirection: input.extensionDirection ?? null,
-      sources:
-        sources ??
-        [
-          ...(input.firstFrameAssetId
-            ? [{ assetId: input.firstFrameAssetId, role: "FIRST_FRAME", position: 0 }]
-            : []),
-          ...(input.lastFrameAssetId
-            ? [{ assetId: input.lastFrameAssetId, role: "LAST_FRAME", position: 1 }]
-            : []),
-          ...(input.referenceVideoAssetId
-            ? [
-                {
-                  assetId: input.referenceVideoAssetId,
-                  role: "REFERENCE_VIDEO",
-                  position: 2,
-                },
-              ]
-            : []),
-        ],
+      sources: sources ?? [
+        ...(input.firstFrameAssetId
+          ? [
+              {
+                assetId: input.firstFrameAssetId,
+                role: "FIRST_FRAME",
+                position: 0,
+              },
+            ]
+          : []),
+        ...(input.lastFrameAssetId
+          ? [
+              {
+                assetId: input.lastFrameAssetId,
+                role: "LAST_FRAME",
+                position: 1,
+              },
+            ]
+          : []),
+        ...(input.referenceVideoAssetId
+          ? [
+              {
+                assetId: input.referenceVideoAssetId,
+                role: "REFERENCE_VIDEO",
+                position: 2,
+              },
+            ]
+          : []),
+      ],
     };
   }
   if (mediaKind === "VOICE")

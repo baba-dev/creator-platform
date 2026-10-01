@@ -74,11 +74,7 @@ async function serve(request: Request, assetId: string, head: boolean) {
         : asset.mediaKind === "IMAGE"
           ? 30 * 1024 * 1024
           : 25 * 1024 * 1024;
-    if (
-      !Number.isSafeInteger(size) ||
-      size <= 0 ||
-      size > maximumBytes
-    )
+    if (!Number.isSafeInteger(size) || size <= 0 || size > maximumBytes)
       return new Response(null, { status: 503 });
     const headers = new Headers({
       "Content-Type": asset.mimeType,

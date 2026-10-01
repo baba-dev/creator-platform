@@ -125,7 +125,8 @@ export const videoRequestV2Schema = z
       context.addIssue({
         code: "custom",
         path: ["sources"],
-        message: "First/last-frame video requires one first and one last frame.",
+        message:
+          "First/last-frame video requires one first and one last frame.",
       });
     }
 
@@ -141,11 +142,15 @@ export const videoRequestV2Schema = z
       });
     }
 
-    if (value.workflow === "REFERENCE" && (frameCount > 0 || referenceCount < 1)) {
+    if (
+      value.workflow === "REFERENCE" &&
+      (frameCount > 0 || referenceCount < 1)
+    ) {
       context.addIssue({
         code: "custom",
         path: ["sources"],
-        message: "Reference workflow requires reference media and no frame roles.",
+        message:
+          "Reference workflow requires reference media and no frame roles.",
       });
     }
 
@@ -188,7 +193,8 @@ export const videoRequestV2Schema = z
         context.addIssue({
           code: "custom",
           path: ["sourceDraftJobId"],
-          message: "Final rendering requires one Creators Draft job and no sources.",
+          message:
+            "Final rendering requires one Creators Draft job and no sources.",
         });
       }
       if (value.resolution !== "1080p") {
@@ -246,7 +252,27 @@ export const legacyVideoRequestSchema = z
     lastFrameAssetId: z.string().min(1).max(100).optional(),
     referenceVideoAssetId: z.string().min(1).max(100).optional(),
   })
-  .strict();
+  .strict()
+  .refine((value) => !value.lastFrameAssetId || value.firstFrameAssetId, {
+    path: ["lastFrameAssetId"],
+    message: "Choose a first frame before a last frame.",
+  })
+  .refine(
+    (value) =>
+      !value.referenceVideoAssetId ||
+      (!value.firstFrameAssetId && !value.lastFrameAssetId),
+    {
+      path: ["referenceVideoAssetId"],
+      message: "Choose reference video or image frames.",
+    },
+  )
+  .refine(
+    (value) => !value.firstFrameAssetId || value.aspectRatio === "adaptive",
+    {
+      path: ["aspectRatio"],
+      message: "Image-to-video uses the source image ratio.",
+    },
+  );
 
 export type LegacyVideoRequest = z.infer<typeof legacyVideoRequestSchema>;
 
@@ -350,7 +376,11 @@ export function validateVideoModelRequest(
 
   if (request.durationSeconds !== -1) {
     const minimum = capabilityNumber(capabilities, "minimumDurationSeconds", 4);
-    const maximum = capabilityNumber(capabilities, "maximumDurationSeconds", 30);
+    const maximum = capabilityNumber(
+      capabilities,
+      "maximumDurationSeconds",
+      30,
+    );
     if (
       request.durationSeconds < minimum ||
       request.durationSeconds > maximum
@@ -392,10 +422,8 @@ export function validateVideoModelRequest(
   );
 
   if (
-    counts.images >
-      capabilityNumber(capabilities, "maxReferenceImages", 0) ||
-    counts.videos >
-      capabilityNumber(capabilities, "maxReferenceVideos", 0) ||
+    counts.images > capabilityNumber(capabilities, "maxReferenceImages", 0) ||
+    counts.videos > capabilityNumber(capabilities, "maxReferenceVideos", 0) ||
     counts.audio > capabilityNumber(capabilities, "maxReferenceAudio", 0)
   ) {
     return "Reference media count is outside the selected model limits.";

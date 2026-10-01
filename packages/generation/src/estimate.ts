@@ -138,7 +138,8 @@ export async function estimateAuthorizedGeneration(
     });
     if (!candidate.success)
       throw new QuoteValidationError(
-        candidate.error.issues[0]?.message ?? "Invalid video input combination.",
+        candidate.error.issues[0]?.message ??
+          "Invalid video input combination.",
         400,
       );
     const video = candidate.data;
@@ -317,10 +318,7 @@ export async function estimateAuthorizedGeneration(
           409,
         );
       const draftPayload = draft.requestPayload as Record<string, unknown>;
-      if (
-        draftPayload.schemaVersion !== 2 ||
-        draftPayload.workflow !== "DRAFT"
-      )
+      if (draftPayload.schemaVersion !== 2 || draftPayload.workflow !== "DRAFT")
         throw new QuoteValidationError(
           "The selected job is not a Seedance 2.5 Draft.",
           409,

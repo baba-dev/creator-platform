@@ -154,9 +154,7 @@ describe("Seedance video request contract", () => {
       aspectRatio: "16:9",
       resolution: "720p",
       durationSeconds: 8,
-      sources: [
-        { assetId: "audio", role: "REFERENCE_AUDIO", position: 0 },
-      ],
+      sources: [{ assetId: "audio", role: "REFERENCE_AUDIO", position: 0 }],
     });
     const limited = {
       "resolution:720p": true,

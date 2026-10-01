@@ -1,6 +1,6 @@
 import { toNextJsHandler } from "better-auth/next-js";
 
-import { auth } from "@/lib/auth";
+import { auth } from "../../../../lib/auth";
 
 const handlers = toNextJsHandler(auth);
 const PASSWORD_RESET_PATH = "/api/auth/request-password-reset";

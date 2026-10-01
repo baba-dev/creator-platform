@@ -331,6 +331,11 @@ export async function releaseOrRefundCredits(
   tx: Prisma.TransactionClient,
   params: ReleaseOrRefundCreditsParams,
 ): Promise<LedgerEntry> {
+  // Serialize all settlement decisions for this wallet before reading reversal
+  // totals. This makes cumulative refund ceilings safe even when callers do
+  // not already hold the generation-job row lock.
+  const wallet = await lockAndGetWallet(tx, params.walletId);
+
   const capture = await tx.ledgerEntry.findFirst({
     where: {
       walletId: params.walletId,
@@ -347,6 +352,21 @@ export async function releaseOrRefundCredits(
         (r) => r.idempotencyKey === params.idempotencyKey,
       );
       if (match) {
+        const requestedAmount =
+          params.amountCredits === undefined
+            ? undefined
+            : requireNonNegativeInteger(params.amountCredits, "amountCredits");
+        if (
+          match.type !== "REFUND" ||
+          (requestedAmount !== undefined &&
+            match.amountCredits !== requestedAmount) ||
+          match.description !== params.reason
+        ) {
+          throw new IdempotencyConflictError(
+            params.idempotencyKey,
+            "Existing refund does not match requested parameters",
+          );
+        }
         return match;
       }
     }
@@ -375,7 +395,6 @@ export async function releaseOrRefundCredits(
       );
     }
 
-    const wallet = await lockAndGetWallet(tx, params.walletId);
     const balanceAfter = wallet.balanceCache + refundAmount;
     const idempotencyKey =
       params.idempotencyKey ??
@@ -434,15 +453,31 @@ export async function releaseOrRefundCredits(
         ? [(reservation as Record<string, unknown>).reversedBy as LedgerEntry]
         : []);
     if (reservationReversals.length > 0) {
-      if (
-        params.idempotencyKey &&
-        reservationReversals.some(
+      if (params.idempotencyKey) {
+        const match = reservationReversals.find(
           (r) => r.idempotencyKey === params.idempotencyKey,
-        )
-      ) {
-        return reservationReversals.find(
-          (r) => r.idempotencyKey === params.idempotencyKey,
-        )!;
+        );
+        if (match) {
+          const requestedAmount =
+            params.amountCredits === undefined
+              ? undefined
+              : requireNonNegativeInteger(
+                  params.amountCredits,
+                  "amountCredits",
+                );
+          if (
+            match.type !== "RELEASE" ||
+            (requestedAmount !== undefined &&
+              match.amountCredits !== requestedAmount) ||
+            match.description !== params.reason
+          ) {
+            throw new IdempotencyConflictError(
+              params.idempotencyKey,
+              "Existing release does not match requested parameters",
+            );
+          }
+          return match;
+        }
       }
       throw new ReservationAlreadySettledError(
         params.jobId,
@@ -461,7 +496,6 @@ export async function releaseOrRefundCredits(
       );
     }
 
-    const wallet = await lockAndGetWallet(tx, params.walletId);
     const balanceAfter = wallet.balanceCache + releaseAmount;
     const idempotencyKey =
       params.idempotencyKey ?? `release-${params.jobId}-${reservation.id}`;

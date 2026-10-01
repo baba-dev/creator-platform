@@ -61,6 +61,7 @@ export function ScriptwritingStudio({
 
   const handleCreateNewScript = useCallback(
     async (isInitial = false) => {
+      if (!canGenerate) return;
       const defaultContent = {
         scenes: [
           {
@@ -106,7 +107,7 @@ export function ScriptwritingStudio({
         console.error("Failed to create script", err);
       }
     },
-    [organizationId],
+    [canGenerate, organizationId],
   );
 
   // Load scripts on mount
@@ -121,8 +122,8 @@ export function ScriptwritingStudio({
           setScripts(data.scripts || []);
           if (data.scripts?.length) {
             setActiveScript(data.scripts[0]);
-          } else {
-            // Seed a starter sample script
+          } else if (canGenerate) {
+            // Seed a starter sample only for members allowed to create content.
             handleCreateNewScript(true);
           }
         }
@@ -131,10 +132,10 @@ export function ScriptwritingStudio({
       }
     }
     loadScripts();
-  }, [organizationId, handleCreateNewScript]);
+  }, [organizationId, canGenerate, handleCreateNewScript]);
 
   async function handleSaveScript() {
-    if (!activeScript) return;
+    if (!activeScript || !canGenerate) return;
     setIsSaving(true);
     setStatusMessage(null);
     try {
@@ -323,11 +324,16 @@ export function ScriptwritingStudio({
             variant="secondary"
             size="sm"
             onClick={() => handleCreateNewScript()}
+            disabled={!canGenerate}
           >
             <Icon name="plus" className="size-3.5" /> New Script
           </Button>
 
-          <Button size="sm" onClick={handleSaveScript} disabled={isSaving}>
+          <Button
+            size="sm"
+            onClick={handleSaveScript}
+            disabled={isSaving || !canGenerate}
+          >
             {isSaving ? "Saving..." : "Save Script"}
           </Button>
         </div>

@@ -78,9 +78,7 @@ export function GenerationProgressDialog({
           <ol className="grid grid-cols-4 gap-2" aria-label="Generation stages">
             {steps.map((step, index) => {
               const complete =
-                experience.stage === "READY"
-                  ? true
-                  : index < experience.stageIndex;
+                experience.stage === "READY" || index < experience.stageIndex;
               const current =
                 experience.stage !== "READY" &&
                 index === experience.stageIndex;

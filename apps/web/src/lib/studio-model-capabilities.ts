@@ -1,5 +1,6 @@
 export type CapabilityValue = boolean | number | string;
-export type StudioCapabilities = Record<string, CapabilityValue> | null | undefined;
+export type StudioCapabilities =
+  Record<string, CapabilityValue> | null | undefined;
 
 export function capabilityValues(
   capabilities: StudioCapabilities,

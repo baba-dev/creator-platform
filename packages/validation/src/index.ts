@@ -309,7 +309,7 @@ const textUsageRatesSchema = z
     "Text pricing tiers must be strictly increasing.",
   );
 
-export const usageRatesSchema = z.discriminatedUnion("estimator", [
+export const usageRatesSchema = z.union([
   videoUsageRatesSchema,
   textUsageRatesSchema,
 ]);

@@ -981,19 +981,16 @@ export async function processImageJob(
       typeof requestPayload.resolution === "string"
         ? requestPayload.resolution
         : undefined;
-    const referenceImageCount = Array.isArray(
-      requestPayload.referenceAssetIds,
-    )
+    const referenceImageCount = Array.isArray(requestPayload.referenceAssetIds)
       ? requestPayload.referenceAssetIds.length
       : 0;
-    const actualProviderCostMicroUsd =
-      getImageGenerationProviderCostMicroUsd({
-        providerModelId: current.providerModel.providerModelId,
-        baseCostMicroUsd: current.priceVersion.providerCostMicroUsd,
-        resolution,
-        outputCount: successfulCount,
-        referenceImageCount,
-      });
+    const actualProviderCostMicroUsd = getImageGenerationProviderCostMicroUsd({
+      providerModelId: current.providerModel.providerModelId,
+      baseCostMicroUsd: current.priceVersion.providerCostMicroUsd,
+      resolution,
+      outputCount: successfulCount,
+      referenceImageCount,
+    });
     const readyAssets = assets.slice(0, successfulCount);
     await tx.generationJob.update({
       where: { id },

@@ -265,6 +265,32 @@ Do not:
 - Never tint real customer media to match the interface palette.
 - Loading should communicate generation progress, stage, and expected wait.
 
+### Process experience
+
+Long-running work uses the shared process system in
+`apps/web/src/components/process/`.
+
+- Generation waits use the working-laptop mascot and a stage rail. Never invent
+  percentage progress when the provider does not expose it.
+- Route and local process waits use the running mascot. Delay route artwork for
+  roughly 350 ms so fast navigation does not flash a loader.
+- Delayed/recoverable/error states use the confused mascot, but status meaning
+  comes from semantic colour plus explicit copy, never artwork alone.
+- Generation ETA is learned from recent successful jobs for the same provider
+  model using a conservative percentile. Sparse history uses coarse language
+  such as “Usually ready within a minute”.
+- When elapsed time exceeds the expected range, stop the countdown and switch to
+  “Taking a little longer than usual”; never count through zero.
+- Long generation waits must be dismissible to background. Persist the durable
+  job id, not a client-only task, so navigation never implies the provider work
+  stopped.
+- `MANUAL_REVIEW` is an attention state, not a retry invitation. Tell the user
+  that credits remain reserved and link to job details.
+
+Mascot artwork sits on the semantic `illustration-paper` surface. This is a
+contrast surface, not a third theme; surrounding product UI continues to use
+normal light/dark tokens.
+
 ### Empty states
 
 - One line icon or small sketch, a clear explanation, and one next action.
@@ -323,8 +349,8 @@ Any coding agent creating or editing Aiwa Creators UI must:
    `text-muted-foreground`, `border-border`, and `text-primary`.
 3. Verify the result in both light and dark modes.
 4. Reuse `Button`, `ThemeToggle`, `CreativeSurface`, `Eyebrow`, `Annotation`,
-   `DemoBadge`, `StatusDot`, `Tape`, `Brand`, and `Icon` before inventing
-   equivalents.
+   `DemoBadge`, `StatusDot`, `Tape`, `Brand`, `Icon`, `MascotScene`,
+   `ProcessDialog`, and `ProcessFeedback` before inventing equivalents.
 5. Use Bricolage for display headings, Manrope for product copy, and Caveat only
    for short annotations.
 6. Keep one focal sketch gesture per major viewport.

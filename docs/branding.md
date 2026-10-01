@@ -48,7 +48,6 @@ These files are application identity assets, not customer media. Customer
 uploads and generated outputs continue through the `Asset` domain and
 `@aiwa/assets`.
 
-
 ## Process mascots
 
 The three animated mascot SVGs are product-experience assets, not customer

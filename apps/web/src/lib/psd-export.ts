@@ -304,7 +304,8 @@ function compositeVisibleLayers(
             (1 - sourceAlpha) * backdropAlpha * backdrop +
             sourceAlpha *
               ((1 - backdropAlpha) * source + backdropAlpha * blended);
-          targetChannels[channel][canvasIndex] =
+          const target = targetChannels[channel]!;
+          target[canvasIndex] =
             outputAlpha > 0 ? Math.round(premultiplied / outputAlpha) : 0;
         }
         alpha[canvasIndex] = Math.round(outputAlpha * 255);

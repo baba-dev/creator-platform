@@ -308,9 +308,13 @@ describe("executeTextGeneration", () => {
           priceVersions: [
             {
               id: "pv_1",
-              providerCostMicroUsd: 1000n,
+              providerCostMicroUsd: 20_000n,
               pricingDimension: "TOKEN",
               unitQuantity: 1000,
+              fxBaisaNumerator: 769n,
+              fxBaisaDenominator: 2n,
+              targetMarginBps: 2500,
+              creditsPerBaisa: 1n,
             },
           ],
         }),
@@ -328,7 +332,6 @@ describe("executeTextGeneration", () => {
       units: 2,
       billableQuantity: 1024,
     });
-    mocks.credits.priceCredits.mockReturnValue(20n);
 
     const provider = {
       name: "byteplus" as const,

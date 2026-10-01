@@ -63,6 +63,7 @@ export async function POST(
       template.promptTemplate,
       variables,
       parsed.data.values,
+      template.mediaKind as "IMAGE" | "VIDEO" | "VOICE",
     );
 
     if (resolved.referenceAssetIds.length) {

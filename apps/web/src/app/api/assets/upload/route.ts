@@ -6,6 +6,7 @@ import {
   inspectAssetUpload,
 } from "@aiwa/assets";
 import { createAssetObjectKey, LocalAssetStorage } from "@aiwa/assets/storage";
+import { probeUploadedBuffer } from "@aiwa/assets/media-probe";
 import { parseServerEnv } from "@aiwa/config";
 import { db } from "@aiwa/db";
 import { NextResponse } from "next/server";
@@ -119,14 +120,28 @@ export async function POST(request: Request) {
     );
     pending = created;
 
-    const stored = await storage.put(objectKey, bytes);
     let width: number | null = null;
     let height: number | null = null;
+    let durationMs: number | null = null;
     if (inspected.mediaKind === "IMAGE") {
       const metadata = await sharp(bytes, { failOn: "error" }).metadata();
       width = metadata.width ?? null;
       height = metadata.height ?? null;
+    } else if (
+      inspected.mediaKind === "VIDEO" ||
+      inspected.mediaKind === "AUDIO"
+    ) {
+      const media = await probeUploadedBuffer(
+        bytes,
+        inspected.mediaKind,
+        inspected.extension,
+      );
+      width = media.width;
+      height = media.height;
+      durationMs = media.durationMs;
     }
+
+    const stored = await storage.put(objectKey, bytes);
 
     const asset = await db.$transaction((tx) =>
       finalizeUploadedAsset(tx, {
@@ -137,6 +152,7 @@ export async function POST(request: Request) {
         sha256: stored.sha256,
         width,
         height,
+        durationMs,
       }),
     );
 

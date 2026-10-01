@@ -150,6 +150,9 @@ describe("asset trash lifecycle", () => {
   });
 
   it("finalizes only PURGING assets and releases used storage once", async () => {
+    const variantFindMany = vi
+      .fn()
+      .mockResolvedValue([{ byteSize: 50n }, { byteSize: 20n }]);
     const variantDeleteMany = vi.fn().mockResolvedValue({ count: 2 });
     const assetUpdate = vi.fn().mockResolvedValue({});
     const usageUpdate = vi.fn().mockResolvedValue({ count: 1 });
@@ -165,6 +168,7 @@ describe("asset trash lifecycle", () => {
         update: assetUpdate,
       },
       assetVariant: {
+        findMany: variantFindMany,
         deleteMany: variantDeleteMany,
       },
       assetStorageUsage: {
@@ -179,6 +183,10 @@ describe("asset trash lifecycle", () => {
       }),
     ).resolves.toBe(true);
 
+    expect(variantFindMany).toHaveBeenCalledWith({
+      where: { assetId: "asset_1" },
+      select: { byteSize: true },
+    });
     expect(variantDeleteMany).toHaveBeenCalledWith({
       where: { assetId: "asset_1" },
     });
@@ -194,7 +202,7 @@ describe("asset trash lifecycle", () => {
     expect(usageUpdate).toHaveBeenCalledWith({
       where: { organizationId: "org_1" },
       data: {
-        usedBytes: { decrement: 100n },
+        usedBytes: { decrement: 170n },
         version: { increment: 1 },
       },
     });

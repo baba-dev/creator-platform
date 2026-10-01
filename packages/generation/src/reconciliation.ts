@@ -279,7 +279,7 @@ export async function getJobReconciliationDetails(jobId: string) {
         reversalOf: {
           select: { id: true, type: true, amountCredits: true },
         },
-        reversedBy: {
+        reversals: {
           select: { id: true, type: true, amountCredits: true },
         },
       },
@@ -298,7 +298,6 @@ export async function getJobReconciliationDetails(jobId: string) {
   ]);
 
   const captureEntry = ledgerEntries.find((e) => e.type === "CAPTURE");
-  const refundEntry = ledgerEntries.find((e) => e.type === "REFUND");
   const releaseEntry = ledgerEntries.find((e) => e.type === "RELEASE");
   const reconciliationOutcome = latestOutcomeFromAudits(auditEvents);
 
@@ -369,21 +368,24 @@ export async function getJobReconciliationDetails(jobId: string) {
       "Recovery is available only for verified MANUAL_REVIEW jobs or PROCESSING storage recovery.";
   }
 
-  // Refund permitted if job is settled (chargedCredits > 0) and unrefunded
-  if (
-    job.chargedCredits > 0n &&
-    captureEntry &&
-    !captureEntry.reversedBy &&
-    !refundEntry
-  ) {
+  // Refund permitted if job is settled (chargedCredits > 0) and remaining refundable balance exists
+  const refundEntries = ledgerEntries.filter((e) => e.type === "REFUND");
+  const totalRefunded = refundEntries.reduce(
+    (sum, r) => sum + r.amountCredits,
+    0n,
+  );
+  const remainingRefundable = captureEntry
+    ? captureEntry.amountCredits - totalRefunded
+    : 0n;
+
+  if (job.chargedCredits > 0n && captureEntry && remainingRefundable > 0n) {
     permittedActions.canRefund = true;
-    permittedActions.refundReason =
-      "Settled job can be refunded with documented administrative reason.";
+    permittedActions.refundReason = `Settled job can be refunded up to ${remainingRefundable.toString()} remaining credits.`;
   } else if (!captureEntry || job.chargedCredits === 0n) {
     permittedActions.canRefund = false;
     permittedActions.refundReason =
       "Job has not charged any credits to refund.";
-  } else if (captureEntry.reversedBy || refundEntry) {
+  } else if (remainingRefundable <= 0n) {
     permittedActions.canRefund = false;
     permittedActions.refundReason =
       "Captured credits have already been refunded.";
@@ -1258,7 +1260,7 @@ export async function refundSettledJob(params: RefundSettledJobParams) {
         referenceId: job.id,
         type: "CAPTURE",
       },
-      include: { reversedBy: true },
+      include: { reversals: true },
     });
 
     if (!captureEntry) {
@@ -1269,7 +1271,19 @@ export async function refundSettledJob(params: RefundSettledJobParams) {
       );
     }
 
-    if (captureEntry.reversedBy) {
+    const existingRefunds = (
+      captureEntry.reversals ??
+      ("reversedBy" in captureEntry && captureEntry.reversedBy
+        ? [captureEntry.reversedBy as { type: string; amountCredits: bigint }]
+        : [])
+    ).filter((r) => r.type === "REFUND");
+    const alreadyRefunded = existingRefunds.reduce(
+      (sum, r) => sum + r.amountCredits,
+      0n,
+    );
+    const remainingRefundable = captureEntry.amountCredits - alreadyRefunded;
+
+    if (remainingRefundable <= 0n) {
       throw new JobReconciliationError(
         "ALREADY_REFUNDED",
         "Job has already been refunded.",
@@ -1277,11 +1291,11 @@ export async function refundSettledJob(params: RefundSettledJobParams) {
       );
     }
 
-    const refundAmount = params.amountCredits ?? job.chargedCredits;
-    if (refundAmount <= 0n || refundAmount > job.chargedCredits) {
+    const refundAmount = params.amountCredits ?? remainingRefundable;
+    if (refundAmount <= 0n || refundAmount > remainingRefundable) {
       throw new JobReconciliationError(
         "INVALID_REFUND_AMOUNT",
-        `Refund amount must be between 1 and ${job.chargedCredits.toString()} credits.`,
+        `Refund amount must be between 1 and ${remainingRefundable.toString()} credits.`,
         400,
       );
     }

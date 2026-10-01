@@ -184,7 +184,18 @@ export function usedStorageBytes(
 ): bigint {
   return assets.reduce(
     (total, asset) =>
-      asset.status === "DELETED" ? total : total + asset.byteSize,
+      asset.status === "DELETED" || asset.status === "PURGED"
+        ? total
+        : total + asset.byteSize,
+    0n,
+  );
+}
+export function retainedStorageBytes(
+  assets: readonly { byteSize: bigint; status: string }[],
+): bigint {
+  return assets.reduce(
+    (total, asset) =>
+      asset.status === "PURGED" ? total : total + asset.byteSize,
     0n,
   );
 }
@@ -664,7 +675,22 @@ export async function getStorageUsage(organizationId: string, userId?: string) {
     where: {
       organizationId,
       storageOwnerUserId: userId,
-      status: { not: "DELETED" },
+      status: { in: ["PENDING", "READY", "QUARANTINED", "DELETED", "PURGING"] },
+    },
+    _sum: { byteSize: true },
+  });
+  return result._sum.byteSize ?? 0n;
+}
+
+export async function getLogicalStorageUsage(
+  organizationId: string,
+  userId?: string,
+) {
+  const result = await db.asset.aggregate({
+    where: {
+      organizationId,
+      storageOwnerUserId: userId,
+      status: { in: ["READY", "QUARANTINED"] },
     },
     _sum: { byteSize: true },
   });
@@ -674,6 +700,7 @@ export async function getStorageUsage(organizationId: string, userId?: string) {
 /**
  * Locks the organization while calculating both quota scopes. Asset creation
  * must run in the callback so a check and allocation cannot race each other.
+ * Retains trash charges until purge to avoid storage quota bypasses.
  */
 export async function withStorageAllocation<T>(input: {
   organizationId: string;
@@ -689,14 +716,18 @@ export async function withStorageAllocation<T>(input: {
           where: {
             organizationId: input.organizationId,
             storageOwnerUserId: input.storageOwnerUserId,
-            status: { not: "DELETED" },
+            status: {
+              in: ["PENDING", "READY", "QUARANTINED", "DELETED", "PURGING"],
+            },
           },
           _sum: { byteSize: true },
         }),
         transaction.asset.aggregate({
           where: {
             organizationId: input.organizationId,
-            status: { not: "DELETED" },
+            status: {
+              in: ["PENDING", "READY", "QUARANTINED", "DELETED", "PURGING"],
+            },
           },
           _sum: { byteSize: true },
         }),

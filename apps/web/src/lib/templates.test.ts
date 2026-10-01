@@ -98,6 +98,10 @@ describe("generation templates", () => {
             "aspectRatio:16:9": true,
             "resolution:2K": true,
             referenceImages: true,
+            maxReferenceImages: 14,
+            sequentialImages: true,
+            maxGeneratedImages: 15,
+            maxTotalInputOutputImages: 15,
           } as Prisma.JsonValue,
         },
         "IMAGE",
@@ -117,6 +121,93 @@ describe("generation templates", () => {
         },
         "IMAGE",
         defaults,
+      ),
+    ).toBe(false);
+  });
+
+  it("enforces media-specific prompt limits", () => {
+    const text2500 = "a".repeat(2500);
+    const text1500 = "a".repeat(1500);
+    const singleVar = parseTemplateVariables([
+      { key: "t", label: "Text", type: "text", required: true },
+    ] as Prisma.JsonValue);
+
+    // Image/Video limit is 2000
+    expect(() =>
+      resolveTemplatePrompt("{{t}}", singleVar, { t: text2500 }, "IMAGE"),
+    ).toThrow("too long");
+
+    expect(
+      resolveTemplatePrompt("{{t}}", singleVar, { t: text1500 }, "IMAGE").prompt
+        .length,
+    ).toBe(1500);
+
+    // Voice allows up to 4096
+    expect(
+      resolveTemplatePrompt("{{t}}", singleVar, { t: text1500 }, "VOICE").prompt
+        .length,
+    ).toBe(1500);
+  });
+
+  it("checks sequentialImages and outputCount limits for IMAGE templates", () => {
+    const defaults = parseTemplateDefaults({
+      aspectRatio: "16:9",
+      resolution: "2K",
+      outputCount: 4,
+    } as Prisma.JsonValue);
+
+    // Fails when sequentialImages is not true
+    expect(
+      modelSupportsTemplate(
+        {
+          mediaKind: "IMAGE",
+          capabilities: {
+            "aspectRatio:16:9": true,
+            "resolution:2K": true,
+            sequentialImages: false,
+            maxGeneratedImages: 4,
+          } as Prisma.JsonValue,
+        },
+        "IMAGE",
+        defaults,
+      ),
+    ).toBe(false);
+
+    // Fails when outputCount exceeds maxGeneratedImages
+    expect(
+      modelSupportsTemplate(
+        {
+          mediaKind: "IMAGE",
+          capabilities: {
+            "aspectRatio:16:9": true,
+            "resolution:2K": true,
+            sequentialImages: true,
+            maxGeneratedImages: 2,
+          } as Prisma.JsonValue,
+        },
+        "IMAGE",
+        defaults,
+      ),
+    ).toBe(false);
+
+    // Fails when combined references and outputs exceed maxTotalInputOutputImages
+    expect(
+      modelSupportsTemplate(
+        {
+          mediaKind: "IMAGE",
+          capabilities: {
+            "aspectRatio:16:9": true,
+            "resolution:2K": true,
+            referenceImages: true,
+            maxReferenceImages: 5,
+            sequentialImages: true,
+            maxGeneratedImages: 10,
+            maxTotalInputOutputImages: 5,
+          } as Prisma.JsonValue,
+        },
+        "IMAGE",
+        defaults,
+        3, // 3 + 4 = 7 > 5
       ),
     ).toBe(false);
   });

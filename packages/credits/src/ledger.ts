@@ -228,18 +228,27 @@ export async function captureCreditsForJob(
       referenceId: params.jobId,
       type: "RESERVATION",
     },
-    include: { reversedBy: true },
+    include: { reversals: true },
   });
 
   if (!reservation) {
     throw new ReservationNotFoundError(params.jobId);
   }
 
-  if (reservation.reversedBy) {
-    throw new ReservationAlreadySettledError(
-      params.jobId,
-      reservation.reversedBy.type,
+  const hasReversal =
+    (reservation.reversals?.length ?? 0) > 0 ||
+    Boolean(
+      "reversedBy" in reservation &&
+      (reservation as Record<string, unknown>).reversedBy,
     );
+
+  if (hasReversal) {
+    const settledType =
+      reservation.reversals?.[0]?.type ??
+      ((reservation as Record<string, unknown>).reversedBy as { type?: string })
+        ?.type ??
+      "SETTLED";
+    throw new ReservationAlreadySettledError(params.jobId, settledType);
   }
 
   const existingCapture = await tx.ledgerEntry.findFirst({
@@ -329,38 +338,48 @@ export async function releaseOrRefundCredits(
       referenceId: params.jobId,
       type: "CAPTURE",
     },
-    include: { reversedBy: true },
+    include: { reversals: true },
   });
 
   if (capture) {
-    if (capture.reversedBy) {
-      if (
-        params.idempotencyKey &&
-        capture.reversedBy.idempotencyKey === params.idempotencyKey
-      ) {
-        return capture.reversedBy;
-      }
-      throw new ReservationAlreadySettledError(
-        params.jobId,
-        capture.reversedBy.type,
+    if (params.idempotencyKey) {
+      const match = capture.reversals.find(
+        (r) => r.idempotencyKey === params.idempotencyKey,
       );
+      if (match) {
+        return match;
+      }
+    }
+
+    const existingRefunds = capture.reversals.filter(
+      (r) => r.type === "REFUND",
+    );
+    const alreadyRefunded = existingRefunds.reduce(
+      (sum, r) => sum + r.amountCredits,
+      0n,
+    );
+    const remainingRefundable = capture.amountCredits - alreadyRefunded;
+
+    if (remainingRefundable <= 0n) {
+      throw new ReservationAlreadySettledError(params.jobId, "REFUND");
     }
 
     const refundAmount =
       params.amountCredits !== undefined
         ? requireNonNegativeInteger(params.amountCredits, "amountCredits")
-        : capture.amountCredits;
+        : remainingRefundable;
 
-    if (refundAmount === 0n || refundAmount > capture.amountCredits) {
+    if (refundAmount === 0n || refundAmount > remainingRefundable) {
       throw new InvalidAmountError(
-        `Refund amount must be between 1 and ${capture.amountCredits} credits`,
+        `Refund amount must be between 1 and ${remainingRefundable} credits`,
       );
     }
 
     const wallet = await lockAndGetWallet(tx, params.walletId);
     const balanceAfter = wallet.balanceCache + refundAmount;
     const idempotencyKey =
-      params.idempotencyKey ?? `refund-${params.jobId}-${capture.id}`;
+      params.idempotencyKey ??
+      `refund-${params.jobId}-${capture.id}-${existingRefunds.length + 1}`;
 
     const metadataJson =
       typeof params.metadata === "object" && params.metadata !== null
@@ -404,20 +423,30 @@ export async function releaseOrRefundCredits(
       referenceId: params.jobId,
       type: "RESERVATION",
     },
-    include: { reversedBy: true },
+    include: { reversals: true },
   });
 
   if (reservation) {
-    if (reservation.reversedBy) {
+    const reservationReversals =
+      reservation.reversals ??
+      ("reversedBy" in reservation &&
+      (reservation as Record<string, unknown>).reversedBy
+        ? [(reservation as Record<string, unknown>).reversedBy as LedgerEntry]
+        : []);
+    if (reservationReversals.length > 0) {
       if (
         params.idempotencyKey &&
-        reservation.reversedBy.idempotencyKey === params.idempotencyKey
+        reservationReversals.some(
+          (r) => r.idempotencyKey === params.idempotencyKey,
+        )
       ) {
-        return reservation.reversedBy;
+        return reservationReversals.find(
+          (r) => r.idempotencyKey === params.idempotencyKey,
+        )!;
       }
       throw new ReservationAlreadySettledError(
         params.jobId,
-        reservation.reversedBy.type,
+        reservationReversals[0]!.type,
       );
     }
 

@@ -123,17 +123,42 @@ export function AssetLibrary({
   const [newFolderName, setNewFolderName] = useState("");
   const [showFolderForm, setShowFolderForm] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const activeAbortControllerRef = useRef<AbortController | null>(null);
+  const requestSeqRef = useRef(0);
+  const activeQueryKeyRef = useRef("");
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedQ(q.trim()), 250);
     return () => window.clearTimeout(timer);
   }, [q]);
 
+  const currentQueryKey = JSON.stringify({
+    debouncedQ,
+    mediaKind,
+    projectId,
+    folderId,
+    tagId,
+    favorite,
+    trash,
+  });
+
   const load = useCallback(
     async (cursor?: string) => {
       const append = Boolean(cursor);
-      if (append) setLoadingMore(true);
-      else setLoading(true);
+      if (append) {
+        setLoadingMore(true);
+      } else {
+        if (activeAbortControllerRef.current) {
+          activeAbortControllerRef.current.abort();
+        }
+        activeAbortControllerRef.current = new AbortController();
+        setLoading(true);
+        setNextCursor(null);
+        activeQueryKeyRef.current = currentQueryKey;
+      }
+
+      const seq = ++requestSeqRef.current;
+      const controller = activeAbortControllerRef.current;
       setError(null);
       try {
         const params = new URLSearchParams({ organizationId, limit: "60" });
@@ -147,12 +172,19 @@ export function AssetLibrary({
         if (trash) params.set("trash", "true");
         const response = await fetch(`/api/assets?${params}`, {
           cache: "no-store",
+          signal: append ? undefined : controller?.signal,
         });
+
+        if (seq !== requestSeqRef.current) return;
+        if (append && activeQueryKeyRef.current !== currentQueryKey) return;
+
         const body = (await response.json()) as {
           assets?: Asset[];
           nextCursor?: string | null;
           error?: string;
         };
+
+        if (seq !== requestSeqRef.current) return;
         if (!response.ok || !body.assets)
           throw new Error(body.error ?? "Unable to load asset library.");
         const rows = body.assets;
@@ -175,16 +207,24 @@ export function AssetLibrary({
           );
         }
       } catch (cause) {
-        setError(
-          cause instanceof Error ? cause.message : "Unable to load assets.",
-        );
+        if (cause instanceof DOMException && cause.name === "AbortError") {
+          return;
+        }
+        if (seq === requestSeqRef.current) {
+          setError(
+            cause instanceof Error ? cause.message : "Unable to load assets.",
+          );
+        }
       } finally {
-        if (append) setLoadingMore(false);
-        else setLoading(false);
+        if (seq === requestSeqRef.current) {
+          if (append) setLoadingMore(false);
+          else setLoading(false);
+        }
       }
     },
     [
       organizationId,
+      currentQueryKey,
       debouncedQ,
       mediaKind,
       projectId,
@@ -197,7 +237,12 @@ export function AssetLibrary({
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      if (activeAbortControllerRef.current) {
+        activeAbortControllerRef.current.abort();
+      }
+    };
   }, [load]);
 
   const pollOffset = useRef(0);

@@ -49,6 +49,13 @@ async function saveVariant(input: {
           height: input.height,
         },
       });
+      await tx.assetStorageUsage.updateMany({
+        where: { organizationId: input.organizationId },
+        data: {
+          usedBytes: { increment: stored.byteSize },
+          version: { increment: 1 },
+        },
+      });
       await completeMediaTask(tx);
     });
   } catch (error) {
@@ -213,13 +220,28 @@ export async function purgeExpiredAssets(limit = 50): Promise<number> {
 
   let purged = 0;
   for (const candidate of candidates) {
-    const claimed = await db.$transaction((tx) =>
-      claimExpiredAssetForPurge(tx, {
+    let claimed: Awaited<ReturnType<typeof claimExpiredAssetForPurge>> = null;
+    try {
+      claimed = await db.$transaction((tx) =>
+        claimExpiredAssetForPurge(tx, {
+          assetId: candidate.id,
+          organizationId: candidate.organizationId,
+          now,
+        }),
+      );
+    } catch (claimError) {
+      console.error("Failed to claim asset for purge; applying backoff.", {
         assetId: candidate.id,
-        organizationId: candidate.organizationId,
-        now,
-      }),
-    );
+        error: claimError,
+      });
+      await db.asset
+        .updateMany({
+          where: { id: candidate.id },
+          data: { purgeAfter: new Date(Date.now() + 15 * 60_000) },
+        })
+        .catch(() => undefined);
+      continue;
+    }
     if (!claimed) continue;
 
     try {
@@ -227,21 +249,41 @@ export async function purgeExpiredAssets(limit = 50): Promise<number> {
         await storage.delete(variant.objectKey);
       }
       await storage.delete(claimed.objectKey);
-    } catch {
-      // Keep PURGING so a later maintenance pass can retry idempotent deletes.
-      console.error("Asset purge deletion failed; retry remains eligible.", {
+    } catch (deleteError) {
+      // Record failure with bounded retry / backoff so this item does not block others every cycle
+      console.error("Asset purge deletion failed; applying retry backoff.", {
         assetId: claimed.id,
+        error: deleteError,
       });
+      await db.asset
+        .updateMany({
+          where: { id: claimed.id },
+          data: { purgeAfter: new Date(Date.now() + 15 * 60_000) },
+        })
+        .catch(() => undefined);
       continue;
     }
 
-    const completed = await db.$transaction((tx) =>
-      completeAssetPurge(tx, {
+    try {
+      const completed = await db.$transaction((tx) =>
+        completeAssetPurge(tx, {
+          assetId: claimed.id,
+          organizationId: claimed.organizationId,
+        }),
+      );
+      if (completed) purged += 1;
+    } catch (completeError) {
+      console.error("Failed to complete asset purge; applying backoff.", {
         assetId: claimed.id,
-        organizationId: claimed.organizationId,
-      }),
-    );
-    if (completed) purged += 1;
+        error: completeError,
+      });
+      await db.asset
+        .updateMany({
+          where: { id: claimed.id },
+          data: { purgeAfter: new Date(Date.now() + 15 * 60_000) },
+        })
+        .catch(() => undefined);
+    }
   }
 
   return purged;

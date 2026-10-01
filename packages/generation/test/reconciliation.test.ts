@@ -682,7 +682,7 @@ describe("Generation Job Reconciliation", () => {
         id: "entry-cap",
         type: "CAPTURE",
         amountCredits: 28n,
-        reversedBy: null,
+        reversals: [],
       });
 
       const result = await refundSettledJob({
@@ -721,7 +721,7 @@ describe("Generation Job Reconciliation", () => {
         id: "entry-cap",
         type: "CAPTURE",
         amountCredits: 28n,
-        reversedBy: { id: "entry-ref", type: "REFUND" },
+        reversals: [{ id: "entry-ref", type: "REFUND", amountCredits: 28n }],
       });
 
       await expect(
@@ -732,6 +732,40 @@ describe("Generation Job Reconciliation", () => {
           idempotencyKey: "dup-key",
         }),
       ).rejects.toThrow("Job has already been refunded");
+    });
+
+    it("allows refunding the remainder after a partial refund", async () => {
+      mocks.db.generationJob.findUnique.mockResolvedValue({
+        ...baseJob,
+        status: "SUCCEEDED",
+        chargedCredits: 100n,
+      });
+      // Already refunded 20 credits previously
+      mocks.db.ledgerEntry.findFirst.mockResolvedValue({
+        id: "entry-cap",
+        type: "CAPTURE",
+        amountCredits: 100n,
+        reversals: [{ id: "entry-ref-1", type: "REFUND", amountCredits: 20n }],
+      });
+
+      // Refunding 80 of the remaining 80 should succeed
+      const result = await refundSettledJob({
+        jobId: "job-123",
+        actorUserId: "operator-1",
+        reason: "Refunding remaining credits",
+        amountCredits: 80n,
+        idempotencyKey: "refund-key-2",
+      });
+
+      expect(result.success).toBe(true);
+      expect(mocks.releaseOrRefund).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          walletId: "wallet-1",
+          jobId: "job-123",
+          amountCredits: 80n,
+        }),
+      );
     });
   });
 });

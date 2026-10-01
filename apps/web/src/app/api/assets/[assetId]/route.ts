@@ -154,9 +154,13 @@ export async function PATCH(
         organizationId: input.organizationId,
         status: { in: ["READY", "DELETED"] },
       },
-      select: { id: true },
+      select: { id: true, purpose: true, storageOwnerUserId: true },
     });
-    if (!existing)
+    if (
+      !existing ||
+      (existing.purpose === "REFERENCE_INPUT" &&
+        existing.storageOwnerUserId !== session.user.id)
+    )
       return NextResponse.json({ error: "Asset not found." }, { status: 404 });
 
     const asset = await db.$transaction(async (tx) => {

@@ -42,6 +42,7 @@ import { failImageOperation, processImageOperation } from "./image-operations";
 import { failVideoRender, processVideoRender } from "./video-renders";
 import { processReasoningJob } from "./reasoning";
 import { reapExpiredRecoveryJobs } from "./reaper";
+import { applyTenantFairness } from "./generation-dispatch";
 
 configureMediaCapacityGate(withDatabaseMediaCapacity);
 const env = parseServerEnv();
@@ -352,6 +353,23 @@ void startMediaWorker().catch(() =>
   log("error", "Media worker startup failed; queued tasks retained"),
 );
 
+let gcDispatching = false;
+async function dispatchGarbageCollection() {
+  if (isShuttingDown || gcDispatching) return;
+  gcDispatching = true;
+  try {
+    await purgeMediaAttemptOutputs();
+    await purgeExpiredAssets();
+  } catch (error) {
+    log("error", "Asset garbage collection failed; retries remain eligible", {
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      errorMessage: error instanceof Error ? error.message : "Unknown",
+    });
+  } finally {
+    gcDispatching = false;
+  }
+}
+
 let operationScanCursor: string | undefined;
 let renderScanCursor: string | undefined;
 let cleanupScanCursor: string | undefined;
@@ -362,8 +380,6 @@ async function dispatchAssets() {
   assetDispatching = true;
   try {
     await reviewExpiredMediaTasks();
-    await purgeMediaAttemptOutputs();
-    await purgeExpiredAssets();
     const operations = await db.imageOperation.findMany({
       where: {
         ...(operationScanCursor ? { id: { gt: operationScanCursor } } : {}),
@@ -602,6 +618,10 @@ async function dispatchMail() {
 }
 
 let generationDispatching = false;
+let generationSubmitCursor: string | null = null;
+let generationPollCursor: string | null = null;
+const GENERATION_BATCH_SIZE = 100;
+
 async function dispatchGeneration() {
   if (
     isShuttingDown ||
@@ -614,28 +634,120 @@ async function dispatchGeneration() {
   try {
     await reapExpiredRecoveryJobs();
 
+    // 1. Fetch new submissions with keyset cursor rotation
+    const submitWhere: {
+      status: "QUEUED";
+      providerModel: { enabled: true };
+      id?: { gt: string };
+    } = {
+      status: "QUEUED",
+      providerModel: { enabled: true },
+    };
+    if (generationSubmitCursor) {
+      submitWhere.id = { gt: generationSubmitCursor };
+    }
+
+    let queuedRows = await db.generationJob.findMany({
+      where: submitWhere,
+      select: {
+        id: true,
+        status: true,
+        organizationId: true,
+        providerModel: { select: { mediaKind: true } },
+      },
+      orderBy: { id: "asc" },
+      take: GENERATION_BATCH_SIZE,
+    });
+
+    if (queuedRows.length < GENERATION_BATCH_SIZE) {
+      if (generationSubmitCursor && queuedRows.length === 0) {
+        generationSubmitCursor = null;
+        queuedRows = await db.generationJob.findMany({
+          where: {
+            status: "QUEUED",
+            providerModel: { enabled: true },
+          },
+          select: {
+            id: true,
+            status: true,
+            organizationId: true,
+            providerModel: { select: { mediaKind: true } },
+          },
+          orderBy: { id: "asc" },
+          take: GENERATION_BATCH_SIZE,
+        });
+      } else {
+        generationSubmitCursor = null;
+      }
+    }
+    if (queuedRows.length > 0) {
+      generationSubmitCursor = queuedRows[queuedRows.length - 1]!.id;
+    }
+
+    // 2. Fetch provider polling jobs with separate keyset cursor rotation
     const retryBefore = new Date(Date.now() - 60 * 1000);
-    const jobs = await db.generationJob.findMany({
-      where: {
-        OR: [
-          { status: "QUEUED", providerModel: { enabled: true } },
-          {
+    const pollWhere: {
+      status: "PROCESSING";
+      OR: [
+        { errorCode: null },
+        { errorCode: { not: null }; updatedAt: { lt: Date } },
+      ];
+      id?: { gt: string };
+    } = {
+      status: "PROCESSING",
+      OR: [
+        { errorCode: null },
+        { errorCode: { not: null }, updatedAt: { lt: retryBefore } },
+      ],
+    };
+    if (generationPollCursor) {
+      pollWhere.id = { gt: generationPollCursor };
+    }
+
+    let pollRows = await db.generationJob.findMany({
+      where: pollWhere,
+      select: {
+        id: true,
+        status: true,
+        organizationId: true,
+        providerModel: { select: { mediaKind: true } },
+      },
+      orderBy: { id: "asc" },
+      take: GENERATION_BATCH_SIZE,
+    });
+
+    if (pollRows.length < GENERATION_BATCH_SIZE) {
+      if (generationPollCursor && pollRows.length === 0) {
+        generationPollCursor = null;
+        pollRows = await db.generationJob.findMany({
+          where: {
             status: "PROCESSING",
             OR: [
               { errorCode: null },
               { errorCode: { not: null }, updatedAt: { lt: retryBefore } },
             ],
           },
-        ],
-      },
-      select: {
-        id: true,
-        status: true,
-        providerModel: { select: { mediaKind: true } },
-      },
-      orderBy: { createdAt: "asc" },
-      take: 100,
-    });
+          select: {
+            id: true,
+            status: true,
+            organizationId: true,
+            providerModel: { select: { mediaKind: true } },
+          },
+          orderBy: { id: "asc" },
+          take: GENERATION_BATCH_SIZE,
+        });
+      } else {
+        generationPollCursor = null;
+      }
+    }
+    if (pollRows.length > 0) {
+      generationPollCursor = pollRows[pollRows.length - 1]!.id;
+    }
+
+    // Interleave submissions and polling with tenant fairness
+    const fairQueued = applyTenantFairness(queuedRows);
+    const fairPoll = applyTenantFairness(pollRows);
+    const jobs = [...fairQueued, ...fairPoll];
 
     for (const job of jobs) {
       if (isShuttingDown) break;
@@ -760,6 +872,7 @@ schedule("mail", dispatchMail, 5_000);
 schedule("generation", dispatchGeneration, 10_000);
 schedule("reasoning", dispatchReasoning, 2_000);
 schedule("asset-ingestion", dispatchAssets, 15_000);
+schedule("asset-ingestion", dispatchGarbageCollection, 60_000);
 const loopDelay = monitorEventLoopDelay({ resolution: 20 });
 loopDelay.enable();
 const healthRedis = new Redis(env.REDIS_URL, {

@@ -1,3 +1,4 @@
+import { hasOrganizationPermission } from "@aiwa/authz";
 import { db, type Prisma } from "@aiwa/db";
 import { scriptUpdateSchema } from "@aiwa/validation";
 import { NextResponse } from "next/server";
@@ -37,8 +38,9 @@ export async function GET(
         userId: session.user.id,
       },
     },
+    include: { organization: true },
   });
-  if (!membership) {
+  if (!membership || membership.organization.status !== "ACTIVE") {
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
   }
 
@@ -81,12 +83,33 @@ export async function PUT(
       },
       include: { organization: true },
     });
-    if (!membership || membership.organization.status !== "ACTIVE") {
+    if (
+      !membership ||
+      membership.organization.status !== "ACTIVE" ||
+      !hasOrganizationPermission(membership.role, "projects:write")
+    ) {
       return NextResponse.json({ error: "Access denied." }, { status: 403 });
     }
 
     const json = await request.json();
     const input = scriptUpdateSchema.parse(json);
+
+    if (input.projectId) {
+      const project = await db.project.findFirst({
+        where: {
+          id: input.projectId,
+          organizationId: existing.organizationId,
+          archivedAt: null,
+        },
+        select: { id: true },
+      });
+      if (!project) {
+        return NextResponse.json(
+          { error: "Project is unavailable in this workspace." },
+          { status: 400 },
+        );
+      }
+    }
 
     const updated = await db.script.update({
       where: { id: scriptId },
@@ -155,8 +178,13 @@ export async function DELETE(
         userId: session.user.id,
       },
     },
+    include: { organization: true },
   });
-  if (!membership) {
+  if (
+    !membership ||
+    membership.organization.status !== "ACTIVE" ||
+    !hasOrganizationPermission(membership.role, "projects:write")
+  ) {
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
   }
 

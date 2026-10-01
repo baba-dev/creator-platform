@@ -2234,13 +2234,19 @@ export function GenerationStudio({
               !canGenerate ||
               !isConfiguredForMode ||
               !model ||
-              (activeMode === "VOICE" ? !voiceText.trim() : !prompt.trim()) ||
+              (activeMode === "VOICE"
+                ? !voiceText.trim()
+                : activeMode === "VIDEO" && videoWorkflow === "DRAFT_FINAL"
+                  ? false
+                  : !prompt.trim()) ||
               (activeMode === "VOICE" &&
                 (selectedVoiceKey === "" || activeRequiredCredits === null)) ||
               (activeMode !== "VOICE" &&
                 (!selectedRatio || !selectedResolution)) ||
               (model.mediaKind === "VIDEO" &&
-                (!selectedDuration || activeRequiredCredits === null)) ||
+                (!videoRequestReady ||
+                  !selectedDuration ||
+                  activeRequiredCredits === null)) ||
               (activeRequiredCredits !== null &&
                 BigInt(data?.balance ?? "0") < activeRequiredCredits)
             }

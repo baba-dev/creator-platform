@@ -247,7 +247,12 @@ export async function PATCH(
         { error: "Usage rates require TOKEN pricing." },
         { status: 400 },
       );
-    if (pricingDimension === "TOKEN") {
+    if (usageRates && model.mediaKind !== "VIDEO")
+      return NextResponse.json(
+        { error: "Resolution usage-rate tables are only valid for video models." },
+        { status: 400 },
+      );
+    if (pricingDimension === "TOKEN" && model.mediaKind === "VIDEO") {
       try {
         const table = parseUsageRates(usageRates);
         const capabilities = model.capabilities as Record<

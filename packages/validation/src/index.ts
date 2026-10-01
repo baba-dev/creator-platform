@@ -5,6 +5,14 @@ export const cuidSchema = z
   .min(20)
   .max(40)
   .regex(/^[a-z0-9]+$/);
+
+// Better Auth owns User.id values. Existing accounts may use mixed-case
+// alphanumeric IDs, while Prisma-owned records continue to use cuidSchema.
+export const userRecordIdSchema = z
+  .string()
+  .min(20)
+  .max(128)
+  .regex(/^[A-Za-z0-9_-]+$/);
 // ProviderModel includes a legacy seeded NVIDIA row with a hyphenated ID.
 // Admin model routes must accept both it and Prisma-generated CUIDs.
 export const providerModelRecordIdSchema = z

@@ -1,8 +1,5 @@
 import { hasPlatformPermission } from "@aiwa/authz";
-import {
-  adminResetPasswordSchema,
-  userRecordIdSchema,
-} from "@aiwa/validation";
+import { adminResetPasswordSchema, userRecordIdSchema } from "@aiwa/validation";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 

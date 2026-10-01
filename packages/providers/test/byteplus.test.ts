@@ -37,6 +37,9 @@ describe("BytePlus provider adapter", () => {
       "seedream-4-5-251128",
       "seedream-4-0-250828",
       "dreamina-seedance-2-5-260628",
+      "dreamina-seedance-2-0-fast-260128",
+      "dreamina-seedance-2-0-mini-260615",
+      "omnihuman-1.5",
       "seed-tts-2.0",
       "dola-seed-2-1-turbo-260628",
       "seed-2-0-pro-260328",
@@ -87,6 +90,30 @@ describe("BytePlus provider adapter", () => {
     ).toMatchObject({
       minimumDurationSeconds: 4,
       maximumDurationSeconds: 30,
+      fps: 24,
+    });
+    expect(
+      models.find((model) => model.id === "dreamina-seedance-2-0-mini-260615")
+        ?.capabilities,
+    ).toMatchObject({
+      "resolution:480p": true,
+      "resolution:720p": true,
+      minimumDurationSeconds: 4,
+      maximumDurationSeconds: 15,
+      fps: 24,
+    });
+    expect(
+      models.find((model) => model.id === "dreamina-seedance-2-0-mini-260615")
+        ?.capabilities,
+    ).not.toHaveProperty("resolution:1080p");
+    expect(
+      models.find((model) => model.id === "dreamina-seedance-2-0-fast-260128")
+        ?.capabilities,
+    ).toMatchObject({
+      "resolution:480p": true,
+      "resolution:720p": true,
+      minimumDurationSeconds: 4,
+      maximumDurationSeconds: 15,
       fps: 24,
     });
   });
@@ -596,6 +623,96 @@ describe("BytePlus provider adapter", () => {
         role: "last_frame",
       },
     ]);
+  });
+
+  it("submits an OmniHuman 1.5 talking avatar task with character and speech audio", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ id: "task-omnihuman-1" }));
+    const provider = createBytePlusProvider({
+      ...validConfig,
+      fetch: fetchMock as typeof fetch,
+    });
+    const job = await provider.submit({
+      idempotencyKey: "omnihuman-job-1",
+      modelId: "omnihuman-1.5",
+      mediaKind: "video",
+      input: {
+        prompt:
+          "Confident presenter explaining product features with subtle gestures",
+        resolution: "1080p",
+        aspectRatio: "16:9",
+        durationSeconds: 15,
+        avatarImageUrl:
+          "https://creator.example.com/api/provider-media/avatar-asset?jobId=job1&grant=token",
+        audioUrl:
+          "https://creator.example.com/api/provider-media/speech-asset?jobId=job1&grant=token",
+      },
+    });
+
+    expect(job).toEqual({
+      providerRequestId: "task-omnihuman-1",
+      status: "submitted",
+    });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      "https://ark.ap-southeast.bytepluses.com/api/v3/contents/generations/tasks",
+    );
+    expect(JSON.parse(init.body as string)).toEqual({
+      model: "omnihuman-1.5",
+      content: [
+        {
+          type: "text",
+          text: "Confident presenter explaining product features with subtle gestures",
+        },
+        {
+          type: "image_url",
+          image_url: {
+            url: "https://creator.example.com/api/provider-media/avatar-asset?jobId=job1&grant=token",
+          },
+          role: "avatar_image",
+        },
+        {
+          type: "audio_url",
+          audio_url: {
+            url: "https://creator.example.com/api/provider-media/speech-asset?jobId=job1&grant=token",
+          },
+          role: "speech_audio",
+        },
+      ],
+      resolution: "1080p",
+      ratio: "16:9",
+      duration: 15,
+      generate_audio: false,
+      watermark: false,
+    });
+  });
+
+  it("rejects OmniHuman 1.5 submissions missing avatar image or audio", async () => {
+    const provider = createBytePlusProvider(validConfig);
+    await expect(
+      provider.submit({
+        idempotencyKey: "omnihuman-invalid-1",
+        modelId: "omnihuman-1.5",
+        mediaKind: "video",
+        input: {
+          prompt: "talking head",
+          audioUrl: "https://example.com/speech.mp3",
+        },
+      }),
+    ).rejects.toThrow("OmniHuman requires an avatar image");
+
+    await expect(
+      provider.submit({
+        idempotencyKey: "omnihuman-invalid-2",
+        modelId: "omnihuman-1.5",
+        mediaKind: "video",
+        input: {
+          prompt: "talking head",
+          avatarImageUrl: "https://example.com/avatar.png",
+        },
+      }),
+    ).rejects.toThrow("OmniHuman requires a driving audio URL");
   });
 
   it("polls running and successful video tasks", async () => {

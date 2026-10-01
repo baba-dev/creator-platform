@@ -20,6 +20,7 @@ interface QuoteInput {
   referenceVideoAssetId?: string;
   firstFrameAssetId?: string;
   lastFrameAssetId?: string;
+  audioAssetId?: string;
   referenceAssetIds: string[];
 }
 export async function estimateAuthorizedGeneration(
@@ -37,6 +38,7 @@ export async function estimateAuthorizedGeneration(
     resolution,
     generateAudio,
     referenceVideoAssetId,
+    audioAssetId,
   } = input;
   const session = { user: { id: userId } };
   let inputDurationMs: number | undefined;
@@ -67,10 +69,19 @@ export async function estimateAuthorizedGeneration(
       );
   }
   if (model.mediaKind === "VIDEO") {
-    if (
-      caps["durationSeconds:" + (durationSeconds ?? 5)] !== true ||
-      (generateAudio && caps.generateAudio !== true)
-    )
+    const minDur =
+      typeof caps.minimumDurationSeconds === "number"
+        ? caps.minimumDurationSeconds
+        : 4;
+    const maxDur =
+      typeof caps.maximumDurationSeconds === "number"
+        ? caps.maximumDurationSeconds
+        : 30;
+    const dur = durationSeconds ?? 5;
+    const isSupportedDuration =
+      caps["durationSeconds:" + dur] === true ||
+      (dur >= minDur && dur <= maxDur);
+    if (!isSupportedDuration || (generateAudio && caps.generateAudio !== true))
       throw new QuoteValidationError(
         "Duration or audio setting is unsupported.",
         400,
@@ -81,7 +92,8 @@ export async function estimateAuthorizedGeneration(
     if (
       (input.lastFrameAssetId && !input.firstFrameAssetId) ||
       (frames.length &&
-        (referenceVideoAssetId || normalizedRatio !== "adaptive"))
+        (referenceVideoAssetId ||
+          (normalizedRatio !== "adaptive" && !audioAssetId)))
     )
       throw new QuoteValidationError("Invalid video input combination.", 400);
     if (frames.length) {
@@ -106,6 +118,29 @@ export async function estimateAuthorizedGeneration(
       )
         throw new QuoteValidationError("Source image is unavailable.", 400);
     }
+  }
+  if (audioAssetId) {
+    if (caps.audioInput !== true)
+      throw new QuoteValidationError(
+        "Audio input is unsupported for this model.",
+        400,
+      );
+    const audio = await db.asset.findFirst({
+      where: {
+        id: audioAssetId,
+        organizationId,
+        mediaKind: "AUDIO",
+        status: "READY",
+        storageProvider: "LOCAL",
+        OR: [
+          { purpose: "GENERAL" },
+          { purpose: "REFERENCE_INPUT", storageOwnerUserId: session.user.id },
+        ],
+      },
+      select: { durationMs: true },
+    });
+    if (!audio)
+      throw new QuoteValidationError("Driving audio is unavailable.", 400);
   }
   if (referenceVideoAssetId) {
     if (caps.referenceVideo !== true)

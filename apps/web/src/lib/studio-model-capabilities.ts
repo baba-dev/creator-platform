@@ -49,6 +49,7 @@ export function resolutionLabel(value: string): string {
     "2K": "2K · High resolution",
     "3K": "3K · Higher resolution",
     "4K": "4K · Maximum detail",
+    "480p": "480p · Fast Preview",
     "720p": "720p · HD Video",
     "1080p": "1080p · Full HD Video",
   };

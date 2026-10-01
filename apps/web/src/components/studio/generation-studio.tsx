@@ -152,11 +152,16 @@ export function GenerationStudio({
   const [references, setReferences] = useState<ReferenceAsset[]>([]);
   const [videoFrames, setVideoFrames] = useState<ReferenceAsset[]>([]);
   const [videoReferences, setVideoReferences] = useState<ReferenceAsset[]>([]);
+  const [videoAudioAssets, setVideoAudioAssets] = useState<ReferenceAsset[]>(
+    [],
+  );
   const [referenceVideoAssetId, setReferenceVideoAssetId] = useState("");
   const [referenceAssetIds, setReferenceAssetIds] = useState<string[]>([]);
   const [videoFirstFrameId, setVideoFirstFrameId] = useState("");
   const [videoLastFrameId, setVideoLastFrameId] = useState("");
+  const [videoAudioAssetId, setVideoAudioAssetId] = useState("");
   const [referenceBusy, setReferenceBusy] = useState(false);
+  const [audioBusy, setAudioBusy] = useState(false);
   const [referenceUrl, setReferenceUrl] = useState("");
   const [outputCount, setOutputCount] = useState(1);
   const [busy, setBusy] = useState(false);
@@ -238,6 +243,7 @@ export function GenerationStudio({
         setTemplateContext(null);
         setReferenceAssetIds([]);
         setOutputCount(1);
+        setVideoAudioAssetId("");
       }
       setActiveMode(mode);
       setError(null);
@@ -273,6 +279,7 @@ export function GenerationStudio({
             : {}),
           ...(videoLastFrameId ? { lastFrameAssetId: videoLastFrameId } : {}),
           ...(referenceVideoAssetId ? { referenceVideoAssetId } : {}),
+          ...(videoAudioAssetId ? { audioAssetId: videoAudioAssetId } : {}),
         }
       : {}),
   });
@@ -440,6 +447,66 @@ export function GenerationStudio({
       .catch(() => undefined);
     return () => controller.abort();
   }, [activeMode, organizationId, variant]);
+
+  useEffect(() => {
+    if (
+      variant !== "advanced" ||
+      activeMode !== "VIDEO" ||
+      (model?.capabilities?.audioInput !== true &&
+        model?.capabilities?.talkingAvatar !== true)
+    )
+      return;
+    const controller = new AbortController();
+    void fetch(
+      `/api/assets?organizationId=${encodeURIComponent(organizationId)}&mediaKind=AUDIO&limit=100`,
+      { signal: controller.signal, cache: "no-store" },
+    )
+      .then((response) =>
+        response.ok
+          ? (response.json() as Promise<{ assets: ReferenceAsset[] }>)
+          : { assets: [] },
+      )
+      .then((body) => setVideoAudioAssets(body.assets ?? []))
+      .catch(() => {
+        if (!controller.signal.aborted) setVideoAudioAssets([]);
+      });
+    return () => controller.abort();
+  }, [
+    activeMode,
+    organizationId,
+    variant,
+    model?.capabilities?.audioInput,
+    model?.capabilities?.talkingAvatar,
+  ]);
+
+  async function uploadAudio(file: File) {
+    if (audioBusy || !canGenerate) return;
+    setAudioBusy(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/assets/media-upload", {
+        method: "POST",
+        headers: {
+          "x-organization-id": organizationId,
+          "x-file-name": file.name,
+          "content-type": file.type || "audio/mpeg",
+        },
+        body: file,
+      });
+      const body = (await response.json()) as {
+        asset?: ReferenceAsset;
+        error?: string;
+      };
+      if (!response.ok || !body.asset)
+        throw new Error(body.error ?? "Audio upload failed.");
+      setVideoAudioAssets((previous) => [body.asset!, ...previous]);
+      setVideoAudioAssetId(body.asset.id);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Audio upload failed.");
+    } finally {
+      setAudioBusy(false);
+    }
+  }
 
   async function uploadReference(file: File) {
     if (referenceBusy || !canGenerate) return;
@@ -703,6 +770,7 @@ export function GenerationStudio({
             : {}),
           ...(videoLastFrameId ? { lastFrameAssetId: videoLastFrameId } : {}),
           ...(referenceVideoAssetId ? { referenceVideoAssetId } : {}),
+          ...(videoAudioAssetId ? { audioAssetId: videoAudioAssetId } : {}),
         }),
       };
     }
@@ -983,7 +1051,7 @@ export function GenerationStudio({
                     nextModel.capabilities,
                     "resolution",
                     resolution,
-                    ["2K"],
+                    ["720p", "480p", "2K"],
                   );
                   if (nextResolution && nextResolution !== resolution) {
                     setResolution(nextResolution);
@@ -992,10 +1060,16 @@ export function GenerationStudio({
                     nextModel.capabilities,
                     "aspectRatio",
                     ratio,
-                    ["1:1"],
+                    ["16:9", "1:1"],
                   );
                   if (nextRatio && nextRatio !== ratio) {
                     setRatio(nextRatio);
+                  }
+                  if (
+                    !nextModel.capabilities.audioInput &&
+                    !nextModel.capabilities.talkingAvatar
+                  ) {
+                    setVideoAudioAssetId("");
                   }
                 }
               }}
@@ -1016,8 +1090,16 @@ export function GenerationStudio({
                 const resSnippet = resolutions.length
                   ? ` · [${resolutions.join(", ")}]`
                   : "";
+                const isMini = m.providerModelId.includes("mini");
+                const isFast = m.providerModelId.includes("fast");
+                const tierPrefix = isMini
+                  ? "⚡ Economy Preview · "
+                  : isFast
+                    ? "🚀 Fast · "
+                    : "";
                 return (
                   <option key={m.id} value={m.id}>
+                    {tierPrefix}
                     {m.name} ·{" "}
                     {m.pricingDimension === "TOKEN"
                       ? "Usage-based pricing"
@@ -1042,6 +1124,11 @@ export function GenerationStudio({
                 className="flex flex-wrap items-center gap-1.5 pt-1"
                 aria-label="Supported model parameters"
               >
+                {model.capabilities.talkingAvatar === true && (
+                  <span className="inline-flex items-center rounded-md border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                    Talking Avatar · Lip Sync
+                  </span>
+                )}
                 {availableResolutions.length > 0 && (
                   <span className="inline-flex items-center rounded-md border border-border/80 bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-foreground">
                     Resolutions: {availableResolutions.join(", ")}
@@ -1212,7 +1299,9 @@ export function GenerationStudio({
                 htmlFor="creation-prompt"
                 className="block text-sm font-semibold text-foreground"
               >
-                Describe your {model?.mediaKind === "VIDEO" ? "video" : "image"}
+                {model?.capabilities?.talkingAvatar === true
+                  ? "Scene description or expression guidance (optional)"
+                  : `Describe your ${model?.mediaKind === "VIDEO" ? "video" : "image"}`}
               </label>
               <div className="relative">
                 <textarea
@@ -1221,7 +1310,11 @@ export function GenerationStudio({
                   onChange={(e) => setPrompt(e.target.value)}
                   maxLength={2000}
                   disabled={busy || isEnhancing}
-                  placeholder="A cinematic product photograph in warm Omani desert light…"
+                  placeholder={
+                    model?.capabilities?.talkingAvatar === true
+                      ? "Natural talking expressions, subtle head tilts, warm smile, professional spokesperson…"
+                      : "A cinematic product photograph in warm Omani desert light…"
+                  }
                   className="min-h-44 w-full rounded-2xl border border-input bg-card p-4 pb-14 text-foreground placeholder:text-muted-foreground"
                 />
                 <Button
@@ -1424,15 +1517,27 @@ export function GenerationStudio({
               model?.capabilities?.firstFrame === true &&
               !referenceVideoAssetId ? (
                 <div className="space-y-3 rounded-2xl border border-border bg-card/75 p-4">
-                  <h3 className="text-sm font-semibold">
-                    Guide your opening frame
-                  </h3>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold">
+                      {model?.capabilities?.talkingAvatar === true
+                        ? "Avatar character portrait"
+                        : "Guide your opening frame"}
+                    </h3>
+                    {model?.capabilities?.talkingAvatar === true ? (
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                        Required
+                      </span>
+                    ) : null}
+                  </div>
                   <p className="text-xs text-muted-foreground">
-                    Select a private reference image. The output follows its
-                    aspect ratio.
+                    {model?.capabilities?.talkingAvatar === true
+                      ? "Select or upload a clear portrait photo or character illustration for lip-synchronized animation."
+                      : "Select a private reference image. The output follows its aspect ratio."}
                   </p>
                   <label className="grid gap-2 text-xs font-semibold">
-                    First frame
+                    {model?.capabilities?.talkingAvatar === true
+                      ? "Character portrait"
+                      : "First frame"}
                     <select
                       value={videoFirstFrameId}
                       onChange={(event) => {
@@ -1441,7 +1546,11 @@ export function GenerationStudio({
                       }}
                       className="min-h-11 rounded-xl border border-input bg-background px-3"
                     >
-                      <option value="">Text to video</option>
+                      <option value="">
+                        {model?.capabilities?.talkingAvatar === true
+                          ? "Select a portrait image"
+                          : "Text to video"}
+                      </option>
                       {videoFrames.map((item) => (
                         <option key={item.id} value={item.id}>
                           {item.name}
@@ -1470,7 +1579,11 @@ export function GenerationStudio({
                     </label>
                   ) : null}
                   <label className="inline-flex cursor-pointer rounded-xl border border-border px-3 py-2 text-xs font-semibold text-primary">
-                    {referenceBusy ? "Uploading…" : "Upload frame image"}
+                    {referenceBusy
+                      ? "Uploading…"
+                      : model?.capabilities?.talkingAvatar === true
+                        ? "Upload portrait image"
+                        : "Upload frame image"}
                     <input
                       type="file"
                       accept="image/png,image/jpeg,image/webp"
@@ -1479,6 +1592,66 @@ export function GenerationStudio({
                       onChange={(event) => {
                         const file = event.target.files?.[0];
                         if (file) void uploadReference(file);
+                        event.target.value = "";
+                      }}
+                    />
+                  </label>
+                </div>
+              ) : null}
+
+              {variant === "advanced" &&
+              activeMode === "VIDEO" &&
+              (model?.capabilities?.audioInput === true ||
+                model?.capabilities?.talkingAvatar === true) ? (
+                <div className="space-y-3 rounded-2xl border border-border bg-card/75 p-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold">
+                      Driving speech audio
+                    </h3>
+                    {model?.capabilities?.talkingAvatar === true ? (
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                        Required
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Select or upload a speech recording to drive lip
+                    synchronization and facial gestures.
+                  </p>
+                  <label className="grid gap-2 text-xs font-semibold">
+                    Speech audio track
+                    <select
+                      value={videoAudioAssetId}
+                      onChange={(event) =>
+                        setVideoAudioAssetId(event.target.value)
+                      }
+                      className="min-h-11 rounded-xl border border-input bg-background px-3"
+                    >
+                      <option value="">
+                        {model?.capabilities?.talkingAvatar === true
+                          ? "Select an audio track"
+                          : "No external audio"}
+                      </option>
+                      {videoAudioAssets.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name}
+                          {item.durationMs
+                            ? ` (${Math.round(item.durationMs / 1000)}s)`
+                            : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="inline-flex cursor-pointer rounded-xl border border-border px-3 py-2 text-xs font-semibold text-primary">
+                    {audioBusy ? "Uploading audio…" : "Upload audio (MP3/WAV)"}
+                    <input
+                      type="file"
+                      accept="audio/mpeg,audio/wav,audio/mp3,audio/x-wav,audio/ogg"
+                      className="sr-only"
+                      disabled={busy || audioBusy || !canGenerate}
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) void uploadAudio(file);
                         event.target.value = "";
                       }}
                     />
@@ -1681,6 +1854,18 @@ export function GenerationStudio({
                     provider usage; unused held credits return to your balance.
                   </p>
                 )}
+                {activeQuote.quote.expiresAt && (
+                  <p className="text-[11px] text-muted-foreground">
+                    ⚡ Guaranteed quote rate · Valid until{" "}
+                    {new Date(activeQuote.quote.expiresAt).toLocaleTimeString(
+                      [],
+                      {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      },
+                    )}
+                  </p>
+                )}
                 {!activeQuote.canSpend && (
                   <p className="text-sm text-destructive">
                     This generation exceeds your monthly spending cap.
@@ -1714,7 +1899,11 @@ export function GenerationStudio({
               !canGenerate ||
               !isConfiguredForMode ||
               !model ||
-              (activeMode === "VOICE" ? !voiceText.trim() : !prompt.trim()) ||
+              (activeMode === "VOICE"
+                ? !voiceText.trim()
+                : model.capabilities?.talkingAvatar === true
+                  ? !videoFirstFrameId || !videoAudioAssetId
+                  : !prompt.trim()) ||
               (activeMode === "VOICE" &&
                 (selectedVoiceKey === "" || activeRequiredCredits === null)) ||
               (activeMode !== "VOICE" &&
@@ -1728,13 +1917,17 @@ export function GenerationStudio({
             {busy
               ? activeMode === "VOICE"
                 ? "Synthesizing voice…"
-                : "Queuing media…"
+                : model?.capabilities?.talkingAvatar === true
+                  ? "Animating avatar…"
+                  : "Queuing media…"
               : `Generate ${
-                  activeMode === "VIDEO"
-                    ? "video"
-                    : activeMode === "VOICE"
-                      ? "speech"
-                      : "image"
+                  model?.capabilities?.talkingAvatar === true
+                    ? "avatar"
+                    : activeMode === "VIDEO"
+                      ? "video"
+                      : activeMode === "VOICE"
+                        ? "speech"
+                        : "image"
                 } · ${activeQuote?.quote.reservationCredits ?? "—"} credits`}
           </Button>
           <p className="text-xs text-muted-foreground">
@@ -1906,6 +2099,31 @@ export function GenerationStudio({
                         >
                           Edit video →
                         </Link>
+                      ) : null}
+                      {asset.mimeType.startsWith("video/") &&
+                      (job.providerModel.displayName.includes("Mini") ||
+                        job.providerModel.displayName.includes("Fast")) ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const hdModel = data?.models.find(
+                              (m) =>
+                                m.mediaKind === "VIDEO" &&
+                                m.providerModelId ===
+                                  "dreamina-seedance-2-5-260628",
+                            );
+                            if (hdModel) {
+                              setActiveMode("VIDEO");
+                              setModelId(hdModel.id);
+                              setResolution("1080p");
+                              const el = document.getElementById("create");
+                              el?.scrollIntoView({ behavior: "smooth" });
+                            }
+                          }}
+                          className="ml-4 inline-flex min-h-10 items-center text-sm font-semibold text-primary underline underline-offset-4 hover:opacity-80"
+                        >
+                          Polish in 1080p HD (Seedance 2.5) →
+                        </button>
                       ) : null}
                     </div>
                   ))}

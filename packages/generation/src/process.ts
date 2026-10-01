@@ -247,18 +247,24 @@ export async function processVideoSubmitJob(
       typeof videoPayload.referenceVideoAssetId === "string"
         ? videoPayload.referenceVideoAssetId
         : null;
-    const inputs =
-      frameIds.length || referenceVideoId
-        ? await db.generationInputAsset.findMany({
-            where: { generationJobId: job.id },
-            include: { asset: true },
-            orderBy: { position: "asc" },
-          })
-        : [];
+    const audioId =
+      typeof videoPayload.audioAssetId === "string"
+        ? videoPayload.audioAssetId
+        : null;
+    const inputIds = [
+      ...frameIds,
+      ...(referenceVideoId ? [referenceVideoId] : []),
+      ...(audioId ? [audioId] : []),
+    ];
+    const inputs = inputIds.length
+      ? await db.generationInputAsset.findMany({
+          where: { generationJobId: job.id },
+          include: { asset: true },
+          orderBy: { position: "asc" },
+        })
+      : [];
     if (
-      inputs.length !==
-        new Set([...frameIds, ...(referenceVideoId ? [referenceVideoId] : [])])
-          .size ||
+      inputs.length !== new Set(inputIds).size ||
       inputs.some(
         ({ asset }) =>
           asset.organizationId !== job.organizationId ||
@@ -269,10 +275,12 @@ export async function processVideoSubmitJob(
             ? asset.mediaKind !== "VIDEO" ||
               asset.mimeType !== "video/mp4" ||
               asset.storageProvider !== "LOCAL"
-            : asset.mediaKind !== "IMAGE"),
+            : asset.id === audioId
+              ? asset.mediaKind !== "AUDIO" || asset.storageProvider !== "LOCAL"
+              : asset.mediaKind !== "IMAGE"),
       )
     )
-      throw new ProviderRequestError("Source image is unavailable", false, {
+      throw new ProviderRequestError("Source media is unavailable", false, {
         code: "REFERENCE_IMAGE_UNAVAILABLE",
       });
     const frameImages = await Promise.all(
@@ -310,6 +318,31 @@ export async function processVideoSubmitJob(
       );
       referenceVideoUrl = url.toString();
     }
+    let audioUrl: string | undefined;
+    if (audioId) {
+      const env = parseServerEnv();
+      const base = new URL(env.APP_URL);
+      if (base.protocol !== "https:")
+        throw new ProviderRequestError(
+          "Provider source requires a public HTTPS app URL",
+          false,
+          { code: "INVALID_PROVIDER_SOURCE" },
+        );
+      const url = new URL(
+        `/api/provider-media/${encodeURIComponent(audioId)}`,
+        base,
+      );
+      url.searchParams.set("jobId", job.id);
+      url.searchParams.set(
+        "grant",
+        issueProviderMediaGrant({
+          secret: env.AUTH_SECRET,
+          jobId: job.id,
+          assetId: audioId,
+        }),
+      );
+      audioUrl = url.toString();
+    }
     const result = await provider.submit({
       idempotencyKey: job.idempotencyKey,
       modelId: job.providerModel.providerModelId,
@@ -319,6 +352,7 @@ export async function processVideoSubmitJob(
         ...(frameImages[0] ? { firstFrameImage: frameImages[0] } : {}),
         ...(frameImages[1] ? { lastFrameImage: frameImages[1] } : {}),
         ...(referenceVideoUrl ? { referenceVideoUrl } : {}),
+        ...(audioUrl ? { audioUrl } : {}),
       },
     });
     if (result.status !== "submitted" || !result.providerRequestId)

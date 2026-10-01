@@ -324,7 +324,7 @@ export const quoteRequestSchema = z.object({
     .max(1_000_000)
     .optional(),
   text: z.string().max(4096).optional(),
-  durationSeconds: z.coerce.number().int().min(4).max(30).optional(),
+  durationSeconds: z.coerce.number().int().min(1).max(60).optional(),
   aspectRatio: z
     .enum([
       "1:1",
@@ -346,6 +346,7 @@ export const quoteRequestSchema = z.object({
     .optional(),
   generateAudio: z.boolean().optional(),
   referenceVideoAssetId: cuidSchema.optional(),
+  audioAssetId: cuidSchema.optional(),
 });
 
 export const paymentMethodSchema = z.enum(["CASH", "CHEQUE"]);

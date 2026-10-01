@@ -123,6 +123,106 @@ describe("generation pricing policies", () => {
       estimateGeneration({ ...input, providerModelId: "other-fixed-video" })
         .quote.customerCredits,
     ).toBe(240n);
+    expect(() =>
+      estimateGeneration({
+        ...input,
+        providerModelId: "dreamina-seedance-2-0-mini-260615",
+      }),
+    ).toThrow("Publish token pricing");
+    expect(() =>
+      estimateGeneration({
+        ...input,
+        providerModelId: "dreamina-seedance-2-0-fast-260128",
+      }),
+    ).toThrow("Publish token pricing");
+  });
+  it("prices Seedance 2.0 Mini at 480p preview and 720p draft with significant cost savings", () => {
+    const miniRates = {
+      estimator: "byteplus-video-v1",
+      rates: [
+        {
+          resolution: "480p",
+          workflow: "GENERATE",
+          microUsdPerThousandTokens: "3500",
+        },
+        {
+          resolution: "720p",
+          workflow: "GENERATE",
+          microUsdPerThousandTokens: "3500",
+        },
+        {
+          resolution: "480p",
+          workflow: "VIDEO_INPUT",
+          microUsdPerThousandTokens: "2100",
+        },
+        {
+          resolution: "720p",
+          workflow: "VIDEO_INPUT",
+          microUsdPerThousandTokens: "2100",
+        },
+      ],
+    };
+    const miniPrice: PriceSnapshot = {
+      ...price,
+      providerCostMicroUsd: 3500n,
+      usageRates: miniRates,
+    };
+    const preview = estimateGeneration({
+      price: miniPrice,
+      mediaKind: "VIDEO",
+      providerModelId: "dreamina-seedance-2-0-mini-260615",
+      resolution: "480p",
+      aspectRatio: "16:9",
+      durationSeconds: 5,
+    });
+    expect(preview.estimatedTokens).toBe(48038n);
+    expect(preview.quote.providerCostMicroUsd).toBe(168133n);
+    expect(preview.quote.customerCredits).toBe(87n);
+
+    const draft = estimateGeneration({
+      price: miniPrice,
+      mediaKind: "VIDEO",
+      providerModelId: "dreamina-seedance-2-0-mini-260615",
+      resolution: "720p",
+      aspectRatio: "16:9",
+      durationSeconds: 5,
+    });
+    expect(draft.estimatedTokens).toBe(108000n);
+    expect(draft.quote.providerCostMicroUsd).toBe(378000n);
+    expect(draft.quote.customerCredits).toBe(195n);
+  });
+  it("prices Seedance 2.0 Fast with lower cost than 2.5", () => {
+    const fastRates = {
+      estimator: "byteplus-video-v1",
+      rates: [
+        {
+          resolution: "720p",
+          workflow: "GENERATE",
+          microUsdPerThousandTokens: "5600",
+        },
+        {
+          resolution: "720p",
+          workflow: "VIDEO_INPUT",
+          microUsdPerThousandTokens: "3300",
+        },
+      ],
+    };
+    const fastPrice: PriceSnapshot = {
+      ...price,
+      providerCostMicroUsd: 5600n,
+      usageRates: fastRates,
+    };
+    const fast = estimateGeneration({
+      price: fastPrice,
+      mediaKind: "VIDEO",
+      providerModelId: "dreamina-seedance-2-0-fast-260128",
+      resolution: "720p",
+      aspectRatio: "16:9",
+      durationSeconds: 5,
+    });
+    expect(fast.estimatedTokens).toBe(108000n);
+    expect(fast.quote.providerCostMicroUsd).toBe(604800n);
+    expect(fast.quote.customerCredits).toBe(311n);
   });
   it("counts spaces and newlines at block boundaries and canonicalizes submitted text", () => {
     const voice = {
@@ -203,5 +303,48 @@ describe("generation pricing policies", () => {
     expect(estimate.reservation.customerCredits).toBe(
       estimate.quote.customerCredits,
     );
+  });
+
+  it("estimates and reserves credits for OmniHuman 1.5 using parameter-sensitive SECOND pricing", () => {
+    const omniHumanPrice: PriceSnapshot = {
+      providerCostMicroUsd: 120_000n, // $0.12 per second
+      pricingDimension: "SECOND",
+      unitQuantity: 1,
+      fxBaisaNumerator: 769n,
+      fxBaisaDenominator: 2n,
+      targetMarginBps: 2500,
+      creditsPerBaisa: 1n,
+    };
+
+    // 15 seconds at 720p: 15 * 120,000 = 1,800,000 micro-USD
+    // 1,800,000 * 769 / 2,000,000 = 692.1 -> 693 baisa
+    // 693 * 10,000 / 7,500 = 924 baisa = 924 credits
+    const estimate720p = estimateGeneration({
+      price: omniHumanPrice,
+      mediaKind: "VIDEO",
+      providerModelId: "omnihuman-1.5",
+      durationSeconds: 15,
+      resolution: "720p",
+    });
+
+    expect(estimate720p.settlement).toBe("FIXED");
+    expect(estimate720p.units).toBe(15);
+    expect(estimate720p.quote.customerCredits).toBe(924n);
+    expect(estimate720p.reservation.customerCredits).toBe(924n);
+
+    // 15 seconds at 1080p (1.5x resolution multiplier):
+    // 1,800,000 * 1.5 = 2,700,000 micro-USD
+    // 2,700,000 * 769 / 2,000,000 = 1038.15 -> 1039 baisa
+    // 1039 * 10,000 / 7,500 = 1385.33 -> 1386 credits
+    const estimate1080p = estimateGeneration({
+      price: omniHumanPrice,
+      mediaKind: "VIDEO",
+      providerModelId: "omnihuman-1.5",
+      durationSeconds: 15,
+      resolution: "1080p",
+    });
+
+    expect(estimate1080p.quote.customerCredits).toBe(1386n);
+    expect(estimate1080p.reservation.customerCredits).toBe(1386n);
   });
 });

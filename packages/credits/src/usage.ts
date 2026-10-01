@@ -303,11 +303,11 @@ export function estimateGeneration(params: {
       settlement = "ACTUAL_USAGE";
     } else {
       if (
-        params.providerModelId.startsWith("dreamina-seedance-2-5-") &&
+        params.providerModelId.startsWith("dreamina-seedance-") &&
         params.inputDurationMs === undefined
       )
         throw new RangeError(
-          "Publish token pricing for Seedance 2.5 before generating.",
+          "Publish token pricing for Seedance before generating.",
         );
       const legacy = calculateVideoPricing({
         providerCostMicroUsd: price.providerCostMicroUsd,

@@ -311,6 +311,78 @@ describe("video processing", () => {
     );
   });
 
+  it("submits an OmniHuman 1.5 talking avatar job with linked driving audio and portrait image", async () => {
+    const p = provider();
+    vi.mocked(p.submit).mockResolvedValue({
+      status: "submitted",
+      providerRequestId: "omnihuman-task-1",
+    });
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+      ...base,
+      status: "QUEUED",
+      providerModel: {
+        id: "model1",
+        providerModelId: "omnihuman-1.5",
+        enabled: true,
+      },
+      requestPayload: {
+        prompt: "A welcoming brand spokesperson",
+        firstFrameAssetId: "avatar1",
+        audioAssetId: "audio1",
+        durationSeconds: 15,
+        resolution: "720p",
+        aspectRatio: "16:9",
+      },
+    });
+    mocks.db.generationInputAsset.findMany.mockResolvedValue([
+      {
+        assetId: "avatar1",
+        asset: {
+          id: "avatar1",
+          organizationId: "org1",
+          status: "READY",
+          mediaKind: "IMAGE",
+          mimeType: "image/png",
+          storageProvider: "LOCAL",
+          purpose: "GENERAL",
+          objectKey: "avatar1.png",
+          byteSize: 1024n,
+        },
+      },
+      {
+        assetId: "audio1",
+        asset: {
+          id: "audio1",
+          organizationId: "org1",
+          status: "READY",
+          mediaKind: "AUDIO",
+          mimeType: "audio/mpeg",
+          storageProvider: "LOCAL",
+          purpose: "GENERAL",
+          objectKey: "audio1.mp3",
+          byteSize: 2048n,
+        },
+      },
+    ]);
+    mocks.referenceImage.mockResolvedValue("data:image/png;base64,AVATAR==");
+
+    await processVideoSubmitJob("job1", p);
+
+    expect(p.submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelId: "omnihuman-1.5",
+        mediaKind: "video",
+        input: expect.objectContaining({
+          firstFrameImage: "data:image/png;base64,AVATAR==",
+          audioUrl: expect.stringMatching(
+            /^https:\/\/creator\.example\.com\/api\/provider-media\/audio1\?jobId=job1&grant=v1\./,
+          ),
+          durationSeconds: 15,
+        }),
+      }),
+    );
+  });
+
   it("keeps credits reserved while a video is still processing", async () => {
     const p = provider();
     vi.mocked(p.getJob).mockResolvedValue({

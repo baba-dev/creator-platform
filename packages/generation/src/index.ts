@@ -72,14 +72,15 @@ export const videoRequestSchema = z
     quoteToken: z.string().min(1).max(2048).optional(),
     idempotencyKey: z.uuid(),
     templateId: z.string().min(1).max(100).optional(),
-    prompt: z.string().trim().min(1).max(2000),
+    prompt: z.string().trim().max(2000).default(""),
     aspectRatio: z.enum(["16:9", "9:16", "1:1", "4:3", "3:4", "adaptive"]),
     resolution: z.enum(["720p", "1080p"]).default("1080p"),
-    durationSeconds: z.number().int().min(1).max(30),
+    durationSeconds: z.number().int().min(1).max(60),
     generateAudio: z.boolean().default(false),
     firstFrameAssetId: z.string().min(1).max(100).optional(),
     lastFrameAssetId: z.string().min(1).max(100).optional(),
     referenceVideoAssetId: z.string().min(1).max(100).optional(),
+    audioAssetId: z.string().min(1).max(100).optional(),
   })
   .strict()
   .refine((value) => !value.lastFrameAssetId || value.firstFrameAssetId, {
@@ -96,7 +97,10 @@ export const videoRequestSchema = z
     },
   )
   .refine(
-    (value) => !value.firstFrameAssetId || value.aspectRatio === "adaptive",
+    (value) =>
+      !value.firstFrameAssetId ||
+      value.audioAssetId ||
+      value.aspectRatio === "adaptive",
     {
       path: ["aspectRatio"],
       message: "Image-to-video uses the source image ratio.",
@@ -647,6 +651,7 @@ export async function createVideoJob(userId: string, raw: unknown) {
     ...(input.referenceVideoAssetId
       ? { referenceVideoAssetId: input.referenceVideoAssetId }
       : {}),
+    ...(input.audioAssetId ? { audioAssetId: input.audioAssetId } : {}),
   };
   const key = createHash("sha256")
     .update(`${input.organizationId}:${userId}:${input.idempotencyKey}`)
@@ -732,12 +737,28 @@ export async function createVideoJob(userId: string, raw: unknown) {
           "Aspect ratio is not supported by this model.",
         );
       }
-      if (
-        !hasModelCapability(
+      const caps = (
+        model.capabilities &&
+        typeof model.capabilities === "object" &&
+        !Array.isArray(model.capabilities)
+          ? model.capabilities
+          : {}
+      ) as Record<string, unknown>;
+      const minDur =
+        typeof caps.minimumDurationSeconds === "number"
+          ? caps.minimumDurationSeconds
+          : 4;
+      const maxDur =
+        typeof caps.maximumDurationSeconds === "number"
+          ? caps.maximumDurationSeconds
+          : 30;
+      const isSupportedDuration =
+        hasModelCapability(
           model.capabilities,
           `durationSeconds:${input.durationSeconds}`,
-        )
-      ) {
+        ) ||
+        (input.durationSeconds >= minDur && input.durationSeconds <= maxDur);
+      if (!isSupportedDuration) {
         throw new GenerationError("Duration is not supported by this model.");
       }
       if (
@@ -819,6 +840,31 @@ export async function createVideoJob(userId: string, raw: unknown) {
           );
       }
 
+      let audioAsset: Awaited<ReturnType<typeof tx.asset.findFirst>> = null;
+      if (input.audioAssetId) {
+        if (!hasModelCapability(model.capabilities, "audioInput")) {
+          throw new GenerationError(
+            "Audio input is not supported by this model.",
+          );
+        }
+        audioAsset = await tx.asset.findFirst({
+          where: {
+            id: input.audioAssetId,
+            organizationId: input.organizationId,
+            mediaKind: "AUDIO",
+            status: "READY",
+            storageProvider: "LOCAL",
+          },
+        });
+        if (
+          !audioAsset ||
+          (audioAsset.purpose === "REFERENCE_INPUT" &&
+            audioAsset.storageOwnerUserId !== userId)
+        ) {
+          throw new GenerationError("Driving audio is unavailable.", 404);
+        }
+      }
+
       let pricing: ReturnType<typeof estimateGeneration>;
       try {
         pricing = estimateGeneration({
@@ -896,6 +942,7 @@ export async function createVideoJob(userId: string, raw: unknown) {
         ...new Set([
           ...frameIds,
           ...(referenceVideo ? [referenceVideo.id] : []),
+          ...(audioAsset ? [audioAsset.id] : []),
         ]),
       ];
       if (sourceIds.length)

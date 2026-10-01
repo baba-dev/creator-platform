@@ -140,19 +140,23 @@ export const bytePlusImageInputSchema = z
 
 export const bytePlusVideoInputSchema = z
   .object({
-    prompt: z.string().trim().min(1),
+    prompt: z.string().trim().default(""),
     aspectRatio: z
       .enum(["16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "adaptive"])
       .default("16:9"),
     resolution: z.enum(["480p", "720p", "1080p"]).default("720p"),
-    durationSeconds: z.number().int().min(4).max(30).default(5),
+    durationSeconds: z.number().int().min(1).max(60).default(5),
     generateAudio: z.boolean().default(false),
     watermark: z.boolean().default(false),
     seed: z.number().int().min(-1).max(2_147_483_647).optional(),
     firstFrameImage: z
-      .string()
-      .startsWith("data:image/")
-      .max(42 * 1024 * 1024)
+      .union([
+        z.string().url().startsWith("https://").max(4096),
+        z
+          .string()
+          .startsWith("data:image/")
+          .max(42 * 1024 * 1024),
+      ])
       .optional(),
     lastFrameImage: z
       .string()
@@ -160,6 +164,16 @@ export const bytePlusVideoInputSchema = z
       .max(42 * 1024 * 1024)
       .optional(),
     referenceVideoUrl: z.url().startsWith("https://").optional(),
+    avatarImageUrl: z
+      .union([
+        z.string().url().startsWith("https://").max(4096),
+        z
+          .string()
+          .startsWith("data:image/")
+          .max(42 * 1024 * 1024),
+      ])
+      .optional(),
+    audioUrl: z.url().startsWith("https://").optional(),
   })
   .refine(
     (input) =>
@@ -332,6 +346,91 @@ export const VERIFIED_BYTEPLUS_MODELS: readonly ProviderModelDescriptor[] = [
       minimumDurationSeconds: 4,
       maximumDurationSeconds: 30,
       fps: 24,
+    },
+  },
+  {
+    id: "dreamina-seedance-2-0-fast-260128",
+    provider: "byteplus",
+    displayName: "Seedance 2.0 Fast",
+    description:
+      "High-speed video generation balancing quality and low latency for reference-guided iterations.",
+    mediaKind: "video",
+    capabilities: {
+      "aspectRatio:16:9": true,
+      "aspectRatio:9:16": true,
+      "aspectRatio:1:1": true,
+      "aspectRatio:4:3": true,
+      "aspectRatio:3:4": true,
+      "aspectRatio:21:9": true,
+      "aspectRatio:adaptive": true,
+      "resolution:480p": true,
+      "resolution:720p": true,
+      "durationSeconds:5": true,
+      "durationSeconds:10": true,
+      generateAudio: true,
+      firstFrame: true,
+      lastFrame: true,
+      referenceVideo: true,
+      minimumDurationSeconds: 4,
+      maximumDurationSeconds: 15,
+      fps: 24,
+    },
+  },
+  {
+    id: "dreamina-seedance-2-0-mini-260615",
+    provider: "byteplus",
+    displayName: "Seedance 2.0 Mini",
+    description:
+      "Cost-optimized fast video generation designed for previews, variants, and concept exploration.",
+    mediaKind: "video",
+    capabilities: {
+      "aspectRatio:16:9": true,
+      "aspectRatio:9:16": true,
+      "aspectRatio:1:1": true,
+      "aspectRatio:4:3": true,
+      "aspectRatio:3:4": true,
+      "aspectRatio:21:9": true,
+      "aspectRatio:adaptive": true,
+      "resolution:480p": true,
+      "resolution:720p": true,
+      "durationSeconds:5": true,
+      "durationSeconds:10": true,
+      generateAudio: true,
+      firstFrame: true,
+      lastFrame: true,
+      referenceVideo: true,
+      minimumDurationSeconds: 4,
+      maximumDurationSeconds: 15,
+      fps: 24,
+    },
+  },
+  {
+    id: "omnihuman-1.5",
+    provider: "byteplus",
+    displayName: "OmniHuman 1.5",
+    description:
+      "Film-grade digital humans and spokesperson videos from portrait images and speech audio.",
+    mediaKind: "video",
+    capabilities: {
+      "aspectRatio:16:9": true,
+      "aspectRatio:9:16": true,
+      "aspectRatio:1:1": true,
+      "aspectRatio:adaptive": true,
+      "resolution:720p": true,
+      "resolution:1080p": true,
+      "durationSeconds:5": true,
+      "durationSeconds:10": true,
+      "durationSeconds:15": true,
+      "durationSeconds:30": true,
+      "durationSeconds:60": true,
+      talkingAvatar: true,
+      avatarImage: true,
+      audioInput: true,
+      firstFrame: true,
+      prompt: true,
+      minimumDurationSeconds: 2,
+      maximumDurationSeconds: 60,
+      fps: 25,
     },
   },
   {
@@ -696,6 +795,29 @@ export function normalizeBytePlusModelId(modelId: string): string {
     modelId === "dola-seedream-5-0-pro-260628"
   ) {
     return "dola-seedream-5-0-pro-260628";
+  }
+  if (
+    modelId === "omnihuman" ||
+    modelId === "omnihuman-1-5" ||
+    modelId === "omnihuman-1.5"
+  ) {
+    return "omnihuman-1.5";
+  }
+  if (
+    modelId === "seedance-2-0-fast" ||
+    modelId === "seedance-2-fast" ||
+    modelId === "dreamina-seedance-2-0-fast" ||
+    modelId === "dreamina-seedance-2-0-fast-260128"
+  ) {
+    return "dreamina-seedance-2-0-fast-260128";
+  }
+  if (
+    modelId === "seedance-2-0-mini" ||
+    modelId === "seedance-2-mini" ||
+    modelId === "dreamina-seedance-2-0-mini" ||
+    modelId === "dreamina-seedance-2-0-mini-260615"
+  ) {
+    return "dreamina-seedance-2-0-mini-260615";
   }
   return modelId;
 }
@@ -1145,6 +1267,82 @@ export function createBytePlusProvider(
               },
             );
           }
+          const isOmniHuman =
+            submission.modelId === "omnihuman-1.5" ||
+            submission.modelId.startsWith("omnihuman-1");
+          const avatarUrl =
+            input.data.avatarImageUrl ?? input.data.firstFrameImage;
+
+          if (isOmniHuman) {
+            if (!avatarUrl) {
+              throw new ProviderRequestError(
+                "OmniHuman requires an avatar image",
+                false,
+                { code: "INVALID_INPUT" },
+              );
+            }
+            if (!input.data.audioUrl) {
+              throw new ProviderRequestError(
+                "OmniHuman requires a driving audio URL",
+                false,
+                { code: "INVALID_INPUT" },
+              );
+            }
+          } else if (!input.data.prompt) {
+            throw new ProviderRequestError(
+              "Prompt is required for video generation",
+              false,
+              { code: "INVALID_INPUT" },
+            );
+          }
+
+          const content = isOmniHuman
+            ? [
+                ...(input.data.prompt
+                  ? [{ type: "text", text: input.data.prompt }]
+                  : []),
+                {
+                  type: "image_url",
+                  image_url: { url: avatarUrl! },
+                  role: "avatar_image",
+                },
+                {
+                  type: "audio_url",
+                  audio_url: { url: input.data.audioUrl! },
+                  role: "speech_audio",
+                },
+              ]
+            : [
+                { type: "text", text: input.data.prompt },
+                ...(input.data.firstFrameImage
+                  ? [
+                      {
+                        type: "image_url",
+                        image_url: { url: input.data.firstFrameImage },
+                        role: "first_frame",
+                      },
+                    ]
+                  : []),
+                ...(input.data.lastFrameImage
+                  ? [
+                      {
+                        type: "image_url",
+                        image_url: { url: input.data.lastFrameImage },
+                        role: "last_frame",
+                      },
+                    ]
+                  : []),
+                ...(input.data.referenceVideoUrl
+                  ? [
+                      {
+                        type: "video_url",
+                        video_url: { url: input.data.referenceVideoUrl },
+                        role: "reference_video",
+                      },
+                    ]
+                  : []),
+              ];
+
           const response = await safeFetch(
             fetchClient,
             `${baseUrl}/contents/generations/tasks`,
@@ -1153,36 +1351,7 @@ export function createBytePlusProvider(
               headers: modelArkHeaders,
               body: JSON.stringify({
                 model: submission.modelId,
-                content: [
-                  { type: "text", text: input.data.prompt },
-                  ...(input.data.firstFrameImage
-                    ? [
-                        {
-                          type: "image_url",
-                          image_url: { url: input.data.firstFrameImage },
-                          role: "first_frame",
-                        },
-                      ]
-                    : []),
-                  ...(input.data.lastFrameImage
-                    ? [
-                        {
-                          type: "image_url",
-                          image_url: { url: input.data.lastFrameImage },
-                          role: "last_frame",
-                        },
-                      ]
-                    : []),
-                  ...(input.data.referenceVideoUrl
-                    ? [
-                        {
-                          type: "video_url",
-                          video_url: { url: input.data.referenceVideoUrl },
-                          role: "reference_video",
-                        },
-                      ]
-                    : []),
-                ],
+                content,
                 ...(input.data.referenceVideoUrl
                   ? { omni_reference_task_type: "reference" }
                   : {}),

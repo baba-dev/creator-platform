@@ -94,6 +94,7 @@ export function quoteParameters(
     referenceVideoAssetId?: string;
     firstFrameAssetId?: string;
     lastFrameAssetId?: string;
+    audioAssetId?: string;
     referenceAssetIds?: string[];
   },
 ): Record<string, unknown> {
@@ -106,6 +107,7 @@ export function quoteParameters(
       referenceVideoAssetId: input.referenceVideoAssetId ?? null,
       firstFrameAssetId: input.firstFrameAssetId ?? null,
       lastFrameAssetId: input.lastFrameAssetId ?? null,
+      audioAssetId: input.audioAssetId ?? null,
     };
   if (mediaKind === "VOICE")
     return {

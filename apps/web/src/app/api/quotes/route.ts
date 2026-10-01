@@ -123,6 +123,11 @@ export async function POST(request: Request): Promise<NextResponse> {
       { error: "Video reference requires a video model." },
       { status: 400 },
     );
+  if (parsed.data.audioAssetId && model.mediaKind !== "VIDEO")
+    return NextResponse.json(
+      { error: "Audio input requires a video model." },
+      { status: 400 },
+    );
 
   let estimate: Awaited<ReturnType<typeof estimateAuthorizedGeneration>>;
   try {

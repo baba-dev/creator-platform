@@ -12,6 +12,10 @@ brand/
 │   ├── creators-horizontal-white-transparent.webp
 │   ├── creators-symbol-black-transparent.webp
 │   └── creators-symbol-white-transparent.webp
+├── mascots/
+│   ├── creators-mascot-working-laptop-queued-laptop-float.svg
+│   ├── creators-mascot-running-loader-terrain-loop.svg
+│   └── creators-mascot-confused-long-wait-motion-arranged.svg
 └── icons/
     ├── compatibility/
     │   ├── favicon.ico
@@ -43,3 +47,19 @@ WebP favicon and manifest paths remain stable for existing installations.
 These files are application identity assets, not customer media. Customer
 uploads and generated outputs continue through the `Asset` domain and
 `@aiwa/assets`.
+
+## Process mascots
+
+The three animated mascot SVGs are product-experience assets, not customer
+media. Render them through `MascotScene` so sizing, illustration-paper contrast,
+reduced-motion behaviour, and future asset changes remain centralized.
+
+- **Working laptop**: durable generation queue and active generation waits.
+- **Running terrain loop**: route loading and non-generation process waits.
+- **Confused long-wait**: delayed, reconnecting, recoverable failure, timeout,
+  and other user-attention states.
+
+Do not use the confused mascot as the only indication of failure. Pair it with
+plain-language status copy and the appropriate semantic warning/destructive
+surface. Do not invert the artwork for dark mode; the shared illustration-paper
+surface preserves the intended black-and-white drawing in both themes.

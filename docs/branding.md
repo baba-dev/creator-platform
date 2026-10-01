@@ -51,14 +51,15 @@ uploads and generated outputs continue through the `Asset` domain and
 
 ## Process mascots
 
-The four animated mascot SVGs are product-experience assets, not customer
-media. Render them through `MascotScene` so sizing, illustration-paper contrast,
+The four animated mascot SVGs are product-experience assets, not customer media.
+Render them through `MascotScene` so sizing, illustration-paper contrast,
 reduced-motion behaviour, and future asset changes remain centralized.
 
 - **Working laptop**: durable generation queue and active generation waits.
 - **Running terrain loop**: route loading and non-generation process waits.
 - **Confused long-wait**: delayed, reconnecting, recoverable failure, timeout,
-  failed generation, manual review, cancellation, and other user-attention states.
+  failed generation, manual review, cancellation, and other user-attention
+  states.
 - **Celebration**: successful terminal generation and completed-task feedback.
 
 Do not use the confused mascot as the only indication of failure. Pair it with

@@ -335,7 +335,7 @@ export const quoteRequestSchema = z.object({
   firstFrameAssetId: cuidSchema.optional(),
   lastFrameAssetId: cuidSchema.optional(),
   resolution: z
-    .enum(["480p", "720p", "1080p", "1K", "2K", "3K", "4K"])
+    .enum(["480p", "720p", "1080p", "1K", "1.5K", "2K", "3K", "4K"])
     .optional(),
   generateAudio: z.boolean().optional(),
   referenceVideoAssetId: cuidSchema.optional(),

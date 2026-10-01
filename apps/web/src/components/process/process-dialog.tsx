@@ -30,6 +30,8 @@ export function ProcessDialog({
   const descriptionId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
+  const onDismissRef = useRef(onDismiss);
+  onDismissRef.current = onDismiss;
 
   useEffect(() => {
     if (!open) return;
@@ -43,7 +45,7 @@ export function ProcessDialog({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && allowDismiss) {
         event.preventDefault();
-        onDismiss?.();
+        onDismissRef.current?.();
         return;
       }
       if (event.key !== "Tab" || !panel) return;
@@ -71,7 +73,7 @@ export function ProcessDialog({
       document.removeEventListener("keydown", onKeyDown);
       previousFocus.current?.focus();
     };
-  }, [allowDismiss, onDismiss, open]);
+  }, [allowDismiss, open]);
 
   if (!open) return null;
 
@@ -100,7 +102,7 @@ export function ProcessDialog({
         {allowDismiss && onDismiss ? (
           <button
             type="button"
-            aria-label="Continue in background"
+            aria-label="Dismiss process dialog"
             onClick={onDismiss}
             className="absolute right-4 top-4 z-10 grid size-10 place-items-center rounded-xl border border-border bg-card text-lg text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/35"
           >

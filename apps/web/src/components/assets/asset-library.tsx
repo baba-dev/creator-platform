@@ -153,6 +153,7 @@ export function AssetLibrary({
         }
         activeAbortControllerRef.current = new AbortController();
         setLoading(true);
+        setLoadingMore(false);
         setNextCursor(null);
         activeQueryKeyRef.current = currentQueryKey;
       }

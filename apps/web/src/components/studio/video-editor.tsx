@@ -222,6 +222,18 @@ export function VideoEditor({
     });
     setSelectedClip(second.id);
   }
+  function startAiWorkflow(workflow: "EDIT" | "EXTEND") {
+    if (!clip?.assetId) {
+      setError("Select a video clip before starting an AI action.");
+      return;
+    }
+    window.dispatchEvent(
+      new CustomEvent("creators:video-workflow", {
+        detail: { workflow, assetId: clip.assetId },
+      }),
+    );
+  }
+
   async function save() {
     if (!canSave) return null;
     setBusy(true);
@@ -429,7 +441,8 @@ export function VideoEditor({
           </h2>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
             Arrange clips, add narration or music, and save a new video.
-            Originals stay intact.
+            Originals stay intact. AI Edit and Extend hand the selected source
+            to the Seedance workflow above for a separately quoted generation.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -447,6 +460,22 @@ export function VideoEditor({
             disabled={!canSave}
           >
             Render MP4
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => startAiWorkflow("EDIT")}
+            disabled={!clip || busy}
+          >
+            AI Edit
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => startAiWorkflow("EXTEND")}
+            disabled={!clip || busy}
+          >
+            Extend with AI
           </Button>
         </div>
       </div>

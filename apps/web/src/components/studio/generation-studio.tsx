@@ -199,6 +199,8 @@ export function GenerationStudio({
   const [sourceDraftJobId, setSourceDraftJobId] = useState("");
   const [videoOutputFormat, setVideoOutputFormat] =
     useState<"mp4" | "mov">("mp4");
+  const [extensionDirection, setExtensionDirection] =
+    useState<"BEFORE" | "AFTER">("AFTER");
   const [returnLastFrame, setReturnLastFrame] = useState(true);
   const [referenceBusy, setReferenceBusy] = useState(false);
   const [referenceUrl, setReferenceUrl] = useState("");
@@ -381,13 +383,19 @@ export function GenerationStudio({
       : {}),
     ...(activeMode === "VIDEO"
       ? {
+          schemaVersion: 2,
+          workflow: videoWorkflow,
+          sources: videoSources,
           durationSeconds: Number(selectedDuration),
           generateAudio,
-          ...(videoFirstFrameId
-            ? { firstFrameAssetId: videoFirstFrameId }
+          outputFormat: videoOutputFormat,
+          returnLastFrame,
+          ...(videoWorkflow === "DRAFT_FINAL" && sourceDraftJobId
+            ? { sourceDraftJobId }
             : {}),
-          ...(videoLastFrameId ? { lastFrameAssetId: videoLastFrameId } : {}),
-          ...(referenceVideoAssetId ? { referenceVideoAssetId } : {}),
+          ...(videoWorkflow === "EXTEND"
+            ? { extensionDirection }
+            : {}),
         }
       : {}),
   });

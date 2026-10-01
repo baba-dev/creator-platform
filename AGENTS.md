@@ -120,4 +120,11 @@ These rules apply to every contributor and coding agent.
 - Keep sketch treatments sparse: one focal hand-drawn gesture per major
   viewport.
 - Preserve keyboard focus, reduced-motion support, and honest demo labels.
+- Use the shared process experience for long-running work. Do not fake
+  percentage progress or exact ETAs when providers do not expose them.
+- Persist only durable generation job IDs across navigation; never imply a
+  background provider request was cancelled merely because a dialog closed.
+- Treat delayed generation as distinct from failure. Do not invite automatic
+  resubmission for `MANUAL_REVIEW` or any state where provider acceptance or
+  billing may be ambiguous.
 - Treat `/design-system` as the living visual reference.

@@ -66,8 +66,11 @@ export const auth = betterAuth({
     autoSignIn: false,
     revokeSessionsOnPasswordReset: true,
     resetPasswordTokenExpiresIn: 60 * 60,
-    sendResetPassword: async ({ user, url, token }) => {
-      await enqueueMail(
+    sendResetPassword: ({ user, url, token }) => {
+      // Do not await user-dependent mail work on this public endpoint. Keeping
+      // the response path independent of account existence reduces timing
+      // differences while the durable mail queue handles delivery.
+      void enqueueMail(
         passwordResetEmail({
           to: user.email,
           resetUrl: url,
@@ -76,7 +79,7 @@ export const auth = betterAuth({
             .update(token)
             .digest("hex")}`,
         }),
-      );
+      ).catch(() => undefined);
     },
     onPasswordReset: async ({ user }) => {
       await enqueueMail(

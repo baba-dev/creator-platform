@@ -6,7 +6,11 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Eyebrow } from "@/components/ui/creative";
 import { Icon } from "@/components/ui/icon";
-import { downloadPsdFile, type PsdLayerInput } from "@/lib/psd-export";
+import {
+  downloadPsdFile,
+  validatePsdExportLayout,
+  type PsdLayerInput,
+} from "@/lib/psd-export";
 
 type Asset = {
   id: string;
@@ -547,6 +551,11 @@ export function ImageEditor({
     setLayerError(null);
 
     try {
+      validatePsdExportLayout({
+        width: canvasWidth,
+        height: canvasHeight,
+        layers,
+      });
       const psdLayers: PsdLayerInput[] = [];
 
       for (const layer of layers) {
@@ -605,20 +614,27 @@ export function ImageEditor({
   async function downloadCompositePng() {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const blob = await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob((value) => {
-        if (value) resolve(value);
-        else reject(new Error("Could not encode flattened PNG."));
-      }, "image/png");
-    });
-    const url = URL.createObjectURL(blob);
+    setLayerError(null);
     try {
-      const a = document.createElement("a");
-      a.download = `${selected?.name ?? "composite"}-flattened.png`;
-      a.href = url;
-      a.click();
-    } finally {
-      URL.revokeObjectURL(url);
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((value) => {
+          if (value) resolve(value);
+          else reject(new Error("Could not encode flattened PNG."));
+        }, "image/png");
+      });
+      const url = URL.createObjectURL(blob);
+      try {
+        const a = document.createElement("a");
+        a.download = `${selected?.name ?? "composite"}-flattened.png`;
+        a.href = url;
+        a.click();
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      setLayerError(
+        err instanceof Error ? err.message : "Failed to export flattened PNG.",
+      );
     }
   }
 
@@ -1405,7 +1421,7 @@ export function ImageEditor({
                   variant="secondary"
                   className="w-full"
                   disabled={!layers.length}
-                  onClick={downloadCompositePng}
+                  onClick={() => void downloadCompositePng()}
                 >
                   Download Composite PNG
                 </Button>

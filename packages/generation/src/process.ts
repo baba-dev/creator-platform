@@ -663,13 +663,15 @@ export async function processImageJob(
     try {
       const referenceImages = await Promise.all(
         (job.inputAssets ?? []).map(async ({ asset }) => {
-          if (
-            asset.organizationId !== job.organizationId ||
-            asset.storageOwnerUserId !== job.createdById ||
-            asset.purpose !== "REFERENCE_INPUT" ||
-            asset.mediaKind !== "IMAGE" ||
-            asset.status !== "READY"
-          ) {
+          const usableReference =
+            asset.organizationId === job.organizationId &&
+            asset.mediaKind === "IMAGE" &&
+            asset.status === "READY" &&
+            asset.storageProvider === "LOCAL" &&
+            (asset.purpose === "GENERAL" ||
+              (asset.purpose === "REFERENCE_INPUT" &&
+                asset.storageOwnerUserId === job.createdById));
+          if (!usableReference) {
             throw new ProviderRequestError(
               "Reference image is no longer available",
               false,

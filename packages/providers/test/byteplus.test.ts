@@ -34,6 +34,7 @@ describe("BytePlus provider adapter", () => {
     expect(models.map((model) => model.id)).toEqual([
       "seedream-5-0-260128",
       "seedream-4-5-251128",
+      "seedream-4-0-250828",
       "dreamina-seedance-2-5-260628",
       "seed-tts-2.0",
     ]);
@@ -57,6 +58,18 @@ describe("BytePlus provider adapter", () => {
     });
     expect(
       models.find((model) => model.id === "seedream-4-5-251128")?.capabilities,
+    ).not.toHaveProperty("resolution:3K");
+    expect(
+      models.find((model) => model.id === "seedream-4-0-250828")?.capabilities,
+    ).toMatchObject({
+      "aspectRatio:2:3": true,
+      "resolution:2K": true,
+      "resolution:4K": true,
+      referenceImages: true,
+      maxReferenceImages: 14,
+    });
+    expect(
+      models.find((model) => model.id === "seedream-4-0-250828")?.capabilities,
     ).not.toHaveProperty("resolution:3K");
     expect(
       models.find((model) => model.mediaKind === "video")?.capabilities,

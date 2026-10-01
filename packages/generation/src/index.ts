@@ -499,12 +499,11 @@ export async function createImageJob(userId: string, raw: unknown) {
         idempotencyKey: `generation-reserve-${job.id}`,
         jobId: job.id,
       });
-      const extension =
-        model.providerModelId === "seedream-4-5-251128" ? "jpg" : "png";
-      const mimeType =
-        model.providerModelId === "seedream-4-5-251128"
-          ? "image/jpeg"
-          : "image/png";
+      const isJpegDefault =
+        model.providerModelId === "seedream-4-5-251128" ||
+        model.providerModelId === "seedream-4-0-250828";
+      const extension = isJpegDefault ? "jpg" : "png";
+      const mimeType = isJpegDefault ? "image/jpeg" : "image/png";
       await tx.asset.createMany({
         data: Array.from({ length: input.outputCount }, (_, outputIndex) => ({
           organizationId: input.organizationId,

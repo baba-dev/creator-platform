@@ -33,11 +33,11 @@ zero, overflowing and unsupported selectors are rejected. Adding rate rows does
 not activate provider access or unsupported model capabilities.
 
 Seedream Lite: REQUEST, quantity 1, cost 31500. Seedream 4.5: REQUEST, quantity
-1, cost 36000. TTS2: CHARACTER, quantity 1000, cost 30000. UI margin 25 means
-2500 basis points and price = cost / 0.75 before upward rounding. The default FX
-is 769/2 baisa/USD. Omitted FX retains the current version's FX; first
-publication uses that default. Seed changes apply only where no active price
-already exists.
+1, cost 36000. Seedream 4.0: REQUEST, quantity 1, cost 28000. TTS2: CHARACTER,
+quantity 1000, cost 30000. UI margin 25 means 2500 basis points and price = cost
+/ 0.75 before upward rounding. The default FX is 769/2 baisa/USD. Omitted FX
+retains the current version's FX; first publication uses that default. Seed
+changes apply only where no active price already exists.
 
 The source defaults use this account's verified paid rates. Trials are not a
 zero production cost. Discount/resource-package expiry and actual consumption

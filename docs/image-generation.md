@@ -9,8 +9,9 @@ generation integration is exercised in CI with real MariaDB and Redis services.
 ## Deployment
 
 Use the normal release deployment. The migration maps legacy image catalog IDs
-onto `seedream-5-0-260128` and `seedream-4-5-251128`, preserving IDs, prices,
-enabled flags and history. A fresh database still requires `pnpm db:seed`.
+onto `seedream-5-0-260128`, `seedream-4-5-251128`, and `seedream-4-0-250828`,
+preserving IDs, prices, enabled flags and history. A fresh database still
+requires `pnpm db:seed`.
 
 Both services read the existing `BYTEPLUS_API_KEY`, region and ModelArk URL.
 Voice additionally requires `BYTEPLUS_SPEECH_API_KEY`; ModelArk and legacy App

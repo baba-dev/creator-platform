@@ -33,6 +33,15 @@ describe("pricing defaults and model quotes", () => {
     expect(quote.customerPriceBaisa).toBe(22n);
   });
 
+  it("calculates accurate quotes for seedream-4-0 (image)", () => {
+    const quote = calculateModelQuote({
+      providerCostMicroUsd: 28_000n,
+    });
+    expect(quote.customerCredits).toBe(15n);
+    expect(quote.convertedCostBaisa).toBe(11n);
+    expect(quote.customerPriceBaisa).toBe(15n);
+  });
+
   it("calculates accurate quotes for seedance-2-5 (video)", () => {
     const quote = calculateModelQuote({
       providerCostMicroUsd: 468_000n,

@@ -40,6 +40,18 @@ export const showcaseModels: readonly ShowcaseModel[] = [
     latency: "~9 sec",
   },
   {
+    id: "seedream-4-0",
+    kind: "image",
+    name: "Seedream 4.0",
+    provider: "BytePlus",
+    description:
+      "Versatile foundation image generation with balanced styling and prompt fidelity.",
+    badge: "Foundation",
+    demoRate: "15 credits / image",
+    demoCredits: "15",
+    latency: "~8 sec",
+  },
+  {
     id: "seedance-2-5",
     kind: "video",
     name: "Seedance 2.5",

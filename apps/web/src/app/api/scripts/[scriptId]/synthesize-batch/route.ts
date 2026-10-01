@@ -17,6 +17,21 @@ const batchSynthesizeSchema = z.object({
     .optional(),
 });
 
+function deterministicUuid(value: string): string {
+  const digest = createHash("sha256").update(value).digest("hex");
+  const variantNibble = (
+    (Number.parseInt(digest[16]!, 16) & 0x3) |
+    0x8
+  ).toString(16);
+  return [
+    digest.slice(0, 8),
+    digest.slice(8, 12),
+    `5${digest.slice(13, 16)}`,
+    `${variantNibble}${digest.slice(17, 20)}`,
+    digest.slice(20, 32),
+  ].join("-");
+}
+
 interface ScriptSceneBlock {
   id: string;
   type: string;
@@ -143,20 +158,18 @@ export async function POST(
         voiceKeyToUse = "jasper";
       }
 
-      const idempotencyKey = createHash("sha256")
-        .update(
-          [
-            "script-batch-voice-v1",
-            script.id,
-            block.id,
-            voiceModel.id,
-            voiceModel.priceVersions[0].id,
-            voiceKeyToUse,
-            String(speechRateToUse),
-            block.text,
-          ].join("\u0000"),
-        )
-        .digest("hex");
+      const idempotencyKey = deterministicUuid(
+        [
+          "script-batch-voice-v1",
+          script.id,
+          block.id,
+          voiceModel.id,
+          voiceModel.priceVersions[0].id,
+          voiceKeyToUse,
+          String(speechRateToUse),
+          block.text,
+        ].join("\u0000"),
+      );
 
       try {
         const job = await createVoiceJob(session.user.id, {

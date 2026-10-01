@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import { getGenerationErrorPresentation } from "@/lib/generation-error-copy";
 import {
   formatEta,
   type GenerationExperience,
@@ -19,16 +20,19 @@ export type GenerationProgressJob = {
   status: string;
   model: string;
   kind: GenerationKind;
+  errorCode: string | null;
   errorMessage: string | null;
   reservedCredits: string;
   chargedCredits: string;
   canCancel: boolean;
 };
 
-function isAttentionStage(experience: GenerationExperience) {
-  return ["DELAYED", "FAILED", "CANCELLED", "REVIEW"].includes(
-    experience.stage,
-  );
+function mascotForExperience(experience: GenerationExperience) {
+  if (experience.stage === "READY") return "celebration" as const;
+  if (["DELAYED", "FAILED", "CANCELLED", "REVIEW"].includes(experience.stage)) {
+    return "confused" as const;
+  }
+  return "working" as const;
 }
 
 export function GenerationProgressDialog({
@@ -56,11 +60,19 @@ export function GenerationProgressDialog({
 }) {
   const eta = formatEta(experience.etaSeconds, experience.etaConfidence);
   const terminal = experience.terminal;
+  const error =
+    experience.stage === "FAILED" || experience.stage === "REVIEW"
+      ? getGenerationErrorPresentation({
+          errorCode: job.errorCode,
+          errorMessage: job.errorMessage,
+          status: job.status,
+        })
+      : null;
 
   return (
     <ProcessDialog
       open={open}
-      mascot={isAttentionStage(experience) ? "confused" : "working"}
+      mascot={mascotForExperience(experience)}
       eyebrow={
         experience.stage === "DELAYED"
           ? "Taking longer"
@@ -134,6 +146,31 @@ export function GenerationProgressDialog({
           </p>
         </div>
 
+        {error ? (
+          <div
+            role={experience.stage === "FAILED" ? "alert" : "status"}
+            className={cn(
+              "rounded-xl border px-3 py-3 text-left",
+              experience.stage === "FAILED"
+                ? "border-destructive/30 bg-destructive/5"
+                : "border-warning/30 bg-warning/5",
+            )}
+          >
+            <p className="text-sm font-semibold text-foreground">
+              {error.title}
+            </p>
+            {error.nextStep ? (
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                {error.nextStep}
+              </p>
+            ) : null}
+            {job.errorCode ? (
+              <p className="mt-2 break-all font-mono text-[0.6875rem] text-subtle-foreground">
+                Reference code: {job.errorCode}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
         {connectionIssue ? (
           <p
             role="status"

@@ -271,6 +271,111 @@ describe("executeTextGeneration", () => {
     expect(mocks.db.$transaction).not.toHaveBeenCalled();
   });
 
+
+  it("does not charge above the authorized reservation when actual usage is higher", async () => {
+    const submittedJob = {
+      id: "job_text_overage",
+      status: "SUBMITTED",
+      billableQuantity: 1024,
+      quotedUnits: 2,
+      reservedCredits: 10n,
+    };
+    const tx = {
+      $queryRaw: vi.fn(),
+      membership: {
+        findUnique: vi.fn().mockResolvedValue({
+          role: "ORGANIZATION_MEMBER",
+          monthlySpendingCapCredits: 100n,
+          organization: { status: "ACTIVE" },
+          user: { disabledAt: null, emailVerified: true },
+        }),
+      },
+      generationTemplate: { findFirst: vi.fn() },
+      generationJob: {
+        findUnique: vi.fn().mockResolvedValue(null),
+        findUniqueOrThrow: vi.fn().mockResolvedValue({
+          status: "PROCESSING",
+        }),
+        create: vi.fn().mockResolvedValue({ id: submittedJob.id }),
+        update: vi.fn().mockResolvedValue(submittedJob),
+        aggregate: vi.fn().mockResolvedValue({
+          _sum: { chargedCredits: 0n, reservedCredits: 0n },
+        }),
+      },
+      providerModel: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: "m_1",
+          providerModelId: "doubao-seed-character-260628",
+          enabled: true,
+          priceVersions: [
+            {
+              id: "pv_1",
+              providerCostMicroUsd: 1000n,
+              pricingDimension: "TOKEN",
+              unitQuantity: 1000,
+            },
+          ],
+        }),
+      },
+      project: { findUnique: vi.fn() },
+      wallet: {
+        findUnique: vi.fn().mockResolvedValue({ id: "wallet_1" }),
+      },
+      auditEvent: { create: vi.fn() },
+    };
+
+    mocks.db.$transaction.mockImplementation(async (callback) => callback(tx));
+    mocks.credits.estimateGeneration.mockReturnValue({
+      reservation: { customerCredits: 10n },
+      units: 2,
+      billableQuantity: 1024,
+    });
+    mocks.credits.priceCredits.mockReturnValue(20n);
+
+    const provider = {
+      name: "byteplus" as const,
+      listModels: vi.fn(),
+      getJob: vi.fn(),
+      cancel: vi.fn(),
+      submit: vi.fn().mockResolvedValue({
+        providerRequestId: "req_overage",
+        status: "succeeded" as const,
+        textOutput: { content: "A costly answer" },
+        rawUsage: {
+          prompt_tokens: 1000,
+          completion_tokens: 1000,
+          total_tokens: 2000,
+        },
+      }),
+    };
+
+    await expect(
+      executeTextGeneration(
+        "user_1",
+        {
+          organizationId: "org_1",
+          modelId: "m_1",
+          priceVersionId: "pv_1",
+          idempotencyKey: "123e4567-e89b-12d3-a456-426614174097",
+          messages: [{ role: "user" as const, content: "Generate." }],
+          maxTokens: 1024,
+        },
+        { provider },
+      ),
+    ).rejects.toThrow("exceeded the authorized quote");
+
+    expect(mocks.credits.captureCreditsForJob).not.toHaveBeenCalled();
+    expect(mocks.db.generationJob.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: submittedJob.id, status: "PROCESSING" },
+        data: expect.objectContaining({
+          status: "MANUAL_REVIEW",
+          errorCode: "SETTLEMENT_EXCEEDS_RESERVATION",
+        }),
+      }),
+    );
+  });
+
   it("uses the reserved estimate when provider usage telemetry is missing", async () => {
     const submittedJob = {
       id: "job_text_fallback",

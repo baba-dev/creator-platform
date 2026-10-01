@@ -2481,6 +2481,55 @@ export function GenerationStudio({
                           Edit video →
                         </Link>
                       ) : null}
+                      {asset.mimeType.startsWith("video/") &&
+                      job.status === "SUCCEEDED" ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              focusVideoWorkflow("EDIT", {
+                                sourceAssetId: asset.id,
+                                providerModelId:
+                                  job.providerModel.providerModelId,
+                              })
+                            }
+                            className="ml-4 inline-flex min-h-10 items-center text-sm font-semibold text-primary"
+                          >
+                            AI Edit →
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              focusVideoWorkflow("EXTEND", {
+                                sourceAssetId: asset.id,
+                                providerModelId:
+                                  job.providerModel.providerModelId,
+                              })
+                            }
+                            className="ml-4 inline-flex min-h-10 items-center text-sm font-semibold text-primary"
+                          >
+                            Extend →
+                          </button>
+                        </>
+                      ) : null}
+                      {job.providerModel.mediaKind === "VIDEO" &&
+                      asset.mimeType.startsWith("image/") &&
+                      asset.generationOutputIndex === 1 &&
+                      job.status === "SUCCEEDED" ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            focusVideoWorkflow("FRAME_TO_VIDEO", {
+                              firstFrameAssetId: asset.id,
+                              providerModelId:
+                                job.providerModel.providerModelId,
+                            })
+                          }
+                          className="ml-4 inline-flex min-h-10 items-center text-sm font-semibold text-primary"
+                        >
+                          Continue scene →
+                        </button>
+                      ) : null}
                     </div>
                   ))}
                   {job.errorMessage ? (
@@ -2495,6 +2544,33 @@ export function GenerationStudio({
                       your history and ask support to review it before starting
                       another attempt.
                     </p>
+                  ) : null}
+                  {job.status === "SUCCEEDED" &&
+                  job.videoWorkflow === "DRAFT" &&
+                  job.draftExpiresAt ? (
+                    <div className="mt-3 rounded-xl border border-primary/25 bg-primary/[0.06] p-3">
+                      <p className="text-xs font-semibold text-foreground">
+                        Draft approved?
+                      </p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        Final rendering is a separately quoted 1080p generation.
+                        Draft expires {new Date(job.draftExpiresAt).toLocaleString()}.
+                      </p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="mt-2"
+                        onClick={() =>
+                          focusVideoWorkflow("DRAFT_FINAL", {
+                            draftJobId: job.id,
+                            providerModelId:
+                              job.providerModel.providerModelId,
+                          })
+                        }
+                      >
+                        Quote 1080p final
+                      </Button>
+                    </div>
                   ) : null}
                   <p className="mt-2 text-xs tabular-nums text-muted-foreground">
                     {job.status === "SUCCEEDED"

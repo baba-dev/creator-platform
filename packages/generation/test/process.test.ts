@@ -373,7 +373,7 @@ describe("video processing", () => {
       expect.objectContaining({ amountCredits: 28n }),
     );
     expect(tx.asset.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { objectKey: "job1.mp4" } }),
+      expect.objectContaining({ where: { id: "video-asset" } }),
     );
     expect(tx.generationJob.update).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -381,6 +381,8 @@ describe("video processing", () => {
           actualUnits: 1,
           outputPayload: {
             stored: true,
+            assetId: "video-asset",
+            providerReturnedLastFrame: false,
             providerUsage: { completionTokens: 183_104 },
           },
         }),
@@ -408,7 +410,11 @@ describe("video processing", () => {
     expect(tx.generationJob.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          outputPayload: { stored: true },
+          outputPayload: {
+            stored: true,
+            assetId: "video-asset",
+            providerReturnedLastFrame: false,
+          },
         }),
       }),
     );
@@ -451,7 +457,12 @@ describe("video processing", () => {
       tx,
       expect.objectContaining({
         amountCredits: expect.any(BigInt),
-        metadata: { completionTokens: 183_104, cappedAtReservation: false },
+        metadata: {
+          completionTokens: 183_104,
+          rateMicroUsdPerThousandTokens: "6400",
+          workflow: "LEGACY",
+          cappedAtReservation: false,
+        },
       }),
     );
     expect(mocks.capture.mock.calls[0]?.[1].amountCredits).toBeLessThan(4_000n);
@@ -526,7 +537,12 @@ describe("video processing", () => {
       tx,
       expect.objectContaining({
         amountCredits: 4_000n,
-        metadata: { completionTokens: 9_000_000, cappedAtReservation: true },
+        metadata: {
+          completionTokens: 9_000_000,
+          rateMicroUsdPerThousandTokens: "6400",
+          workflow: "LEGACY",
+          cappedAtReservation: true,
+        },
       }),
     );
   });
@@ -1336,6 +1352,8 @@ describe("ordinary token-priced video settlement", () => {
           amountCredits: tokens === 108000 ? 594n : 1000n,
           metadata: {
             completionTokens: tokens,
+            rateMicroUsdPerThousandTokens: "10700",
+            workflow: "LEGACY",
             cappedAtReservation: tokens !== 108000,
           },
         }),

@@ -29,7 +29,7 @@ test -f apps/worker/dist/byteplus-smoke.cjs
 test -f packages/db/prisma/schema.prisma
 test -d packages/db/prisma/migrations
 test -f packages/db/prisma/promote-owner.ts
-test -f packages/db/prisma/seed-templates.ts
+test -f packages/db/prisma/seed.ts
 test -f packages/db/prisma/template-catalog.ts
 test -f packages/db/prisma/templates.ts
 test -f infra/deploy/creator-deploy
@@ -114,7 +114,7 @@ test -x "$operations_root/node_modules/.bin/tsx"
 test -f "$operations_root/prisma/schema.prisma"
 test -d "$operations_root/prisma/migrations"
 test -f "$operations_root/prisma/promote-owner.ts"
-test -f "$operations_root/prisma/seed-templates.ts"
+test -f "$operations_root/prisma/seed.ts"
 test -f "$operations_root/prisma/template-catalog.ts"
 test -f "$operations_root/prisma/templates.ts"
 

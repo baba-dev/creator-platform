@@ -158,6 +158,7 @@ export interface JobPermittedActions {
   releaseReason?: string;
   canRefund: boolean;
   refundReason?: string;
+  maxRefundCredits?: string;
 }
 
 export interface ReconcileProviderOutcomeParams {
@@ -380,6 +381,7 @@ export async function getJobReconciliationDetails(jobId: string) {
 
   if (job.chargedCredits > 0n && captureEntry && remainingRefundable > 0n) {
     permittedActions.canRefund = true;
+    permittedActions.maxRefundCredits = remainingRefundable.toString();
     permittedActions.refundReason = `Settled job can be refunded up to ${remainingRefundable.toString()} remaining credits.`;
   } else if (!captureEntry || job.chargedCredits === 0n) {
     permittedActions.canRefund = false;

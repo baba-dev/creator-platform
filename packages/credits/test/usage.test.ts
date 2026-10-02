@@ -215,6 +215,33 @@ describe("generation pricing policies", () => {
     ).toThrow("must be positive");
   });
 
+  it("uses generic external text token rates for both quote and reservation", () => {
+    const textRates = {
+      estimator: "text-token-v1",
+      tiers: [
+        {
+          maxPromptTokens: 1_000_000,
+          inputMicroUsdPerMillionTokens: "1000000",
+          outputMicroUsdPerMillionTokens: "2000000",
+        },
+      ],
+    };
+    const result = estimateGeneration({
+      price: {
+        ...price,
+        providerCostMicroUsd: 999999n,
+        usageRates: textRates,
+      },
+      mediaKind: "TEXT",
+      providerModelId: "external-text-model",
+      text: "abcd",
+      units: 1000,
+    });
+    expect(result.settlement).toBe("ACTUAL_USAGE");
+    expect(result.quote.providerCostMicroUsd).toBe(2002n);
+    expect(result.reservation.providerCostMicroUsd).toBe(2004n);
+  });
+
   it("prices text input, cached input and output independently", () => {
     const textRates = {
       estimator: "byteplus-text-v1",

@@ -510,8 +510,9 @@ export function estimateGeneration(params: {
       price.usageRates &&
       typeof price.usageRates === "object" &&
       !Array.isArray(price.usageRates) &&
-      (price.usageRates as Record<string, unknown>).estimator ===
-        "byteplus-text-v1"
+      ["byteplus-text-v1", "text-token-v1"].includes(
+        String((price.usageRates as Record<string, unknown>).estimator),
+      )
         ? textProviderCostMicroUsd(price.usageRates, {
             promptTokens: estimatedInputTokens,
             completionTokens: requestedCompletionTokens,
@@ -528,8 +529,9 @@ export function estimateGeneration(params: {
       price.usageRates &&
       typeof price.usageRates === "object" &&
       !Array.isArray(price.usageRates) &&
-      (price.usageRates as Record<string, unknown>).estimator ===
-        "byteplus-text-v1"
+      ["byteplus-text-v1", "text-token-v1"].includes(
+        String((price.usageRates as Record<string, unknown>).estimator),
+      )
         ? textProviderCostMicroUsd(price.usageRates, {
             promptTokens: reservationInputTokens,
             completionTokens: requestedCompletionTokens,

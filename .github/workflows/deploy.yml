@@ -148,7 +148,7 @@ jobs:
             ssh "${ssh_opts[@]}" "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
               "set -eu
                test -f '$remote_partial'
-               sha256sum '$remote_partial' | awk '{print \\$1}'
+               sha256sum '$remote_partial' | cut -c1-64
                mv -f -- '$remote_partial' '$remote_archive'"
           )"
           test "$remote_sha" = "$local_sha" || {

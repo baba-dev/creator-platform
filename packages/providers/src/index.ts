@@ -88,7 +88,7 @@ export interface TextChatResult {
 }
 
 export interface TextGenerationProvider {
-  readonly name: "groq" | "gemini" | "cloudflare";
+  readonly name: ReasoningProvider["name"];
   chat(input: TextChatRequest): Promise<TextChatResult>;
 }
 

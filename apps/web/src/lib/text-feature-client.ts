@@ -29,9 +29,10 @@ export async function runQuotedTextFeature<T>(
   options?: {
     onQuote?: (quote: TextFeatureQuote) => void;
     maxPolls?: number;
+    idempotencyKey?: string;
   },
 ): Promise<T> {
-  const idempotencyKey = crypto.randomUUID();
+  const idempotencyKey = options?.idempotencyKey ?? crypto.randomUUID();
   const quoteResponse = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

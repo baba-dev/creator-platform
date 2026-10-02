@@ -11,6 +11,7 @@ import {
   assembleMasterStoryAudio,
   type AssembledAudioResult,
 } from "@/lib/audio-assembly";
+import { runQuotedTextFeature } from "@/lib/text-feature-client";
 
 interface SceneBlock {
   id: string;
@@ -402,24 +403,17 @@ export function ScriptwritingStudio({
         )
         .join("\n");
 
-      const res = await fetch(
+      const data = await runQuotedTextFeature<{
+        content: string;
+        chargedCredits?: number;
+      }>(
         `/api/scripts/${encodeURIComponent(activeScript.id)}/generate`,
         {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            prompt: aiPrompt,
-            action: aiAction,
-            currentScene: currentContext.slice(-1500),
-          }),
+          prompt: aiPrompt,
+          action: aiAction,
+          currentScene: currentContext.slice(-1500),
         },
       );
-
-      if (!res.ok) {
-        throw new Error("Screenplay generation failed.");
-      }
-
-      const data = await res.json();
       const generatedText = data.content as string;
 
       // Append generated dialogue or action

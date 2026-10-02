@@ -7,6 +7,7 @@ import { Icon } from "@/components/ui/icon";
 import { StatusBadge } from "@/components/admin/primitives";
 import { AudioWaveformPlayer } from "@/components/ui/audio-waveform-player";
 import { VoiceCastingBooth } from "@/components/ui/voice-casting-booth";
+import { runQuotedTextFeature } from "@/lib/text-feature-client";
 
 interface Persona {
   id: string;
@@ -403,25 +404,18 @@ export function CharacterChatWorkspace({
     setMessages((prev) => [...prev, tempUserMsg]);
 
     try {
-      const res = await fetch(
+      const data = await runQuotedTextFeature<{
+        userMessage: ChatMessage;
+        message: ChatMessage;
+        audioJobId?: string;
+      }>(
         `/api/chat/threads/${encodeURIComponent(threadId!)}/messages`,
         {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            content: userText,
-            idempotencyKey: clientRequestId,
-            autoVoice,
-          }),
+          content: userText,
+          autoVoice,
         },
+        { idempotencyKey: clientRequestId },
       );
-
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => null);
-        throw new Error(errJson?.error || "Generation request failed");
-      }
-
-      const data = await res.json();
       setMessages((prev) => {
         const filtered = prev.filter((m) => m.id !== tempUserMsg.id);
         return [...filtered, data.userMessage, data.message];

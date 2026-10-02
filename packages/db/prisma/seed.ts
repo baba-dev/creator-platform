@@ -17,6 +17,7 @@ interface SeedModel {
   negotiatedDiscountBps?: number;
   providerCostBasisNote?: string;
   enabled?: boolean;
+  seedPrice?: boolean;
 }
 
 const verifiedBytePlusModels: readonly SeedModel[] = [
@@ -460,6 +461,34 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
     },
   },
   {
+    providerModelId: "omnihuman-1.5",
+    mediaKind: "VIDEO",
+    displayName: "OmniHuman 1.5",
+    description:
+      "Expressive talking-avatar video from one portrait image and a driving audio track.",
+    capabilities: {
+      "aspectRatio:adaptive": true,
+      "resolution:720p": true,
+      "resolution:1080p": true,
+      talkingAvatar: true,
+      avatarImage: true,
+      audioInput: true,
+      outputFormatMov: false,
+      returnLastFrame: false,
+      maximumDurationSeconds: 60,
+      concurrencyLimit: 1,
+      providerTransport: "vision",
+    },
+    providerCostMicroUsd: 120_000n,
+    customerCredits: 63n,
+    pricingDimension: "SECOND",
+    unitQuantity: 1,
+    enabled: false,
+    seedPrice: false,
+    providerCostBasisNote:
+      "BytePlus OmniHuman 1.5 public PAYG list price: $0.12 per generated video second. Production price publication is operator-controlled.",
+  },
+  {
     providerModelId: "seed-tts-2.0",
     mediaKind: "VOICE",
     displayName: "Seed Speech TTS 2.0",
@@ -846,7 +875,7 @@ async function main(): Promise<void> {
       orderBy: { effectiveFrom: "desc" },
     });
 
-    if (!activePrice) {
+    if (!activePrice && model.seedPrice !== false) {
       await db.modelPriceVersion.create({
         data: {
           providerModelId: providerModel.id,
@@ -868,9 +897,13 @@ async function main(): Promise<void> {
       console.info(
         `Created price version for ${model.displayName}: ${model.customerCredits} credits`,
       );
-    } else {
+    } else if (activePrice) {
       console.info(
         `Active price version already exists for ${model.displayName} (${activePrice.customerCredits} credits)`,
+      );
+    } else {
+      console.info(
+        `Skipped automatic price publication for ${model.displayName}; operator verification is required.`,
       );
     }
   }

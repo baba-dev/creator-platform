@@ -174,14 +174,22 @@ mailWorker?.on("failed", (job, error) =>
 );
 
 const generationQueue = createQueue("generation");
-const hasBytePlus =
-  owns("generation") &&
-  Boolean(env.BYTEPLUS_API_KEY || env.BYTEPLUS_SPEECH_API_KEY);
+const hasBytePlusVisionCredentials = Boolean(
+  env.BYTEPLUS_VISION_ACCESS_KEY_ID && env.BYTEPLUS_VISION_SECRET_ACCESS_KEY,
+);
+const hasBytePlusCredentials =
+  Boolean(env.BYTEPLUS_API_KEY) ||
+  Boolean(env.BYTEPLUS_SPEECH_API_KEY) ||
+  hasBytePlusVisionCredentials;
+const hasBytePlus = owns("generation") && hasBytePlusCredentials;
 const bytePlusProvider = hasBytePlus
   ? createBytePlusProvider({
       apiKey: env.BYTEPLUS_API_KEY,
       region: env.BYTEPLUS_REGION,
       modelArkBaseUrl: env.BYTEPLUS_MODELARK_BASE_URL,
+      visionAccessKeyId: env.BYTEPLUS_VISION_ACCESS_KEY_ID,
+      visionSecretAccessKey: env.BYTEPLUS_VISION_SECRET_ACCESS_KEY,
+      visionBaseUrl: env.BYTEPLUS_VISION_BASE_URL,
       speechBaseUrl: env.BYTEPLUS_SPEECH_BASE_URL,
       speechApiKey: env.BYTEPLUS_SPEECH_API_KEY,
       speechAppKey: env.BYTEPLUS_SPEECH_APP_KEY,
@@ -732,6 +740,7 @@ async function dispatchGeneration() {
       OR: [
         { providerModel: { enabled: true } },
         { providerModel: { mediaKind: "TEXT" } },
+        { providerModel: { mediaKind: "VIDEO" } },
       ],
     };
     if (generationSubmitCursor) {
@@ -759,6 +768,7 @@ async function dispatchGeneration() {
             OR: [
               { providerModel: { enabled: true } },
               { providerModel: { mediaKind: "TEXT" } },
+              { providerModel: { mediaKind: "VIDEO" } },
             ],
           },
           select: {

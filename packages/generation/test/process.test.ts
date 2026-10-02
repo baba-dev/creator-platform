@@ -198,6 +198,69 @@ describe("video processing", () => {
     expect(tx.generationJob.update).not.toHaveBeenCalled();
   });
 
+  it("releases a queued video reservation when the model was disabled before dispatch", async () => {
+    const p = provider();
+    const disabledJob = {
+      ...base,
+      status: "QUEUED",
+      providerModel: {
+        id: "video-model",
+        providerModelId: "omnihuman-1.5",
+        enabled: false,
+      },
+    };
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue(disabledJob);
+    const tx = transaction("QUEUED", disabledJob);
+
+    await processVideoSubmitJob("job1", p);
+
+    expect(p.submit).not.toHaveBeenCalled();
+    expect(mocks.release).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        jobId: "job1",
+        idempotencyKey: "generation-release-job1",
+      }),
+    );
+    expect(tx.generationJob.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "FAILED",
+          errorCode: "MODEL_DISABLED",
+        }),
+      }),
+    );
+  });
+
+  it("releases a video reservation when the model is disabled after the worker claim", async () => {
+    const p = provider();
+    const queuedJob = {
+      ...base,
+      status: "QUEUED",
+      providerModel: {
+        id: "video-model",
+        providerModelId: "omnihuman-1.5",
+        enabled: true,
+      },
+    };
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue(queuedJob);
+    mocks.db.providerModel.findUnique.mockResolvedValue({ enabled: false });
+    const tx = transaction("SUBMITTED", queuedJob);
+
+    await processVideoSubmitJob("job1", p);
+
+    expect(p.submit).not.toHaveBeenCalled();
+    expect(mocks.release).toHaveBeenCalledTimes(1);
+    expect(tx.generationJob.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "FAILED",
+          errorCode: "MODEL_DISABLED",
+        }),
+      }),
+    );
+  });
+
   it("submits a queued video exactly once and records its provider task", async () => {
     const p = provider();
     vi.mocked(p.submit).mockResolvedValue({
@@ -385,6 +448,65 @@ describe("video processing", () => {
             providerReturnedLastFrame: false,
             providerUsage: { completionTokens: 183_104 },
           },
+        }),
+      }),
+    );
+  });
+
+  it("records configured OmniHuman per-second provider cost without changing the authorized charge", async () => {
+    const p = provider();
+    vi.mocked(p.getJob).mockResolvedValue({
+      status: "succeeded",
+      providerRequestId: "vision:omnihuman:task-1",
+      outputUrls: ["https://cdn.bytepluscdn.com/omnihuman.mp4"],
+    });
+    const omniHumanJob = {
+      ...base,
+      status: "PROCESSING",
+      providerRequestId: "vision:omnihuman:task-1",
+      requestPayload: {
+        schemaVersion: 2,
+        workflow: "TALKING_AVATAR",
+        sources: [
+          { assetId: "avatar", role: "AVATAR_IMAGE", position: 0 },
+          { assetId: "audio", role: "DRIVING_AUDIO", position: 1 },
+        ],
+        resolution: "1080p",
+        outputFormat: "mp4",
+        returnLastFrame: false,
+      },
+      providerModel: {
+        id: "omnihuman-db-model",
+        providerModelId: "omnihuman-1.5",
+      },
+      reservedCredits: 126n,
+      quotedUnits: 2,
+      billableQuantity: 2,
+      priceVersion: {
+        providerCostMicroUsd: 120_000n,
+        pricingDimension: "SECOND",
+        unitQuantity: 1,
+      },
+    };
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue(omniHumanJob);
+    const tx = transaction("PROCESSING", omniHumanJob);
+
+    await processVideoPollJob("job1", p);
+
+    expect(mocks.capture).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        amountCredits: 126n,
+        idempotencyKey: "generation-capture-job1",
+      }),
+    );
+    expect(tx.generationJob.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "SUCCEEDED",
+          actualProviderCostMicroUsd: 240_000n,
+          providerCostBasis: "CONFIGURED_RATE",
+          actualUnits: 2,
         }),
       }),
     );
@@ -1171,9 +1293,9 @@ describe("model disabling emergency stop and pause semantics", () => {
     expect(mocks.release).not.toHaveBeenCalled();
   });
 
-  it("rolls back video submission to QUEUED if model is disabled immediately before submission", async () => {
+  it("releases video reservation if model is disabled immediately before submission", async () => {
     const p = provider();
-    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+    const queuedJob = {
       ...base,
       status: "QUEUED",
       providerModel: {
@@ -1181,16 +1303,23 @@ describe("model disabling emergency stop and pause semantics", () => {
         providerModelId: "seedance-2.5",
         enabled: true,
       },
-    });
+    };
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue(queuedJob);
     mocks.db.providerModel.findUnique.mockResolvedValue({ enabled: false });
+    const tx = transaction("SUBMITTED", queuedJob);
 
     await processVideoSubmitJob("job1", p);
 
     expect(p.submit).not.toHaveBeenCalled();
-    expect(mocks.db.generationJob.updateMany).toHaveBeenCalledWith({
-      where: { id: "job1", status: "SUBMITTED" },
-      data: { status: "QUEUED", submittedAt: null },
-    });
+    expect(mocks.release).toHaveBeenCalledTimes(1);
+    expect(tx.generationJob.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "FAILED",
+          errorCode: "MODEL_DISABLED",
+        }),
+      }),
+    );
   });
 
   it("pauses a queued image job without submitting when model is disabled", async () => {

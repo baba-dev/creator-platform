@@ -109,6 +109,11 @@ export const serverEnvSchema = z.object({
     .enum(["ap-southeast-1", "eu-west-1"])
     .default("ap-southeast-1"),
   BYTEPLUS_MODELARK_BASE_URL: optionalHttpsUrl,
+  BYTEPLUS_VISION_ACCESS_KEY_ID: optionalString,
+  BYTEPLUS_VISION_SECRET_ACCESS_KEY: optionalString,
+  BYTEPLUS_VISION_BASE_URL: optionalHttpsUrl.default(
+    "https://cv.byteplusapi.com",
+  ),
   BYTEPLUS_SPEECH_API_KEY: optionalString,
   BYTEPLUS_SPEECH_APP_KEY: optionalString,
   BYTEPLUS_SPEECH_BASE_URL: optionalHttpsUrl,
@@ -157,6 +162,15 @@ export function parseServerEnv(
   ) {
     throw new Error(
       "Invalid server environment variables: ROUTINE_USER, ROUTINE_USER_PASSWORD must be configured together",
+    );
+  }
+
+  if (
+    Boolean(result.data.BYTEPLUS_VISION_ACCESS_KEY_ID) !==
+    Boolean(result.data.BYTEPLUS_VISION_SECRET_ACCESS_KEY)
+  ) {
+    throw new Error(
+      "Invalid server environment variables: BYTEPLUS_VISION_ACCESS_KEY_ID, BYTEPLUS_VISION_SECRET_ACCESS_KEY must be configured together",
     );
   }
 

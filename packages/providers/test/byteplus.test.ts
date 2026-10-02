@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { ProviderConfigurationError, ProviderRequestError } from "../src/index";
+import { createVisionAuthorizationHeaders } from "../src/byteplus/vision";
 import {
   createBytePlusProvider,
+  isBytePlusVisionConfigured,
   isBytePlusVoiceConfigured,
   mapBytePlusError,
   readResponseText,
@@ -40,6 +42,7 @@ describe("BytePlus provider adapter", () => {
       "dreamina-seedance-2-0-fast-260128",
       "dreamina-seedance-2-0-260128",
       "dreamina-seedance-2-5-260628",
+      "omnihuman-1.5",
       "seed-tts-2.0",
       "dola-seed-2-1-turbo-260628",
       "seed-2-0-pro-260328",
@@ -93,6 +96,200 @@ describe("BytePlus provider adapter", () => {
       maximumDurationSeconds: 30,
       fps: 24,
     });
+  });
+
+  it("detects complete BytePlus Vision credentials only", () => {
+    expect(
+      isBytePlusVisionConfigured({
+        BYTEPLUS_VISION_ACCESS_KEY_ID: "ak",
+        BYTEPLUS_VISION_SECRET_ACCESS_KEY: "sk",
+      }),
+    ).toBe(true);
+    expect(
+      isBytePlusVisionConfigured({
+        BYTEPLUS_VISION_ACCESS_KEY_ID: "ak",
+      }),
+    ).toBe(false);
+  });
+
+  it("treats Vision HTTP 5xx business failures as retryable without leaking provider messages", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(
+        {
+          code: 50215,
+          message: "Temporary upstream failure with private provider context",
+          request_id: "req-retry-1",
+          data: null,
+        },
+        503,
+      ),
+    );
+    const provider = createBytePlusProvider({
+      region: "ap-southeast-1",
+      visionAccessKeyId: "test-access-key",
+      visionSecretAccessKey: "test-secret-key",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await expect(
+      provider.submit({
+        idempotencyKey: "omnihuman-retry-1",
+        modelId: "omnihuman-1.5",
+        mediaKind: "video",
+        input: {
+          workflow: "TALKING_AVATAR",
+          prompt: "",
+          sources: [
+            {
+              role: "AVATAR_IMAGE",
+              url: "https://creator.example/avatar.jpg",
+            },
+            {
+              role: "DRIVING_AUDIO",
+              url: "https://creator.example/speech.mp3",
+            },
+          ],
+          aspectRatio: "adaptive",
+          resolution: "1080p",
+          durationSeconds: -1,
+          generateAudio: false,
+          outputFormat: "mp4",
+          returnLastFrame: false,
+        },
+      }),
+    ).rejects.toMatchObject({
+      name: "ProviderRequestError",
+      message: "BytePlus Vision request failed (50215)",
+      retryable: true,
+      code: "VISION_50215",
+    });
+  });
+
+  it("matches BytePlus canonical HMAC signing with the required header separator", () => {
+    const body =
+      '{"req_key":"realman_avatar_picture_omni15_cv","image_url":"https://creator.example/avatar.jpg","audio_url":"https://creator.example/speech.mp3","output_resolution":1080}';
+    const headers = createVisionAuthorizationHeaders({
+      accessKeyId: "test-access-key",
+      secretAccessKey: "test-secret-key",
+      url: new URL(
+        "https://cv.byteplusapi.com/?Action=CVSubmitTask&Version=2024-06-06",
+      ),
+      body,
+      now: new Date("2026-01-05T12:21:33Z"),
+    });
+
+    expect(headers["x-content-sha256"]).toBe(
+      "a5bb142ffbe9d0afacb3e75923239696e5eadd3c2b939ef6d0badd364ecf000c",
+    );
+    expect(headers.authorization).toBe(
+      "HMAC-SHA256 Credential=test-access-key/20260105/ap-singapore-1/cv/request, SignedHeaders=host;x-content-sha256;x-date, Signature=2d35a1ea9d3300e1c17ca70ea329d68f2ba9f7053b5013879ab18e9ad826aa7b",
+    );
+  });
+
+  it("submits OmniHuman through the signed Vision API instead of ModelArk", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        code: 10000,
+        data: { task_id: "7392616336519610409" },
+        message: "Success",
+      }),
+    );
+    const provider = createBytePlusProvider({
+      region: "ap-southeast-1",
+      visionAccessKeyId: "test-access-key",
+      visionSecretAccessKey: "test-secret-key",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const job = await provider.submit({
+      idempotencyKey: "omnihuman-job-1",
+      modelId: "omnihuman-1.5",
+      mediaKind: "video",
+      input: {
+        workflow: "TALKING_AVATAR",
+        prompt: "",
+        sources: [
+          {
+            role: "AVATAR_IMAGE",
+            url: "https://creator.example/avatar.jpg",
+          },
+          {
+            role: "DRIVING_AUDIO",
+            url: "https://creator.example/speech.mp3",
+          },
+        ],
+        aspectRatio: "adaptive",
+        resolution: "1080p",
+        durationSeconds: -1,
+        generateAudio: false,
+        outputFormat: "mp4",
+        returnLastFrame: false,
+      },
+    });
+
+    expect(job).toEqual({
+      providerRequestId: "vision:omnihuman:7392616336519610409",
+      status: "submitted",
+    });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      "https://cv.byteplusapi.com/?Action=CVSubmitTask&Version=2024-06-06",
+    );
+    expect(init.method).toBe("POST");
+    expect(init.headers).toMatchObject({
+      "content-type": "application/json",
+      "x-content-sha256": expect.stringMatching(/^[a-f0-9]{64}$/),
+      "x-date": expect.stringMatching(/^\d{8}T\d{6}Z$/),
+      authorization: expect.stringContaining("Credential=test-access-key/"),
+    });
+    expect(JSON.stringify(init.headers)).not.toContain("test-secret-key");
+    expect(JSON.parse(init.body as string)).toEqual({
+      req_key: "realman_avatar_picture_omni15_cv",
+      image_url: "https://creator.example/avatar.jpg",
+      audio_url: "https://creator.example/speech.mp3",
+      output_resolution: 1080,
+    });
+  });
+
+  it("polls and cancels OmniHuman Vision task identifiers", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          code: 10000,
+          data: {
+            status: "done",
+            resp_data: JSON.stringify({
+              video_url: "https://cdn.example.com/omnihuman.mp4",
+            }),
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          code: 10000,
+          data: {
+            req_key: "realman_avatar_picture_omni15_cv",
+            task_id: "task-123",
+          },
+        }),
+      );
+    const provider = createBytePlusProvider({
+      region: "ap-southeast-1",
+      visionAccessKeyId: "test-access-key",
+      visionSecretAccessKey: "test-secret-key",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await expect(
+      provider.getJob("vision:omnihuman:task-123"),
+    ).resolves.toMatchObject({
+      status: "succeeded",
+      outputUrls: ["https://cdn.example.com/omnihuman.mp4"],
+    });
+    await provider.cancel("vision:omnihuman:task-123");
+    expect(fetchMock.mock.calls[0]?.[0]).toContain("Action=CVGetResult");
+    expect(fetchMock.mock.calls[1]?.[0]).toContain("Action=CVCancelTask");
   });
 
   it("submits an image request using the documented host and payload", async () => {

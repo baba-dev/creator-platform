@@ -12,6 +12,7 @@ import {
 } from "@aiwa/generation";
 import {
   isBytePlusMediaConfigured,
+  isBytePlusVisionConfigured,
   isBytePlusVoiceConfigured,
 } from "@aiwa/providers/byteplus";
 import { NextResponse } from "next/server";
@@ -52,7 +53,7 @@ export async function POST(request: Request) {
       .parse(parsed);
     const model = await db.providerModel.findUnique({
       where: { id: modelId },
-      select: { mediaKind: true },
+      select: { mediaKind: true, providerModelId: true },
     });
     if (!model)
       return NextResponse.json({ error: "Model not found." }, { status: 404 });
@@ -73,13 +74,21 @@ export async function POST(request: Request) {
           { status: 503 },
         );
       }
-    } else {
-      if (!isBytePlusMediaConfigured()) {
+    } else if (
+      model.mediaKind === "VIDEO" &&
+      model.providerModelId === "omnihuman-1.5"
+    ) {
+      if (!isBytePlusVisionConfigured()) {
         return NextResponse.json(
-          { error: "Media generation is not configured." },
+          { error: "OmniHuman generation is not configured." },
           { status: 503 },
         );
       }
+    } else if (!isBytePlusMediaConfigured()) {
+      return NextResponse.json(
+        { error: "Media generation is not configured." },
+        { status: 503 },
+      );
     }
 
     const job =
@@ -184,15 +193,23 @@ export async function GET(request: Request) {
       select: { balanceCache: true },
     });
     const mediaConfigured = isBytePlusMediaConfigured();
+    const visionConfigured = isBytePlusVisionConfigured();
     const voiceConfigured = isBytePlusVoiceConfigured();
     return NextResponse.json(
       {
-        configured: mediaConfigured || voiceConfigured,
+        configured: mediaConfigured || visionConfigured || voiceConfigured,
         mediaConfigured,
+        visionConfigured,
         voiceConfigured,
         balance: wallet?.balanceCache.toString() ?? "0",
-        models: models.flatMap((m) =>
-          m.priceVersions[0]
+        models: models.flatMap((m) => {
+          const configuredForModel =
+            m.mediaKind === "VOICE"
+              ? voiceConfigured
+              : m.providerModelId === "omnihuman-1.5"
+                ? visionConfigured
+                : mediaConfigured;
+          return configuredForModel && m.priceVersions[0]
             ? [
                 {
                   id: m.id,
@@ -226,8 +243,8 @@ export async function GET(request: Request) {
                       : m.capabilities,
                 },
               ]
-            : [],
-        ),
+            : [];
+        }),
         voices: listPublicPresetVoices(),
         projects,
         jobs: jobs.map((j) => {

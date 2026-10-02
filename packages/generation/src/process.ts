@@ -214,7 +214,15 @@ export async function processVideoSubmitJob(
     },
   });
   if (job.status !== "QUEUED") return;
-  if (job.providerModel.enabled === false) return;
+  if (job.providerModel.enabled === false) {
+    await failJob(
+      id,
+      "Selected video model was disabled before provider submission.",
+      "QUEUED",
+      "MODEL_DISABLED",
+    );
+    return;
+  }
 
   try {
     await requireMembership(db, job.organizationId, job.createdById, true);
@@ -235,10 +243,12 @@ export async function processVideoSubmitJob(
     select: { enabled: true },
   });
   if (!currentModel || currentModel.enabled === false) {
-    await db.generationJob.updateMany({
-      where: { id, status: "SUBMITTED" },
-      data: { status: "QUEUED", submittedAt: null },
-    });
+    await failJob(
+      id,
+      "Selected video model was disabled before provider submission.",
+      "SUBMITTED",
+      "MODEL_DISABLED",
+    );
     return;
   }
 
@@ -666,15 +676,23 @@ export async function processVideoPollJob(
         "The video-input price snapshot is missing its token rate.",
       );
 
-    const actualCost =
+    const usageProviderCost =
       hasVideoInput || tokenPriced
         ? videoInputProviderCost(BigInt(completionTokens!), rate!)
         : null;
+    const configuredProviderCost =
+      job.providerModel.providerModelId === "omnihuman-1.5" &&
+      current.priceVersion.pricingDimension === "SECOND" &&
+      current.quotedUnits !== null
+        ? current.priceVersion.providerCostMicroUsd *
+          BigInt(current.quotedUnits)
+        : null;
+    const actualProviderCost = usageProviderCost ?? configuredProviderCost;
     const actualQuote =
-      actualCost === null
+      usageProviderCost === null
         ? null
         : createCreditQuote({
-            providerCostMicroUsd: actualCost,
+            providerCostMicroUsd: usageProviderCost,
             exchangeRate: {
               baisaNumerator: current.priceVersion.fxBaisaNumerator,
               baisaDenominator: current.priceVersion.fxBaisaDenominator,
@@ -772,8 +790,13 @@ export async function processVideoPollJob(
       where: { id },
       data: {
         status: "SUCCEEDED",
-        actualProviderCostMicroUsd: actualCost,
-        providerCostBasis: actualCost === null ? null : "PROVIDER_USAGE",
+        actualProviderCostMicroUsd: actualProviderCost,
+        providerCostBasis:
+          usageProviderCost !== null
+            ? "PROVIDER_USAGE"
+            : configuredProviderCost !== null
+              ? "CONFIGURED_RATE"
+              : null,
         actualUnits:
           tokenPriced || hasVideoInput ? completionTokens : current.quotedUnits,
         completedAt: new Date(),

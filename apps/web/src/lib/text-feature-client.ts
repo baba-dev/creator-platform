@@ -19,7 +19,9 @@ export class TextFeatureRequestError extends Error {
   }
 }
 
-async function responseJson(response: Response): Promise<Record<string, unknown>> {
+async function responseJson(
+  response: Response,
+): Promise<Record<string, unknown>> {
   return (await response.json().catch(() => ({}))) as Record<string, unknown>;
 }
 

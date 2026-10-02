@@ -23,23 +23,23 @@ const scriptGenerateSchema = z
     currentScene: z.string().max(4000).optional(),
     targetTone: z.string().max(200).optional(),
     modelId: z.string().min(1).max(100).optional(),
-  mode: z.enum(["quote", "generate"]).default("generate"),
-  idempotencyKey: z.uuid(),
-  quoteToken: z.string().min(1).max(2048).optional(),
-  quotedModelId: z.string().min(1).max(100).optional(),
-  priceVersionId: z.string().min(1).max(100).optional(),
+    mode: z.enum(["quote", "generate"]).default("generate"),
+    idempotencyKey: z.uuid(),
+    quoteToken: z.string().min(1).max(2048).optional(),
+    quotedModelId: z.string().min(1).max(100).optional(),
+    priceVersionId: z.string().min(1).max(100).optional(),
   })
   .superRefine((value, context) => {
-  if (
-    value.mode === "generate" &&
-    (!value.quoteToken || !value.quotedModelId || !value.priceVersionId)
-  ) {
-    context.addIssue({
-      code: "custom",
-      message: "A fresh generation quote is required.",
-    });
-  }
-});
+    if (
+      value.mode === "generate" &&
+      (!value.quoteToken || !value.quotedModelId || !value.priceVersionId)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "A fresh generation quote is required.",
+      });
+    }
+  });
 
 const SCRIPTWRITER_SYSTEM_PROMPT = `You are an expert Hollywood and commercial screenplay writer and script consultant.
 Write sharp, formatted screenplay lines following standard screenplay format conventions:

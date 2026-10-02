@@ -155,7 +155,10 @@ export async function assembleMasterStoryAudio({
 
     const durationSeconds = totalSamples / sampleRate;
     const estimatedWorkingBytes = totalSamples * 2 * 4;
-    if (durationSeconds > 30 * 60 || estimatedWorkingBytes > 120 * 1024 * 1024) {
+    if (
+      durationSeconds > 30 * 60 ||
+      estimatedWorkingBytes > 120 * 1024 * 1024
+    ) {
       throw new Error(
         "Master audio is too large for safe in-browser assembly. Export a smaller scene or fewer clips.",
       );

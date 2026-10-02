@@ -22,23 +22,23 @@ const brandGenerateSchema = z
     vision: z.string().max(1000).optional(),
     targetMarket: z.string().max(200).optional(),
     modelId: z.string().min(1).max(100).optional(),
-  mode: z.enum(["quote", "generate"]).default("generate"),
-  idempotencyKey: z.uuid(),
-  quoteToken: z.string().min(1).max(2048).optional(),
-  quotedModelId: z.string().min(1).max(100).optional(),
-  priceVersionId: z.string().min(1).max(100).optional(),
+    mode: z.enum(["quote", "generate"]).default("generate"),
+    idempotencyKey: z.uuid(),
+    quoteToken: z.string().min(1).max(2048).optional(),
+    quotedModelId: z.string().min(1).max(100).optional(),
+    priceVersionId: z.string().min(1).max(100).optional(),
   })
   .superRefine((value, context) => {
-  if (
-    value.mode === "generate" &&
-    (!value.quoteToken || !value.quotedModelId || !value.priceVersionId)
-  ) {
-    context.addIssue({
-      code: "custom",
-      message: "A fresh generation quote is required.",
-    });
-  }
-});
+    if (
+      value.mode === "generate" &&
+      (!value.quoteToken || !value.quotedModelId || !value.priceVersionId)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "A fresh generation quote is required.",
+      });
+    }
+  });
 
 const generatedBrandProfileSchema = z.object({
   tagline: z.string().max(200).default(""),

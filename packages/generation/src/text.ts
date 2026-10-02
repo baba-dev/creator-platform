@@ -57,7 +57,11 @@ type TextJobShape = {
 };
 
 function capabilityContextWindow(capabilities: unknown): number {
-  if (!capabilities || typeof capabilities !== "object" || Array.isArray(capabilities))
+  if (
+    !capabilities ||
+    typeof capabilities !== "object" ||
+    Array.isArray(capabilities)
+  )
     return 32_768;
   const value = (capabilities as Record<string, unknown>).contextWindow;
   return typeof value === "number" &&
@@ -175,8 +179,7 @@ function sameIdempotentRequest(
     return false;
   const existingPayload = payloadObject(existing.requestPayload);
   const hash = existingPayload.clientRequestHash;
-  if (typeof hash === "string")
-    return hash === requestFingerprint(input);
+  if (typeof hash === "string") return hash === requestFingerprint(input);
   return (
     JSON.stringify(existing.requestPayload) ===
     JSON.stringify({
@@ -569,8 +572,7 @@ export async function processTextJob(
     (promptTokens ?? -1) >= 0 &&
     (completionTokens ?? -1) >= 0 &&
     (reportedTotalTokens ?? 0) > 0 &&
-    (reportedTotalTokens ?? 0) >=
-      (promptTokens ?? 0) + (completionTokens ?? 0);
+    (reportedTotalTokens ?? 0) >= (promptTokens ?? 0) + (completionTokens ?? 0);
 
   const price = job.priceVersion;
   const unitQuantity = BigInt(price.unitQuantity ?? 1000);
@@ -773,9 +775,6 @@ export async function executeTextGeneration(
   });
   const result = textResultFromJob(completed);
   if (!result)
-    throw new GenerationError(
-      "Text generation is still being processed.",
-      409,
-    );
+    throw new GenerationError("Text generation is still being processed.", 409);
   return result;
 }

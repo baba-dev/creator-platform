@@ -355,9 +355,7 @@ export function ScriptwritingStudio({
         const data = await res.json();
         setActiveScript(data.script);
         setScripts((prev) =>
-          prev.map((item) =>
-            item.id === data.script.id ? data.script : item,
-          ),
+          prev.map((item) => (item.id === data.script.id ? data.script : item)),
         );
         setPendingBatchQuote(null);
         setStatusMessage("Script saved successfully.");
@@ -446,14 +444,11 @@ export function ScriptwritingStudio({
       const data = await runQuotedTextFeature<{
         content: string;
         chargedCredits?: number;
-      }>(
-        `/api/scripts/${encodeURIComponent(activeScript.id)}/generate`,
-        {
-          prompt: aiPrompt,
-          action: aiAction,
-          currentScene: currentContext.slice(-1500),
-        },
-      );
+      }>(`/api/scripts/${encodeURIComponent(activeScript.id)}/generate`, {
+        prompt: aiPrompt,
+        action: aiAction,
+        currentScene: currentContext.slice(-1500),
+      });
       const generatedText = data.content as string;
 
       // Append generated dialogue or action
@@ -567,8 +562,7 @@ export function ScriptwritingStudio({
     if (!activeScript || isGenerating) return;
     setIsGenerating(true);
     try {
-      const endpoint =
-        `/api/scripts/${encodeURIComponent(activeScript.id)}/synthesize-batch`;
+      const endpoint = `/api/scripts/${encodeURIComponent(activeScript.id)}/synthesize-batch`;
 
       if (!pendingBatchQuote) {
         const idempotencyKey = crypto.randomUUID();
@@ -594,9 +588,7 @@ export function ScriptwritingStudio({
         return;
       }
 
-      setVoiceNotice(
-        "Queueing the authorized Seed Speech TTS 2.0 batch...",
-      );
+      setVoiceNotice("Queueing the authorized Seed Speech TTS 2.0 batch...");
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

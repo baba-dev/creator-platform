@@ -1,9 +1,6 @@
 import { createHash } from "node:crypto";
 import { hasOrganizationPermission } from "@aiwa/authz";
-import {
-  calculateBillableUnits,
-  countBillableCharacters,
-} from "@aiwa/credits";
+import { calculateBillableUnits, countBillableCharacters } from "@aiwa/credits";
 import { db, type Prisma } from "@aiwa/db";
 import {
   createVoiceJob,
@@ -350,10 +347,8 @@ export async function POST(
       });
     }
 
-    const partial =
-      failedBlocks.length > 0 || attachmentConflicts.length > 0;
-    const status =
-      queuedJobs.length === 0 ? 422 : partial ? 207 : 202;
+    const partial = failedBlocks.length > 0 || attachmentConflicts.length > 0;
+    const status = queuedJobs.length === 0 ? 422 : partial ? 207 : 202;
     return NextResponse.json(
       {
         jobs: queuedJobs.map(({ blockId, jobId }) => ({ blockId, jobId })),

@@ -23,23 +23,23 @@ const storyGenerateSchema = z
     genre: z.string().max(100).optional(),
     structureType: storyStructureTypeSchema.default("THREE_ACT"),
     modelId: z.string().min(1).max(100).optional(),
-  mode: z.enum(["quote", "generate"]).default("generate"),
-  idempotencyKey: z.uuid(),
-  quoteToken: z.string().min(1).max(2048).optional(),
-  quotedModelId: z.string().min(1).max(100).optional(),
-  priceVersionId: z.string().min(1).max(100).optional(),
+    mode: z.enum(["quote", "generate"]).default("generate"),
+    idempotencyKey: z.uuid(),
+    quoteToken: z.string().min(1).max(2048).optional(),
+    quotedModelId: z.string().min(1).max(100).optional(),
+    priceVersionId: z.string().min(1).max(100).optional(),
   })
   .superRefine((value, context) => {
-  if (
-    value.mode === "generate" &&
-    (!value.quoteToken || !value.quotedModelId || !value.priceVersionId)
-  ) {
-    context.addIssue({
-      code: "custom",
-      message: "A fresh generation quote is required.",
-    });
-  }
-});
+    if (
+      value.mode === "generate" &&
+      (!value.quoteToken || !value.quotedModelId || !value.priceVersionId)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "A fresh generation quote is required.",
+      });
+    }
+  });
 
 const generatedStorySchema = z.object({
   beats: z
@@ -111,8 +111,7 @@ export async function POST(request: Request) {
     )
       return NextResponse.json({ error: "Access denied." }, { status: 403 });
 
-    const providerModelId =
-      input.modelId || "dola-seed-2-1-turbo-260628";
+    const providerModelId = input.modelId || "dola-seed-2-1-turbo-260628";
     const userPromptContent = `Story Title: ${input.title}
 Genre: ${input.genre || "Drama / Cinematic"}
 Structure: ${input.structureType}

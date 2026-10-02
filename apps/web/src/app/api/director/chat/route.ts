@@ -28,23 +28,23 @@ const directorChatSchema = z
       .max(49),
     modelId: z.string().min(1).max(100).optional(),
     temperature: z.number().min(0).max(2).optional(),
-  mode: z.enum(["quote", "generate"]).default("generate"),
-  idempotencyKey: z.uuid(),
-  quoteToken: z.string().min(1).max(2048).optional(),
-  quotedModelId: z.string().min(1).max(100).optional(),
-  priceVersionId: z.string().min(1).max(100).optional(),
+    mode: z.enum(["quote", "generate"]).default("generate"),
+    idempotencyKey: z.uuid(),
+    quoteToken: z.string().min(1).max(2048).optional(),
+    quotedModelId: z.string().min(1).max(100).optional(),
+    priceVersionId: z.string().min(1).max(100).optional(),
   })
   .superRefine((value, context) => {
-  if (
-    value.mode === "generate" &&
-    (!value.quoteToken || !value.quotedModelId || !value.priceVersionId)
-  ) {
-    context.addIssue({
-      code: "custom",
-      message: "A fresh generation quote is required.",
-    });
-  }
-});
+    if (
+      value.mode === "generate" &&
+      (!value.quoteToken || !value.quotedModelId || !value.priceVersionId)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "A fresh generation quote is required.",
+      });
+    }
+  });
 
 const DIRECTOR_SYSTEM_PROMPT = `You are the Lead Creative Director at Aiwa Creator, an elite AI media studio.
 Your role is to guide creators from raw ideas into production-ready creative assets across Image, Video, and Speech studios.
@@ -85,8 +85,7 @@ export async function POST(request: Request) {
     )
       return NextResponse.json({ error: "Access denied." }, { status: 403 });
 
-    const providerModelId =
-      input.modelId || "dola-seed-2-1-turbo-260628";
+    const providerModelId = input.modelId || "dola-seed-2-1-turbo-260628";
     const messages = [
       { role: "system" as const, content: DIRECTOR_SYSTEM_PROMPT },
       ...input.messages,

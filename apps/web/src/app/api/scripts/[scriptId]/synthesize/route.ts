@@ -57,9 +57,7 @@ export async function POST(
     const input = synthesizeSchema.parse(await request.json());
     if (input.blockId) {
       const content = (scriptRow.content as ScriptContent) || {};
-      const block = content.scenes?.find(
-        (scene) => scene.id === input.blockId,
-      );
+      const block = content.scenes?.find((scene) => scene.id === input.blockId);
       if (!block || block.type !== "dialogue" || block.text !== input.text)
         return NextResponse.json(
           {

@@ -43,23 +43,204 @@ export interface TextGenerationResult {
   chargedCredits: number;
 }
 
-export async function executeTextGeneration(
-  userId: string,
-  raw: unknown,
-  options?: TextGenerationOptions,
-): Promise<TextGenerationResult> {
+export interface TextMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
+type TextJobShape = {
+  id: string;
+  status: string;
+  outputPayload: unknown;
+  chargedCredits: bigint;
+  errorMessage: string | null;
+};
+
+function capabilityContextWindow(capabilities: unknown): number {
+  if (!capabilities || typeof capabilities !== "object" || Array.isArray(capabilities))
+    return 32_768;
+  const value = (capabilities as Record<string, unknown>).contextWindow;
+  return typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value >= 4_096 &&
+    value <= 1_048_576
+    ? value
+    : 32_768;
+}
+
+function estimatedMessageTokens(message: TextMessage): number {
+  return Math.max(1, Math.ceil(message.content.length / 3.5)) + 6;
+}
+
+/**
+ * Keep the system contract and newest turns inside the selected model's context
+ * envelope. This is deliberately conservative because provider tokenization
+ * differs across English, Arabic, code, and mixed-language prompts.
+ */
+export function normalizeTextMessagesForModel(
+  messages: readonly TextMessage[],
+  capabilities: unknown,
+  maxTokens: number,
+): TextMessage[] {
+  const contextWindow = capabilityContextWindow(capabilities);
+  const reserved = maxTokens + 256;
+  const promptBudget = Math.max(1_024, contextWindow - reserved);
+  const systems = messages.filter((message) => message.role === "system");
+  const turns = messages.filter((message) => message.role !== "system");
+  const systemCost = systems.reduce(
+    (sum, message) => sum + estimatedMessageTokens(message),
+    0,
+  );
+  if (systemCost >= promptBudget)
+    throw new GenerationError(
+      "The system instructions exceed this model's context window.",
+      400,
+    );
+
+  const selected: TextMessage[] = [];
+  let used = systemCost;
+  for (let index = turns.length - 1; index >= 0; index -= 1) {
+    const message = turns[index]!;
+    const cost = estimatedMessageTokens(message);
+    if (used + cost > promptBudget) {
+      if (selected.length === 0)
+        throw new GenerationError(
+          "The latest message is too large for this model's context window.",
+          400,
+        );
+      continue;
+    }
+    selected.push(message);
+    used += cost;
+  }
+  selected.reverse();
+  return [...systems, ...selected];
+}
+
+function requestFingerprint(input: {
+  projectId?: string | null;
+  templateId?: string;
+  modelId: string;
+  priceVersionId: string;
+  messages: TextMessage[];
+  temperature: number;
+  maxTokens: number;
+}): string {
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        projectId: input.projectId ?? null,
+        templateId: input.templateId ?? null,
+        modelId: input.modelId,
+        priceVersionId: input.priceVersionId,
+        messages: input.messages,
+        temperature: input.temperature,
+        maxTokens: input.maxTokens,
+      }),
+    )
+    .digest("hex");
+}
+
+function payloadObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function sameIdempotentRequest(
+  existing: {
+    projectId: string | null;
+    templateId: string | null;
+    providerModelId: string;
+    priceVersionId: string;
+    requestPayload: unknown;
+  },
+  input: {
+    projectId?: string | null;
+    templateId?: string;
+    modelId: string;
+    priceVersionId: string;
+    messages: TextMessage[];
+    temperature: number;
+    maxTokens: number;
+  },
+  resolvedTemplateId: string | null,
+): boolean {
+  if (
+    existing.projectId !== (input.projectId ?? null) ||
+    existing.templateId !== resolvedTemplateId ||
+    existing.providerModelId !== input.modelId ||
+    existing.priceVersionId !== input.priceVersionId
+  )
+    return false;
+  const existingPayload = payloadObject(existing.requestPayload);
+  const hash = existingPayload.clientRequestHash;
+  if (typeof hash === "string")
+    return hash === requestFingerprint(input);
+  return (
+    JSON.stringify(existing.requestPayload) ===
+    JSON.stringify({
+      messages: input.messages,
+      temperature: input.temperature,
+      maxTokens: input.maxTokens,
+    })
+  );
+}
+
+export function textResultFromJob(
+  job: TextJobShape,
+): TextGenerationResult | null {
+  if (job.status === "SUCCEEDED") {
+    const output = payloadObject(job.outputPayload);
+    if (typeof output.content !== "string" || output.content.length === 0)
+      throw new GenerationError(
+        "Completed text generation has no usable output.",
+        500,
+      );
+    const rawUsage = payloadObject(output.usage);
+    const usage =
+      Number.isSafeInteger(rawUsage.promptTokens) &&
+      Number.isSafeInteger(rawUsage.completionTokens) &&
+      Number.isSafeInteger(rawUsage.totalTokens)
+        ? {
+            promptTokens: Number(rawUsage.promptTokens),
+            completionTokens: Number(rawUsage.completionTokens),
+            totalTokens: Number(rawUsage.totalTokens),
+          }
+        : undefined;
+    return {
+      jobId: job.id,
+      status: "SUCCEEDED",
+      content: output.content,
+      usage,
+      chargedCredits: Number(job.chargedCredits),
+    };
+  }
+  if (job.status === "FAILED" || job.status === "CANCELLED")
+    throw new GenerationError(
+      job.errorMessage ?? "Text generation did not complete.",
+      409,
+    );
+  if (job.status === "MANUAL_REVIEW")
+    throw new GenerationError(
+      job.errorMessage ??
+        "Text generation requires provider or billing reconciliation.",
+      409,
+    );
+  return null;
+}
+
+/**
+ * Admission only: validates, prices, reserves, and queues a durable TEXT job.
+ * Provider I/O is intentionally excluded so web requests never call BytePlus.
+ */
+export async function createTextJob(userId: string, raw: unknown) {
   const input = textRequestSchema.parse(raw);
   const key = createHash("sha256")
     .update(`${input.organizationId}:${userId}:${input.idempotencyKey}`)
     .digest("hex");
 
-  const payload = {
-    messages: input.messages,
-    temperature: input.temperature,
-    maxTokens: input.maxTokens,
-  };
-
-  const txResult = await db.$transaction(
+  return db.$transaction(
     async (tx) => {
       await tx.$queryRaw`SELECT id FROM Organization WHERE id = ${input.organizationId} FOR UPDATE`;
       const member = await requireMembership(
@@ -78,56 +259,12 @@ export async function executeTextGeneration(
         where: { idempotencyKey: key },
       });
       if (existing) {
-        const samePayload =
-          existing.projectId === (input.projectId ?? null) &&
-          existing.templateId === templateId &&
-          existing.providerModelId === input.modelId &&
-          existing.priceVersionId === input.priceVersionId &&
-          JSON.stringify(existing.requestPayload) === JSON.stringify(payload);
-        if (!samePayload) {
+        if (!sameIdempotentRequest(existing, input, templateId))
           throw new GenerationError(
             "Request key was already used for different inputs.",
             409,
           );
-        }
-        if (
-          existing.status === "SUCCEEDED" &&
-          existing.outputPayload &&
-          typeof existing.outputPayload === "object" &&
-          "content" in existing.outputPayload
-        ) {
-          const out = existing.outputPayload as {
-            content: string;
-            usage?: {
-              promptTokens: number;
-              completionTokens: number;
-              totalTokens: number;
-            };
-          };
-          return {
-            job: existing,
-            model: null,
-            price: null,
-            wallet: null,
-            cachedResult: {
-              jobId: existing.id,
-              status: "SUCCEEDED" as const,
-              content: out.content,
-              usage: out.usage,
-              chargedCredits: Number(existing.chargedCredits ?? 0n),
-            },
-          };
-        }
-        if (existing.status === "FAILED" || existing.status === "CANCELLED") {
-          throw new GenerationError(
-            "This request key belongs to a finalized generation. Submit a new request key to retry.",
-            409,
-          );
-        }
-        throw new GenerationError(
-          "This generation request is already being processed.",
-          409,
-        );
+        return existing;
       }
 
       await assertAssignableProject(tx, input.organizationId, input.projectId);
@@ -151,17 +288,20 @@ export async function executeTextGeneration(
           },
         },
       });
-
       const priceRow = modelRow?.priceVersions[0];
-      if (!modelRow || !priceRow || priceRow.id !== input.priceVersionId) {
+      if (!modelRow || !priceRow || priceRow.id !== input.priceVersionId)
         throw new GenerationError(
-          "Model or price changed. Refresh and try again.",
+          "Model or price changed. Refresh the estimate and try again.",
           409,
         );
-      }
 
-      const promptText = input.messages
-        .map((m) => `${m.role}: ${m.content}`)
+      const messages = normalizeTextMessagesForModel(
+        input.messages,
+        modelRow.capabilities,
+        input.maxTokens,
+      );
+      const promptText = messages
+        .map((message) => `${message.role}: ${message.content}`)
         .join("\n");
       const pricing = estimateGeneration({
         price: priceRow,
@@ -170,8 +310,8 @@ export async function executeTextGeneration(
         text: promptText,
         units: input.maxTokens,
       });
-
       const credits = pricing.reservation.customerCredits;
+
       try {
         verifyGenerationQuote(
           input.quoteToken,
@@ -202,15 +342,13 @@ export async function executeTextGeneration(
         additionalCredits: credits,
         now,
       });
-
-      const walletRow = await tx.wallet.findUnique({
+      const wallet = await tx.wallet.findUnique({
         where: { organizationId: input.organizationId },
       });
-      if (!walletRow) {
+      if (!wallet)
         throw new GenerationError("Workspace wallet is unavailable.");
-      }
 
-      const createdJob = await tx.generationJob.create({
+      const job = await tx.generationJob.create({
         data: {
           organizationId: input.organizationId,
           projectId: input.projectId ?? null,
@@ -219,84 +357,153 @@ export async function executeTextGeneration(
           providerModelId: modelRow.id,
           priceVersionId: priceRow.id,
           idempotencyKey: key,
-          requestPayload: payload,
-          status: "QUOTED",
+          requestPayload: {
+            messages,
+            temperature: input.temperature,
+            maxTokens: input.maxTokens,
+            clientRequestHash: requestFingerprint(input),
+          },
+          status: "QUEUED",
           quotedAt: now,
+          queuedAt: now,
           billableQuantity: pricing.billableQuantity,
           quotedUnits: pricing.units,
         },
       });
 
       await reserveCreditsForJob(tx, {
-        walletId: walletRow.id,
+        walletId: wallet.id,
         amountCredits: credits,
-        idempotencyKey: `generation-reserve-${createdJob.id}`,
-        jobId: createdJob.id,
+        idempotencyKey: `generation-reserve-${job.id}`,
+        jobId: job.id,
       });
-
       await tx.auditEvent.create({
         data: {
           actorUserId: userId,
           organizationId: input.organizationId,
           action: "generation.queued",
           targetType: "GenerationJob",
-          targetId: createdJob.id,
+          targetId: job.id,
+          metadata: { mediaKind: "TEXT" },
         },
       });
-
-      const submittedJob = await tx.generationJob.update({
-        where: { id: createdJob.id },
-        data: { status: "SUBMITTED", submittedAt: now },
-      });
-
-      return {
-        job: submittedJob,
-        model: modelRow,
-        price: priceRow,
-        wallet: walletRow,
-        cachedResult: null,
-      };
+      return job;
     },
-    { isolationLevel: "ReadCommitted", timeout: 15000 },
+    { isolationLevel: "ReadCommitted", timeout: 15_000 },
   );
+}
 
-  if (txResult.cachedResult) {
-    return txResult.cachedResult;
-  }
-
-  const { job, model, price, wallet } = txResult;
-  if (!model || !price || !wallet) {
-    throw new GenerationError("Failed to initialize text generation.", 500);
-  }
-
-  const provider =
-    options?.provider ??
-    createBytePlusProvider({
-      apiKey: process.env.BYTEPLUS_API_KEY,
-      region:
-        (process.env.BYTEPLUS_REGION as "ap-southeast-1" | "eu-west-1") ??
-        "ap-southeast-1",
-      modelArkBaseUrl: process.env.BYTEPLUS_MODELARK_BASE_URL,
+async function failTextJob(
+  id: string,
+  expectedStatus: "QUEUED" | "SUBMITTED",
+  message: string,
+  errorCode: string,
+): Promise<void> {
+  await db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM GenerationJob WHERE id = ${id} FOR UPDATE`;
+    const current = await tx.generationJob.findUniqueOrThrow({
+      where: { id },
     });
+    if (current.status !== expectedStatus) return;
+    const wallet = await tx.wallet.findUniqueOrThrow({
+      where: { organizationId: current.organizationId },
+    });
+    await releaseOrRefundCredits(tx, {
+      walletId: wallet.id,
+      jobId: id,
+      reason: message,
+      idempotencyKey: `generation-release-${id}`,
+    });
+    await tx.generationJob.update({
+      where: { id },
+      data: {
+        status: "FAILED",
+        errorCode,
+        errorMessage: message,
+        completedAt: new Date(),
+      },
+    });
+  });
+}
+
+/**
+ * Worker-only TEXT provider execution and settlement.
+ */
+export async function processTextJob(
+  id: string,
+  provider: MediaGenerationProvider,
+): Promise<void> {
+  const job = await db.generationJob.findUniqueOrThrow({
+    where: { id },
+    include: {
+      providerModel: true,
+      priceVersion: true,
+    },
+  });
+  if (job.status !== "QUEUED" || job.providerModel.mediaKind !== "TEXT") return;
+
+  try {
+    await requireMembership(db, job.organizationId, job.createdById, true);
+  } catch {
+    await failTextJob(
+      id,
+      "QUEUED",
+      "Workspace access changed before generation.",
+      "WORKSPACE_ACCESS_CHANGED",
+    );
+    return;
+  }
+
+  const claimed = await db.generationJob.updateMany({
+    where: { id, status: "QUEUED" },
+    data: { status: "SUBMITTED", submittedAt: new Date() },
+  });
+  if (!claimed.count) return;
+
+  const currentModel = await db.providerModel.findUnique({
+    where: { id: job.providerModelId },
+    select: { enabled: true },
+  });
+  if (!currentModel?.enabled) {
+    await db.generationJob.updateMany({
+      where: { id, status: "SUBMITTED" },
+      data: { status: "QUEUED", submittedAt: null },
+    });
+    return;
+  }
+
+  const payload = payloadObject(job.requestPayload);
+  const messages = Array.isArray(payload.messages)
+    ? (payload.messages as TextMessage[])
+    : [];
+  const temperature =
+    typeof payload.temperature === "number" ? payload.temperature : 0.7;
+  const maxTokens =
+    typeof payload.maxTokens === "number" ? payload.maxTokens : 2048;
+  if (!messages.length) {
+    await failTextJob(
+      id,
+      "SUBMITTED",
+      "Text generation payload is invalid.",
+      "INVALID_REQUEST_PAYLOAD",
+    );
+    return;
+  }
 
   let providerResponse;
   try {
     providerResponse = await provider.submit({
-      idempotencyKey: key,
-      modelId: model.providerModelId,
+      idempotencyKey: job.idempotencyKey,
+      modelId: job.providerModel.providerModelId,
       mediaKind: "text",
-      input: {
-        messages: input.messages,
-        temperature: input.temperature,
-        maxTokens: input.maxTokens,
-      },
+      input: { messages, temperature, maxTokens },
     });
   } catch (error) {
     const outcomeUnknown =
       !(error instanceof ProviderRequestError) || error.retryable;
     if (outcomeUnknown) {
       await db.generationJob.updateMany({
-        where: { id: job.id, status: "SUBMITTED" },
+        where: { id, status: "SUBMITTED" },
         data: {
           status: "MANUAL_REVIEW",
           errorCode: "PROVIDER_OUTCOME_UNKNOWN",
@@ -304,28 +511,15 @@ export async function executeTextGeneration(
             "The text provider outcome is unknown. Credits remain reserved to prevent duplicate billing; an operator can reconcile this job.",
         },
       });
-      throw new GenerationError(
-        "The provider response timed out or became unavailable. This request was not automatically retried to avoid duplicate billing.",
-        503,
-      );
+      return;
     }
-    await db.$transaction(async (tx) => {
-      await releaseOrRefundCredits(tx, {
-        walletId: wallet.id,
-        jobId: job.id,
-        reason: error.message,
-      });
-      await tx.generationJob.update({
-        where: { id: job.id },
-        data: {
-          status: "FAILED",
-          errorCode: error.code,
-          errorMessage: error.message,
-          completedAt: new Date(),
-        },
-      });
-    });
-    throw error;
+    await failTextJob(
+      id,
+      "SUBMITTED",
+      error.message,
+      error.code ?? "PROVIDER_REJECTED",
+    );
+    return;
   }
 
   const content =
@@ -336,33 +530,18 @@ export async function executeTextGeneration(
           "base64",
         ).toString("utf8")
       : "");
-
   if (providerResponse.status !== "succeeded" || !content) {
-    await db.$transaction(async (tx) => {
-      await releaseOrRefundCredits(tx, {
-        walletId: wallet.id,
-        jobId: job.id,
-        reason: "Text provider returned invalid or empty response.",
-      });
-      await tx.generationJob.update({
-        where: { id: job.id },
-        data: {
-          status: "FAILED",
-          errorCode: "INVALID_PROVIDER_RESPONSE",
-          errorMessage: "Text provider returned invalid or empty response.",
-          completedAt: new Date(),
-        },
-      });
-    });
-    throw new ProviderRequestError(
+    await failTextJob(
+      id,
+      "SUBMITTED",
       "Text provider returned invalid or empty response.",
-      false,
-      { code: "INVALID_PROVIDER_RESPONSE" },
+      "INVALID_PROVIDER_RESPONSE",
     );
+    return;
   }
 
-  const recordedProviderResult = await db.generationJob.updateMany({
-    where: { id: job.id, status: "SUBMITTED" },
+  const recorded = await db.generationJob.updateMany({
+    where: { id, status: "SUBMITTED" },
     data: {
       status: "PROCESSING",
       providerRequestId: providerResponse.providerRequestId,
@@ -370,12 +549,7 @@ export async function executeTextGeneration(
       errorMessage: null,
     },
   });
-  if (!recordedProviderResult.count) {
-    throw new GenerationError(
-      "Generation state changed before provider settlement.",
-      409,
-    );
-  }
+  if (!recorded.count) return;
 
   const rawUsage = providerResponse.rawUsage as
     | {
@@ -385,7 +559,6 @@ export async function executeTextGeneration(
         prompt_tokens_details?: { cached_tokens?: number };
       }
     | undefined;
-
   const promptTokens = rawUsage?.prompt_tokens;
   const completionTokens = rawUsage?.completion_tokens;
   const reportedTotalTokens = rawUsage?.total_tokens;
@@ -396,12 +569,14 @@ export async function executeTextGeneration(
     (promptTokens ?? -1) >= 0 &&
     (completionTokens ?? -1) >= 0 &&
     (reportedTotalTokens ?? 0) > 0 &&
-    (reportedTotalTokens ?? 0) >= (promptTokens ?? 0) + (completionTokens ?? 0);
+    (reportedTotalTokens ?? 0) >=
+      (promptTokens ?? 0) + (completionTokens ?? 0);
 
+  const price = job.priceVersion;
   const unitQuantity = BigInt(price.unitQuantity ?? 1000);
   const fallbackBillableQuantity = Math.max(
     1,
-    job.billableQuantity ?? input.maxTokens,
+    job.billableQuantity ?? maxTokens,
   );
   const totalTokens = usageIsReliable
     ? (reportedTotalTokens as number)
@@ -428,6 +603,7 @@ export async function executeTextGeneration(
     !Array.isArray(price.usageRates) &&
     (price.usageRates as Record<string, unknown>).estimator ===
       "byteplus-text-v1";
+
   let actualCost: bigint;
   let configuredCredits: bigint;
   try {
@@ -445,18 +621,16 @@ export async function executeTextGeneration(
     });
   } catch {
     await db.generationJob.updateMany({
-      where: { id: job.id, status: "PROCESSING" },
+      where: { id, status: "PROCESSING" },
       data: {
         status: "MANUAL_REVIEW",
         errorCode: "INVALID_SETTLEMENT_USAGE",
         errorMessage:
           "Provider token usage could not be safely priced. Credits remain reserved for review.",
+        outputPayload: { content, settlementPending: true },
       },
     });
-    throw new GenerationError(
-      "Generation completed at the provider, but its token usage requires billing review.",
-      409,
-    );
+    return;
   }
 
   const actualCredits =
@@ -473,7 +647,7 @@ export async function executeTextGeneration(
 
   if (actualCredits > job.reservedCredits) {
     await db.generationJob.updateMany({
-      where: { id: job.id, status: "PROCESSING" },
+      where: { id, status: "PROCESSING" },
       data: {
         status: "MANUAL_REVIEW",
         errorCode: "SETTLEMENT_EXCEEDS_RESERVATION",
@@ -490,37 +664,33 @@ export async function executeTextGeneration(
           : { content, usageEstimated: true, settlementPending: true },
       },
     });
-    throw new GenerationError(
-      "Generation completed, but actual usage exceeded the authorized quote. No additional credits were charged.",
-      409,
-    );
+    return;
   }
+
+  const wallet = await db.wallet.findUniqueOrThrow({
+    where: { organizationId: job.organizationId },
+  });
 
   try {
     await db.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM GenerationJob WHERE id = ${job.id} FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM GenerationJob WHERE id = ${id} FOR UPDATE`;
       const currentJob = await tx.generationJob.findUniqueOrThrow({
-        where: { id: job.id },
+        where: { id },
       });
-      if (currentJob.status !== "PROCESSING") {
-        throw new GenerationError(
-          "Generation state changed before settlement.",
-          409,
-        );
-      }
+      if (currentJob.status !== "PROCESSING") return;
+
       await captureCreditsForJob(tx, {
         walletId: wallet.id,
-        jobId: job.id,
+        jobId: id,
         amountCredits: actualCredits,
-        idempotencyKey: `generation-capture-${job.id}`,
+        idempotencyKey: `generation-capture-${id}`,
         metadata: {
           ...(usage ?? {}),
           usageFallback: !usageIsReliable,
         },
       });
-
       await tx.generationJob.update({
-        where: { id: job.id },
+        where: { id },
         data: {
           status: "SUCCEEDED",
           providerRequestId: providerResponse.providerRequestId,
@@ -539,14 +709,13 @@ export async function executeTextGeneration(
           chargedCredits: actualCredits,
         },
       });
-
       await tx.auditEvent.create({
         data: {
-          organizationId: input.organizationId,
-          actorUserId: userId,
+          organizationId: job.organizationId,
+          actorUserId: job.createdById,
           action: "generation.succeeded",
           targetType: "GenerationJob",
-          targetId: job.id,
+          targetId: id,
           metadata: {
             ...(usage ?? {}),
             usageFallback: !usageIsReliable,
@@ -555,9 +724,9 @@ export async function executeTextGeneration(
         },
       });
     });
-  } catch (error) {
+  } catch {
     await db.generationJob.updateMany({
-      where: { id: job.id, status: "PROCESSING" },
+      where: { id, status: "PROCESSING" },
       data: {
         status: "MANUAL_REVIEW",
         errorCode: "SETTLEMENT_REVIEW_REQUIRED",
@@ -568,19 +737,45 @@ export async function executeTextGeneration(
           : { content, usageEstimated: true, settlementPending: true },
       },
     });
-    throw error instanceof GenerationError
-      ? error
-      : new GenerationError(
-          "Generation completed at the provider, but billing settlement requires review.",
-          409,
-        );
   }
+}
 
-  return {
-    jobId: job.id,
-    status: "SUCCEEDED",
-    content,
-    usage,
-    chargedCredits: Number(actualCredits),
-  };
+/**
+ * Compatibility helper for tests and trusted server callers. Product HTTP
+ * routes use createTextJob and let the generation worker execute the provider.
+ */
+export async function executeTextGeneration(
+  userId: string,
+  raw: unknown,
+  options?: TextGenerationOptions,
+): Promise<TextGenerationResult> {
+  const job = await createTextJob(userId, raw);
+  const replay = textResultFromJob(job);
+  if (replay) return replay;
+  if (job.status !== "QUEUED")
+    throw new GenerationError(
+      "This generation request is already being processed.",
+      409,
+    );
+
+  const provider =
+    options?.provider ??
+    createBytePlusProvider({
+      apiKey: process.env.BYTEPLUS_API_KEY,
+      region:
+        (process.env.BYTEPLUS_REGION as "ap-southeast-1" | "eu-west-1") ??
+        "ap-southeast-1",
+      modelArkBaseUrl: process.env.BYTEPLUS_MODELARK_BASE_URL,
+    });
+  await processTextJob(job.id, provider);
+  const completed = await db.generationJob.findUniqueOrThrow({
+    where: { id: job.id },
+  });
+  const result = textResultFromJob(completed);
+  if (!result)
+    throw new GenerationError(
+      "Text generation is still being processed.",
+      409,
+    );
+  return result;
 }

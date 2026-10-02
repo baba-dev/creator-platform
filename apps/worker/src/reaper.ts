@@ -71,6 +71,20 @@ export async function reapExpiredRecoveryJobs(now = new Date()) {
   await db.generationJob.updateMany({
     where: {
       status: "PROCESSING",
+      providerModel: { mediaKind: "TEXT" },
+      updatedAt: { lt: interruptedCutoff15m },
+    },
+    data: {
+      status: "MANUAL_REVIEW",
+      errorCode: "TEXT_SETTLEMENT_INTERRUPTED",
+      errorMessage:
+        "Text generation completed or reached settlement, but the worker was interrupted. Credits remain reserved for review.",
+    },
+  });
+
+  await db.generationJob.updateMany({
+    where: {
+      status: "PROCESSING",
       providerModel: { mediaKind: "VIDEO" },
       submittedAt: { lt: videoCutoff2h },
     },

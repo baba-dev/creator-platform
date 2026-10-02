@@ -23,6 +23,7 @@ import {
   processVideoSubmitJob,
   processVoiceJob,
 } from "@aiwa/generation/process";
+import { processTextJob } from "@aiwa/generation";
 import { mailJobId } from "@aiwa/mail";
 import {
   closeSmtpTransport,
@@ -274,6 +275,9 @@ const generationWorker = createWorker(
       }
       case "voice":
         await processVoiceJob(job.data.jobId, bytePlusProvider);
+        return;
+      case "text":
+        await processTextJob(job.data.jobId, bytePlusProvider);
         return;
       default:
         throw new Error("Unknown generation queue job");
@@ -851,6 +855,9 @@ async function dispatchGeneration() {
         jobName = job.status === "QUEUED" ? "video-submit" : "video-poll";
       } else if (mediaKind === "VOICE") {
         jobName = "voice";
+      } else if (mediaKind === "TEXT") {
+        if (job.status !== "QUEUED") continue;
+        jobName = "text";
       } else {
         jobName = "image";
       }
@@ -859,7 +866,12 @@ async function dispatchGeneration() {
         { jobId: job.id },
         {
           jobId: job.id,
-          attempts: mediaKind === "VIDEO" || mediaKind === "VOICE" ? 1 : 3,
+          attempts:
+            mediaKind === "VIDEO" ||
+            mediaKind === "VOICE" ||
+            mediaKind === "TEXT"
+              ? 1
+              : 3,
           backoff: { type: "exponential", delay: 10_000 },
           removeOnComplete: true,
           removeOnFail: 100,

@@ -453,6 +453,65 @@ describe("video processing", () => {
     );
   });
 
+  it("records configured OmniHuman per-second provider cost without changing the authorized charge", async () => {
+    const p = provider();
+    vi.mocked(p.getJob).mockResolvedValue({
+      status: "succeeded",
+      providerRequestId: "vision:omnihuman:task-1",
+      outputUrls: ["https://cdn.bytepluscdn.com/omnihuman.mp4"],
+    });
+    const omniHumanJob = {
+      ...base,
+      status: "PROCESSING",
+      providerRequestId: "vision:omnihuman:task-1",
+      requestPayload: {
+        schemaVersion: 2,
+        workflow: "TALKING_AVATAR",
+        sources: [
+          { assetId: "avatar", role: "AVATAR_IMAGE", position: 0 },
+          { assetId: "audio", role: "DRIVING_AUDIO", position: 1 },
+        ],
+        resolution: "1080p",
+        outputFormat: "mp4",
+        returnLastFrame: false,
+      },
+      providerModel: {
+        id: "omnihuman-db-model",
+        providerModelId: "omnihuman-1.5",
+      },
+      reservedCredits: 126n,
+      quotedUnits: 2,
+      billableQuantity: 2,
+      priceVersion: {
+        providerCostMicroUsd: 120_000n,
+        pricingDimension: "SECOND",
+        unitQuantity: 1,
+      },
+    };
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue(omniHumanJob);
+    const tx = transaction("PROCESSING", omniHumanJob);
+
+    await processVideoPollJob("job1", p);
+
+    expect(mocks.capture).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        amountCredits: 126n,
+        idempotencyKey: "generation-capture-job1",
+      }),
+    );
+    expect(tx.generationJob.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "SUCCEEDED",
+          actualProviderCostMicroUsd: 240_000n,
+          providerCostBasis: "CONFIGURED_RATE",
+          actualUnits: 2,
+        }),
+      }),
+    );
+  });
+
   it("does not persist an invalid video token count as billing evidence", async () => {
     const p = provider();
     vi.mocked(p.getJob).mockResolvedValue({

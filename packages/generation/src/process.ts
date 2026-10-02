@@ -676,15 +676,23 @@ export async function processVideoPollJob(
         "The video-input price snapshot is missing its token rate.",
       );
 
-    const actualCost =
+    const usageProviderCost =
       hasVideoInput || tokenPriced
         ? videoInputProviderCost(BigInt(completionTokens!), rate!)
         : null;
+    const configuredProviderCost =
+      job.providerModel.providerModelId === "omnihuman-1.5" &&
+      current.priceVersion.pricingDimension === "SECOND" &&
+      current.quotedUnits !== null
+        ? current.priceVersion.providerCostMicroUsd *
+          BigInt(current.quotedUnits)
+        : null;
+    const actualProviderCost = usageProviderCost ?? configuredProviderCost;
     const actualQuote =
-      actualCost === null
+      usageProviderCost === null
         ? null
         : createCreditQuote({
-            providerCostMicroUsd: actualCost,
+            providerCostMicroUsd: usageProviderCost,
             exchangeRate: {
               baisaNumerator: current.priceVersion.fxBaisaNumerator,
               baisaDenominator: current.priceVersion.fxBaisaDenominator,
@@ -782,8 +790,13 @@ export async function processVideoPollJob(
       where: { id },
       data: {
         status: "SUCCEEDED",
-        actualProviderCostMicroUsd: actualCost,
-        providerCostBasis: actualCost === null ? null : "PROVIDER_USAGE",
+        actualProviderCostMicroUsd: actualProviderCost,
+        providerCostBasis:
+          usageProviderCost !== null
+            ? "PROVIDER_USAGE"
+            : configuredProviderCost !== null
+              ? "CONFIGURED_RATE"
+              : null,
         actualUnits:
           tokenPriced || hasVideoInput ? completionTokens : current.quotedUnits,
         completedAt: new Date(),

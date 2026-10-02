@@ -175,8 +175,7 @@ mailWorker?.on("failed", (job, error) =>
 
 const generationQueue = createQueue("generation");
 const hasBytePlusVisionCredentials = Boolean(
-  env.BYTEPLUS_VISION_ACCESS_KEY_ID &&
-    env.BYTEPLUS_VISION_SECRET_ACCESS_KEY,
+  env.BYTEPLUS_VISION_ACCESS_KEY_ID && env.BYTEPLUS_VISION_SECRET_ACCESS_KEY,
 );
 const hasBytePlusCredentials =
   Boolean(env.BYTEPLUS_API_KEY) ||

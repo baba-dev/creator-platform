@@ -143,8 +143,8 @@ export async function PUT(
       }
     }
 
-    const updated = await db.script.update({
-      where: { id: scriptId },
+    const updatedCount = await db.script.updateMany({
+      where: { id: scriptId, revision: input.expectedRevision },
       data: {
         ...(input.title !== undefined ? { title: input.title } : {}),
         ...(input.description !== undefined
@@ -162,9 +162,21 @@ export async function PUT(
         ...(input.projectId !== undefined
           ? { projectId: input.projectId }
           : {}),
+        revision: { increment: 1 },
       },
     });
-
+    if (!updatedCount.count)
+      return NextResponse.json(
+        {
+          error:
+            "This screenplay changed in another operation. Reload the latest revision before saving.",
+          code: "SCRIPT_REVISION_CONFLICT",
+        },
+        { status: 409 },
+      );
+    const updated = await db.script.findUniqueOrThrow({
+      where: { id: scriptId },
+    });
     return NextResponse.json({ script: updated });
   } catch (error) {
     if (error instanceof ZodError) {

@@ -1008,9 +1008,10 @@ model ChatThread {
 }
 
 model ChatMessage {
-  id          String     @id @default(cuid())
-  threadId    String
-  role        String
+  id              String     @id @default(cuid())
+  threadId        String
+  clientRequestId String?
+  role            String
   content     String     @db.LongText
   tokensUsed  Int?
   metadata    Json?
@@ -1018,6 +1019,7 @@ model ChatMessage {
 
   thread      ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
 
+  @@unique([threadId, clientRequestId, role])
   @@index([threadId, createdAt])
 }
 
@@ -1030,6 +1032,7 @@ model Script {
   logline               String?      @db.Text
   targetDurationSeconds Int?
   content               Json
+  revision              Int          @default(1)
   createdById           String
   createdAt             DateTime     @default(now())
   updatedAt             DateTime     @updatedAt

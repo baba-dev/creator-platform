@@ -10,7 +10,7 @@ describe("text and voice workspace validation contracts", () => {
     expect(
       chatMessageCreateSchema.parse({
         content: "Hello there",
-        idempotencyKey: "request-key-123456",
+        idempotencyKey: "123e4567-e89b-42d3-a456-426614174123",
         autoVoice: true,
       }).autoVoice,
     ).toBe(true);
@@ -18,6 +18,7 @@ describe("text and voice workspace validation contracts", () => {
 
   it("round-trips durable screenplay voice metadata", () => {
     const parsed = scriptUpdateSchema.parse({
+      expectedRevision: 1,
       content: {
         scenes: [
           {
@@ -39,6 +40,32 @@ describe("text and voice workspace validation contracts", () => {
       "cm12345678901234567890",
     );
     expect(parsed.content?.voiceAssignments?.NORA?.voiceKey).toBe("charlotte");
+  });
+
+  it("requires a stable idempotency key for paid chat turns", () => {
+    expect(() =>
+      chatMessageCreateSchema.parse({
+        content: "Hello there",
+        autoVoice: false,
+      }),
+    ).toThrow();
+  });
+
+  it("requires the expected screenplay revision on updates", () => {
+    expect(() =>
+      scriptUpdateSchema.parse({
+        content: {
+          scenes: [
+            {
+              id: "scene-1",
+              type: "dialogue",
+              character: "NORA",
+              text: "We should leave now.",
+            },
+          ],
+        },
+      }),
+    ).toThrow();
   });
 
   it("accepts versioned BytePlus text token rate tables", () => {

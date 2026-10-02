@@ -11,6 +11,7 @@ import {
   assembleMasterStoryAudio,
   type AssembledAudioResult,
 } from "@/lib/audio-assembly";
+import { runQuotedTextFeature } from "@/lib/text-feature-client";
 
 interface SceneBlock {
   id: string;
@@ -37,6 +38,7 @@ interface ScriptDocument {
     scenes: SceneBlock[];
     voiceAssignments?: Record<string, CharacterVoiceAssignment>;
   };
+  revision: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -129,6 +131,13 @@ export function ScriptwritingStudio({
   );
   const [selectedVoice, setSelectedVoice] = useState<string>("jasper");
   const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
+  const [pendingBatchQuote, setPendingBatchQuote] = useState<{
+    quoteToken: string;
+    idempotencyKey: string;
+    estimatedCredits: string;
+    maximumChargeCredits: string;
+    blockCount: number;
+  } | null>(null);
 
   // Sequential story player state
   const [isPlayingSequence, setIsPlayingSequence] = useState(false);
@@ -338,12 +347,39 @@ export function ScriptwritingStudio({
             title: activeScript.title,
             logline: activeScript.logline,
             content: activeScript.content,
+            expectedRevision: activeScript.revision,
           }),
         },
       );
       if (res.ok) {
+        const data = await res.json();
+        setActiveScript(data.script);
+        setScripts((prev) =>
+          prev.map((item) => (item.id === data.script.id ? data.script : item)),
+        );
+        setPendingBatchQuote(null);
         setStatusMessage("Script saved successfully.");
         setTimeout(() => setStatusMessage(null), 3000);
+      } else if (res.status === 409) {
+        const fresh = await fetch(
+          `/api/scripts/${encodeURIComponent(activeScript.id)}`,
+          { cache: "no-store" },
+        );
+        if (fresh.ok) {
+          const data = await fresh.json();
+          setActiveScript(data.script);
+          setScripts((prev) =>
+            prev.map((item) =>
+              item.id === data.script.id ? data.script : item,
+            ),
+          );
+        }
+        setPendingBatchQuote(null);
+        setStatusMessage(
+          "The screenplay changed while you were editing. Latest revision loaded; review before saving again.",
+        );
+      } else {
+        throw new Error("Failed to save script.");
       }
     } catch {
       setStatusMessage("Failed to save script.");
@@ -354,6 +390,7 @@ export function ScriptwritingStudio({
 
   function handleAddBlock(type: "slugline" | "action" | "dialogue") {
     if (!activeScript) return;
+    setPendingBatchQuote(null);
     const newBlock: SceneBlock = {
       id: String(Date.now()),
       type,
@@ -370,6 +407,7 @@ export function ScriptwritingStudio({
 
   function handleUpdateBlock(id: string, updates: Partial<SceneBlock>) {
     if (!activeScript) return;
+    setPendingBatchQuote(null);
     setActiveScript({
       ...activeScript,
       content: {
@@ -382,6 +420,7 @@ export function ScriptwritingStudio({
 
   function handleRemoveBlock(id: string) {
     if (!activeScript) return;
+    setPendingBatchQuote(null);
     setActiveScript({
       ...activeScript,
       content: {
@@ -402,24 +441,14 @@ export function ScriptwritingStudio({
         )
         .join("\n");
 
-      const res = await fetch(
-        `/api/scripts/${encodeURIComponent(activeScript.id)}/generate`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            prompt: aiPrompt,
-            action: aiAction,
-            currentScene: currentContext.slice(-1500),
-          }),
-        },
-      );
-
-      if (!res.ok) {
-        throw new Error("Screenplay generation failed.");
-      }
-
-      const data = await res.json();
+      const data = await runQuotedTextFeature<{
+        content: string;
+        chargedCredits?: number;
+      }>(`/api/scripts/${encodeURIComponent(activeScript.id)}/generate`, {
+        prompt: aiPrompt,
+        action: aiAction,
+        currentScene: currentContext.slice(-1500),
+      });
       const generatedText = data.content as string;
 
       // Append generated dialogue or action
@@ -532,34 +561,61 @@ export function ScriptwritingStudio({
   async function handleBatchSynthesize() {
     if (!activeScript || isGenerating) return;
     setIsGenerating(true);
-    setVoiceNotice(
-      "Batch synthesizing all dialogue lines via BytePlus Seed Speech TTS 2.0...",
-    );
     try {
-      const res = await fetch(
-        `/api/scripts/${encodeURIComponent(activeScript.id)}/synthesize-batch`,
-        {
+      const endpoint = `/api/scripts/${encodeURIComponent(activeScript.id)}/synthesize-batch`;
+
+      if (!pendingBatchQuote) {
+        const idempotencyKey = crypto.randomUUID();
+        const quoteResponse = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
-        },
-      );
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => null);
-        throw new Error(errJson?.error || "Batch voice synthesis failed.");
+          body: JSON.stringify({ mode: "quote", idempotencyKey }),
+        });
+        const data = await quoteResponse.json().catch(() => ({}));
+        if (!quoteResponse.ok)
+          throw new Error(data.error || "Batch quote failed.");
+        const quote = data.quote;
+        setPendingBatchQuote({
+          quoteToken: quote.quoteToken,
+          idempotencyKey,
+          estimatedCredits: quote.estimatedCredits,
+          maximumChargeCredits: quote.maximumChargeCredits,
+          blockCount: quote.blockCount,
+        });
+        setVoiceNotice(
+          `Estimated ${quote.estimatedCredits} credits for ${quote.blockCount} lines (max ${quote.maximumChargeCredits}). Click “Confirm batch” to queue them.`,
+        );
+        return;
       }
-      const data = await res.json();
+
+      setVoiceNotice("Queueing the authorized Seed Speech TTS 2.0 batch...");
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "generate",
+          idempotencyKey: pendingBatchQuote.idempotencyKey,
+          quoteToken: pendingBatchQuote.quoteToken,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok && response.status !== 207)
+        throw new Error(data.error || "Batch voice synthesis failed.");
+
       const failedCount = Number(data.failedCount ?? 0);
+      const conflicts = Array.isArray(data.attachmentConflicts)
+        ? data.attachmentConflicts.length
+        : 0;
+      setPendingBatchQuote(null);
       setVoiceNotice(
-        failedCount > 0
-          ? `Queued ${data.queuedCount} dialogue voice jobs; ${failedCount} line(s) could not be queued and can be retried safely.`
-          : `Queued ${data.queuedCount} dialogue voice jobs! Audio clips will appear in the Story Audio Timeline.`,
+        failedCount > 0 || conflicts > 0
+          ? `Queued ${data.queuedCount} voice jobs; ${failedCount} failed and ${conflicts} edited line(s) were left untouched.`
+          : `Queued ${data.queuedCount} dialogue voice jobs within the authorized ${data.authorizedCredits} credit maximum.`,
       );
-      if (data.queuedCount > 0) {
-        pollScriptVoiceJobs(activeScript.id);
-      }
+      if (data.queuedCount > 0) pollScriptVoiceJobs(activeScript.id);
       setTimeout(() => setVoiceNotice(null), 6000);
     } catch (err) {
+      setPendingBatchQuote(null);
       setVoiceNotice(
         err instanceof Error ? err.message : "Batch synthesis failed.",
       );
@@ -583,6 +639,7 @@ export function ScriptwritingStudio({
     speechRate: number = 1.0,
   ) {
     if (!activeScript) return;
+    setPendingBatchQuote(null);
     const currentAssignments = activeScript.content.voiceAssignments || {};
     const updatedAssignments = {
       ...currentAssignments,
@@ -717,7 +774,10 @@ export function ScriptwritingStudio({
               return (
                 <button
                   key={s.id}
-                  onClick={() => setActiveScript(s)}
+                  onClick={() => {
+                    setPendingBatchQuote(null);
+                    setActiveScript(s);
+                  }}
                   className={`flex w-full flex-col rounded-xl p-3 text-left transition ${
                     isActive
                       ? "border border-primary/50 bg-primary/10 text-primary"
@@ -1064,7 +1124,11 @@ export function ScriptwritingStudio({
                         className="gap-1.5 text-xs font-semibold"
                       >
                         <Icon name="voice" className="size-3.5" />
-                        <span>Synthesize All Lines</span>
+                        <span>
+                          {pendingBatchQuote
+                            ? `Confirm batch · ${pendingBatchQuote.maximumChargeCredits} credits max`
+                            : "Synthesize All Lines"}
+                        </span>
                       </Button>
                     </div>
                   </div>

@@ -16,13 +16,14 @@ import {
 } from "./media-tasks";
 import { assetJobOptions, retainFailedAssetJob } from "./asset-dispatch";
 import { parseServerEnv } from "@aiwa/config";
-import { db } from "@aiwa/db";
+import { db, type Prisma } from "@aiwa/db";
 import {
   processImageJob,
   processVideoPollJob,
   processVideoSubmitJob,
   processVoiceJob,
 } from "@aiwa/generation/process";
+import { processTextJob } from "@aiwa/generation";
 import { mailJobId } from "@aiwa/mail";
 import {
   closeSmtpTransport,
@@ -274,6 +275,9 @@ const generationWorker = createWorker(
       }
       case "voice":
         await processVoiceJob(job.data.jobId, bytePlusProvider);
+        return;
+      case "text":
+        await processTextJob(job.data.jobId, bytePlusProvider);
         return;
       default:
         throw new Error("Unknown generation queue job");
@@ -723,13 +727,12 @@ async function dispatchGeneration() {
     await reapExpiredRecoveryJobs();
 
     // 1. Fetch new submissions with keyset cursor rotation
-    const submitWhere: {
-      status: "QUEUED";
-      providerModel: { enabled: true };
-      id?: { gt: string };
-    } = {
+    const submitWhere: Prisma.GenerationJobWhereInput = {
       status: "QUEUED",
-      providerModel: { enabled: true },
+      OR: [
+        { providerModel: { enabled: true } },
+        { providerModel: { mediaKind: "TEXT" } },
+      ],
     };
     if (generationSubmitCursor) {
       submitWhere.id = { gt: generationSubmitCursor };
@@ -753,7 +756,10 @@ async function dispatchGeneration() {
         queuedRows = await db.generationJob.findMany({
           where: {
             status: "QUEUED",
-            providerModel: { enabled: true },
+            OR: [
+              { providerModel: { enabled: true } },
+              { providerModel: { mediaKind: "TEXT" } },
+            ],
           },
           select: {
             id: true,
@@ -851,6 +857,9 @@ async function dispatchGeneration() {
         jobName = job.status === "QUEUED" ? "video-submit" : "video-poll";
       } else if (mediaKind === "VOICE") {
         jobName = "voice";
+      } else if (mediaKind === "TEXT") {
+        if (job.status !== "QUEUED") continue;
+        jobName = "text";
       } else {
         jobName = "image";
       }
@@ -859,7 +868,12 @@ async function dispatchGeneration() {
         { jobId: job.id },
         {
           jobId: job.id,
-          attempts: mediaKind === "VIDEO" || mediaKind === "VOICE" ? 1 : 3,
+          attempts:
+            mediaKind === "VIDEO" ||
+            mediaKind === "VOICE" ||
+            mediaKind === "TEXT"
+              ? 1
+              : 3,
           backoff: { type: "exponential", delay: 10_000 },
           removeOnComplete: true,
           removeOnFail: 100,

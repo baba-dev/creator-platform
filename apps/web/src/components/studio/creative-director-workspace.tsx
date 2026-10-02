@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { CreativeSurface, Eyebrow } from "@/components/ui/creative";
 import { Icon } from "@/components/ui/icon";
+import { runQuotedTextFeature } from "@/lib/text-feature-client";
 
 interface DirectorMessage {
   id: string;
@@ -131,27 +132,18 @@ export function CreativeDirectorWorkspace({
     setMessages(nextMessages);
 
     try {
-      const res = await fetch("/api/director/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          organizationId,
-          modelId: selectedModel,
-          messages: nextMessages.map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
-        }),
+      const data = await runQuotedTextFeature<{
+        content: string;
+        chargedCredits?: number;
+        usage?: { totalTokens?: number };
+      }>("/api/director/chat", {
+        organizationId,
+        modelId: selectedModel,
+        messages: nextMessages.map((message) => ({
+          role: message.role,
+          content: message.content,
+        })),
       });
-
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => null);
-        throw new Error(
-          errJson?.error || "Creative Director failed to respond.",
-        );
-      }
-
-      const data = await res.json();
       const assistantMsg: DirectorMessage = {
         id: `assistant-${Date.now()}`,
         role: "assistant",

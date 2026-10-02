@@ -1,47 +1,63 @@
-import { randomUUID } from "node:crypto";
 import { hasOrganizationPermission } from "@aiwa/authz";
 import { db } from "@aiwa/db";
 import {
+  createTextJob,
   createVoiceJob,
-  executeTextGeneration,
   GenerationError,
+  textResultFromJob,
 } from "@aiwa/generation";
 import { chatMessageCreateSchema } from "@aiwa/validation";
 import { NextResponse } from "next/server";
-import { ZodError } from "zod";
+import { z } from "zod";
+import { deterministicUuid } from "@/lib/idempotency";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
+import {
+  assertQuotedTextModel,
+  issueTextFeatureQuote,
+} from "@/lib/text-feature-generation";
+
+const chatGenerationSchema = chatMessageCreateSchema
+  .extend({
+    mode: z.enum(["quote", "generate"]).default("generate"),
+    quoteToken: z.string().min(1).max(2048).optional(),
+    quotedModelId: z.string().min(1).max(100).optional(),
+    priceVersionId: z.string().min(1).max(100).optional(),
+  })
+  .superRefine((value, context) => {
+    if (
+      value.mode === "generate" &&
+      (!value.quoteToken || !value.quotedModelId || !value.priceVersionId)
+    )
+      context.addIssue({
+        code: "custom",
+        message: "A fresh generation quote is required.",
+      });
+  });
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ threadId: string }> },
 ) {
-  if (!hasTrustedMutationOrigin(request)) {
+  if (!hasTrustedMutationOrigin(request))
     return NextResponse.json({ error: "Origin not allowed." }, { status: 403 });
-  }
 
   const session = await getRequestSession(request.headers);
-  if (!session) {
+  if (!session)
     return NextResponse.json(
       { error: "Authentication required." },
       { status: 401 },
     );
-  }
-
   const { threadId } = await params;
 
   try {
-    const body = await request.json();
-    const input = chatMessageCreateSchema.parse(body);
-    const autoVoice = input.autoVoice;
+    const input = chatGenerationSchema.parse(await request.json());
     const thread = await db.chatThread.findUnique({
       where: { id: threadId },
       include: { persona: true },
     });
-
-    if (!thread || thread.createdById !== session.user.id) {
+    if (!thread || thread.createdById !== session.user.id)
       return NextResponse.json({ error: "Thread not found." }, { status: 404 });
-    }
 
     const membership = await db.membership.findUnique({
       where: {
@@ -52,54 +68,31 @@ export async function POST(
       },
       include: { organization: true },
     });
-
     if (
       !membership ||
       membership.organization.status !== "ACTIVE" ||
       !hasOrganizationPermission(membership.role, "generation:create")
-    ) {
+    )
       return NextResponse.json({ error: "Access denied." }, { status: 403 });
-    }
 
     const targetModelId =
       thread.persona?.modelId ??
       thread.modelId ??
       "doubao-seed-character-260628";
-    const now = new Date();
-    const model = await db.providerModel.findFirst({
-      where: {
-        provider: "BYTEPLUS",
-        providerModelId: targetModelId,
-        mediaKind: "TEXT",
-        enabled: true,
-      },
-      include: {
-        priceVersions: {
-          where: {
-            effectiveFrom: { lte: now },
-            OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
-          },
-          orderBy: { effectiveFrom: "desc" },
-          take: 1,
-        },
-      },
-    });
-
-    if (!model || !model.priceVersions[0]) {
-      return NextResponse.json(
-        { error: "Model or pricing is unavailable for text generation." },
-        { status: 409 },
-      );
-    }
-
     const recentMessages = await db.chatMessage.findMany({
-      where: { threadId },
+      where: {
+        threadId,
+        OR: [
+          { clientRequestId: null },
+          { clientRequestId: { not: input.idempotencyKey } },
+        ],
+      },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: 30,
       select: { role: true, content: true },
     });
 
-    const messagesPayload: Array<{
+    const messages: Array<{
       role: "system" | "user" | "assistant";
       content: string;
     }> = [
@@ -111,31 +104,71 @@ export async function POST(
           "You are a helpful, creative and knowledgeable assistant.",
       },
     ];
-
     for (const message of recentMessages.reverse()) {
-      if (message.role === "user" || message.role === "assistant") {
-        messagesPayload.push({
-          role: message.role,
-          content: message.content,
-        });
-      }
+      if (message.role === "user" || message.role === "assistant")
+        messages.push({ role: message.role, content: message.content });
     }
-    messagesPayload.push({ role: "user", content: input.content });
+    messages.push({ role: "user", content: input.content });
+    const maxTokens = 2048;
 
-    const genResult = await executeTextGeneration(session.user.id, {
+    if (input.mode === "quote") {
+      const quote = await issueTextFeatureQuote({
+        organizationId: thread.organizationId,
+        userId: session.user.id,
+        providerModelId: targetModelId,
+        messages,
+        maxTokens,
+      });
+      return NextResponse.json({ quote });
+    }
+
+    await assertQuotedTextModel(input.quotedModelId!, targetModelId);
+    const job = await createTextJob(session.user.id, {
       organizationId: thread.organizationId,
       projectId: thread.projectId,
-      modelId: model.id,
-      priceVersionId: model.priceVersions[0].id,
-      idempotencyKey: input.idempotencyKey ?? randomUUID(),
-      messages: messagesPayload,
+      modelId: input.quotedModelId,
+      priceVersionId: input.priceVersionId,
+      quoteToken: input.quoteToken,
+      idempotencyKey: input.idempotencyKey,
+      messages,
       temperature: 0.7,
-      maxTokens: 2048,
+      maxTokens,
     });
 
+    const userMessage = await db.chatMessage.upsert({
+      where: {
+        threadId_clientRequestId_role: {
+          threadId,
+          clientRequestId: input.idempotencyKey,
+          role: "user",
+        },
+      },
+      update: {},
+      create: {
+        threadId,
+        clientRequestId: input.idempotencyKey,
+        role: "user",
+        content: input.content,
+        metadata: { generationJobId: job.id },
+      },
+    });
+
+    const result = textResultFromJob(job);
+    if (!result)
+      return NextResponse.json(
+        {
+          jobId: job.id,
+          status: job.status,
+          pending: true,
+          userMessage,
+        },
+        { status: 202 },
+      );
+
     let audioJobId: string | undefined;
-    if (autoVoice && genResult.content.trim()) {
+    if (input.autoVoice && result.content.trim()) {
       try {
+        const now = new Date();
         const voiceModel = await db.providerModel.findFirst({
           where: {
             mediaKind: "VOICE",
@@ -156,88 +189,93 @@ export async function POST(
         });
         if (voiceModel?.priceVersions[0]) {
           const voiceKey = thread.persona?.voiceKey || "jasper";
-          const vJob = await createVoiceJob(session.user.id, {
+          const voiceIdempotencyKey = deterministicUuid(
+            [
+              "chat-auto-voice-v2",
+              result.jobId,
+              voiceModel.id,
+              voiceModel.priceVersions[0].id,
+              voiceKey,
+              result.content,
+            ].join("\u0000"),
+          );
+          const voiceJob = await createVoiceJob(session.user.id, {
             organizationId: thread.organizationId,
             projectId: thread.projectId,
             modelId: voiceModel.id,
             priceVersionId: voiceModel.priceVersions[0].id,
-            idempotencyKey: randomUUID(),
-            text: genResult.content,
+            idempotencyKey: voiceIdempotencyKey,
+            text: result.content,
             voiceKey,
-            speechRate: 1.0,
+            speechRate: 1,
             format: "mp3",
           });
-          audioJobId = vJob.id;
+          audioJobId = voiceJob.id;
         }
       } catch {
-        // Non-fatal auto-voice dispatch failure
+        // Text success is durable; optional auto-voice may be retried separately.
       }
     }
 
-    const persisted = await db.$transaction(async (tx) => {
-      const userMessage = await tx.chatMessage.create({
-        data: {
+    const assistantMessage = await db.chatMessage.upsert({
+      where: {
+        threadId_clientRequestId_role: {
           threadId,
-          role: "user",
-          content: input.content,
-          metadata: input.idempotencyKey
-            ? { clientRequestId: input.idempotencyKey }
-            : undefined,
-        },
-      });
-
-      const assistantMessage = await tx.chatMessage.create({
-        data: {
-          threadId,
+          clientRequestId: input.idempotencyKey,
           role: "assistant",
-          content: genResult.content,
-          tokensUsed: genResult.usage?.totalTokens ?? null,
-          metadata: {
-            generationJobId: genResult.jobId,
-            chargedCredits: genResult.chargedCredits,
-            usage: genResult.usage,
-            ...(audioJobId ? { audioJobId } : {}),
-            ...(input.idempotencyKey
-              ? { clientRequestId: input.idempotencyKey }
-              : {}),
-          },
         },
-      });
-
-      await tx.chatThread.update({
-        where: { id: threadId },
-        data: { updatedAt: new Date() },
-      });
-
-      return { userMessage, assistantMessage };
+      },
+      update: {
+        content: result.content,
+        tokensUsed: result.usage?.totalTokens ?? null,
+        metadata: {
+          generationJobId: result.jobId,
+          chargedCredits: result.chargedCredits,
+          usage: result.usage,
+          ...(audioJobId ? { audioJobId } : {}),
+        },
+      },
+      create: {
+        threadId,
+        clientRequestId: input.idempotencyKey,
+        role: "assistant",
+        content: result.content,
+        tokensUsed: result.usage?.totalTokens ?? null,
+        metadata: {
+          generationJobId: result.jobId,
+          chargedCredits: result.chargedCredits,
+          usage: result.usage,
+          ...(audioJobId ? { audioJobId } : {}),
+        },
+      },
+    });
+    await db.chatThread.update({
+      where: { id: threadId },
+      data: { updatedAt: new Date() },
     });
 
     return NextResponse.json(
       {
-        userMessage: persisted.userMessage,
-        message: {
-          ...persisted.assistantMessage,
-          audioJobId,
-        },
+        userMessage,
+        message: { ...assistantMessage, audioJobId },
         audioJobId,
-        usage: genResult.usage,
-        chargedCredits: genResult.chargedCredits,
+        usage: result.usage,
+        chargedCredits: result.chargedCredits,
+        jobId: result.jobId,
       },
       { status: 201 },
     );
   } catch (error) {
-    if (error instanceof ZodError) {
+    if (error instanceof z.ZodError)
       return NextResponse.json(
         { error: "Invalid message data.", issues: error.issues },
         { status: 400 },
       );
-    }
-    if (error instanceof GenerationError) {
+    if (error instanceof GenerationError)
       return NextResponse.json(
         { error: error.message },
         { status: error.status },
       );
-    }
     return NextResponse.json(
       { error: "Text generation failed. Please try again." },
       { status: 502 },

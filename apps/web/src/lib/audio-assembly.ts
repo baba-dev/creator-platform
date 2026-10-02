@@ -98,6 +98,21 @@ export async function assembleMasterStoryAudio({
   if (clips.length === 0) {
     throw new Error("No dialogue clips provided for audio assembly.");
   }
+  if (clips.length > 50) {
+    throw new Error(
+      "Master audio export is limited to 50 dialogue clips per assembly.",
+    );
+  }
+  if (
+    !Number.isFinite(pauseDurationSeconds) ||
+    pauseDurationSeconds < 0 ||
+    pauseDurationSeconds > 5 ||
+    !Number.isSafeInteger(sampleRate) ||
+    sampleRate < 8_000 ||
+    sampleRate > 48_000
+  ) {
+    throw new Error("Audio assembly settings are outside safe limits.");
+  }
 
   const audioCtx = new (
     window.AudioContext ||
@@ -115,7 +130,14 @@ export async function assembleMasterStoryAudio({
           `Failed to fetch audio for clip ${clip.speaker || clip.id}`,
         );
       }
+      const length = Number(res.headers.get("content-length") ?? 0);
+      if (Number.isFinite(length) && length > 25 * 1024 * 1024) {
+        throw new Error("A dialogue clip exceeds the 25 MB assembly limit.");
+      }
       const arrayBuf = await res.arrayBuffer();
+      if (arrayBuf.byteLength > 25 * 1024 * 1024) {
+        throw new Error("A dialogue clip exceeds the 25 MB assembly limit.");
+      }
       const decoded = await audioCtx.decodeAudioData(arrayBuf);
       decodedBuffers.push(decoded);
     }
@@ -129,6 +151,17 @@ export async function assembleMasterStoryAudio({
       if (i < decodedBuffers.length - 1) {
         totalSamples += pauseSamples;
       }
+    }
+
+    const durationSeconds = totalSamples / sampleRate;
+    const estimatedWorkingBytes = totalSamples * 2 * 4;
+    if (
+      durationSeconds > 30 * 60 ||
+      estimatedWorkingBytes > 120 * 1024 * 1024
+    ) {
+      throw new Error(
+        "Master audio is too large for safe in-browser assembly. Export a smaller scene or fewer clips.",
+      );
     }
 
     // 3. Create merged buffer (Stereo 2-channel)
@@ -157,7 +190,6 @@ export async function assembleMasterStoryAudio({
     // 4. Encode to standard WAV
     const blob = audioBufferToWav(mergedBuffer);
     const objectUrl = URL.createObjectURL(blob);
-    const durationSeconds = mergedBuffer.duration;
 
     return {
       blob,

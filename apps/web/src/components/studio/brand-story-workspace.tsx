@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { CreativeSurface, Eyebrow } from "@/components/ui/creative";
 import { Icon } from "@/components/ui/icon";
+import { runQuotedTextFeature } from "@/lib/text-feature-client";
 
 interface BrandProfile {
   id: string;
@@ -123,23 +124,21 @@ export function BrandStoryWorkspace({
     setStatusNotice(null);
 
     try {
-      const res = await fetch("/api/brand-profiles/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          organizationId,
-          brandName: brandForm.name,
-          industry: brandForm.industry || undefined,
-          vision: brandForm.vision || undefined,
-          targetMarket: brandForm.targetMarket || undefined,
-        }),
+      const data = await runQuotedTextFeature<{
+        profile: {
+          tagline?: string;
+          voiceTone?: string;
+          guidelines?: string;
+          targetAudience?: string;
+          vocabulary?: string[];
+        };
+      }>("/api/brand-profiles/generate", {
+        organizationId,
+        brandName: brandForm.name,
+        industry: brandForm.industry || undefined,
+        vision: brandForm.vision || undefined,
+        targetMarket: brandForm.targetMarket || undefined,
       });
-
-      if (!res.ok) {
-        throw new Error("Brand guidelines generation failed.");
-      }
-
-      const data = await res.json();
       const generated = data.profile;
 
       // Save as permanent brand profile
@@ -186,23 +185,16 @@ export function BrandStoryWorkspace({
     setStatusNotice(null);
 
     try {
-      const res = await fetch("/api/story-plans/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          organizationId,
-          title: storyForm.title,
-          premise: storyForm.premise,
-          genre: storyForm.genre,
-          structureType: storyForm.structureType,
-        }),
+      const data = await runQuotedTextFeature<{
+        beats: StoryBeat[];
+        characters: CharacterProfile[];
+      }>("/api/story-plans/generate", {
+        organizationId,
+        title: storyForm.title,
+        premise: storyForm.premise,
+        genre: storyForm.genre,
+        structureType: storyForm.structureType,
       });
-
-      if (!res.ok) {
-        throw new Error("Story beat sheet generation failed.");
-      }
-
-      const data = await res.json();
 
       // Save story plan
       const saveRes = await fetch("/api/story-plans", {

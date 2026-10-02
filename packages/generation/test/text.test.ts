@@ -1,574 +1,76 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
+import { normalizeTextMessagesForModel, textResultFromJob } from "../src/text";
 
-const mocks = vi.hoisted(() => ({
-  db: {
-    $transaction: vi.fn(),
-    generationJob: {
-      updateMany: vi.fn(),
-    },
-  },
-  credits: {
-    calculateBillableUnits: vi.fn(
-      (tokens: bigint, unit: bigint) => (tokens + unit - 1n) / unit,
-    ),
-    estimateGeneration: vi.fn(),
-    createCreditQuote: vi.fn(() => ({ customerCredits: 5n })),
-    priceCredits: vi.fn(() => 5n),
-    reserveCreditsForJob: vi.fn(),
-    captureCreditsForJob: vi.fn(),
-    releaseOrRefundCredits: vi.fn(),
-    textProviderCostMicroUsd: vi.fn(() => 5_000n),
-  },
-  quoteContract: {
-    verifyGenerationQuote: vi.fn(),
-    quoteParameters: vi.fn(),
-  },
-}));
-
-vi.mock("@aiwa/db", () => ({ db: mocks.db }));
-vi.mock("@aiwa/credits", () => mocks.credits);
-
-import { executeTextGeneration } from "../src/text";
-
-describe("executeTextGeneration", () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-    mocks.db.generationJob.updateMany.mockResolvedValue({ count: 1 });
-  });
-
-  it("validates input and throws error on malformed request", async () => {
-    await expect(
-      executeTextGeneration("user_1", {
-        organizationId: "org_1",
-        modelId: "m_1",
-        priceVersionId: "pv_1",
-        idempotencyKey: "invalid-uuid",
-        messages: [],
-      }),
-    ).rejects.toThrow();
-  });
-
-  it("successfully reserves credits, calls provider, captures credits, and returns result", async () => {
-    const tx = {
-      $queryRaw: vi.fn(),
-      membership: {
-        findUnique: vi.fn().mockResolvedValue({
-          role: "ORGANIZATION_MEMBER",
-          monthlySpendingCapCredits: null,
-          organization: { status: "ACTIVE" },
-          user: { disabledAt: null, emailVerified: true },
-        }),
-      },
-      generationTemplate: { findFirst: vi.fn() },
-      generationJob: {
-        findUnique: vi.fn().mockResolvedValue(null),
-        findUniqueOrThrow: vi.fn().mockResolvedValue({
-          status: "PROCESSING",
-        }),
-        create: vi.fn().mockResolvedValue({ id: "job_text_1" }),
-        update: vi
-          .fn()
-          .mockResolvedValue({ id: "job_text_1", status: "SUBMITTED" }),
-        aggregate: vi.fn().mockResolvedValue({
-          _sum: { chargedCredits: 0n, reservedCredits: 0n },
-        }),
-      },
-      providerModel: {
-        findFirst: vi.fn().mockResolvedValue({
-          id: "m_1",
-          providerModelId: "doubao-seed-character-260628",
-          enabled: true,
-          priceVersions: [
-            {
-              id: "pv_1",
-              providerCostMicroUsd: 1000n,
-              pricingDimension: "TOKEN",
-              unitQuantity: 1000,
-            },
-          ],
-        }),
-      },
-      project: { findUnique: vi.fn() },
-      wallet: {
-        findUnique: vi.fn().mockResolvedValue({ id: "wallet_1" }),
-      },
-      auditEvent: {
-        create: vi.fn(),
-      },
-    };
-
-    mocks.db.$transaction.mockImplementation(async (callback) => callback(tx));
-    mocks.credits.estimateGeneration.mockReturnValue({
-      reservation: { customerCredits: 10n },
-      units: 1,
-      billableQuantity: 1000,
-    });
-
-    const mockProvider = {
-      name: "byteplus" as const,
-      listModels: vi.fn(),
-      getJob: vi.fn(),
-      cancel: vi.fn(),
-      submit: vi.fn().mockResolvedValue({
-        providerRequestId: "req_1",
-        status: "succeeded" as const,
-        textOutput: { content: "Hello, traveler! What brings you here?" },
-        rawUsage: {
-          prompt_tokens: 50,
-          completion_tokens: 120,
-          total_tokens: 170,
-        },
-      }),
-    };
-
-    const validPayload = {
-      organizationId: "org_1",
-      modelId: "m_1",
-      priceVersionId: "pv_1",
-      idempotencyKey: "123e4567-e89b-12d3-a456-426614174000",
-      messages: [{ role: "user" as const, content: "Greetings!" }],
-      temperature: 0.7,
-      maxTokens: 1024,
-    };
-
-    const result = await executeTextGeneration("user_1", validPayload, {
-      provider: mockProvider,
-    });
-
-    expect(result.status).toBe("SUCCEEDED");
-    expect(result.content).toBe("Hello, traveler! What brings you here?");
-    expect(result.usage?.totalTokens).toBe(170);
-    expect(mocks.credits.reserveCreditsForJob).toHaveBeenCalled();
-    expect(mockProvider.submit).toHaveBeenCalledWith(
-      expect.objectContaining({
-        modelId: "doubao-seed-character-260628",
-        mediaKind: "text",
-      }),
+describe("text generation hardening", () => {
+  it("preserves system instructions and newest turns inside model context", () => {
+    const messages = [
+      { role: "system" as const, content: "system".repeat(100) },
+      ...Array.from({ length: 12 }, (_, index) => ({
+        role: (index % 2 ? "assistant" : "user") as "assistant" | "user",
+        content: `turn-${index}-` + "x".repeat(1200),
+      })),
+    ];
+    const packed = normalizeTextMessagesForModel(
+      messages,
+      { contextWindow: 4096 },
+      1024,
     );
-    expect(mocks.credits.captureCreditsForJob).toHaveBeenCalled();
+    expect(packed[0]?.role).toBe("system");
+    expect(packed.at(-1)?.content).toContain("turn-11");
+    expect(packed.length).toBeLessThan(messages.length);
   });
 
-  it("replays a succeeded request only when the idempotent payload matches", async () => {
-    const payload = {
-      messages: [{ role: "user", content: "Greetings!" }],
-      temperature: 0.7,
-      maxTokens: 1024,
-    };
-    const tx = {
-      $queryRaw: vi.fn(),
-      membership: {
-        findUnique: vi.fn().mockResolvedValue({
-          role: "ORGANIZATION_MEMBER",
-          monthlySpendingCapCredits: null,
-          organization: { status: "ACTIVE" },
-          user: { disabledAt: null, emailVerified: true },
-        }),
-      },
-      generationTemplate: { findFirst: vi.fn().mockResolvedValue(null) },
-      generationJob: {
-        findUnique: vi.fn().mockResolvedValue({
-          id: "job_cached",
-          status: "SUCCEEDED",
-          projectId: null,
-          templateId: null,
-          providerModelId: "m_1",
-          priceVersionId: "pv_1",
-          requestPayload: payload,
-          outputPayload: {
-            content: "Cached answer",
-            usage: {
-              promptTokens: 5,
-              completionTokens: 2,
-              totalTokens: 7,
-            },
-          },
-          chargedCredits: 3n,
-        }),
-      },
-    };
-    mocks.db.$transaction.mockImplementationOnce(async (callback) =>
-      callback(tx),
-    );
-
-    const result = await executeTextGeneration("user_1", {
-      organizationId: "org_1",
-      modelId: "m_1",
-      priceVersionId: "pv_1",
-      idempotencyKey: "123e4567-e89b-12d3-a456-426614174010",
-      messages: [{ role: "user", content: "Greetings!" }],
-      temperature: 0.7,
-      maxTokens: 1024,
-    });
-
-    expect(result.content).toBe("Cached answer");
-    expect(result.chargedCredits).toBe(3);
-  });
-
-  it("rejects reuse of an idempotency key with changed text inputs", async () => {
-    const tx = {
-      $queryRaw: vi.fn(),
-      membership: {
-        findUnique: vi.fn().mockResolvedValue({
-          role: "ORGANIZATION_MEMBER",
-          monthlySpendingCapCredits: null,
-          organization: { status: "ACTIVE" },
-          user: { disabledAt: null, emailVerified: true },
-        }),
-      },
-      generationTemplate: { findFirst: vi.fn().mockResolvedValue(null) },
-      generationJob: {
-        findUnique: vi.fn().mockResolvedValue({
-          id: "job_existing",
-          status: "SUCCEEDED",
-          projectId: null,
-          templateId: null,
-          providerModelId: "m_1",
-          priceVersionId: "pv_1",
-          requestPayload: {
-            messages: [{ role: "user", content: "Original" }],
-            temperature: 0.7,
-            maxTokens: 1024,
-          },
-          outputPayload: { content: "Old answer" },
-          chargedCredits: 3n,
-        }),
-      },
-    };
-    mocks.db.$transaction.mockImplementationOnce(async (callback) =>
-      callback(tx),
-    );
-
-    await expect(
-      executeTextGeneration("user_1", {
-        organizationId: "org_1",
-        modelId: "m_1",
-        priceVersionId: "pv_1",
-        idempotencyKey: "123e4567-e89b-12d3-a456-426614174011",
-        messages: [{ role: "user", content: "Changed" }],
-        temperature: 0.7,
-        maxTokens: 1024,
-      }),
-    ).rejects.toThrow("different inputs");
-  });
-
-  it("rejects aggregate prompt context above the bounded limit", async () => {
-    await expect(
-      executeTextGeneration("user_1", {
-        organizationId: "org_1",
-        modelId: "m_1",
-        priceVersionId: "pv_1",
-        idempotencyKey: "123e4567-e89b-12d3-a456-426614174099",
-        messages: Array.from({ length: 16 }, () => ({
-          role: "user" as const,
-          content: "x".repeat(8000),
-        })),
-      }),
-    ).rejects.toThrow(
-      "Combined text-generation context cannot exceed 120,000 characters.",
-    );
-
-    expect(mocks.db.$transaction).not.toHaveBeenCalled();
-  });
-
-  it("does not charge above the authorized reservation when actual usage is higher", async () => {
-    const submittedJob = {
-      id: "job_text_overage",
-      status: "SUBMITTED",
-      billableQuantity: 1024,
-      quotedUnits: 2,
-      reservedCredits: 10n,
-    };
-    const tx = {
-      $queryRaw: vi.fn(),
-      membership: {
-        findUnique: vi.fn().mockResolvedValue({
-          role: "ORGANIZATION_MEMBER",
-          monthlySpendingCapCredits: 100n,
-          organization: { status: "ACTIVE" },
-          user: { disabledAt: null, emailVerified: true },
-        }),
-      },
-      generationTemplate: { findFirst: vi.fn() },
-      generationJob: {
-        findUnique: vi.fn().mockResolvedValue(null),
-        findUniqueOrThrow: vi.fn().mockResolvedValue({
-          status: "PROCESSING",
-        }),
-        create: vi.fn().mockResolvedValue({ id: submittedJob.id }),
-        update: vi.fn().mockResolvedValue(submittedJob),
-        aggregate: vi.fn().mockResolvedValue({
-          _sum: { chargedCredits: 0n, reservedCredits: 0n },
-        }),
-      },
-      providerModel: {
-        findFirst: vi.fn().mockResolvedValue({
-          id: "m_1",
-          providerModelId: "doubao-seed-character-260628",
-          enabled: true,
-          priceVersions: [
-            {
-              id: "pv_1",
-              providerCostMicroUsd: 20_000n,
-              pricingDimension: "TOKEN",
-              unitQuantity: 1000,
-              fxBaisaNumerator: 769n,
-              fxBaisaDenominator: 2n,
-              targetMarginBps: 2500,
-              creditsPerBaisa: 1n,
-            },
-          ],
-        }),
-      },
-      project: { findUnique: vi.fn() },
-      wallet: {
-        findUnique: vi.fn().mockResolvedValue({ id: "wallet_1" }),
-      },
-      auditEvent: { create: vi.fn() },
-    };
-
-    mocks.db.$transaction.mockImplementation(async (callback) => callback(tx));
-    mocks.credits.estimateGeneration.mockReturnValue({
-      reservation: { customerCredits: 10n },
-      units: 2,
-      billableQuantity: 1024,
-    });
-    mocks.credits.createCreditQuote.mockReturnValue({
-      customerCredits: 20n,
-    });
-
-    const provider = {
-      name: "byteplus" as const,
-      listModels: vi.fn(),
-      getJob: vi.fn(),
-      cancel: vi.fn(),
-      submit: vi.fn().mockResolvedValue({
-        providerRequestId: "req_overage",
-        status: "succeeded" as const,
-        textOutput: { content: "A costly answer" },
-        rawUsage: {
-          prompt_tokens: 1000,
-          completion_tokens: 1000,
-          total_tokens: 2000,
-        },
-      }),
-    };
-
-    await expect(
-      executeTextGeneration(
-        "user_1",
-        {
-          organizationId: "org_1",
-          modelId: "m_1",
-          priceVersionId: "pv_1",
-          idempotencyKey: "123e4567-e89b-12d3-a456-426614174097",
-          messages: [{ role: "user" as const, content: "Generate." }],
-          maxTokens: 1024,
-        },
-        { provider },
+  it("rejects a latest message that cannot fit the selected model", () => {
+    expect(() =>
+      normalizeTextMessagesForModel(
+        [
+          { role: "system", content: "Be concise." },
+          { role: "user", content: "x".repeat(30_000) },
+        ],
+        { contextWindow: 4096 },
+        2048,
       ),
-    ).rejects.toThrow("exceeded the authorized quote");
-
-    expect(mocks.credits.captureCreditsForJob).not.toHaveBeenCalled();
-    expect(mocks.db.generationJob.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: submittedJob.id, status: "PROCESSING" },
-        data: expect.objectContaining({
-          status: "MANUAL_REVIEW",
-          errorCode: "SETTLEMENT_EXCEEDS_RESERVATION",
-        }),
-      }),
-    );
+    ).toThrow("latest message is too large");
   });
 
-  it("uses the reserved estimate when provider usage telemetry is missing", async () => {
-    const submittedJob = {
-      id: "job_text_fallback",
-      status: "SUBMITTED",
-      billableQuantity: 2048,
-      quotedUnits: 3,
-      reservedCredits: 10n,
-    };
-    const tx = {
-      $queryRaw: vi.fn(),
-      membership: {
-        findUnique: vi.fn().mockResolvedValue({
-          role: "ORGANIZATION_MEMBER",
-          monthlySpendingCapCredits: null,
-          organization: { status: "ACTIVE" },
-          user: { disabledAt: null, emailVerified: true },
-        }),
+  it("reads durable succeeded text output", () => {
+    expect(
+      textResultFromJob({
+        id: "job_1",
+        status: "SUCCEEDED",
+        outputPayload: {
+          content: "done",
+          usage: {
+            promptTokens: 10,
+            completionTokens: 5,
+            totalTokens: 15,
+          },
+        },
+        chargedCredits: 4n,
+        errorMessage: null,
+      }),
+    ).toEqual({
+      jobId: "job_1",
+      status: "SUCCEEDED",
+      content: "done",
+      usage: {
+        promptTokens: 10,
+        completionTokens: 5,
+        totalTokens: 15,
       },
-      generationTemplate: { findFirst: vi.fn() },
-      generationJob: {
-        findUnique: vi.fn().mockResolvedValue(null),
-        findUniqueOrThrow: vi.fn().mockResolvedValue({
-          status: "PROCESSING",
-        }),
-        create: vi.fn().mockResolvedValue({ id: submittedJob.id }),
-        update: vi.fn().mockResolvedValue(submittedJob),
-        aggregate: vi.fn().mockResolvedValue({
-          _sum: { chargedCredits: 0n, reservedCredits: 0n },
-        }),
-      },
-      providerModel: {
-        findFirst: vi.fn().mockResolvedValue({
-          id: "m_1",
-          providerModelId: "doubao-seed-character-260628",
-          enabled: true,
-          priceVersions: [
-            {
-              id: "pv_1",
-              providerCostMicroUsd: 1000n,
-              pricingDimension: "TOKEN",
-              unitQuantity: 1000,
-            },
-          ],
-        }),
-      },
-      project: { findUnique: vi.fn() },
-      wallet: {
-        findUnique: vi.fn().mockResolvedValue({ id: "wallet_1" }),
-      },
-      auditEvent: {
-        create: vi.fn(),
-      },
-    };
-
-    mocks.db.$transaction.mockImplementation(async (callback) => callback(tx));
-    mocks.credits.estimateGeneration.mockReturnValue({
-      reservation: { customerCredits: 10n },
-      units: 3,
-      billableQuantity: 2048,
+      chargedCredits: 4,
     });
-    mocks.credits.priceCredits.mockReturnValue(5n);
-
-    const providerWithoutUsage = {
-      name: "byteplus" as const,
-      listModels: vi.fn(),
-      getJob: vi.fn(),
-      cancel: vi.fn(),
-      submit: vi.fn().mockResolvedValue({
-        providerRequestId: "req_fallback",
-        status: "succeeded" as const,
-        textOutput: { content: "Generated without usage telemetry." },
-      }),
-    };
-
-    const result = await executeTextGeneration(
-      "user_1",
-      {
-        organizationId: "org_1",
-        modelId: "m_1",
-        priceVersionId: "pv_1",
-        idempotencyKey: "123e4567-e89b-12d3-a456-426614174098",
-        messages: [{ role: "user" as const, content: "Generate." }],
-        maxTokens: 2048,
-      },
-      { provider: providerWithoutUsage },
-    );
-
-    expect(result.status).toBe("SUCCEEDED");
-    expect(result.usage).toBeUndefined();
-    expect(result.chargedCredits).toBe(10);
-    expect(mocks.credits.captureCreditsForJob).toHaveBeenCalledWith(
-      tx,
-      expect.objectContaining({
-        jobId: submittedJob.id,
-        amountCredits: 10n,
-        metadata: expect.objectContaining({ usageFallback: true }),
-      }),
-    );
   });
 
-  it("preserves credits for reconciliation when provider outcome is unknown", async () => {
-    const tx = {
-      $queryRaw: vi.fn(),
-      membership: {
-        findUnique: vi.fn().mockResolvedValue({
-          role: "ORGANIZATION_MEMBER",
-          monthlySpendingCapCredits: null,
-          organization: { status: "ACTIVE" },
-          user: { disabledAt: null, emailVerified: true },
-        }),
-      },
-      generationTemplate: { findFirst: vi.fn() },
-      generationJob: {
-        findUnique: vi.fn().mockResolvedValue(null),
-        findUniqueOrThrow: vi.fn().mockResolvedValue({
-          status: "PROCESSING",
-        }),
-        create: vi.fn().mockResolvedValue({ id: "job_text_1" }),
-        update: vi
-          .fn()
-          .mockResolvedValue({ id: "job_text_1", status: "SUBMITTED" }),
-        aggregate: vi.fn().mockResolvedValue({
-          _sum: { chargedCredits: 0n, reservedCredits: 0n },
-        }),
-      },
-      providerModel: {
-        findFirst: vi.fn().mockResolvedValue({
-          id: "m_1",
-          providerModelId: "doubao-seed-character-260628",
-          enabled: true,
-          priceVersions: [
-            {
-              id: "pv_1",
-              providerCostMicroUsd: 1000n,
-              pricingDimension: "TOKEN",
-              unitQuantity: 1000,
-            },
-          ],
-        }),
-      },
-      project: { findUnique: vi.fn() },
-      wallet: {
-        findUnique: vi.fn().mockResolvedValue({ id: "wallet_1" }),
-      },
-      auditEvent: {
-        create: vi.fn(),
-      },
-    };
-
-    mocks.db.$transaction.mockImplementation(async (callback) => callback(tx));
-    mocks.credits.estimateGeneration.mockReturnValue({
-      reservation: { customerCredits: 10n },
-      units: 1,
-      billableQuantity: 1000,
-    });
-
-    const mockFailingProvider = {
-      name: "byteplus" as const,
-      listModels: vi.fn(),
-      getJob: vi.fn(),
-      cancel: vi.fn(),
-      submit: vi.fn().mockRejectedValue(new Error("Provider API timeout")),
-    };
-
-    const validPayload = {
-      organizationId: "org_1",
-      modelId: "m_1",
-      priceVersionId: "pv_1",
-      idempotencyKey: "123e4567-e89b-12d3-a456-426614174001",
-      messages: [{ role: "user" as const, content: "Greetings!" }],
-      temperature: 0.7,
-      maxTokens: 1024,
-    };
-
-    await expect(
-      executeTextGeneration("user_1", validPayload, {
-        provider: mockFailingProvider,
+  it("surfaces terminal failures without pretending they are pending", () => {
+    expect(() =>
+      textResultFromJob({
+        id: "job_2",
+        status: "FAILED",
+        outputPayload: null,
+        chargedCredits: 0n,
+        errorMessage: "Provider rejected request.",
       }),
-    ).rejects.toThrow("provider response timed out");
-
-    expect(mocks.credits.releaseOrRefundCredits).not.toHaveBeenCalled();
-    expect(mocks.db.generationJob.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: "job_text_1", status: "SUBMITTED" },
-        data: expect.objectContaining({
-          status: "MANUAL_REVIEW",
-          errorCode: "PROVIDER_OUTCOME_UNKNOWN",
-        }),
-      }),
-    );
+    ).toThrow("Provider rejected request.");
   });
 });

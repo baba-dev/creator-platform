@@ -1,20 +1,44 @@
-import { randomUUID } from "node:crypto";
 import { hasOrganizationPermission } from "@aiwa/authz";
 import { db } from "@aiwa/db";
-import { executeTextGeneration, GenerationError } from "@aiwa/generation";
+import {
+  createTextJob,
+  GenerationError,
+  textResultFromJob,
+} from "@aiwa/generation";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
+import {
+  assertQuotedTextModel,
+  issueTextFeatureQuote,
+} from "@/lib/text-feature-generation";
 
-const brandGenerateSchema = z.object({
-  organizationId: z.string().min(1),
-  brandName: z.string().min(1).max(100),
-  industry: z.string().max(100).optional(),
-  vision: z.string().max(1000).optional(),
-  targetMarket: z.string().max(200).optional(),
-  modelId: z.string().min(1).max(100).optional(),
-});
+const brandGenerateSchema = z
+  .object({
+    organizationId: z.string().min(1),
+    brandName: z.string().min(1).max(100),
+    industry: z.string().max(100).optional(),
+    vision: z.string().max(1000).optional(),
+    targetMarket: z.string().max(200).optional(),
+    modelId: z.string().min(1).max(100).optional(),
+    mode: z.enum(["quote", "generate"]).default("generate"),
+    idempotencyKey: z.uuid(),
+    quoteToken: z.string().min(1).max(2048).optional(),
+    quotedModelId: z.string().min(1).max(100).optional(),
+    priceVersionId: z.string().min(1).max(100).optional(),
+  })
+  .superRefine((value, context) => {
+    if (
+      value.mode === "generate" &&
+      (!value.quoteToken || !value.quotedModelId || !value.priceVersionId)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "A fresh generation quote is required.",
+      });
+    }
+  });
 
 const generatedBrandProfileSchema = z.object({
   tagline: z.string().max(200).default(""),
@@ -37,21 +61,17 @@ You must return only a valid JSON object with the following keys:
 Do not wrap in markdown fences. Return only raw valid JSON.`;
 
 export async function POST(request: Request) {
-  if (!hasTrustedMutationOrigin(request)) {
+  if (!hasTrustedMutationOrigin(request))
     return NextResponse.json({ error: "Origin not allowed." }, { status: 403 });
-  }
   const session = await getRequestSession(request.headers);
-  if (!session) {
+  if (!session)
     return NextResponse.json(
       { error: "Authentication required." },
       { status: 401 },
     );
-  }
 
   try {
-    const json = await request.json();
-    const input = brandGenerateSchema.parse(json);
-
+    const input = brandGenerateSchema.parse(await request.json());
     const membership = await db.membership.findUnique({
       where: {
         organizationId_userId: {
@@ -65,108 +85,82 @@ export async function POST(request: Request) {
       !membership ||
       membership.organization.status !== "ACTIVE" ||
       !hasOrganizationPermission(membership.role, "generation:create")
-    ) {
+    )
       return NextResponse.json({ error: "Access denied." }, { status: 403 });
-    }
 
-    const preferredModel = input.modelId || "seed-2-0-pro-260328";
-    const now = new Date();
-    let model = await db.providerModel.findFirst({
-      where: {
-        provider: "BYTEPLUS",
-        providerModelId: preferredModel,
-        mediaKind: "TEXT",
-        enabled: true,
-      },
-      include: {
-        priceVersions: {
-          where: {
-            effectiveFrom: { lte: now },
-            OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
-          },
-          orderBy: { effectiveFrom: "desc" },
-          take: 1,
-        },
-      },
-    });
-
-    if (!model || !model.priceVersions[0]) {
-      model = await db.providerModel.findFirst({
-        where: { provider: "BYTEPLUS", mediaKind: "TEXT", enabled: true },
-        include: {
-          priceVersions: {
-            where: {
-              effectiveFrom: { lte: now },
-              OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
-            },
-            orderBy: { effectiveFrom: "desc" },
-            take: 1,
-          },
-        },
-      });
-    }
-
-    if (!model || !model.priceVersions[0]) {
-      return NextResponse.json(
-        { error: "No text models are currently enabled." },
-        { status: 503 },
-      );
-    }
-
+    const providerModelId = input.modelId || "seed-2-0-pro-260328";
     const userPromptContent = `Brand Name: ${input.brandName}
 ${input.industry ? `Industry: ${input.industry}` : ""}
 ${input.vision ? `Vision / Mission: ${input.vision}` : ""}
 ${input.targetMarket ? `Target Market: ${input.targetMarket}` : ""}`;
+    const messages = [
+      { role: "system" as const, content: BRAND_STRATEGIST_SYSTEM_PROMPT },
+      { role: "user" as const, content: userPromptContent },
+    ];
+    const maxTokens = 2048;
 
-    const idempotencyKey = randomUUID();
-    const genResult = await executeTextGeneration(session.user.id, {
+    if (input.mode === "quote") {
+      const quote = await issueTextFeatureQuote({
+        organizationId: input.organizationId,
+        userId: session.user.id,
+        providerModelId,
+        messages,
+        maxTokens,
+      });
+      return NextResponse.json({ quote });
+    }
+
+    await assertQuotedTextModel(input.quotedModelId!, providerModelId);
+    const job = await createTextJob(session.user.id, {
       organizationId: input.organizationId,
-      modelId: model.id,
-      priceVersionId: model.priceVersions[0].id,
-      idempotencyKey,
-      messages: [
-        { role: "system", content: BRAND_STRATEGIST_SYSTEM_PROMPT },
-        { role: "user", content: userPromptContent },
-      ],
+      modelId: input.quotedModelId,
+      priceVersionId: input.priceVersionId,
+      quoteToken: input.quoteToken,
+      idempotencyKey: input.idempotencyKey,
+      messages,
       temperature: 0.7,
-      maxTokens: 2048,
+      maxTokens,
     });
+    const result = textResultFromJob(job);
+    if (!result)
+      return NextResponse.json(
+        { jobId: job.id, status: job.status, pending: true },
+        { status: 202 },
+      );
 
     let parsedResult;
     try {
-      const cleanJson = genResult.content
-        .replace(/^```json\s*/i, "")
-        .replace(/```\s*$/i, "")
+      const cleanJson = result.content
+        .replace(/^\`\`\`json\s*/i, "")
+        .replace(/\`\`\`\s*$/i, "")
         .trim();
       parsedResult = generatedBrandProfileSchema.parse(JSON.parse(cleanJson));
     } catch {
       parsedResult = {
         tagline: "",
-        voiceTone: genResult.content,
+        voiceTone: result.content,
         guidelines: "",
         targetAudience: "",
         vocabulary: [],
       };
     }
-
     return NextResponse.json({
       profile: parsedResult,
-      rawContent: genResult.content,
-      chargedCredits: genResult.chargedCredits,
+      rawContent: result.content,
+      chargedCredits: result.chargedCredits,
+      jobId: result.jobId,
     });
   } catch (error) {
-    if (error instanceof z.ZodError) {
+    if (error instanceof z.ZodError)
       return NextResponse.json(
         { error: "Invalid brand generation parameters.", issues: error.issues },
         { status: 400 },
       );
-    }
-    if (error instanceof GenerationError) {
+    if (error instanceof GenerationError)
       return NextResponse.json(
         { error: error.message },
         { status: error.status },
       );
-    }
     return NextResponse.json(
       { error: "Brand generation failed." },
       { status: 502 },

@@ -1,20 +1,44 @@
-import { randomUUID } from "node:crypto";
 import { hasOrganizationPermission } from "@aiwa/authz";
 import { db } from "@aiwa/db";
-import { executeTextGeneration, GenerationError } from "@aiwa/generation";
+import {
+  createTextJob,
+  GenerationError,
+  textResultFromJob,
+} from "@aiwa/generation";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
+import {
+  assertQuotedTextModel,
+  issueTextFeatureQuote,
+} from "@/lib/text-feature-generation";
 
-const scriptGenerateSchema = z.object({
-  prompt: z.string().min(1).max(2000),
-  action: z
-    .enum(["continue", "dialogue", "polish", "scene"])
-    .default("dialogue"),
-  currentScene: z.string().max(4000).optional(),
-  targetTone: z.string().max(200).optional(),
-  modelId: z.string().min(1).max(100).optional(),
+const scriptGenerateSchema = z
+  .object({
+    prompt: z.string().min(1).max(2000),
+    action: z
+      .enum(["continue", "dialogue", "polish", "scene"])
+      .default("dialogue"),
+    currentScene: z.string().max(4000).optional(),
+    targetTone: z.string().max(200).optional(),
+    modelId: z.string().min(1).max(100).optional(),
+  mode: z.enum(["quote", "generate"]).default("generate"),
+  idempotencyKey: z.uuid(),
+  quoteToken: z.string().min(1).max(2048).optional(),
+  quotedModelId: z.string().min(1).max(100).optional(),
+  priceVersionId: z.string().min(1).max(100).optional(),
+  })
+  .superRefine((value, context) => {
+  if (
+    value.mode === "generate" &&
+    (!value.quoteToken || !value.quotedModelId || !value.priceVersionId)
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "A fresh generation quote is required.",
+    });
+  }
 });
 
 const SCRIPTWRITER_SYSTEM_PROMPT = `You are an expert Hollywood and commercial screenplay writer and script consultant.
@@ -30,30 +54,25 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ scriptId: string }> },
 ) {
-  if (!hasTrustedMutationOrigin(request)) {
+  if (!hasTrustedMutationOrigin(request))
     return NextResponse.json({ error: "Origin not allowed." }, { status: 403 });
-  }
   const session = await getRequestSession(request.headers);
-  if (!session) {
+  if (!session)
     return NextResponse.json(
       { error: "Authentication required." },
       { status: 401 },
     );
-  }
   const { scriptId } = await params;
 
   try {
-    const script = await db.script.findUnique({
-      where: { id: scriptId },
-    });
-    if (!script) {
+    const scriptRow = await db.script.findUnique({ where: { id: scriptId } });
+    if (!scriptRow)
       return NextResponse.json({ error: "Script not found." }, { status: 404 });
-    }
 
     const membership = await db.membership.findUnique({
       where: {
         organizationId_userId: {
-          organizationId: script.organizationId,
+          organizationId: scriptRow.organizationId,
           userId: session.user.id,
         },
       },
@@ -63,60 +82,14 @@ export async function POST(
       !membership ||
       membership.organization.status !== "ACTIVE" ||
       !hasOrganizationPermission(membership.role, "generation:create")
-    ) {
+    )
       return NextResponse.json({ error: "Access denied." }, { status: 403 });
-    }
 
-    const json = await request.json();
-    const input = scriptGenerateSchema.parse(json);
-
-    const preferredModel = input.modelId || "seed-2-0-lite-260428";
-    const now = new Date();
-    let model = await db.providerModel.findFirst({
-      where: {
-        provider: "BYTEPLUS",
-        providerModelId: preferredModel,
-        mediaKind: "TEXT",
-        enabled: true,
-      },
-      include: {
-        priceVersions: {
-          where: {
-            effectiveFrom: { lte: now },
-            OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
-          },
-          orderBy: { effectiveFrom: "desc" },
-          take: 1,
-        },
-      },
-    });
-
-    if (!model || !model.priceVersions[0]) {
-      model = await db.providerModel.findFirst({
-        where: { provider: "BYTEPLUS", mediaKind: "TEXT", enabled: true },
-        include: {
-          priceVersions: {
-            where: {
-              effectiveFrom: { lte: now },
-              OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
-            },
-            orderBy: { effectiveFrom: "desc" },
-            take: 1,
-          },
-        },
-      });
-    }
-
-    if (!model || !model.priceVersions[0]) {
-      return NextResponse.json(
-        { error: "No text models are currently enabled." },
-        { status: 503 },
-      );
-    }
-
+    const input = scriptGenerateSchema.parse(await request.json());
+    const providerModelId = input.modelId || "seed-2-0-lite-260428";
     const userPromptContent = [
-      `Script Title: ${script.title}`,
-      script.logline ? `Logline: ${script.logline}` : null,
+      `Script Title: ${scriptRow.title}`,
+      scriptRow.logline ? `Logline: ${scriptRow.logline}` : null,
       input.targetTone ? `Target Tone: ${input.targetTone}` : null,
       input.currentScene
         ? `Current Scene Context:\n${input.currentScene}`
@@ -126,29 +99,49 @@ export async function POST(
     ]
       .filter(Boolean)
       .join("\n\n");
+    const messages = [
+      { role: "system" as const, content: SCRIPTWRITER_SYSTEM_PROMPT },
+      { role: "user" as const, content: userPromptContent },
+    ];
+    const maxTokens = 2048;
 
-    const idempotencyKey = randomUUID();
-    const genResult = await executeTextGeneration(session.user.id, {
-      organizationId: script.organizationId,
-      projectId: script.projectId,
-      modelId: model.id,
-      priceVersionId: model.priceVersions[0].id,
-      idempotencyKey,
-      messages: [
-        { role: "system", content: SCRIPTWRITER_SYSTEM_PROMPT },
-        { role: "user", content: userPromptContent },
-      ],
+    if (input.mode === "quote") {
+      const quote = await issueTextFeatureQuote({
+        organizationId: scriptRow.organizationId,
+        userId: session.user.id,
+        providerModelId,
+        messages,
+        maxTokens,
+      });
+      return NextResponse.json({ quote });
+    }
+
+    await assertQuotedTextModel(input.quotedModelId!, providerModelId);
+    const job = await createTextJob(session.user.id, {
+      organizationId: scriptRow.organizationId,
+      projectId: scriptRow.projectId,
+      modelId: input.quotedModelId,
+      priceVersionId: input.priceVersionId,
+      quoteToken: input.quoteToken,
+      idempotencyKey: input.idempotencyKey,
+      messages,
       temperature: 0.75,
-      maxTokens: 2048,
+      maxTokens,
     });
-
+    const result = textResultFromJob(job);
+    if (!result)
+      return NextResponse.json(
+        { jobId: job.id, status: job.status, pending: true },
+        { status: 202 },
+      );
     return NextResponse.json({
-      content: genResult.content,
-      usage: genResult.usage,
-      chargedCredits: genResult.chargedCredits,
+      content: result.content,
+      usage: result.usage,
+      chargedCredits: result.chargedCredits,
+      jobId: result.jobId,
     });
   } catch (error) {
-    if (error instanceof z.ZodError) {
+    if (error instanceof z.ZodError)
       return NextResponse.json(
         {
           error: "Invalid screenplay generation parameters.",
@@ -156,13 +149,11 @@ export async function POST(
         },
         { status: 400 },
       );
-    }
-    if (error instanceof GenerationError) {
+    if (error instanceof GenerationError)
       return NextResponse.json(
         { error: error.message },
         { status: error.status },
       );
-    }
     return NextResponse.json(
       { error: "Script generation failed." },
       { status: 502 },

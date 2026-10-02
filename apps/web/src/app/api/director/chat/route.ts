@@ -1,25 +1,49 @@
-import { randomUUID } from "node:crypto";
 import { hasOrganizationPermission } from "@aiwa/authz";
 import { db } from "@aiwa/db";
-import { executeTextGeneration, GenerationError } from "@aiwa/generation";
+import {
+  createTextJob,
+  GenerationError,
+  textResultFromJob,
+} from "@aiwa/generation";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
+import {
+  assertQuotedTextModel,
+  issueTextFeatureQuote,
+} from "@/lib/text-feature-generation";
 
-const directorChatSchema = z.object({
-  organizationId: z.string().min(1),
-  messages: z
-    .array(
-      z.object({
-        role: z.enum(["user", "assistant", "system"]),
-        content: z.string().min(1).max(5000),
-      }),
-    )
-    .min(1)
-    .max(49),
-  modelId: z.string().min(1).max(100).optional(),
-  temperature: z.number().min(0).max(2).optional(),
+const directorChatSchema = z
+  .object({
+    organizationId: z.string().min(1),
+    messages: z
+      .array(
+        z.object({
+          role: z.enum(["user", "assistant", "system"]),
+          content: z.string().min(1).max(5000),
+        }),
+      )
+      .min(1)
+      .max(49),
+    modelId: z.string().min(1).max(100).optional(),
+    temperature: z.number().min(0).max(2).optional(),
+  mode: z.enum(["quote", "generate"]).default("generate"),
+  idempotencyKey: z.uuid(),
+  quoteToken: z.string().min(1).max(2048).optional(),
+  quotedModelId: z.string().min(1).max(100).optional(),
+  priceVersionId: z.string().min(1).max(100).optional(),
+  })
+  .superRefine((value, context) => {
+  if (
+    value.mode === "generate" &&
+    (!value.quoteToken || !value.quotedModelId || !value.priceVersionId)
+  ) {
+    context.addIssue({
+      code: "custom",
+      message: "A fresh generation quote is required.",
+    });
+  }
 });
 
 const DIRECTOR_SYSTEM_PROMPT = `You are the Lead Creative Director at Aiwa Creator, an elite AI media studio.
@@ -34,21 +58,17 @@ When brainstorming or refining ideas:
 3. Be concise, actionable, and visually evocative. Ground concepts in high production value.`;
 
 export async function POST(request: Request) {
-  if (!hasTrustedMutationOrigin(request)) {
+  if (!hasTrustedMutationOrigin(request))
     return NextResponse.json({ error: "Origin not allowed." }, { status: 403 });
-  }
   const session = await getRequestSession(request.headers);
-  if (!session) {
+  if (!session)
     return NextResponse.json(
       { error: "Authentication required." },
       { status: 401 },
     );
-  }
 
   try {
-    const json = await request.json();
-    const input = directorChatSchema.parse(json);
-
+    const input = directorChatSchema.parse(await request.json());
     const membership = await db.membership.findUnique({
       where: {
         organizationId_userId: {
@@ -58,102 +78,68 @@ export async function POST(request: Request) {
       },
       include: { organization: true },
     });
-
     if (
       !membership ||
       membership.organization.status !== "ACTIVE" ||
       !hasOrganizationPermission(membership.role, "generation:create")
-    ) {
+    )
       return NextResponse.json({ error: "Access denied." }, { status: 403 });
-    }
 
-    const preferredModel = input.modelId || "dola-seed-2-1-turbo-260628";
-    const now = new Date();
-    let model = await db.providerModel.findFirst({
-      where: {
-        provider: "BYTEPLUS",
-        providerModelId: preferredModel,
-        mediaKind: "TEXT",
-        enabled: true,
-      },
-      include: {
-        priceVersions: {
-          where: {
-            effectiveFrom: { lte: now },
-            OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
-          },
-          orderBy: { effectiveFrom: "desc" },
-          take: 1,
-        },
-      },
-    });
-
-    if (!model || !model.priceVersions[0]) {
-      // Fallback to any enabled text model
-      model = await db.providerModel.findFirst({
-        where: {
-          provider: "BYTEPLUS",
-          mediaKind: "TEXT",
-          enabled: true,
-        },
-        include: {
-          priceVersions: {
-            where: {
-              effectiveFrom: { lte: now },
-              OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
-            },
-            orderBy: { effectiveFrom: "desc" },
-            take: 1,
-          },
-        },
-      });
-    }
-
-    if (!model || !model.priceVersions[0]) {
-      return NextResponse.json(
-        { error: "No text models are currently enabled." },
-        { status: 503 },
-      );
-    }
-
-    const messagesPayload: Array<{
-      role: "system" | "user" | "assistant";
-      content: string;
-    }> = [
-      { role: "system", content: DIRECTOR_SYSTEM_PROMPT },
+    const providerModelId =
+      input.modelId || "dola-seed-2-1-turbo-260628";
+    const messages = [
+      { role: "system" as const, content: DIRECTOR_SYSTEM_PROMPT },
       ...input.messages,
     ];
+    const maxTokens = 2500;
+    const temperature = input.temperature ?? 0.7;
 
-    const idempotencyKey = randomUUID();
-    const genResult = await executeTextGeneration(session.user.id, {
+    if (input.mode === "quote") {
+      const quote = await issueTextFeatureQuote({
+        organizationId: input.organizationId,
+        userId: session.user.id,
+        providerModelId,
+        messages,
+        maxTokens,
+      });
+      return NextResponse.json({ quote });
+    }
+
+    await assertQuotedTextModel(input.quotedModelId!, providerModelId);
+    const job = await createTextJob(session.user.id, {
       organizationId: input.organizationId,
-      modelId: model.id,
-      priceVersionId: model.priceVersions[0].id,
-      idempotencyKey,
-      messages: messagesPayload,
-      temperature: input.temperature ?? 0.7,
-      maxTokens: 2500,
+      modelId: input.quotedModelId,
+      priceVersionId: input.priceVersionId,
+      quoteToken: input.quoteToken,
+      idempotencyKey: input.idempotencyKey,
+      messages,
+      temperature,
+      maxTokens,
     });
-
+    const result = textResultFromJob(job);
+    if (!result)
+      return NextResponse.json(
+        { jobId: job.id, status: job.status, pending: true },
+        { status: 202 },
+      );
     return NextResponse.json({
       role: "assistant",
-      content: genResult.content,
-      usage: genResult.usage,
-      chargedCredits: genResult.chargedCredits,
+      content: result.content,
+      usage: result.usage,
+      chargedCredits: result.chargedCredits,
+      jobId: result.jobId,
     });
   } catch (error) {
-    if (error instanceof z.ZodError) {
+    if (error instanceof z.ZodError)
       return NextResponse.json(
         { error: "Invalid director request.", issues: error.issues },
         { status: 400 },
       );
-    }
-    if (error instanceof GenerationError) {
+    if (error instanceof GenerationError)
       return NextResponse.json(
         { error: error.message },
         { status: error.status },
       );
-    }
     return NextResponse.json(
       { error: "Director request failed." },
       { status: 502 },

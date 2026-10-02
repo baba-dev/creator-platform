@@ -67,13 +67,13 @@ instead of reactivating mutable code.
 
 Create a GitHub environment named `staging` with:
 
-| Secret                    | Value                                             |
-| ------------------------- | ------------------------------------------------- |
-| `STAGING_SSH_HOST`        | `129.151.137.222`                                 |
-| `STAGING_SSH_PORT`        | `22`                                              |
-| `STAGING_SSH_USER`        | `creator-deploy`                                  |
-| `STAGING_SSH_KEY`         | Dedicated ED25519 private key                     |
-| `STAGING_SSH_FINGERPRINT` | SHA256 fingerprint of a trusted server host key   |
+| Secret                    | Value                                           |
+| ------------------------- | ----------------------------------------------- |
+| `STAGING_SSH_HOST`        | `129.151.137.222`                               |
+| `STAGING_SSH_PORT`        | `22`                                            |
+| `STAGING_SSH_USER`        | `creator-deploy`                                |
+| `STAGING_SSH_KEY`         | Dedicated ED25519 private key                   |
+| `STAGING_SSH_FINGERPRINT` | SHA256 fingerprint of a trusted server host key |
 
 Do not use a root or general-purpose administrator SSH key. The dedicated
 `creator-deploy` user receives permission to run only the validated deployment

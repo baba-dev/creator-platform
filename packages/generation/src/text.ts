@@ -108,7 +108,7 @@ export function normalizeTextMessagesForModel(
           "The latest message is too large for this model's context window.",
           400,
         );
-      continue;
+      break;
     }
     selected.push(message);
     used += cost;

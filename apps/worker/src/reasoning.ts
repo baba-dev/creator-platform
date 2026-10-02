@@ -130,8 +130,7 @@ function resolveReasoningProvider(
         return createGroqProvider({
           apiKey: env.GROQ_API_KEY,
           baseUrl: env.GROQ_BASE_URL,
-          defaultModel:
-            env.GROQ_DEFAULT_MODEL || "openai/gpt-oss-120b",
+          defaultModel: env.GROQ_DEFAULT_MODEL || "openai/gpt-oss-120b",
           requestTimeoutMs: env.GROQ_REQUEST_TIMEOUT_MS,
           idleTimeoutMs: env.GROQ_IDLE_TIMEOUT_MS,
         });

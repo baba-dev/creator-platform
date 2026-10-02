@@ -223,7 +223,9 @@ const geminiProvider =
       })
     : null;
 const cloudflareProvider =
-  externalProviderRole && env.CLOUDFLARE_API_TOKEN && env.CLOUDFLARE_ACCOUNT_ID
+  externalProviderRole &&
+  env.CLOUDFLARE_API_TOKEN &&
+  env.CLOUDFLARE_ACCOUNT_ID
     ? createCloudflareAiProvider({
         apiToken: env.CLOUDFLARE_API_TOKEN,
         accountId: env.CLOUDFLARE_ACCOUNT_ID,
@@ -353,7 +355,9 @@ const generationWorker = createWorker(
             await processTextJob(job.data.jobId, cloudflareProvider);
             return;
           default:
-            throw new Error("Selected provider does not support text generation");
+            throw new Error(
+              "Selected provider does not support text generation",
+            );
         }
       }
       default:

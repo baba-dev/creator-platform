@@ -7,6 +7,22 @@ import { NextResponse } from "next/server";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
 
+const PROVIDER_ENUM = {
+  byteplus: "BYTEPLUS",
+  nvidia: "NVIDIA",
+  groq: "GROQ",
+  gemini: "GEMINI",
+  cloudflare: "CLOUDFLARE",
+} as const;
+
+const MEDIA_KIND_ENUM = {
+  image: "IMAGE",
+  video: "VIDEO",
+  voice: "VOICE",
+  text: "TEXT",
+  reasoning: "REASONING",
+} as const;
+
 export async function POST(request: Request): Promise<NextResponse> {
   if (!hasTrustedMutationOrigin(request)) {
     return NextResponse.json({ error: "Origin not allowed." }, { status: 403 });
@@ -30,18 +46,8 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     let syncedCount = 0;
     for (const model of VERIFIED_ALL_MODELS) {
-      const provider = model.provider.toUpperCase() as
-        | "BYTEPLUS"
-        | "NVIDIA"
-        | "GROQ"
-        | "GEMINI"
-        | "CLOUDFLARE";
-      const mediaKind = model.mediaKind.toUpperCase() as
-        | "IMAGE"
-        | "VIDEO"
-        | "VOICE"
-        | "TEXT"
-        | "REASONING";
+      const provider = PROVIDER_ENUM[model.provider];
+      const mediaKind = MEDIA_KIND_ENUM[model.mediaKind];
       await db.providerModel.upsert({
         where: {
           provider_providerModelId: {

@@ -6,7 +6,11 @@
   "exports": {
     ".": "./src/index.ts",
     "./byteplus": "./src/byteplus/index.ts",
-    "./nvidia": "./src/nvidia/index.ts"
+    "./nvidia": "./src/nvidia/index.ts",
+    "./groq": "./src/groq/index.ts",
+    "./gemini": "./src/gemini/index.ts",
+    "./cloudflare": "./src/cloudflare/index.ts",
+    "./catalog": "./src/catalog.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",

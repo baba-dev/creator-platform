@@ -18,6 +18,7 @@ describe("text and voice workspace validation contracts", () => {
 
   it("round-trips durable screenplay voice metadata", () => {
     const parsed = scriptUpdateSchema.parse({
+      expectedRevision: 1,
       content: {
         scenes: [
           {

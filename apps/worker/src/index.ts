@@ -177,9 +177,9 @@ const hasBytePlus =
   owns("generation") &&
   Boolean(
     env.BYTEPLUS_API_KEY ||
-      env.BYTEPLUS_SPEECH_API_KEY ||
-      (env.BYTEPLUS_VISION_ACCESS_KEY_ID &&
-        env.BYTEPLUS_VISION_SECRET_ACCESS_KEY),
+    env.BYTEPLUS_SPEECH_API_KEY ||
+    (env.BYTEPLUS_VISION_ACCESS_KEY_ID &&
+      env.BYTEPLUS_VISION_SECRET_ACCESS_KEY),
   );
 const bytePlusProvider = hasBytePlus
   ? createBytePlusProvider({

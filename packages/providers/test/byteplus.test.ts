@@ -187,9 +187,7 @@ describe("BytePlus provider adapter", () => {
       "content-type": "application/json",
       "x-content-sha256": expect.stringMatching(/^[a-f0-9]{64}$/),
       "x-date": expect.stringMatching(/^\d{8}T\d{6}Z$/),
-      authorization: expect.stringContaining(
-        "Credential=test-access-key/",
-      ),
+      authorization: expect.stringContaining("Credential=test-access-key/"),
     });
     expect(JSON.stringify(init.headers)).not.toContain("test-secret-key");
     expect(JSON.parse(init.body as string)).toEqual({

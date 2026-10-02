@@ -25,7 +25,9 @@ export function inspectTalkingAvatarSources(
   assets: ReadonlyMap<string, TalkingAvatarAssetSnapshot>,
 ): TalkingAvatarSourceFacts {
   if (request.workflow !== "TALKING_AVATAR") {
-    throw new RangeError("Talking-avatar source inspection requires its workflow.");
+    throw new RangeError(
+      "Talking-avatar source inspection requires its workflow.",
+    );
   }
 
   const avatarSource = request.sources.find(

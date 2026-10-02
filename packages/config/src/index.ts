@@ -111,7 +111,9 @@ export const serverEnvSchema = z.object({
   BYTEPLUS_MODELARK_BASE_URL: optionalHttpsUrl,
   BYTEPLUS_VISION_ACCESS_KEY_ID: optionalString,
   BYTEPLUS_VISION_SECRET_ACCESS_KEY: optionalString,
-  BYTEPLUS_VISION_BASE_URL: optionalHttpsUrl.default("https://cv.byteplusapi.com"),
+  BYTEPLUS_VISION_BASE_URL: optionalHttpsUrl.default(
+    "https://cv.byteplusapi.com",
+  ),
   BYTEPLUS_SPEECH_API_KEY: optionalString,
   BYTEPLUS_SPEECH_APP_KEY: optionalString,
   BYTEPLUS_SPEECH_BASE_URL: optionalHttpsUrl,

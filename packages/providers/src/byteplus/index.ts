@@ -79,9 +79,7 @@ export function isBytePlusVisionConfigured(
     config.BYTEPLUS_VISION_ACCESS_KEY_ID) as string | undefined;
   const secretAccessKey = (config.visionSecretAccessKey ??
     config.BYTEPLUS_VISION_SECRET_ACCESS_KEY) as string | undefined;
-  return Boolean(
-    accessKeyId?.trim().length && secretAccessKey?.trim().length,
-  );
+  return Boolean(accessKeyId?.trim().length && secretAccessKey?.trim().length);
 }
 
 export function isBytePlusVoiceConfigured(

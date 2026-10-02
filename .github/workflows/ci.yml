@@ -48,31 +48,6 @@ jobs:
           bash -n infra/deploy/creator-ops
           bash -n infra/deploy/package-release.sh
 
-      - name: Capture canonical OmniHuman formatting
-        if: github.head_ref == 'feat/byteplus-seedance-2-mini-fast'
-        shell: bash
-        run: |
-          set -euo pipefail
-          files=(
-            'apps/web/src/components/studio/generation-studio.tsx'
-            'apps/worker/src/index.ts'
-            'apps/worker/test/provider-concurrency.test.ts'
-            'packages/config/src/index.ts'
-            'packages/credits/test/usage.test.ts'
-            'packages/generation/src/index.ts'
-            'packages/generation/src/talking-avatar.ts'
-            'packages/generation/src/video-contract.ts'
-            'packages/providers/src/byteplus/index.ts'
-            'packages/providers/src/byteplus/vision.ts'
-            'packages/providers/test/byteplus.test.ts'
-          )
-          pnpm exec prettier --write "${files[@]}"
-          for file in "${files[@]}"; do
-            printf 'OMNI_FORMAT_BEGIN:%s\n' "$file"
-            base64 -w0 "$file"
-            printf '\nOMNI_FORMAT_END:%s\n' "$file"
-          done
-
       - name: Check formatting
         run: pnpm format:check
 

@@ -56,14 +56,19 @@ const resultDataSchema = z.object({
     "expired",
     "canceled",
   ]),
-  resp_data: z.union([z.string(), z.record(z.string(), z.unknown())]).optional(),
+  resp_data: z
+    .union([z.string(), z.record(z.string(), z.unknown())])
+    .optional(),
 });
 
 const resultPayloadSchema = z
   .object({
     video_url: z
       .url()
-      .refine((value) => new URL(value).protocol === "https:", "HTTPS URL required")
+      .refine(
+        (value) => new URL(value).protocol === "https:",
+        "HTTPS URL required",
+      )
       .optional(),
   })
   .passthrough();
@@ -107,9 +112,7 @@ export function createVisionAuthorizationHeaders(input: {
   const payloadHash = sha256Hex(input.body);
   const query = [...input.url.searchParams.entries()]
     .sort(([aKey, aValue], [bKey, bValue]) =>
-      aKey === bKey
-        ? aValue.localeCompare(bValue)
-        : aKey.localeCompare(bKey),
+      aKey === bKey ? aValue.localeCompare(bValue) : aKey.localeCompare(bKey),
     )
     .map(
       ([key, value]) =>
@@ -131,8 +134,7 @@ export function createVisionAuthorizationHeaders(input: {
     signedHeaders,
     payloadHash,
   ].join("\n");
-  const credentialScope =
-    `${shortDate}/${VISION_REGION}/${VISION_SERVICE}/request`;
+  const credentialScope = `${shortDate}/${VISION_REGION}/${VISION_SERVICE}/request`;
   const stringToSign = [
     "HMAC-SHA256",
     xDate,
@@ -141,12 +143,7 @@ export function createVisionAuthorizationHeaders(input: {
   ].join("\n");
   const signature = createHmac(
     "sha256",
-    signingKey(
-      input.secretAccessKey,
-      shortDate,
-      VISION_REGION,
-      VISION_SERVICE,
-    ),
+    signingKey(input.secretAccessKey, shortDate, VISION_REGION, VISION_SERVICE),
   )
     .update(stringToSign, "utf8")
     .digest("hex");
@@ -303,9 +300,7 @@ export async function submitOmniHumanVisionTask(
     );
   }
   const avatar = input.sources.find((source) => source.role === "AVATAR_IMAGE");
-  const audio = input.sources.find(
-    (source) => source.role === "DRIVING_AUDIO",
-  );
+  const audio = input.sources.find((source) => source.role === "DRIVING_AUDIO");
   if (!avatar || !audio || input.sources.length !== 2) {
     throw new ProviderRequestError(
       "OmniHuman requires one avatar image and one driving audio source",
@@ -374,10 +369,7 @@ export async function getOmniHumanVisionJob(
       errorCode: "PROVIDER_CANCELLED",
     };
   }
-  if (
-    data.data.status === "not_found" ||
-    data.data.status === "expired"
-  ) {
+  if (data.data.status === "not_found" || data.data.status === "expired") {
     return {
       providerRequestId,
       status: "failed",

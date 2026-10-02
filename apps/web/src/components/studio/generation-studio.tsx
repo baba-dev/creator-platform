@@ -630,7 +630,8 @@ export function GenerationStudio({
   useEffect(() => {
     if (activeMode !== "VIDEO") return;
     if (isTalkingAvatarModel) {
-      if (videoWorkflow !== "TALKING_AVATAR") setVideoWorkflow("TALKING_AVATAR");
+      if (videoWorkflow !== "TALKING_AVATAR")
+        setVideoWorkflow("TALKING_AVATAR");
       if (ratio !== "adaptive") setRatio("adaptive");
       if (generateAudio) setGenerateAudio(false);
       if (videoOutputFormat !== "mp4") setVideoOutputFormat("mp4");
@@ -789,8 +790,8 @@ export function GenerationStudio({
     if (
       variant !== "advanced" ||
       activeMode !== "VIDEO" ||
-      model?.capabilities?.referenceAudio !== true &&
-      model?.capabilities?.audioInput !== true
+      (model?.capabilities?.referenceAudio !== true &&
+        model?.capabilities?.audioInput !== true)
     )
       return;
     const controller = new AbortController();
@@ -941,9 +942,7 @@ export function GenerationStudio({
       setDrivingAudioId(body.asset.id);
     } catch (error) {
       setError(
-        error instanceof Error
-          ? error.message
-          : "Driving audio upload failed.",
+        error instanceof Error ? error.message : "Driving audio upload failed.",
       );
     } finally {
       setDrivingAudioBusy(false);
@@ -2235,9 +2234,7 @@ export function GenerationStudio({
                           />
                         </label>
                         <label className="inline-flex cursor-pointer rounded-xl border border-border px-3 py-2 text-xs font-semibold text-primary">
-                          {drivingAudioBusy
-                            ? "Uploading…"
-                            : "Upload MP3 / WAV"}
+                          {drivingAudioBusy ? "Uploading…" : "Upload MP3 / WAV"}
                           <input
                             type="file"
                             accept="audio/mpeg,audio/mp3,audio/wav,audio/x-wav"

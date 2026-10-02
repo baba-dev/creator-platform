@@ -306,5 +306,4 @@ describe("generation pricing policies", () => {
     expect(p720.quote.customerCredits).toBe(924n);
     expect(p1080.quote.customerCredits).toBe(924n);
   });
-
 });

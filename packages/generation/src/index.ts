@@ -304,7 +304,7 @@ export async function createImageJob(userId: string, raw: unknown) {
           existing.templateId !== templateId ||
           existing.providerModelId !== input.modelId ||
           existing.priceVersionId !== input.priceVersionId ||
-JSON.stringify(existing.requestPayload) !== JSON.stringify(payload)
+          JSON.stringify(existing.requestPayload) !== JSON.stringify(payload)
         ) {
           // JSON columns can reorder keys: compare canonical fields below.
           const old = existing.requestPayload as Partial<typeof payload>;
@@ -886,8 +886,7 @@ export async function createVideoJob(userId: string, raw: unknown) {
           pricingDurationSeconds = facts.billableDurationSeconds;
           pricingAspectRatio = "adaptive";
           pricingGenerateAudio = false;
-          payload.trustedDrivingAudioDurationMs =
-            facts.drivingAudioDurationMs;
+          payload.trustedDrivingAudioDurationMs = facts.drivingAudioDurationMs;
           payload.billableDurationSeconds = facts.billableDurationSeconds;
         } catch (error) {
           throw new GenerationError(

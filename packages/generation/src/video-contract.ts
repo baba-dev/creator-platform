@@ -180,7 +180,8 @@ export const videoRequestV2Schema = z
         context.addIssue({
           code: "custom",
           path: ["aspectRatio"],
-          message: "Talking-avatar generation uses the source image aspect ratio.",
+          message:
+            "Talking-avatar generation uses the source image aspect ratio.",
         });
       }
       if (value.durationSeconds !== -1) {
@@ -195,7 +196,8 @@ export const videoRequestV2Schema = z
         context.addIssue({
           code: "custom",
           path: ["generateAudio"],
-          message: "Talking-avatar audio is supplied by the driving audio source.",
+          message:
+            "Talking-avatar audio is supplied by the driving audio source.",
         });
       }
       if (value.outputFormat !== "mp4" || value.returnLastFrame) {

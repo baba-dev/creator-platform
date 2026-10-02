@@ -19,6 +19,7 @@ const items: { label: string; segment: string; icon: IconName }[] = [
   { label: "History", segment: "history", icon: "activity" },
   { label: "Assets", segment: "assets", icon: "assets" },
   { label: "Team", segment: "members", icon: "admin" },
+  { label: "Storage", segment: "storage", icon: "settings" },
 ];
 
 export function WorkspaceNavigation({ slug }: { slug: string }) {

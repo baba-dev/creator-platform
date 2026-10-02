@@ -3,6 +3,7 @@ import {
   normalizeAssetName,
   normalizeOriginalFilename,
   type AssetMediaKind,
+  type AssetStorageProvider,
 } from "./index";
 import {
   finalizeAssetStorage,
@@ -106,6 +107,7 @@ export async function createPendingUpload(
     byteSize: bigint;
     originalFilename: string;
     name?: string | null;
+    storageProvider?: AssetStorageProvider;
   },
 ) {
   await reserveAssetStorage(tx, {
@@ -125,7 +127,7 @@ export async function createPendingUpload(
       status: "PENDING",
       mediaKind: input.mediaKind,
       sourceType: "UPLOADED",
-      storageProvider: "LOCAL",
+      storageProvider: input.storageProvider ?? "LOCAL",
       name: normalizeAssetName(input.name, input.originalFilename),
       originalFilename: normalizeOriginalFilename(input.originalFilename),
       objectKey: input.objectKey,
@@ -175,6 +177,8 @@ export async function finalizeUploadedAsset(
     width?: number | null;
     height?: number | null;
     durationMs?: number | null;
+    externalFileId?: string | null;
+    storageProvider?: AssetStorageProvider;
   },
 ) {
   const asset = await lockAssetRow(tx, input);
@@ -197,6 +201,12 @@ export async function finalizeUploadedAsset(
       width: input.width ?? null,
       height: input.height ?? null,
       durationMs: input.durationMs ?? null,
+      ...(input.externalFileId !== undefined
+        ? { externalFileId: input.externalFileId }
+        : {}),
+      ...(input.storageProvider !== undefined
+        ? { storageProvider: input.storageProvider }
+        : {}),
     },
   });
 

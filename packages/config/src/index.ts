@@ -155,6 +155,13 @@ export const serverEnvSchema = z.object({
     .enum(["true", "false"])
     .default("false")
     .transform((value) => value === "true"),
+  STORAGE_ENCRYPTION_KEY: optionalString.default(
+    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  ),
+  GOOGLE_DRIVE_CLIENT_ID: optionalString,
+  GOOGLE_DRIVE_CLIENT_SECRET: optionalString,
+  ONEDRIVE_CLIENT_ID: optionalString,
+  ONEDRIVE_CLIENT_SECRET: optionalString,
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
   OTEL_EXPORTER_OTLP_ENDPOINT: optionalUrl,
 });

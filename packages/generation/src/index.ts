@@ -556,6 +556,12 @@ export async function createImageJob(userId: string, raw: unknown) {
         model.providerModelId === "seedream-4-0-250828";
       const extension = isJpegDefault ? "jpg" : "png";
       const mimeType = isJpegDefault ? "image/jpeg" : "image/png";
+      const orgStorage = await tx.organization.findUnique({
+        where: { id: input.organizationId },
+        select: { defaultStorageProvider: true },
+      });
+      const activeStorageProvider =
+        orgStorage?.defaultStorageProvider ?? "LOCAL";
       await tx.asset.createMany({
         data: Array.from({ length: input.outputCount }, (_, outputIndex) => ({
           organizationId: input.organizationId,
@@ -566,7 +572,7 @@ export async function createImageJob(userId: string, raw: unknown) {
           generationOutputIndex: outputIndex,
           mediaKind: "IMAGE" as const,
           sourceType: "GENERATED" as const,
-          storageProvider: "LOCAL" as const,
+          storageProvider: activeStorageProvider,
           name:
             input.outputCount === 1
               ? defaultAssetName("IMAGE", "GENERATED")
@@ -1074,7 +1080,6 @@ export async function createVideoJob(userId: string, raw: unknown) {
         idempotencyKey: `generation-reserve-${job.id}`,
         jobId: job.id,
       });
-
       const privateSource = assets.some(
         (asset) => asset.purpose === "REFERENCE_INPUT",
       );
@@ -1083,6 +1088,12 @@ export async function createVideoJob(userId: string, raw: unknown) {
         input.sources.find((source) => source.role === "REFERENCE_VIDEO") ??
         input.sources.find((source) => source.role === "FIRST_FRAME") ??
         input.sources[0];
+      const orgStorage = await tx.organization.findUnique({
+        where: { id: input.organizationId },
+        select: { defaultStorageProvider: true },
+      });
+      const activeStorageProvider =
+        orgStorage?.defaultStorageProvider ?? "LOCAL";
       const videoAsset = await tx.asset.create({
         data: {
           organizationId: input.organizationId,
@@ -1095,7 +1106,7 @@ export async function createVideoJob(userId: string, raw: unknown) {
           purpose: privateSource ? "REFERENCE_INPUT" : "GENERAL",
           mediaKind: "VIDEO",
           sourceType: "GENERATED",
-          storageProvider: "LOCAL",
+          storageProvider: activeStorageProvider,
           name: defaultAssetName("VIDEO", "GENERATED"),
           objectKey: `${job.id}.${outputExtension}`,
           mimeType: outputMimeType,
@@ -1329,6 +1340,12 @@ export async function createVoiceJob(userId: string, raw: unknown) {
         idempotencyKey: `generation-reserve-${job.id}`,
         jobId: job.id,
       });
+      const orgStorage = await tx.organization.findUnique({
+        where: { id: input.organizationId },
+        select: { defaultStorageProvider: true },
+      });
+      const activeStorageProvider =
+        orgStorage?.defaultStorageProvider ?? "LOCAL";
       await tx.asset.create({
         data: {
           organizationId: input.organizationId,
@@ -1338,7 +1355,7 @@ export async function createVoiceJob(userId: string, raw: unknown) {
           generationJobId: job.id,
           mediaKind: "AUDIO",
           sourceType: "GENERATED",
-          storageProvider: "LOCAL",
+          storageProvider: activeStorageProvider,
           name: defaultAssetName("AUDIO", "GENERATED"),
           objectKey: `${job.id}.mp3`,
           mimeType: "audio/mpeg",
@@ -1365,3 +1382,4 @@ export async function createVoiceJob(userId: string, raw: unknown) {
 }
 
 export * from "./estimate";
+export * from "./byos-storage";

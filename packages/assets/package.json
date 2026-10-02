@@ -10,6 +10,7 @@
     "./video-captions": "./src/video-captions.ts",
     "./media-probe": "./src/media-probe.ts",
     "./storage": "./src/storage.ts",
+    "./crypto": "./src/crypto.ts",
     "./media-capacity": "./src/media-capacity.ts",
     "./media-status": "./src/media-status.ts",
     "./media-recovery": "./src/media-recovery.ts",

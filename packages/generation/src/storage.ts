@@ -16,6 +16,7 @@ import { BlockList, isIP } from "node:net";
 import { isAbsolute, resolve } from "node:path";
 import sharp, { type Metadata } from "sharp";
 import { MAX_AUDIO_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES } from "./index";
+import { storeGeneratedMedia } from "./byos-storage";
 
 const MAX_REDIRECTS = 3;
 const DOWNLOAD_TIMEOUT_MS = 120_000;
@@ -583,7 +584,30 @@ export async function referenceImageDataUri(input: {
   return `data:${input.mimeType};base64,${bytes.toString("base64")}`;
 }
 
-export async function storeImage(key: string, bytes: Buffer) {
+export async function storeImage(
+  key: string,
+  bytes: Buffer,
+  organizationId?: string,
+) {
+  if (organizationId) {
+    try {
+      return await storeGeneratedMedia({
+        organizationId,
+        assetId: key,
+        objectKey: key,
+        bytes,
+        mimeType:
+          key.endsWith(".jpg") || key.endsWith(".jpeg")
+            ? "image/jpeg"
+            : "image/png",
+        mediaKind: "IMAGE",
+      });
+    } catch (error) {
+      if (error instanceof ImageStorageError) throw error;
+      // Fallback to local
+    }
+  }
+
   const path = storagePath(key);
   const temporary = `${path}.${randomUUID()}.tmp`;
 
@@ -803,7 +827,27 @@ export async function downloadVideo(urlString: string) {
   return bytes;
 }
 
-export async function storeVideo(key: string, bytes: Buffer) {
+export async function storeVideo(
+  key: string,
+  bytes: Buffer,
+  organizationId?: string,
+) {
+  if (organizationId) {
+    try {
+      return await storeGeneratedMedia({
+        organizationId,
+        assetId: key,
+        objectKey: key,
+        bytes,
+        mimeType: "video/mp4",
+        mediaKind: "VIDEO",
+      });
+    } catch (error) {
+      if (error instanceof ImageStorageError) throw error;
+      // Fallback to local
+    }
+  }
+
   const path = storagePath(key);
   const temporary = `${path}.${randomUUID()}.tmp`;
 
@@ -904,8 +948,28 @@ export function validateMp3Bytes(bytes: Buffer): { durationMs: number | null } {
   return { durationMs: null };
 }
 
-export async function storeAudio(key: string, bytes: Buffer) {
+export async function storeAudio(
+  key: string,
+  bytes: Buffer,
+  organizationId?: string,
+) {
   validateMp3Bytes(bytes);
+  if (organizationId) {
+    try {
+      return await storeGeneratedMedia({
+        organizationId,
+        assetId: key,
+        objectKey: key,
+        bytes,
+        mimeType: "audio/mpeg",
+        mediaKind: "AUDIO",
+      });
+    } catch (error) {
+      if (error instanceof ImageStorageError) throw error;
+      // Fallback to local
+    }
+  }
+
   const path = storagePath(key);
   const temporary = `${path}.${randomUUID()}.tmp`;
 

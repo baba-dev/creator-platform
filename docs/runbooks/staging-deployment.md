@@ -7,8 +7,9 @@ The staging environment runs directly on Ubuntu without Docker:
 - `creator-worker.service` runs the bundled BullMQ worker.
 - MariaDB and Redis remain bound to localhost.
 - GitHub CI builds a release archive; the deploy workflow uses native
-  OpenSSH/SCP with pinned host-key verification across ED25519/ECDSA/RSA, SHA-256 validation, and an
-  atomic `.part` rename before invoking the root-owned deployment command.
+  OpenSSH/SCP with pinned host-key verification across ED25519, ECDSA, and RSA
+  keys, SHA-256 validation, and an atomic `.part` rename before invoking the
+  root-owned deployment command.
 
 ## Release layout
 

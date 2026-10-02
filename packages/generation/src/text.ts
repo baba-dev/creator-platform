@@ -7,7 +7,7 @@ import {
   captureCreditsForJob,
   releaseOrRefundCredits,
 } from "@aiwa/credits";
-import { db } from "@aiwa/db";
+import { db, type Prisma } from "@aiwa/db";
 import { assertAssignableProject } from "@aiwa/organizations";
 import { createBytePlusProvider } from "@aiwa/providers/byteplus";
 import {
@@ -362,7 +362,7 @@ export async function createTextJob(userId: string, raw: unknown) {
             temperature: input.temperature,
             maxTokens: input.maxTokens,
             clientRequestHash: requestFingerprint(input),
-          },
+          } as Prisma.InputJsonObject,
           status: "QUEUED",
           quotedAt: now,
           queuedAt: now,

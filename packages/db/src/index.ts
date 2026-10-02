@@ -22,6 +22,7 @@ export {
   MembershipRole,
   PlatformRole,
   MediaKind,
+  ModelProvider,
   GenerationTemplateStatus,
 } from "@prisma/client";
 

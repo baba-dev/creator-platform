@@ -1,6 +1,6 @@
 import { hasPlatformPermission } from "@aiwa/authz";
 import { db } from "@aiwa/db";
-import { VERIFIED_BYTEPLUS_MODELS } from "@aiwa/providers/byteplus";
+import { VERIFIED_ALL_MODELS } from "@aiwa/providers/catalog";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 
@@ -29,28 +29,38 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   try {
     let syncedCount = 0;
-    for (const model of VERIFIED_BYTEPLUS_MODELS) {
+    for (const model of VERIFIED_ALL_MODELS) {
+      const provider = model.provider.toUpperCase() as
+        | "BYTEPLUS"
+        | "NVIDIA"
+        | "GROQ"
+        | "GEMINI"
+        | "CLOUDFLARE";
+      const mediaKind = model.mediaKind.toUpperCase() as
+        | "IMAGE"
+        | "VIDEO"
+        | "VOICE"
+        | "TEXT"
+        | "REASONING";
       await db.providerModel.upsert({
         where: {
           provider_providerModelId: {
-            provider: "BYTEPLUS",
+            provider,
             providerModelId: model.id,
           },
         },
         update: {
           displayName: model.displayName,
           description: model.description,
-          mediaKind: model.mediaKind.toUpperCase() as
-            "IMAGE" | "VIDEO" | "VOICE",
+          mediaKind,
           capabilities: model.capabilities ?? {},
         },
         create: {
-          provider: "BYTEPLUS",
+          provider,
           providerModelId: model.id,
           displayName: model.displayName,
           description: model.description,
-          mediaKind: model.mediaKind.toUpperCase() as
-            "IMAGE" | "VIDEO" | "VOICE",
+          mediaKind,
           capabilities: model.capabilities ?? {},
           enabled: false,
         },

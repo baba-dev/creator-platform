@@ -20,7 +20,6 @@ export async function issueTextFeatureQuote(input: TextFeatureQuoteInput) {
   const now = new Date();
   const model = await db.providerModel.findFirst({
     where: {
-      provider: "BYTEPLUS",
       providerModelId: input.providerModelId,
       mediaKind: "TEXT",
       enabled: true,
@@ -93,7 +92,6 @@ export async function assertQuotedTextModel(
   const model = await db.providerModel.findFirst({
     where: {
       id: quotedModelId,
-      provider: "BYTEPLUS",
       mediaKind: "TEXT",
       providerModelId: expectedProviderModelId,
     },

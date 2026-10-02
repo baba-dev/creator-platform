@@ -84,7 +84,7 @@ export interface TextUsageTier {
   cachedInputMicroUsdPerMillionTokens?: string;
 }
 export interface TextUsageRates {
-  estimator: "byteplus-text-v1";
+  estimator: "byteplus-text-v1" | "text-token-v1";
   tiers: TextUsageTier[];
 }
 
@@ -93,7 +93,7 @@ export function parseTextUsageRates(value: unknown): TextUsageRates {
     throw new RangeError("Text token pricing requires a rate table.");
   const config = value as Record<string, unknown>;
   if (
-    config.estimator !== "byteplus-text-v1" ||
+    !["byteplus-text-v1", "text-token-v1"].includes(String(config.estimator)) ||
     !Array.isArray(config.tiers) ||
     config.tiers.length < 1 ||
     config.tiers.length > 4
@@ -136,7 +136,7 @@ export function parseTextUsageRates(value: unknown): TextUsageRates {
           }),
     };
   });
-  return { estimator: "byteplus-text-v1", tiers };
+  return { estimator: config.estimator as TextUsageRates["estimator"], tiers };
 }
 
 function divideRoundUpBigInt(numerator: bigint, denominator: bigint): bigint {

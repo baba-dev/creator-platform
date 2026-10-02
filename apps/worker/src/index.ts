@@ -32,6 +32,9 @@ import {
 } from "@aiwa/mail/transport";
 import { createBytePlusProvider } from "@aiwa/providers/byteplus";
 import { createNvidiaProvider } from "@aiwa/providers/nvidia";
+import { createGroqProvider } from "@aiwa/providers/groq";
+import { createGeminiProvider } from "@aiwa/providers/gemini";
+import { createCloudflareAiProvider } from "@aiwa/providers/cloudflare";
 import {
   DelayedError,
   Queue,
@@ -198,6 +201,38 @@ const bytePlusProvider = hasBytePlus
     })
   : null;
 
+const externalProviderRole = owns("generation") || owns("reasoning");
+const groqProvider =
+  externalProviderRole && env.GROQ_API_KEY
+    ? createGroqProvider({
+        apiKey: env.GROQ_API_KEY,
+        baseUrl: env.GROQ_BASE_URL,
+        defaultModel: env.GROQ_DEFAULT_MODEL,
+        requestTimeoutMs: env.GROQ_REQUEST_TIMEOUT_MS,
+        idleTimeoutMs: env.GROQ_IDLE_TIMEOUT_MS,
+      })
+    : null;
+const geminiProvider =
+  externalProviderRole && env.GEMINI_API_KEY
+    ? createGeminiProvider({
+        apiKey: env.GEMINI_API_KEY,
+        baseUrl: env.GEMINI_BASE_URL,
+        defaultModel: env.GEMINI_DEFAULT_MODEL,
+        requestTimeoutMs: env.GEMINI_REQUEST_TIMEOUT_MS,
+        idleTimeoutMs: env.GEMINI_IDLE_TIMEOUT_MS,
+      })
+    : null;
+const cloudflareProvider =
+  externalProviderRole && env.CLOUDFLARE_API_TOKEN && env.CLOUDFLARE_ACCOUNT_ID
+    ? createCloudflareAiProvider({
+        apiToken: env.CLOUDFLARE_API_TOKEN,
+        accountId: env.CLOUDFLARE_ACCOUNT_ID,
+        baseUrl: env.CLOUDFLARE_AI_BASE_URL,
+        requestTimeoutMs: env.CLOUDFLARE_REQUEST_TIMEOUT_MS,
+        idleTimeoutMs: env.CLOUDFLARE_IDLE_TIMEOUT_MS,
+      })
+    : null;
+
 async function videoProviderLeaseSpec(
   jobId: string,
 ): Promise<ProviderConcurrencySpec | null> {
@@ -238,15 +273,17 @@ async function releaseVideoLeaseIfTerminal(
 const generationWorker = createWorker(
   "generation",
   async (job, token) => {
-    if (!bytePlusProvider)
-      throw new Error("Generation provider is not configured");
     if (typeof job.data.jobId !== "string" || job.data.jobId !== job.id)
       throw new Error("Invalid generation queue payload");
     switch (job.name) {
       case "image":
+        if (!bytePlusProvider)
+          throw new Error("BytePlus generation provider is not configured");
         await processImageJob(job.data.jobId, bytePlusProvider);
         return;
       case "video-submit": {
+        if (!bytePlusProvider)
+          throw new Error("BytePlus generation provider is not configured");
         const spec = await videoProviderLeaseSpec(job.data.jobId);
         if (
           spec &&
@@ -272,6 +309,8 @@ const generationWorker = createWorker(
         return;
       }
       case "video-poll": {
+        if (!bytePlusProvider)
+          throw new Error("BytePlus generation provider is not configured");
         const spec = await videoProviderLeaseSpec(job.data.jobId);
         if (spec) await renewProviderLease(redis, spec, job.data.jobId);
         try {
@@ -282,11 +321,41 @@ const generationWorker = createWorker(
         return;
       }
       case "voice":
+        if (!bytePlusProvider)
+          throw new Error("BytePlus generation provider is not configured");
         await processVoiceJob(job.data.jobId, bytePlusProvider);
         return;
-      case "text":
-        await processTextJob(job.data.jobId, bytePlusProvider);
-        return;
+      case "text": {
+        const row = await db.generationJob.findUnique({
+          where: { id: job.data.jobId },
+          select: { providerModel: { select: { provider: true } } },
+        });
+        if (!row) throw new Error("Generation job was not found");
+        switch (row.providerModel.provider) {
+          case "BYTEPLUS":
+            if (!bytePlusProvider)
+              throw new Error("BytePlus text provider is not configured");
+            await processTextJob(job.data.jobId, bytePlusProvider);
+            return;
+          case "GROQ":
+            if (!groqProvider)
+              throw new Error("Groq text provider is not configured");
+            await processTextJob(job.data.jobId, groqProvider);
+            return;
+          case "GEMINI":
+            if (!geminiProvider)
+              throw new Error("Gemini text provider is not configured");
+            await processTextJob(job.data.jobId, geminiProvider);
+            return;
+          case "CLOUDFLARE":
+            if (!cloudflareProvider)
+              throw new Error("Cloudflare text provider is not configured");
+            await processTextJob(job.data.jobId, cloudflareProvider);
+            return;
+          default:
+            throw new Error("Selected provider does not support text generation");
+        }
+      }
       default:
         throw new Error("Unknown generation queue job");
     }
@@ -623,12 +692,22 @@ const nvidiaProvider =
       })
     : null;
 
+const reasoningProviders = {
+  NVIDIA: nvidiaProvider ?? undefined,
+  GROQ: groqProvider ?? undefined,
+  GEMINI: geminiProvider ?? undefined,
+  CLOUDFLARE: cloudflareProvider ?? undefined,
+};
+const hasReasoningProvider = Boolean(
+  nvidiaProvider || groqProvider || geminiProvider || cloudflareProvider,
+);
+
 const reasoningWorker = createWorker(
   "reasoning",
   async (job) => {
-    if (!nvidiaProvider)
+    if (!hasReasoningProvider)
       throw new Error("Reasoning provider is not configured");
-    await processReasoningJob(job, nvidiaProvider);
+    await processReasoningJob(job, reasoningProviders);
   },
   { connection: redis, prefix: "aiwa", concurrency: 2 },
 );
@@ -726,7 +805,6 @@ async function dispatchGeneration() {
   if (
     isShuttingDown ||
     generationDispatching ||
-    !bytePlusProvider ||
     !generationQueue
   )
     return;
@@ -904,7 +982,7 @@ async function dispatchReasoning() {
   if (
     isShuttingDown ||
     reasoningDispatching ||
-    !nvidiaProvider ||
+    !hasReasoningProvider ||
     !reasoningQueue
   )
     return;
@@ -1051,6 +1129,9 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   const providerDeadlineMs = Math.max(
     env.BYTEPLUS_REQUEST_TIMEOUT_MS ?? 180_000,
     env.NVIDIA_REQUEST_TIMEOUT_MS ?? 60_000,
+    env.GROQ_REQUEST_TIMEOUT_MS ?? 45_000,
+    env.GEMINI_REQUEST_TIMEOUT_MS ?? 45_000,
+    env.CLOUDFLARE_REQUEST_TIMEOUT_MS ?? 45_000,
   );
   const drainTimeoutMs = providerDeadlineMs + 120_000 + 30_000;
   const drainPromise = Promise.all([

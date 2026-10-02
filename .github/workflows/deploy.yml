@@ -41,55 +41,148 @@ jobs:
           test -f "dist/creator-platform-${RELEASE_SHA}.tar.gz"
           tar -tzf "dist/creator-platform-${RELEASE_SHA}.tar.gz" >/dev/null
 
-      - name: Verify hardened staging control plane
-        uses: appleboy/ssh-action@v1.2.5
-        with:
-          host: ${{ secrets.STAGING_SSH_HOST }}
-          port: ${{ secrets.STAGING_SSH_PORT }}
-          username: ${{ secrets.STAGING_SSH_USER }}
-          key: ${{ secrets.STAGING_SSH_KEY }}
-          fingerprint: ${{ secrets.STAGING_SSH_FINGERPRINT }}
-          protocol: tcp4
-          command_timeout: 1m
-          script: |
-            set -eu
+      - name: Prepare verified staging SSH transport
+        env:
+          STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          STAGING_SSH_PORT: ${{ secrets.STAGING_SSH_PORT }}
+          STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+          STAGING_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          STAGING_SSH_FINGERPRINT: ${{ secrets.STAGING_SSH_FINGERPRINT }}
+        run: |
+          set -Eeuo pipefail
+          umask 077
+
+          key_file="$RUNNER_TEMP/staging-deploy-key"
+          known_hosts="$RUNNER_TEMP/staging-known-hosts"
+          printf '%s\n' "$STAGING_SSH_KEY" | tr -d '\r' >"$key_file"
+          chmod 0600 "$key_file"
+
+          timeout 45 ssh-keyscan -4 -p "$STAGING_SSH_PORT" -t ed25519 \
+            "$STAGING_SSH_HOST" >"$known_hosts" 2>/dev/null
+          test -s "$known_hosts"
+
+          if ! ssh-keygen -lf "$known_hosts" -E sha256 \
+            | awk '{print $2}' \
+            | grep -Fxq -- "$STAGING_SSH_FINGERPRINT"; then
+            echo "Staging SSH host key fingerprint does not match the configured secret." >&2
+            exit 1
+          fi
+
+      - name: Verify hardened staging control plane and upload path
+        env:
+          STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          STAGING_SSH_PORT: ${{ secrets.STAGING_SSH_PORT }}
+          STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+        run: |
+          set -Eeuo pipefail
+          ssh_opts=(
+            -4
+            -i "$RUNNER_TEMP/staging-deploy-key"
+            -p "$STAGING_SSH_PORT"
+            -o BatchMode=yes
+            -o ConnectTimeout=30
+            -o ServerAliveInterval=15
+            -o ServerAliveCountMax=4
+            -o StrictHostKeyChecking=yes
+            -o "UserKnownHostsFile=$RUNNER_TEMP/staging-known-hosts"
+          )
+
+          ssh "${ssh_opts[@]}" "$STAGING_SSH_USER@$STAGING_SSH_HOST" 'set -eu
             version="$(sudo -n /usr/local/sbin/creator-deploy --version)"
             test "$version" = "3" || {
               echo "staging creator-deploy control plane must be bootstrapped to version 3" >&2
               exit 1
             }
+            test -d /var/www/creator-platform/incoming
+            test -w /var/www/creator-platform/incoming || {
+              echo "deployment user cannot write /var/www/creator-platform/incoming" >&2
+              stat -c "%U:%G %a %n" /var/www/creator-platform/incoming >&2 || true
+              exit 1
+            }
+            df -Pk /var/www/creator-platform/incoming
+          '
 
-      - name: Upload release to staging
-        uses: appleboy/scp-action@v1.0.0
-        with:
-          host: ${{ secrets.STAGING_SSH_HOST }}
-          port: ${{ secrets.STAGING_SSH_PORT }}
-          username: ${{ secrets.STAGING_SSH_USER }}
-          key: ${{ secrets.STAGING_SSH_KEY }}
-          fingerprint: ${{ secrets.STAGING_SSH_FINGERPRINT }}
-          protocol: tcp4
-          source:
-            dist/creator-platform-${{ github.event.workflow_run.head_sha
-            }}.tar.gz
-          target: /var/www/creator-platform/incoming
-          strip_components: 1
-          command_timeout: 5m
+      - name: Upload and verify release on staging
+        env:
+          STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          STAGING_SSH_PORT: ${{ secrets.STAGING_SSH_PORT }}
+          STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+        run: |
+          set -Eeuo pipefail
+          archive="dist/creator-platform-${RELEASE_SHA}.tar.gz"
+          remote_dir="/var/www/creator-platform/incoming"
+          remote_archive="$remote_dir/creator-platform-${RELEASE_SHA}.tar.gz"
+          remote_partial="${remote_archive}.part"
+          local_sha="$(sha256sum "$archive" | awk '{print $1}')"
+
+          ssh_opts=(
+            -4
+            -i "$RUNNER_TEMP/staging-deploy-key"
+            -p "$STAGING_SSH_PORT"
+            -o BatchMode=yes
+            -o ConnectTimeout=30
+            -o ServerAliveInterval=15
+            -o ServerAliveCountMax=4
+            -o StrictHostKeyChecking=yes
+            -o "UserKnownHostsFile=$RUNNER_TEMP/staging-known-hosts"
+          )
+          scp_opts=(
+            -4
+            -i "$RUNNER_TEMP/staging-deploy-key"
+            -P "$STAGING_SSH_PORT"
+            -o BatchMode=yes
+            -o ConnectTimeout=30
+            -o ServerAliveInterval=15
+            -o ServerAliveCountMax=4
+            -o StrictHostKeyChecking=yes
+            -o "UserKnownHostsFile=$RUNNER_TEMP/staging-known-hosts"
+          )
+
+          ssh "${ssh_opts[@]}" "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
+            "rm -f -- '$remote_partial'"
+
+          scp "${scp_opts[@]}" "$archive" \
+            "$STAGING_SSH_USER@$STAGING_SSH_HOST:$remote_partial"
+
+          remote_sha="$(
+            ssh "${ssh_opts[@]}" "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
+              "set -eu
+               test -f '$remote_partial'
+               sha256sum '$remote_partial' | cut -c1-64
+               mv -f -- '$remote_partial' '$remote_archive'"
+          )"
+          test "$remote_sha" = "$local_sha" || {
+            echo "Uploaded staging artifact failed SHA-256 verification." >&2
+            exit 1
+          }
 
       - name: Activate release on staging
-        uses: appleboy/ssh-action@v1.2.5
         env:
-          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
-        with:
-          host: ${{ secrets.STAGING_SSH_HOST }}
-          port: ${{ secrets.STAGING_SSH_PORT }}
-          username: ${{ secrets.STAGING_SSH_USER }}
-          key: ${{ secrets.STAGING_SSH_KEY }}
-          fingerprint: ${{ secrets.STAGING_SSH_FINGERPRINT }}
-          protocol: tcp4
-          envs: RELEASE_SHA
-          command_timeout: 12m
-          script: |
-            set -eu
-            sudo -n /usr/local/sbin/creator-deploy \
-              "$RELEASE_SHA" \
-              "/var/www/creator-platform/incoming/creator-platform-${RELEASE_SHA}.tar.gz"
+          STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          STAGING_SSH_PORT: ${{ secrets.STAGING_SSH_PORT }}
+          STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+        run: |
+          set -Eeuo pipefail
+          ssh_opts=(
+            -4
+            -i "$RUNNER_TEMP/staging-deploy-key"
+            -p "$STAGING_SSH_PORT"
+            -o BatchMode=yes
+            -o ConnectTimeout=30
+            -o ServerAliveInterval=15
+            -o ServerAliveCountMax=4
+            -o StrictHostKeyChecking=yes
+            -o "UserKnownHostsFile=$RUNNER_TEMP/staging-known-hosts"
+          )
+
+          ssh "${ssh_opts[@]}" "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
+            "sudo -n /usr/local/sbin/creator-deploy \
+              '$RELEASE_SHA' \
+              '/var/www/creator-platform/incoming/creator-platform-${RELEASE_SHA}.tar.gz'"
+
+      - name: Clean up staging SSH material
+        if: always()
+        run: |
+          rm -f -- \
+            "$RUNNER_TEMP/staging-deploy-key" \
+            "$RUNNER_TEMP/staging-known-hosts"

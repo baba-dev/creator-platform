@@ -17,6 +17,7 @@ interface SeedModel {
   negotiatedDiscountBps?: number;
   providerCostBasisNote?: string;
   enabled?: boolean;
+  seedPrice?: boolean;
 }
 
 const verifiedBytePlusModels: readonly SeedModel[] = [
@@ -483,8 +484,9 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
     pricingDimension: "SECOND",
     unitQuantity: 1,
     enabled: false,
+    seedPrice: false,
     providerCostBasisNote:
-      "BytePlus OmniHuman 1.5 public PAYG list price: $0.12 per generated video second.",
+      "BytePlus OmniHuman 1.5 public PAYG list price: $0.12 per generated video second. Production price publication is operator-controlled.",
   },
   {
     providerModelId: "seed-tts-2.0",
@@ -873,7 +875,7 @@ async function main(): Promise<void> {
       orderBy: { effectiveFrom: "desc" },
     });
 
-    if (!activePrice) {
+    if (!activePrice && model.seedPrice !== false) {
       await db.modelPriceVersion.create({
         data: {
           providerModelId: providerModel.id,
@@ -895,9 +897,13 @@ async function main(): Promise<void> {
       console.info(
         `Created price version for ${model.displayName}: ${model.customerCredits} credits`,
       );
-    } else {
+    } else if (activePrice) {
       console.info(
         `Active price version already exists for ${model.displayName} (${activePrice.customerCredits} credits)`,
+      );
+    } else {
+      console.info(
+        `Skipped automatic price publication for ${model.displayName}; operator verification is required.`,
       );
     }
   }

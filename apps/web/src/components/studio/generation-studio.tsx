@@ -629,18 +629,25 @@ export function GenerationStudio({
 
   useEffect(() => {
     if (activeMode !== "VIDEO") return;
-    if (isTalkingAvatarModel) {
-      if (videoWorkflow !== "TALKING_AVATAR")
-        setVideoWorkflow("TALKING_AVATAR");
-      if (ratio !== "adaptive") setRatio("adaptive");
-      if (generateAudio) setGenerateAudio(false);
-      if (videoOutputFormat !== "mp4") setVideoOutputFormat("mp4");
-      if (returnLastFrame) setReturnLastFrame(false);
-    } else if (videoWorkflow === "TALKING_AVATAR") {
-      setVideoWorkflow("GENERATE");
-      setAvatarImageId("");
-      setDrivingAudioId("");
-    }
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      if (isTalkingAvatarModel) {
+        if (videoWorkflow !== "TALKING_AVATAR")
+          setVideoWorkflow("TALKING_AVATAR");
+        if (ratio !== "adaptive") setRatio("adaptive");
+        if (generateAudio) setGenerateAudio(false);
+        if (videoOutputFormat !== "mp4") setVideoOutputFormat("mp4");
+        if (returnLastFrame) setReturnLastFrame(false);
+      } else if (videoWorkflow === "TALKING_AVATAR") {
+        setVideoWorkflow("GENERATE");
+        setAvatarImageId("");
+        setDrivingAudioId("");
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [
     activeMode,
     generateAudio,

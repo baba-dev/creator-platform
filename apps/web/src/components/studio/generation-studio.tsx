@@ -63,14 +63,17 @@ type VideoWorkflow =
   | "EDIT"
   | "EXTEND"
   | "DRAFT"
-  | "DRAFT_FINAL";
+  | "DRAFT_FINAL"
+  | "TALKING_AVATAR";
 type VideoSourceRole =
   | "FIRST_FRAME"
   | "LAST_FRAME"
   | "REFERENCE_IMAGE"
   | "REFERENCE_VIDEO"
   | "REFERENCE_AUDIO"
-  | "SOURCE_VIDEO";
+  | "SOURCE_VIDEO"
+  | "AVATAR_IMAGE"
+  | "DRIVING_AUDIO";
 type VideoSourceInput = {
   assetId: string;
   role: VideoSourceRole;
@@ -101,6 +104,7 @@ type Job = {
 type Studio = {
   configured: boolean;
   mediaConfigured?: boolean;
+  visionConfigured?: boolean;
   voiceConfigured?: boolean;
   balance: string;
   models: Model[];
@@ -202,6 +206,9 @@ export function GenerationStudio({
     string[]
   >([]);
   const [videoSourceAssetId, setVideoSourceAssetId] = useState("");
+  const [avatarImageId, setAvatarImageId] = useState("");
+  const [drivingAudioId, setDrivingAudioId] = useState("");
+  const [drivingAudioBusy, setDrivingAudioBusy] = useState(false);
   const [sourceDraftJobId, setSourceDraftJobId] = useState("");
   const [videoOutputFormat, setVideoOutputFormat] = useState<"mp4" | "mov">(
     "mp4",
@@ -229,6 +236,40 @@ export function GenerationStudio({
   );
 
   const model = modelsForMode.find((m) => m.id === modelId) ?? modelsForMode[0];
+  const isTalkingAvatarModel =
+    activeMode === "VIDEO" && model?.capabilities?.talkingAvatar === true;
+  const validAvatarFrames = useMemo(
+    () =>
+      videoFrames.filter(
+        (asset) =>
+          ["image/jpeg", "image/png", "image/jfif", "image/pjpeg"].includes(
+            asset.mimeType ?? "",
+          ) &&
+          Number(asset.byteSize ?? 0) > 0 &&
+          Number(asset.byteSize ?? 0) < 5_000_000 &&
+          asset.width !== null &&
+          asset.height !== null &&
+          asset.width > 0 &&
+          asset.height > 0 &&
+          asset.width < 4096 &&
+          asset.height < 4096,
+      ),
+    [videoFrames],
+  );
+  const validDrivingAudio = useMemo(
+    () =>
+      videoAudioReferences.filter(
+        (asset) =>
+          (asset.mimeType ?? "").startsWith("audio/") &&
+          Number(asset.byteSize ?? 0) > 0 &&
+          Number(asset.byteSize ?? 0) <= 25 * 1024 * 1024 &&
+          asset.durationMs !== null &&
+          asset.durationMs !== undefined &&
+          asset.durationMs > 0 &&
+          asset.durationMs < 60_000,
+      ),
+    [videoAudioReferences],
+  );
   const maxImageOutputs = Math.min(
     Number(model?.capabilities?.maxGeneratedImages ?? 1),
     Number(model?.capabilities?.maxTotalInputOutputImages ?? 15) -
@@ -287,9 +328,13 @@ export function GenerationStudio({
 
   const videoForcesAdaptive =
     activeMode === "VIDEO" &&
-    ["FRAME_TO_VIDEO", "FIRST_LAST_FRAME", "EDIT", "EXTEND"].includes(
-      videoWorkflow,
-    );
+    [
+      "FRAME_TO_VIDEO",
+      "FIRST_LAST_FRAME",
+      "EDIT",
+      "EXTEND",
+      "TALKING_AVATAR",
+    ].includes(videoWorkflow);
   const selectedRatio = videoForcesAdaptive
     ? "adaptive"
     : selectSupportedCapability(model?.capabilities, "aspectRatio", ratio, [
@@ -307,7 +352,8 @@ export function GenerationStudio({
             [activeMode === "VIDEO" ? "720p" : "2K"],
           );
   const selectedDuration =
-    activeMode === "VIDEO" && videoWorkflow === "EDIT"
+    activeMode === "VIDEO" &&
+    (videoWorkflow === "EDIT" || videoWorkflow === "TALKING_AVATAR")
       ? "-1"
       : availableDurations.includes(duration)
         ? duration
@@ -336,6 +382,12 @@ export function GenerationStudio({
       videoSourceAssetId
     )
       sources.push({ assetId: videoSourceAssetId, role: "SOURCE_VIDEO" });
+    if (videoWorkflow === "TALKING_AVATAR") {
+      if (avatarImageId)
+        sources.push({ assetId: avatarImageId, role: "AVATAR_IMAGE" });
+      if (drivingAudioId)
+        sources.push({ assetId: drivingAudioId, role: "DRIVING_AUDIO" });
+    }
     return sources.map((source, position) => ({ ...source, position }));
   }, [
     videoFirstFrameId,
@@ -344,6 +396,8 @@ export function GenerationStudio({
     videoReferenceImageIds,
     videoReferenceVideoIds,
     videoSourceAssetId,
+    avatarImageId,
+    drivingAudioId,
     videoWorkflow,
   ]);
 
@@ -356,64 +410,69 @@ export function GenerationStudio({
   const maxVideoReferenceAudio = Number(
     model?.capabilities?.maxReferenceAudio ?? 0,
   );
-  const availableVideoWorkflows = useMemo(
-    () =>
-      [
-        { value: "GENERATE" as const, label: "Generate", hint: "Text → video" },
-        ...(model?.capabilities?.firstFrame === true
-          ? [
-              {
-                value: "FRAME_TO_VIDEO" as const,
-                label: "Frames",
-                hint: "Animate a start / end",
-              },
-            ]
-          : []),
-        ...(model?.capabilities?.referenceImages === true ||
-        model?.capabilities?.referenceVideo === true ||
-        model?.capabilities?.referenceAudio === true
-          ? [
-              {
-                value: "REFERENCE" as const,
-                label: "References",
-                hint: "Match multimodal guides",
-              },
-            ]
-          : []),
-        ...(model?.capabilities?.editVideo === true
-          ? [
-              {
-                value: "EDIT" as const,
-                label: "AI Edit",
-                hint: "Transform a source clip",
-              },
-            ]
-          : []),
-        ...(model?.capabilities?.extendVideo === true
-          ? [
-              {
-                value: "EXTEND" as const,
-                label: "Extend",
-                hint: "Continue before / after",
-              },
-            ]
-          : []),
-        ...(model?.capabilities?.draftMode === true
-          ? [
-              {
-                value: "DRAFT" as const,
-                label: "Draft",
-                hint: "480p review → final",
-              },
-            ]
-          : []),
-      ] satisfies Array<{
-        value: Exclude<VideoWorkflow, "FIRST_LAST_FRAME" | "DRAFT_FINAL">;
-        label: string;
-        hint: string;
-      }>,
-    [model?.capabilities],
-  );
+  const availableVideoWorkflows = useMemo<
+    Array<{ value: VideoWorkflow; label: string; hint: string }>
+  >(() => {
+    if (model?.capabilities?.talkingAvatar === true) {
+      return [
+        {
+          value: "TALKING_AVATAR",
+          label: "Talking avatar",
+          hint: "Portrait + driving audio",
+        },
+      ];
+    }
+    return [
+      { value: "GENERATE", label: "Generate", hint: "Text → video" },
+      ...(model?.capabilities?.firstFrame === true
+        ? [
+            {
+              value: "FRAME_TO_VIDEO" as const,
+              label: "Frames",
+              hint: "Animate a start / end",
+            },
+          ]
+        : []),
+      ...(model?.capabilities?.referenceImages === true ||
+      model?.capabilities?.referenceVideo === true ||
+      model?.capabilities?.referenceAudio === true
+        ? [
+            {
+              value: "REFERENCE" as const,
+              label: "References",
+              hint: "Match multimodal guides",
+            },
+          ]
+        : []),
+      ...(model?.capabilities?.editVideo === true
+        ? [
+            {
+              value: "EDIT" as const,
+              label: "AI Edit",
+              hint: "Transform a source clip",
+            },
+          ]
+        : []),
+      ...(model?.capabilities?.extendVideo === true
+        ? [
+            {
+              value: "EXTEND" as const,
+              label: "Extend",
+              hint: "Continue before / after",
+            },
+          ]
+        : []),
+      ...(model?.capabilities?.draftMode === true
+        ? [
+            {
+              value: "DRAFT" as const,
+              label: "Draft",
+              hint: "480p review → final",
+            },
+          ]
+        : []),
+    ];
+  }, [model?.capabilities]);
   const videoRequestReady =
     activeMode !== "VIDEO"
       ? true
@@ -431,9 +490,11 @@ export function GenerationStudio({
                   videoReferenceVideoIds.length > 0)
               : videoWorkflow === "EDIT" || videoWorkflow === "EXTEND"
                 ? Boolean(videoSourceAssetId)
-                : videoWorkflow === "DRAFT_FINAL"
-                  ? Boolean(sourceDraftJobId)
-                  : true;
+                : videoWorkflow === "TALKING_AVATAR"
+                  ? Boolean(avatarImageId && drivingAudioId)
+                  : videoWorkflow === "DRAFT_FINAL"
+                    ? Boolean(sourceDraftJobId)
+                    : true;
 
   const handleModeChange = useCallback(
     (mode: MediaKind) => {
@@ -473,9 +534,12 @@ export function GenerationStudio({
           workflow: videoWorkflow,
           sources: videoSources,
           durationSeconds: Number(selectedDuration),
-          generateAudio,
-          outputFormat: videoOutputFormat,
-          returnLastFrame,
+          generateAudio:
+            videoWorkflow === "TALKING_AVATAR" ? false : generateAudio,
+          outputFormat:
+            videoWorkflow === "TALKING_AVATAR" ? "mp4" : videoOutputFormat,
+          returnLastFrame:
+            videoWorkflow === "TALKING_AVATAR" ? false : returnLastFrame,
           ...(videoWorkflow === "DRAFT_FINAL" && sourceDraftJobId
             ? { sourceDraftJobId }
             : {}),
@@ -559,7 +623,32 @@ export function GenerationStudio({
   const isConfiguredForMode =
     activeMode === "VOICE"
       ? Boolean(data?.voiceConfigured)
-      : Boolean(data?.mediaConfigured ?? data?.configured);
+      : model?.providerModelId === "omnihuman-1.5"
+        ? Boolean(data?.visionConfigured)
+        : Boolean(data?.mediaConfigured ?? data?.configured);
+
+  useEffect(() => {
+    if (activeMode !== "VIDEO") return;
+    if (isTalkingAvatarModel) {
+      if (videoWorkflow !== "TALKING_AVATAR") setVideoWorkflow("TALKING_AVATAR");
+      if (ratio !== "adaptive") setRatio("adaptive");
+      if (generateAudio) setGenerateAudio(false);
+      if (videoOutputFormat !== "mp4") setVideoOutputFormat("mp4");
+      if (returnLastFrame) setReturnLastFrame(false);
+    } else if (videoWorkflow === "TALKING_AVATAR") {
+      setVideoWorkflow("GENERATE");
+      setAvatarImageId("");
+      setDrivingAudioId("");
+    }
+  }, [
+    activeMode,
+    generateAudio,
+    isTalkingAvatarModel,
+    ratio,
+    returnLastFrame,
+    videoOutputFormat,
+    videoWorkflow,
+  ]);
 
   useEffect(() => {
     const onWorkflow = (event: Event) => {
@@ -700,7 +789,8 @@ export function GenerationStudio({
     if (
       variant !== "advanced" ||
       activeMode !== "VIDEO" ||
-      model?.capabilities?.referenceAudio !== true
+      model?.capabilities?.referenceAudio !== true &&
+      model?.capabilities?.audioInput !== true
     )
       return;
     const controller = new AbortController();
@@ -715,8 +805,17 @@ export function GenerationStudio({
       )
       .then((body) =>
         setVideoAudioReferences(
-          body.assets.filter(
-            (asset) =>
+          body.assets.filter((asset) => {
+            if (model.capabilities?.audioInput === true) {
+              return (
+                asset.durationMs !== null &&
+                asset.durationMs !== undefined &&
+                asset.durationMs > 0 &&
+                asset.durationMs < 60_000 &&
+                Number(asset.byteSize) <= 25 * 1024 * 1024
+              );
+            }
+            return (
               asset.durationMs !== null &&
               asset.durationMs !== undefined &&
               asset.durationMs >= 2_000 &&
@@ -725,8 +824,9 @@ export function GenerationStudio({
                   model.capabilities?.maxReferenceAudioDurationSeconds ?? 30,
                 ) *
                   1000 &&
-              Number(asset.byteSize) <= 15 * 1024 * 1024,
-          ),
+              Number(asset.byteSize) <= 15 * 1024 * 1024
+            );
+          }),
         ),
       )
       .catch(() => {
@@ -738,6 +838,7 @@ export function GenerationStudio({
     organizationId,
     variant,
     model?.capabilities?.referenceAudio,
+    model?.capabilities?.audioInput,
     model?.capabilities?.maxReferenceAudioDurationSeconds,
   ]);
 
@@ -762,7 +863,9 @@ export function GenerationStudio({
       setReferences((previous) => [body.asset!, ...previous]);
       if (activeMode === "VIDEO") {
         setVideoFrames((previous) => [body.asset!, ...previous]);
-        if (videoWorkflow === "REFERENCE" || videoWorkflow === "DRAFT") {
+        if (videoWorkflow === "TALKING_AVATAR") {
+          setAvatarImageId(body.asset.id);
+        } else if (videoWorkflow === "REFERENCE" || videoWorkflow === "DRAFT") {
           setVideoReferenceImageIds((previous) =>
             previous.includes(body.asset!.id)
               ? previous
@@ -784,6 +887,47 @@ export function GenerationStudio({
       );
     } finally {
       setReferenceBusy(false);
+    }
+  }
+
+  async function uploadDrivingAudio(file: File) {
+    if (drivingAudioBusy || !canGenerate) return;
+    setDrivingAudioBusy(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/assets/media-upload", {
+        method: "POST",
+        headers: {
+          "x-organization-id": organizationId,
+          "x-file-name": file.name,
+          "content-type": file.type || "application/octet-stream",
+        },
+        body: file,
+      });
+      const body = (await response.json()) as {
+        asset?: ReferenceAsset;
+        error?: string;
+      };
+      if (!response.ok || !body.asset)
+        throw new Error(body.error ?? "Driving audio upload failed.");
+      if (
+        body.asset.durationMs === null ||
+        body.asset.durationMs === undefined ||
+        body.asset.durationMs <= 0 ||
+        body.asset.durationMs >= 60_000
+      ) {
+        throw new Error("Driving audio must be shorter than 60 seconds.");
+      }
+      setVideoAudioReferences((previous) => [body.asset!, ...previous]);
+      setDrivingAudioId(body.asset.id);
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Driving audio upload failed.",
+      );
+    } finally {
+      setDrivingAudioBusy(false);
     }
   }
 
@@ -1014,9 +1158,12 @@ export function GenerationStudio({
           workflow: videoWorkflow,
           sources: videoSources,
           durationSeconds: Number.parseInt(selectedDuration, 10),
-          generateAudio,
-          outputFormat: videoOutputFormat,
-          returnLastFrame,
+          generateAudio:
+            videoWorkflow === "TALKING_AVATAR" ? false : generateAudio,
+          outputFormat:
+            videoWorkflow === "TALKING_AVATAR" ? "mp4" : videoOutputFormat,
+          returnLastFrame:
+            videoWorkflow === "TALKING_AVATAR" ? false : returnLastFrame,
           ...(videoWorkflow === "DRAFT_FINAL" && sourceDraftJobId
             ? { sourceDraftJobId }
             : {}),
@@ -1345,6 +1492,17 @@ export function GenerationStudio({
                 setModelId(nextId);
                 const nextModel = modelsForMode.find((m) => m.id === nextId);
                 if (nextModel?.capabilities) {
+                  if (nextModel.capabilities.talkingAvatar === true) {
+                    setVideoWorkflow("TALKING_AVATAR");
+                    setRatio("adaptive");
+                    setGenerateAudio(false);
+                    setVideoOutputFormat("mp4");
+                    setReturnLastFrame(false);
+                  } else if (videoWorkflow === "TALKING_AVATAR") {
+                    setVideoWorkflow("GENERATE");
+                    setAvatarImageId("");
+                    setDrivingAudioId("");
+                  }
                   const nextResolution = selectSupportedCapability(
                     nextModel.capabilities,
                     "resolution",
@@ -1578,7 +1736,9 @@ export function GenerationStudio({
                 htmlFor="creation-prompt"
                 className="block text-sm font-semibold text-foreground"
               >
-                Describe your {model?.mediaKind === "VIDEO" ? "video" : "image"}
+                {videoWorkflow === "TALKING_AVATAR"
+                  ? "Optional motion direction"
+                  : `Describe your ${model?.mediaKind === "VIDEO" ? "video" : "image"}`}
               </label>
               <div className="relative">
                 <textarea
@@ -1587,7 +1747,11 @@ export function GenerationStudio({
                   onChange={(e) => setPrompt(e.target.value)}
                   maxLength={2000}
                   disabled={busy || isEnhancing}
-                  placeholder="A cinematic product photograph in warm Omani desert light…"
+                  placeholder={
+                    videoWorkflow === "TALKING_AVATAR"
+                      ? "Optional: subtle smile, natural gestures, steady eye contact…"
+                      : "A cinematic product photograph in warm Omani desert light…"
+                  }
                   className="min-h-44 w-full rounded-2xl border border-input bg-card p-4 pb-14 text-foreground placeholder:text-muted-foreground"
                 />
                 <Button
@@ -1986,6 +2150,95 @@ export function GenerationStudio({
                     </div>
                   )}
 
+                  {videoWorkflow === "TALKING_AVATAR" ? (
+                    <div className="space-y-3 rounded-xl border border-primary/20 bg-primary/[0.05] p-3">
+                      <div>
+                        <p className="text-xs font-semibold text-foreground">
+                          Talking-avatar sources
+                        </p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          Choose one portrait and one speech track. Duration and
+                          billing are derived from the stored audio metadata.
+                        </p>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="grid gap-2 text-xs font-semibold">
+                          Avatar portrait
+                          <select
+                            value={avatarImageId}
+                            onChange={(event) =>
+                              setAvatarImageId(event.target.value)
+                            }
+                            className="min-h-11 rounded-xl border border-input bg-background px-3"
+                          >
+                            <option value="">Choose a portrait…</option>
+                            {validAvatarFrames.map((item) => (
+                              <option key={item.id} value={item.id}>
+                                {item.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="grid gap-2 text-xs font-semibold">
+                          Driving speech audio
+                          <select
+                            value={drivingAudioId}
+                            onChange={(event) =>
+                              setDrivingAudioId(event.target.value)
+                            }
+                            className="min-h-11 rounded-xl border border-input bg-background px-3"
+                          >
+                            <option value="">Choose an audio track…</option>
+                            {validDrivingAudio.map((item) => (
+                              <option key={item.id} value={item.id}>
+                                {item.name}
+                                {item.durationMs
+                                  ? ` · ${(item.durationMs / 1000).toFixed(1)}s`
+                                  : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <label className="inline-flex cursor-pointer rounded-xl border border-border px-3 py-2 text-xs font-semibold text-primary">
+                          {referenceBusy ? "Uploading…" : "Upload portrait"}
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg"
+                            className="sr-only"
+                            disabled={busy || referenceBusy || !canGenerate}
+                            onChange={(event) => {
+                              const file = event.target.files?.[0];
+                              if (file) void uploadReference(file);
+                              event.target.value = "";
+                            }}
+                          />
+                        </label>
+                        <label className="inline-flex cursor-pointer rounded-xl border border-border px-3 py-2 text-xs font-semibold text-primary">
+                          {drivingAudioBusy
+                            ? "Uploading…"
+                            : "Upload MP3 / WAV"}
+                          <input
+                            type="file"
+                            accept="audio/mpeg,audio/mp3,audio/wav,audio/x-wav"
+                            className="sr-only"
+                            disabled={busy || drivingAudioBusy || !canGenerate}
+                            onChange={(event) => {
+                              const file = event.target.files?.[0];
+                              if (file) void uploadDrivingAudio(file);
+                              event.target.value = "";
+                            }}
+                          />
+                        </label>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Portrait: JPEG/PNG under 5 MB and below 4096×4096.
+                        Driving audio: under 60 seconds.
+                      </p>
+                    </div>
+                  ) : null}
+
                   {(videoWorkflow === "EDIT" || videoWorkflow === "EXTEND") && (
                     <div className="grid gap-3 rounded-xl border border-border bg-surface-sunken p-3 sm:grid-cols-2">
                       <label className="grid gap-2 text-xs font-semibold">
@@ -2151,7 +2404,25 @@ export function GenerationStudio({
 
                 {model?.mediaKind === "VIDEO" && (
                   <>
-                    {videoWorkflow === "EDIT" ? (
+                    {videoWorkflow === "TALKING_AVATAR" ? (
+                      <div className="rounded-xl border border-border bg-card px-3 py-3">
+                        <p className="text-sm font-semibold text-foreground">
+                          Duration
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Derived from driving audio
+                          {validDrivingAudio.find(
+                            (asset) => asset.id === drivingAudioId,
+                          )?.durationMs
+                            ? ` · ${(
+                                validDrivingAudio.find(
+                                  (asset) => asset.id === drivingAudioId,
+                                )!.durationMs! / 1000
+                              ).toFixed(1)}s`
+                            : ""}
+                        </p>
+                      </div>
+                    ) : videoWorkflow === "EDIT" ? (
                       <div className="rounded-xl border border-border bg-card px-3 py-3">
                         <p className="text-sm font-semibold text-foreground">
                           Duration
@@ -2298,7 +2569,9 @@ export function GenerationStudio({
                     ? "video tokens"
                     : activeQuote.quote.estimatedUsage.unit === "CHARACTER"
                       ? "characters"
-                      : "images"}
+                      : activeQuote.quote.estimatedUsage.unit === "SECOND"
+                        ? "seconds"
+                        : "images"}
                   : {activeQuote.quote.estimatedUsage.quantity}
                 </p>
                 {activeQuote.quote.settlement === "ACTUAL_USAGE" && (
@@ -2344,7 +2617,9 @@ export function GenerationStudio({
               !model ||
               (activeMode === "VOICE"
                 ? !voiceText.trim()
-                : activeMode === "VIDEO" && videoWorkflow === "DRAFT_FINAL"
+                : activeMode === "VIDEO" &&
+                    (videoWorkflow === "DRAFT_FINAL" ||
+                      videoWorkflow === "TALKING_AVATAR")
                   ? false
                   : !prompt.trim()) ||
               (activeMode === "VOICE" &&
@@ -2365,7 +2640,9 @@ export function GenerationStudio({
                 : "Queuing media…"
               : `Generate ${
                   activeMode === "VIDEO"
-                    ? "video"
+                    ? videoWorkflow === "TALKING_AVATAR"
+                      ? "avatar"
+                      : "video"
                     : activeMode === "VOICE"
                       ? "speech"
                       : "image"
@@ -2384,7 +2661,9 @@ export function GenerationStudio({
             <p className="text-sm text-muted-foreground">
               {activeMode === "VOICE"
                 ? "Voice generation is not configured yet."
-                : "Media generation is not configured yet."}
+                : model?.providerModelId === "omnihuman-1.5"
+                  ? "OmniHuman Vision generation is not configured yet."
+                  : "Media generation is not configured yet."}
             </p>
           ) : null}
           {model &&
@@ -2392,6 +2671,7 @@ export function GenerationStudio({
           (availableRatios.length === 0 ||
             availableResolutions.length === 0 ||
             (model.mediaKind === "VIDEO" &&
+              videoWorkflow !== "TALKING_AVATAR" &&
               availableDurations.length === 0)) ? (
             <p className="text-sm text-destructive">
               This model is missing generation capabilities. Ask an admin to

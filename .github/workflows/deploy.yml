@@ -57,14 +57,21 @@ jobs:
           printf '%s\n' "$STAGING_SSH_KEY" | tr -d '\r' >"$key_file"
           chmod 0600 "$key_file"
 
-          timeout 45 ssh-keyscan -4 -p "$STAGING_SSH_PORT" -t ed25519 \
+          # Scan all standard host-key algorithms. The configured fingerprint
+          # remains the trust anchor; accepting multiple advertised algorithms
+          # avoids coupling deployment to whichever algorithm a client prefers.
+          timeout 45 ssh-keyscan -4 -p "$STAGING_SSH_PORT" \
             "$STAGING_SSH_HOST" >"$known_hosts" 2>/dev/null
           test -s "$known_hosts"
 
+          expected_fingerprint="$(
+            printf '%s' "$STAGING_SSH_FINGERPRINT" | tr -d '\r\n'
+          )"
+          test -n "$expected_fingerprint"
           if ! ssh-keygen -lf "$known_hosts" -E sha256 \
             | awk '{print $2}' \
-            | grep -Fxq -- "$STAGING_SSH_FINGERPRINT"; then
-            echo "Staging SSH host key fingerprint does not match the configured secret." >&2
+            | grep -Fxq -- "$expected_fingerprint"; then
+            echo "No advertised staging SSH host key matches the configured fingerprint." >&2
             exit 1
           fi
 

@@ -844,6 +844,15 @@ export function GenerationStudio({
 
   async function uploadReference(file: File) {
     if (referenceBusy || !canGenerate) return;
+    if (
+      videoWorkflow === "TALKING_AVATAR" &&
+      (!["image/jpeg", "image/png"].includes(file.type) ||
+        file.size <= 0 ||
+        file.size >= 5_000_000)
+    ) {
+      setError("Avatar portrait must be a JPEG/PNG file under 5 MB.");
+      return;
+    }
     setReferenceBusy(true);
     setError(null);
     try {
@@ -892,6 +901,16 @@ export function GenerationStudio({
 
   async function uploadDrivingAudio(file: File) {
     if (drivingAudioBusy || !canGenerate) return;
+    if (
+      !["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav"].includes(
+        file.type,
+      ) ||
+      file.size <= 0 ||
+      file.size > 25 * 1024 * 1024
+    ) {
+      setError("Driving audio must be an MP3/WAV file within 25 MB.");
+      return;
+    }
     setDrivingAudioBusy(true);
     setError(null);
     try {

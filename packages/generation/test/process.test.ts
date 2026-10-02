@@ -1234,9 +1234,9 @@ describe("model disabling emergency stop and pause semantics", () => {
     expect(mocks.release).not.toHaveBeenCalled();
   });
 
-  it("rolls back video submission to QUEUED if model is disabled immediately before submission", async () => {
+  it("releases video reservation if model is disabled immediately before submission", async () => {
     const p = provider();
-    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+    const queuedJob = {
       ...base,
       status: "QUEUED",
       providerModel: {
@@ -1244,16 +1244,23 @@ describe("model disabling emergency stop and pause semantics", () => {
         providerModelId: "seedance-2.5",
         enabled: true,
       },
-    });
+    };
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue(queuedJob);
     mocks.db.providerModel.findUnique.mockResolvedValue({ enabled: false });
+    const tx = transaction("SUBMITTED", queuedJob);
 
     await processVideoSubmitJob("job1", p);
 
     expect(p.submit).not.toHaveBeenCalled();
-    expect(mocks.db.generationJob.updateMany).toHaveBeenCalledWith({
-      where: { id: "job1", status: "SUBMITTED" },
-      data: { status: "QUEUED", submittedAt: null },
-    });
+    expect(mocks.release).toHaveBeenCalledTimes(1);
+    expect(tx.generationJob.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "FAILED",
+          errorCode: "MODEL_DISABLED",
+        }),
+      }),
+    );
   });
 
   it("pauses a queued image job without submitting when model is disabled", async () => {

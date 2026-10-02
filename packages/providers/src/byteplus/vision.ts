@@ -175,10 +175,7 @@ function retryableBusinessCode(code: number): boolean {
   return [50429, 50430, 50500, 50501].includes(code);
 }
 
-function businessError(
-  code: number,
-  httpStatus: number,
-): ProviderRequestError {
+function businessError(code: number, httpStatus: number): ProviderRequestError {
   return new ProviderRequestError(
     `BytePlus Vision request failed (${code})`,
     retryableBusinessCode(code) ||

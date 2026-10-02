@@ -24,12 +24,13 @@ describe("reapExpiredRecoveryJobs", () => {
 
     await reapExpiredRecoveryJobs(fixedNow);
 
-    // Verify 4 updateMany calls were made:
+    // Verify 5 updateMany calls were made:
     // 1. interrupted SUBMITTED jobs
     // 2. expired IMAGE recovery
     // 3. expired VOICE recovery
-    // 4. expired VIDEO recovery
-    expect(mocks.db.generationJob.updateMany).toHaveBeenCalledTimes(4);
+    // 4. interrupted TEXT settlement
+    // 5. expired VIDEO recovery
+    expect(mocks.db.generationJob.updateMany).toHaveBeenCalledTimes(5);
 
     // Call 3: Voice recovery cutoff
     const voiceCall = mocks.db.generationJob.updateMany.mock.calls[2]?.[0];
@@ -93,6 +94,26 @@ describe("reapExpiredRecoveryJobs", () => {
     expect(imageCall.where).not.toHaveProperty("updatedAt");
   });
 
+  it("moves stale text settlement into manual review without replaying the provider", async () => {
+    const fixedNow = new Date("2026-09-23T12:00:00.000Z");
+    const expected15mCutoff = new Date("2026-09-23T11:45:00.000Z");
+
+    await reapExpiredRecoveryJobs(fixedNow);
+
+    const textCall = mocks.db.generationJob.updateMany.mock.calls[3]?.[0];
+    expect(textCall.where).toEqual({
+      status: "PROCESSING",
+      providerModel: { mediaKind: "TEXT" },
+      updatedAt: { lt: expected15mCutoff },
+    });
+    expect(textCall.data).toEqual({
+      status: "MANUAL_REVIEW",
+      errorCode: "TEXT_SETTLEMENT_INTERRUPTED",
+      errorMessage:
+        "Text generation completed or reached settlement, but the worker was interrupted. Credits remain reserved for review.",
+    });
+  });
+
   it("reaps video recovery and interrupted submissions", async () => {
     const fixedNow = new Date("2026-09-23T12:00:00.000Z");
     const expected15mCutoff = new Date("2026-09-23T11:45:00.000Z");
@@ -109,8 +130,8 @@ describe("reapExpiredRecoveryJobs", () => {
     });
     expect(interruptedCall.data.errorCode).toBe("WORKER_INTERRUPTED");
 
-    // Call 4: Video timeout
-    const videoCall = mocks.db.generationJob.updateMany.mock.calls[3]?.[0];
+    // Call 5: Video timeout
+    const videoCall = mocks.db.generationJob.updateMany.mock.calls[4]?.[0];
     expect(videoCall.where).toEqual({
       status: "PROCESSING",
       providerModel: { mediaKind: "VIDEO" },

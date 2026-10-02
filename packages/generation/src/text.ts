@@ -365,7 +365,7 @@ export async function createTextJob(userId: string, raw: unknown) {
             temperature: input.temperature,
             maxTokens: input.maxTokens,
             clientRequestHash: requestFingerprint(input),
-          } as Prisma.InputJsonObject,
+          } as unknown as Prisma.InputJsonObject,
           status: "QUEUED",
           quotedAt: now,
           queuedAt: now,

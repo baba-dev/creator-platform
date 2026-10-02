@@ -78,6 +78,27 @@ node -e 'require(process.argv[1])({create:{width:1,height:1,channels:3,backgroun
 pnpm --filter @aiwa/db deploy --legacy "$operations_root"
 node "$operations_root/node_modules/prisma/build/index.js" generate --schema "$operations_root/prisma/schema.prisma"
 
+# Staging is Ubuntu 22.04/OpenSSL 3. Releases are immutable at runtime, so both
+# Prisma CLI and generated-client OpenSSL 3 engines must already be present.
+prisma_cli_query_engine="$(
+  find "$operations_root/node_modules" \
+    -path '*/@prisma/engines/libquery_engine-debian-openssl-3.0.x.so.node' \
+    -print -quit
+)"
+prisma_cli_schema_engine="$(
+  find "$operations_root/node_modules" \
+    -path '*/@prisma/engines/schema-engine-debian-openssl-3.0.x' \
+    -print -quit
+)"
+prisma_client_query_engine="$(
+  find "$operations_root/node_modules" \
+    -path '*/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node' \
+    -print -quit
+)"
+test -f "$prisma_cli_query_engine"
+test -x "$prisma_cli_schema_engine"
+test -f "$prisma_client_query_engine"
+
 # Worker uses the same generated Prisma runtime as the isolated DB package.
 mkdir -p "$release_root/apps/worker/node_modules/@prisma"
 ln -s ../../../../ops/db/node_modules/@prisma/client "$release_root/apps/worker/node_modules/@prisma/client"

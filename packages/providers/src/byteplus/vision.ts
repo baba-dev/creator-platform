@@ -175,10 +175,16 @@ function retryableBusinessCode(code: number): boolean {
   return [50429, 50430, 50500, 50501].includes(code);
 }
 
-function businessError(code: number): ProviderRequestError {
+function businessError(
+  code: number,
+  httpStatus: number,
+): ProviderRequestError {
   return new ProviderRequestError(
     `BytePlus Vision request failed (${code})`,
-    retryableBusinessCode(code),
+    retryableBusinessCode(code) ||
+      httpStatus === 408 ||
+      httpStatus === 429 ||
+      httpStatus >= 500,
     { code: `VISION_${code}` },
   );
 }
@@ -261,7 +267,8 @@ async function visionRequest(
       { code: `HTTP_${response.status}` },
     );
   }
-  if (parsed.data.code !== 10000) throw businessError(parsed.data.code);
+  if (parsed.data.code !== 10000)
+    throw businessError(parsed.data.code, response.status);
   return parsed.data;
 }
 

@@ -740,6 +740,7 @@ async function dispatchGeneration() {
       OR: [
         { providerModel: { enabled: true } },
         { providerModel: { mediaKind: "TEXT" } },
+        { providerModel: { mediaKind: "VIDEO" } },
       ],
     };
     if (generationSubmitCursor) {
@@ -767,6 +768,7 @@ async function dispatchGeneration() {
             OR: [
               { providerModel: { enabled: true } },
               { providerModel: { mediaKind: "TEXT" } },
+              { providerModel: { mediaKind: "VIDEO" } },
             ],
           },
           select: {

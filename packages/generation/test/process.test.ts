@@ -198,6 +198,69 @@ describe("video processing", () => {
     expect(tx.generationJob.update).not.toHaveBeenCalled();
   });
 
+  it("releases a queued video reservation when the model was disabled before dispatch", async () => {
+    const p = provider();
+    const disabledJob = {
+      ...base,
+      status: "QUEUED",
+      providerModel: {
+        id: "video-model",
+        providerModelId: "omnihuman-1.5",
+        enabled: false,
+      },
+    };
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue(disabledJob);
+    const tx = transaction("QUEUED", disabledJob);
+
+    await processVideoSubmitJob("job1", p);
+
+    expect(p.submit).not.toHaveBeenCalled();
+    expect(mocks.release).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        jobId: "job1",
+        idempotencyKey: "generation-release-job1",
+      }),
+    );
+    expect(tx.generationJob.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "FAILED",
+          errorCode: "MODEL_DISABLED",
+        }),
+      }),
+    );
+  });
+
+  it("releases a video reservation when the model is disabled after the worker claim", async () => {
+    const p = provider();
+    const queuedJob = {
+      ...base,
+      status: "QUEUED",
+      providerModel: {
+        id: "video-model",
+        providerModelId: "omnihuman-1.5",
+        enabled: true,
+      },
+    };
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue(queuedJob);
+    mocks.db.providerModel.findUnique.mockResolvedValue({ enabled: false });
+    const tx = transaction("SUBMITTED", queuedJob);
+
+    await processVideoSubmitJob("job1", p);
+
+    expect(p.submit).not.toHaveBeenCalled();
+    expect(mocks.release).toHaveBeenCalledTimes(1);
+    expect(tx.generationJob.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "FAILED",
+          errorCode: "MODEL_DISABLED",
+        }),
+      }),
+    );
+  });
+
   it("submits a queued video exactly once and records its provider task", async () => {
     const p = provider();
     vi.mocked(p.submit).mockResolvedValue({

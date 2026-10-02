@@ -112,6 +112,53 @@ describe("BytePlus provider adapter", () => {
     ).toBe(false);
   });
 
+  it("treats Vision HTTP 5xx business failures as retryable without leaking provider messages", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(
+        {
+          code: 50215,
+          message: "Temporary upstream failure with private provider context",
+          request_id: "req-retry-1",
+          data: null,
+        },
+        503,
+      ),
+    );
+    const provider = createBytePlusProvider({
+      region: "ap-southeast-1",
+      visionAccessKeyId: "test-access-key",
+      visionSecretAccessKey: "test-secret-key",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await expect(
+      provider.submit({
+        idempotencyKey: "omnihuman-retry-1",
+        modelId: "omnihuman-1.5",
+        mediaKind: "video",
+        input: {
+          workflow: "TALKING_AVATAR",
+          prompt: "",
+          sources: [
+            { role: "AVATAR_IMAGE", url: "https://creator.example/avatar.jpg" },
+            { role: "DRIVING_AUDIO", url: "https://creator.example/speech.mp3" },
+          ],
+          aspectRatio: "adaptive",
+          resolution: "1080p",
+          durationSeconds: -1,
+          generateAudio: false,
+          outputFormat: "mp4",
+          returnLastFrame: false,
+        },
+      }),
+    ).rejects.toMatchObject({
+      name: "ProviderRequestError",
+      message: "BytePlus Vision request failed (50215)",
+      retryable: true,
+      code: "VISION_50215",
+    });
+  });
+
   it("matches BytePlus canonical HMAC signing with the required header separator", () => {
     const body =
       '{"req_key":"realman_avatar_picture_omni15_cv","image_url":"https://creator.example/avatar.jpg","audio_url":"https://creator.example/speech.mp3","output_resolution":1080}';

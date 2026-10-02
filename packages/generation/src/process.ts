@@ -214,7 +214,15 @@ export async function processVideoSubmitJob(
     },
   });
   if (job.status !== "QUEUED") return;
-  if (job.providerModel.enabled === false) return;
+  if (job.providerModel.enabled === false) {
+    await failJob(
+      id,
+      "Selected video model was disabled before provider submission.",
+      "QUEUED",
+      "MODEL_DISABLED",
+    );
+    return;
+  }
 
   try {
     await requireMembership(db, job.organizationId, job.createdById, true);
@@ -235,10 +243,12 @@ export async function processVideoSubmitJob(
     select: { enabled: true },
   });
   if (!currentModel || currentModel.enabled === false) {
-    await db.generationJob.updateMany({
-      where: { id, status: "SUBMITTED" },
-      data: { status: "QUEUED", submittedAt: null },
-    });
+    await failJob(
+      id,
+      "Selected video model was disabled before provider submission.",
+      "SUBMITTED",
+      "MODEL_DISABLED",
+    );
     return;
   }
 

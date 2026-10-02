@@ -304,21 +304,7 @@ export async function createImageJob(userId: string, raw: unknown) {
           existing.templateId !== templateId ||
           existing.providerModelId !== input.modelId ||
           existing.priceVersionId !== input.priceVersionId ||
-          JSON.stringify(
-            (() => {
-              const existingPayload =
-                existing.requestPayload &&
-                typeof existing.requestPayload === "object" &&
-                !Array.isArray(existing.requestPayload)
-                  ? { ...(existing.requestPayload as Record<string, unknown>) }
-                  : {};
-              delete existingPayload.draftProviderTaskId;
-              delete existingPayload.draftBillingContext;
-              delete existingPayload.trustedDrivingAudioDurationMs;
-              delete existingPayload.billableDurationSeconds;
-              return existingPayload;
-            })(),
-          ) !== JSON.stringify(payload)
+JSON.stringify(existing.requestPayload) !== JSON.stringify(payload)
         ) {
           // JSON columns can reorder keys: compare canonical fields below.
           const old = existing.requestPayload as Partial<typeof payload>;

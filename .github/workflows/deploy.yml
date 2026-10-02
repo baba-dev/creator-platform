@@ -57,14 +57,31 @@ jobs:
           printf '%s\n' "$STAGING_SSH_KEY" | tr -d '\r' >"$key_file"
           chmod 0600 "$key_file"
 
-          timeout 45 ssh-keyscan -4 -p "$STAGING_SSH_PORT" -t ed25519 \
-            "$STAGING_SSH_HOST" >"$known_hosts" 2>/dev/null
-          test -s "$known_hosts"
+          scanned_hosts="$RUNNER_TEMP/staging-scanned-hosts"
+          expected_fingerprint="$(
+            printf '%s' "$STAGING_SSH_FINGERPRINT" | tr -d '\r\n'
+          )"
 
-          if ! ssh-keygen -lf "$known_hosts" -E sha256 \
-            | awk '{print $2}' \
-            | grep -Fxq -- "$STAGING_SSH_FINGERPRINT"; then
-            echo "Staging SSH host key fingerprint does not match the configured secret." >&2
+          timeout 45 ssh-keyscan -4 -p "$STAGING_SSH_PORT" \
+            -t ed25519,ecdsa,rsa \
+            "$STAGING_SSH_HOST" >"$scanned_hosts" 2>/dev/null
+          test -s "$scanned_hosts"
+
+          : >"$known_hosts"
+          while IFS= read -r host_key; do
+            fingerprint="$(
+              printf '%s\n' "$host_key" \
+                | ssh-keygen -lf - -E sha256 2>/dev/null \
+                | awk '{print $2}'
+            )"
+            if [ "$fingerprint" = "$expected_fingerprint" ]; then
+              printf '%s\n' "$host_key" >>"$known_hosts"
+            fi
+          done <"$scanned_hosts"
+
+          rm -f -- "$scanned_hosts"
+          if ! test -s "$known_hosts"; then
+            echo "No staging SSH host key matches the configured SHA-256 fingerprint." >&2
             exit 1
           fi
 

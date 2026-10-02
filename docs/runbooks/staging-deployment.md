@@ -73,7 +73,7 @@ Create a GitHub environment named `staging` with:
 | `STAGING_SSH_PORT`        | `22`                                              |
 | `STAGING_SSH_USER`        | `creator-deploy`                                  |
 | `STAGING_SSH_KEY`         | Dedicated ED25519 private key                     |
-| `STAGING_SSH_FINGERPRINT` | SHA256 fingerprint of a trusted server host key |
+| `STAGING_SSH_FINGERPRINT` | SHA256 fingerprint of a trusted server host key   |
 
 Do not use a root or general-purpose administrator SSH key. The dedicated
 `creator-deploy` user receives permission to run only the validated deployment
@@ -106,10 +106,11 @@ root-managed environment file.
 
 The first v3 rollout has an explicit trust bootstrap. A layout-v2 deployment
 tool can extract a release as the runtime user, so it must **not** be allowed to
-self-upgrade from a runtime-writable release. The staging deploy workflow pins the configured SHA-256 fingerprint against the
-server's advertised SSH host keys, checks `creator-deploy --version`, verifies
-that the dedicated deployment user can write `incoming/`, and refuses to upload
-or activate v3 until the host reports control-plane version `3`.
+self-upgrade from a runtime-writable release. The staging deploy workflow pins
+the configured SHA-256 fingerprint against the server's advertised SSH host
+keys, checks `creator-deploy --version`, verifies that the dedicated deployment
+user can write `incoming/`, and refuses to upload or activate v3 until the host
+reports control-plane version `3`.
 
 From a trusted operator checkout of the exact reviewed or merged commit, install
 the complete root control plane before rerunning the deploy workflow:

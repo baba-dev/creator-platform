@@ -774,7 +774,10 @@ export function ScriptwritingStudio({
               return (
                 <button
                   key={s.id}
-                  onClick={() => setActiveScript(s)}
+                  onClick={() => {
+                    setPendingBatchQuote(null);
+                    setActiveScript(s);
+                  }}
                   className={`flex w-full flex-col rounded-xl p-3 text-left transition ${
                     isActive
                       ? "border border-primary/50 bg-primary/10 text-primary"

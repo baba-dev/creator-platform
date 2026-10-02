@@ -42,6 +42,32 @@ describe("text and voice workspace validation contracts", () => {
     expect(parsed.content?.voiceAssignments?.NORA?.voiceKey).toBe("charlotte");
   });
 
+  it("requires a stable idempotency key for paid chat turns", () => {
+    expect(() =>
+      chatMessageCreateSchema.parse({
+        content: "Hello there",
+        autoVoice: false,
+      }),
+    ).toThrow();
+  });
+
+  it("requires the expected screenplay revision on updates", () => {
+    expect(() =>
+      scriptUpdateSchema.parse({
+        content: {
+          scenes: [
+            {
+              id: "scene-1",
+              type: "dialogue",
+              character: "NORA",
+              text: "We should leave now.",
+            },
+          ],
+        },
+      }),
+    ).toThrow();
+  });
+
   it("accepts versioned BytePlus text token rate tables", () => {
     const parsed = publishPriceVersionSchema.parse({
       idempotencyKey: "123e4567-e89b-12d3-a456-426614174099",

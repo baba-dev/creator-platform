@@ -6,9 +6,9 @@ The staging environment runs directly on Ubuntu without Docker:
 - `creator-web.service` runs the Next.js standalone server.
 - `creator-worker.service` runs the bundled BullMQ worker.
 - MariaDB and Redis remain bound to localhost.
-- GitHub CI builds a release archive; the deploy workflow uses native OpenSSH/SCP
-  with pinned host-key verification, SHA-256 validation, and an atomic `.part`
-  rename before invoking the root-owned deployment command.
+- GitHub CI builds a release archive; the deploy workflow uses native
+  OpenSSH/SCP with pinned host-key verification, SHA-256 validation, and an
+  atomic `.part` rename before invoking the root-owned deployment command.
 
 ## Release layout
 
@@ -107,8 +107,8 @@ root-managed environment file.
 The first v3 rollout has an explicit trust bootstrap. A layout-v2 deployment
 tool can extract a release as the runtime user, so it must **not** be allowed to
 self-upgrade from a runtime-writable release. The staging deploy workflow checks
-`creator-deploy --version`, verifies that the dedicated deployment user can write
-`incoming/`, and refuses to upload or activate v3 until the host reports
+`creator-deploy --version`, verifies that the dedicated deployment user can
+write `incoming/`, and refuses to upload or activate v3 until the host reports
 control-plane version `3`.
 
 From a trusted operator checkout of the exact reviewed or merged commit, install

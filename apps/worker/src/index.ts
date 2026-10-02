@@ -16,7 +16,7 @@ import {
 } from "./media-tasks";
 import { assetJobOptions, retainFailedAssetJob } from "./asset-dispatch";
 import { parseServerEnv } from "@aiwa/config";
-import { db } from "@aiwa/db";
+import { db, type Prisma } from "@aiwa/db";
 import {
   processImageJob,
   processVideoPollJob,
@@ -727,13 +727,12 @@ async function dispatchGeneration() {
     await reapExpiredRecoveryJobs();
 
     // 1. Fetch new submissions with keyset cursor rotation
-    const submitWhere: {
-      status: "QUEUED";
-      providerModel: { enabled: true };
-      id?: { gt: string };
-    } = {
+    const submitWhere: Prisma.GenerationJobWhereInput = {
       status: "QUEUED",
-      providerModel: { enabled: true },
+      OR: [
+        { providerModel: { enabled: true } },
+        { providerModel: { mediaKind: "TEXT" } },
+      ],
     };
     if (generationSubmitCursor) {
       submitWhere.id = { gt: generationSubmitCursor };
@@ -757,7 +756,10 @@ async function dispatchGeneration() {
         queuedRows = await db.generationJob.findMany({
           where: {
             status: "QUEUED",
-            providerModel: { enabled: true },
+            OR: [
+              { providerModel: { enabled: true } },
+              { providerModel: { mediaKind: "TEXT" } },
+            ],
           },
           select: {
             id: true,

@@ -732,7 +732,7 @@ export const chatThreadCreateSchema = z
 export const chatMessageCreateSchema = z
   .object({
     content: z.string().trim().min(1).max(8000),
-    idempotencyKey: idempotencyKeySchema,
+    idempotencyKey: z.uuid(),
     autoVoice: z.boolean().default(false),
   })
   .strict();

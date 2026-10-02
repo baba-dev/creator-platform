@@ -73,7 +73,10 @@ function capabilityContextWindow(capabilities: unknown): number {
 }
 
 function estimatedMessageTokens(message: TextMessage): number {
-  return Math.max(1, Math.ceil(message.content.length / 3.5)) + 6;
+  // Mixed Arabic, code, punctuation-heavy prompts and identifiers can tokenize
+  // much more densely than ordinary English prose. Keep admission conservative;
+  // provider usage remains authoritative for settlement.
+  return Math.max(1, Math.ceil(message.content.length / 2)) + 8;
 }
 
 /**
@@ -468,10 +471,12 @@ export async function processTextJob(
     select: { enabled: true },
   });
   if (!currentModel?.enabled) {
-    await db.generationJob.updateMany({
-      where: { id, status: "SUBMITTED" },
-      data: { status: "QUEUED", submittedAt: null },
-    });
+    await failTextJob(
+      id,
+      "SUBMITTED",
+      "Selected text model was disabled before provider submission.",
+      "MODEL_DISABLED",
+    );
     return;
   }
 

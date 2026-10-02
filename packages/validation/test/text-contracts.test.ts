@@ -10,7 +10,7 @@ describe("text and voice workspace validation contracts", () => {
     expect(
       chatMessageCreateSchema.parse({
         content: "Hello there",
-        idempotencyKey: "request-key-123456",
+        idempotencyKey: "123e4567-e89b-42d3-a456-426614174123",
         autoVoice: true,
       }).autoVoice,
     ).toBe(true);

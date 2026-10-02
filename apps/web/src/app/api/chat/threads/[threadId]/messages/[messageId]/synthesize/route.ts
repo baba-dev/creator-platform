@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { hasOrganizationPermission } from "@aiwa/authz";
 import { db } from "@aiwa/db";
 import {
@@ -8,6 +7,7 @@ import {
 } from "@aiwa/generation";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { deterministicUuid } from "@/lib/idempotency";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
 
@@ -126,12 +126,24 @@ export async function POST(
       );
     }
 
-    const idempotencyKey = randomUUID();
+    const price = voiceModel.priceVersions[0]!;
+    const idempotencyKey = deterministicUuid(
+      [
+        "chat-message-voice-v2",
+        threadId,
+        messageId,
+        voiceModel.id,
+        price.id,
+        voiceKeyToUse,
+        String(input.speechRate),
+        message.content,
+      ].join("\u0000"),
+    );
     const job = await createVoiceJob(session.user.id, {
       organizationId: thread.organizationId,
       projectId: thread.projectId,
       modelId: voiceModel.id,
-      priceVersionId: voiceModel.priceVersions[0].id,
+      priceVersionId: price.id,
       idempotencyKey,
       text: message.content,
       voiceKey: voiceKeyToUse,

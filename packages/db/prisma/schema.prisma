@@ -136,6 +136,8 @@ enum GenerationInputRole {
   REFERENCE_VIDEO
   REFERENCE_AUDIO
   SOURCE_VIDEO
+  AVATAR_IMAGE
+  DRIVING_AUDIO
 }
 
 enum ImageOperationStatus {

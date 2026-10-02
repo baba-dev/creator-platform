@@ -6,6 +6,7 @@ import {
   type VideoRequestV2,
   type VideoSource,
 } from "./video-contract";
+import { inspectTalkingAvatarSources } from "./talking-avatar";
 
 export class QuoteValidationError extends Error {
   constructor(
@@ -198,10 +199,12 @@ export async function estimateAuthorizedGeneration(
       const image =
         source.role === "FIRST_FRAME" ||
         source.role === "LAST_FRAME" ||
-        source.role === "REFERENCE_IMAGE";
+        source.role === "REFERENCE_IMAGE" ||
+        source.role === "AVATAR_IMAGE";
       const videoInput =
         source.role === "REFERENCE_VIDEO" || source.role === "SOURCE_VIDEO";
-      const audio = source.role === "REFERENCE_AUDIO";
+      const audio =
+        source.role === "REFERENCE_AUDIO" || source.role === "DRIVING_AUDIO";
       if (
         (image && asset.mediaKind !== "IMAGE") ||
         (videoInput && asset.mediaKind !== "VIDEO") ||
@@ -213,6 +216,7 @@ export async function estimateAuthorizedGeneration(
         );
       if (
         image &&
+        source.role !== "AVATAR_IMAGE" &&
         (asset.byteSize > 20n * 1024n * 1024n ||
           !asset.mimeType.startsWith("image/"))
       )
@@ -251,7 +255,7 @@ export async function estimateAuthorizedGeneration(
           );
         inputVideoMs += asset.durationMs;
       }
-      if (audio) {
+      if (audio && source.role !== "DRIVING_AUDIO") {
         if (
           asset.durationMs === null ||
           asset.durationMs < 2_000 ||
@@ -285,6 +289,22 @@ export async function estimateAuthorizedGeneration(
     pricingDurationSeconds =
       video.durationSeconds === -1 ? 5 : video.durationSeconds;
     pricingGenerateAudio = video.generateAudio;
+
+    if (video.workflow === "TALKING_AVATAR") {
+      try {
+        const facts = inspectTalkingAvatarSources(video, assetById);
+        pricingDurationSeconds = facts.billableDurationSeconds;
+        normalizedRatio = "adaptive";
+        pricingGenerateAudio = false;
+      } catch (error) {
+        throw new QuoteValidationError(
+          error instanceof Error
+            ? error.message
+            : "Talking-avatar source media is invalid.",
+          400,
+        );
+      }
+    }
 
     if (video.workflow === "EDIT") {
       const source = video.sources.find((item) => item.role === "SOURCE_VIDEO");

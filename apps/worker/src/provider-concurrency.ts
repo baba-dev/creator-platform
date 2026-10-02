@@ -31,6 +31,17 @@ export function seedanceConcurrencySpec(input: {
   capabilities: unknown;
   requestPayload: unknown;
 }): ProviderConcurrencySpec | null {
+  if (input.providerModelId === "omnihuman-1.5") {
+    const providerLimit = capabilityLimit(
+      input.capabilities,
+      "concurrencyLimit",
+      1,
+    );
+    return {
+      key: "aiwa:provider-capacity:byteplus:omnihuman-1.5:standard",
+      limit: operatingLimit(providerLimit),
+    };
+  }
   if (!input.providerModelId.startsWith("dreamina-seedance-2-")) return null;
   const payload =
     input.requestPayload &&

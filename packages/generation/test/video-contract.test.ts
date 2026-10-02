@@ -144,6 +144,51 @@ describe("Seedance video request contract", () => {
     expect(final.workflow).toBe("DRAFT_FINAL");
   });
 
+  it("models OmniHuman as a V2 talking-avatar workflow with trusted duration", () => {
+    const valid = videoRequestV2Schema.parse({
+      ...requestIdentity,
+      idempotencyKey: "123e4567-e89b-42d3-a456-426614174109",
+      schemaVersion: 2,
+      workflow: "TALKING_AVATAR",
+      prompt: "",
+      aspectRatio: "adaptive",
+      resolution: "1080p",
+      durationSeconds: -1,
+      generateAudio: false,
+      outputFormat: "mp4",
+      returnLastFrame: false,
+      sources: [
+        { assetId: "avatar", role: "AVATAR_IMAGE", position: 0 },
+        { assetId: "speech", role: "DRIVING_AUDIO", position: 1 },
+      ],
+    });
+    expect(
+      validateVideoModelRequest(
+        "omnihuman-1.5",
+        {
+          "resolution:1080p": true,
+          "aspectRatio:adaptive": true,
+          talkingAvatar: true,
+          returnLastFrame: false,
+        },
+        valid,
+      ),
+    ).toBeNull();
+
+    expect(
+      videoRequestV2Schema.safeParse({
+        ...valid,
+        durationSeconds: 5,
+      }).success,
+    ).toBe(false);
+    expect(
+      videoRequestV2Schema.safeParse({
+        ...valid,
+        sources: [{ assetId: "avatar", role: "AVATAR_IMAGE", position: 0 }],
+      }).success,
+    ).toBe(false);
+  });
+
   it("enforces model ranges, reference ceilings, audio-only policy, MOV and Draft capabilities", () => {
     const request = videoRequestV2Schema.parse({
       ...requestIdentity,

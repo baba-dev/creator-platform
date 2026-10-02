@@ -43,8 +43,9 @@ All customer-facing media generation is performed through BytePlus services:
 
 - Image generation and editing
 - Video generation
+- OmniHuman 1.5 talking-avatar generation through BytePlus Vision
 - Text-to-speech
-- Future avatar and motion-generation capabilities
+- Future motion-generation capabilities
 
 ### NVIDIA
 
@@ -321,6 +322,9 @@ REDIS_URL=
 BYTEPLUS_API_KEY=
 BYTEPLUS_REGION=ap-southeast-1
 BYTEPLUS_MODELARK_BASE_URL=
+BYTEPLUS_VISION_ACCESS_KEY_ID=
+BYTEPLUS_VISION_SECRET_ACCESS_KEY=
+BYTEPLUS_VISION_BASE_URL=https://cv.byteplusapi.com
 BYTEPLUS_SPEECH_API_KEY=
 BYTEPLUS_SPEECH_APP_KEY=aGjiRDfUWi
 BYTEPLUS_SPEECH_BASE_URL=

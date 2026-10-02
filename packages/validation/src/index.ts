@@ -356,6 +356,8 @@ export const videoQuoteSourceSchema = z
       "REFERENCE_VIDEO",
       "REFERENCE_AUDIO",
       "SOURCE_VIDEO",
+      "AVATAR_IMAGE",
+      "DRIVING_AUDIO",
     ]),
     position: z.number().int().min(0).max(49),
   })
@@ -384,6 +386,7 @@ export const quoteRequestSchema = z
         "EXTEND",
         "DRAFT",
         "DRAFT_FINAL",
+        "TALKING_AVATAR",
       ])
       .optional(),
     sources: z.array(videoQuoteSourceSchema).max(50).optional(),

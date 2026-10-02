@@ -732,7 +732,7 @@ export const chatThreadCreateSchema = z
 export const chatMessageCreateSchema = z
   .object({
     content: z.string().trim().min(1).max(8000),
-    idempotencyKey: idempotencyKeySchema.optional(),
+    idempotencyKey: idempotencyKeySchema,
     autoVoice: z.boolean().default(false),
   })
   .strict();
@@ -780,7 +780,11 @@ export const scriptCreateSchema = z
 
 export const scriptUpdateSchema = scriptCreateSchema
   .partial()
-  .omit({ organizationId: true });
+  .omit({ organizationId: true })
+  .extend({
+    expectedRevision: z.number().int().positive(),
+  })
+  .strict();
 
 export const brandProfileCreateSchema = z
   .object({

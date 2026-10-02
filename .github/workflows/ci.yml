@@ -204,6 +204,7 @@ jobs:
       APP_VERSION: ${{ github.sha }}
       SIGNUPS_ENABLED: "true"
       GENERATION_INTEGRATION_TEST: "true"
+      PRISMA_CLI_BINARY_TARGETS: debian-openssl-1.1.x,debian-openssl-3.0.x
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -258,6 +259,9 @@ jobs:
           grep -qx 'ProtectSystem=strict' "$validation_dir/ops/systemd/creator-web.service"
           grep -qx 'ProtectSystem=strict' "$validation_dir/ops/systemd/creator-worker.service"
           grep -qx 'ProtectSystem=strict' "$validation_dir/ops/systemd/creator-worker@.service"
+          test -n "$(find "$validation_dir/ops/db/node_modules" -path '*/@prisma/engines/libquery_engine-debian-openssl-3.0.x.so.node' -print -quit)"
+          test -n "$(find "$validation_dir/ops/db/node_modules" -path '*/@prisma/engines/schema-engine-debian-openssl-3.0.x' -print -quit)"
+          test -n "$(find "$validation_dir/ops/db/node_modules" -path '*/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node' -print -quit)"
 
       - name: Upload staging release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

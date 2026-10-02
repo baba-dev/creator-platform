@@ -127,6 +127,25 @@ export const serverEnvSchema = z.object({
   NVIDIA_REASONING_MODEL: optionalString,
   NVIDIA_REQUEST_TIMEOUT_MS: optionalPositiveInteger,
   NVIDIA_IDLE_TIMEOUT_MS: optionalPositiveInteger,
+  GROQ_API_KEY: optionalString,
+  GROQ_BASE_URL: z.url().default("https://api.groq.com/openai/v1"),
+  GROQ_DEFAULT_MODEL: optionalString.default("openai/gpt-oss-120b"),
+  GROQ_REQUEST_TIMEOUT_MS: optionalPositiveInteger,
+  GROQ_IDLE_TIMEOUT_MS: optionalPositiveInteger,
+  GEMINI_API_KEY: optionalString,
+  GEMINI_BASE_URL: z
+    .url()
+    .default("https://generativelanguage.googleapis.com/v1beta/openai"),
+  GEMINI_DEFAULT_MODEL: optionalString.default("gemini-3.8-flash"),
+  GEMINI_REQUEST_TIMEOUT_MS: optionalPositiveInteger,
+  GEMINI_IDLE_TIMEOUT_MS: optionalPositiveInteger,
+  CLOUDFLARE_API_TOKEN: optionalString,
+  CLOUDFLARE_ACCOUNT_ID: optionalString,
+  CLOUDFLARE_AI_BASE_URL: z
+    .url()
+    .default("https://api.cloudflare.com/client/v4"),
+  CLOUDFLARE_REQUEST_TIMEOUT_MS: optionalPositiveInteger,
+  CLOUDFLARE_IDLE_TIMEOUT_MS: optionalPositiveInteger,
   S3_ENDPOINT: optionalUrl,
   S3_REGION: z.string().min(1).default("us-east-1"),
   S3_BUCKET: optionalString,

@@ -87,6 +87,25 @@ export async function PATCH(
   // 1. Availability toggle
   const toggleResult = toggleModelEnabledSchema.safeParse(body);
   if (toggleResult.success) {
+    if (toggleResult.data.enabled) {
+      const activePrice = await db.modelPriceVersion.findFirst({
+        where: {
+          providerModelId: model.id,
+          effectiveFrom: { lte: new Date() },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gt: new Date() } }],
+        },
+        orderBy: { effectiveFrom: "desc" },
+      });
+      if (!activePrice || activePrice.providerCostMicroUsd <= 0n)
+        return NextResponse.json(
+          {
+            error:
+              "Publish a valid non-zero provider cost and customer pricing before enabling this model.",
+          },
+          { status: 409 },
+        );
+    }
+
     const updated = await db.$transaction(async (tx) => {
       const result = await tx.providerModel.update({
         where: { id: modelId },

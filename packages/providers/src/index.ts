@@ -10,7 +10,7 @@ export interface ProviderInlineOutput {
 
 export interface ProviderModelDescriptor {
   readonly id: string;
-  readonly provider: "byteplus" | "nvidia";
+  readonly provider: "byteplus" | "nvidia" | "groq" | "gemini" | "cloudflare";
   readonly displayName: string;
   readonly description: string;
   readonly mediaKind: MediaKind | "reasoning";
@@ -59,8 +59,65 @@ export interface ReasoningResult {
 }
 
 export interface ReasoningProvider {
-  readonly name: "nvidia";
+  readonly name: "nvidia" | "groq" | "gemini" | "cloudflare";
   complete(input: ReasoningRequest): Promise<ReasoningResult>;
+}
+
+export interface TextChatMessage {
+  readonly role: "system" | "user" | "assistant";
+  readonly content: string;
+}
+
+export interface TextChatRequest {
+  readonly idempotencyKey: string;
+  readonly modelId: string;
+  readonly messages: readonly TextChatMessage[];
+  readonly temperature?: number;
+  readonly maxTokens?: number;
+  readonly responseFormat?: "text" | "json_object";
+}
+
+export interface TextChatResult {
+  readonly providerRequestId?: string;
+  readonly content: string;
+  readonly usage?: {
+    readonly promptTokens: number;
+    readonly completionTokens: number;
+    readonly totalTokens: number;
+  };
+}
+
+export interface TextGenerationProvider {
+  readonly name: ReasoningProvider["name"];
+  chat(input: TextChatRequest): Promise<TextChatResult>;
+}
+
+export interface AudioTranscriptionSegment {
+  readonly id: number;
+  readonly start: number;
+  readonly end: number;
+  readonly text: string;
+}
+
+export interface AudioTranscriptionRequest {
+  readonly idempotencyKey: string;
+  readonly modelId?: string;
+  readonly audioBytes: Uint8Array;
+  readonly filename: string;
+  readonly mimeType?: string;
+  readonly language?: string;
+  readonly prompt?: string;
+  readonly temperature?: number;
+}
+
+export interface AudioTranscriptionResult {
+  readonly providerRequestId?: string;
+  readonly text: string;
+  readonly segments?: readonly AudioTranscriptionSegment[];
+  readonly srt?: string;
+  readonly vtt?: string;
+  readonly durationSeconds?: number;
+  readonly language?: string;
 }
 
 export class ProviderConfigurationError extends Error {

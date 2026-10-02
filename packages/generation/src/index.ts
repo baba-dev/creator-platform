@@ -15,6 +15,7 @@ import {
   muscatCalendarMonth,
 } from "@aiwa/organizations";
 import { VERIFIED_BYTEPLUS_MODELS } from "@aiwa/providers/byteplus";
+import { VERIFIED_ALL_MODELS } from "@aiwa/providers/catalog";
 import { z } from "zod";
 import { resolvePresetVoice, VoiceResolutionError } from "./voices";
 import { inspectTalkingAvatarSources } from "./talking-avatar";
@@ -137,7 +138,7 @@ export const textRequestSchema = z
     }
   });
 
-export const textModelIds = VERIFIED_BYTEPLUS_MODELS.filter(
+export const textModelIds = VERIFIED_ALL_MODELS.filter(
   (m) => m.mediaKind === "text",
 ).map((m) => m.id);
 

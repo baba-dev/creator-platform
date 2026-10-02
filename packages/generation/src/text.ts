@@ -13,6 +13,7 @@ import { createBytePlusProvider } from "@aiwa/providers/byteplus";
 import {
   ProviderRequestError,
   type MediaGenerationProvider,
+  type TextGenerationProvider,
 } from "@aiwa/providers";
 import {
   GenerationError,
@@ -28,7 +29,9 @@ import {
 
 export interface TextGenerationOptions {
   provider?:
-    MediaGenerationProvider | ReturnType<typeof createBytePlusProvider>;
+    | MediaGenerationProvider
+    | TextGenerationProvider
+    | ReturnType<typeof createBytePlusProvider>;
 }
 
 export interface TextGenerationResult {
@@ -279,7 +282,6 @@ export async function createTextJob(userId: string, raw: unknown) {
         where: {
           id: input.modelId,
           enabled: true,
-          provider: "BYTEPLUS",
           mediaKind: "TEXT",
           providerModelId: { in: textModelIds },
         },
@@ -437,7 +439,7 @@ async function failTextJob(
  */
 export async function processTextJob(
   id: string,
-  provider: MediaGenerationProvider,
+  provider: MediaGenerationProvider | TextGenerationProvider,
 ): Promise<void> {
   const job = await db.generationJob.findUniqueOrThrow({
     where: { id },
@@ -498,14 +500,66 @@ export async function processTextJob(
     return;
   }
 
-  let providerResponse;
+  let content = "";
+  let providerRequestId: string | undefined;
+  let rawUsage:
+    | {
+        prompt_tokens?: number;
+        completion_tokens?: number;
+        total_tokens?: number;
+        prompt_tokens_details?: { cached_tokens?: number };
+      }
+    | undefined;
+
   try {
-    providerResponse = await provider.submit({
-      idempotencyKey: job.idempotencyKey,
-      modelId: job.providerModel.providerModelId,
-      mediaKind: "text",
-      input: { messages, temperature, maxTokens },
-    });
+    if ("chat" in provider) {
+      const result = await provider.chat({
+        idempotencyKey: job.idempotencyKey,
+        modelId: job.providerModel.providerModelId,
+        messages,
+        temperature,
+        maxTokens,
+      });
+      content = result.content;
+      providerRequestId = result.providerRequestId;
+      rawUsage = result.usage
+        ? {
+            prompt_tokens: result.usage.promptTokens,
+            completion_tokens: result.usage.completionTokens,
+            total_tokens: result.usage.totalTokens,
+          }
+        : undefined;
+    } else {
+      const providerResponse = await provider.submit({
+        idempotencyKey: job.idempotencyKey,
+        modelId: job.providerModel.providerModelId,
+        mediaKind: "text",
+        input: { messages, temperature, maxTokens },
+      });
+      content =
+        providerResponse.textOutput?.content ??
+        (providerResponse.inlineOutputs?.[0]
+          ? Buffer.from(
+              providerResponse.inlineOutputs[0].dataBase64,
+              "base64",
+            ).toString("utf8")
+          : "");
+      providerRequestId = providerResponse.providerRequestId;
+      rawUsage = providerResponse.rawUsage as typeof rawUsage;
+      if (providerResponse.status !== "succeeded")
+        throw new ProviderRequestError(
+          "Text provider returned an unsuccessful result.",
+          false,
+          { code: providerResponse.errorCode ?? "PROVIDER_REJECTED" },
+        );
+    }
+
+    if (!content.trim())
+      throw new ProviderRequestError(
+        "Text provider returned invalid or empty response.",
+        false,
+        { code: "INVALID_PROVIDER_RESPONSE" },
+      );
   } catch (error) {
     const outcomeUnknown =
       !(error instanceof ProviderRequestError) || error.retryable;
@@ -530,43 +584,17 @@ export async function processTextJob(
     return;
   }
 
-  const content =
-    providerResponse.textOutput?.content ??
-    (providerResponse.inlineOutputs?.[0]
-      ? Buffer.from(
-          providerResponse.inlineOutputs[0].dataBase64,
-          "base64",
-        ).toString("utf8")
-      : "");
-  if (providerResponse.status !== "succeeded" || !content) {
-    await failTextJob(
-      id,
-      "SUBMITTED",
-      "Text provider returned invalid or empty response.",
-      "INVALID_PROVIDER_RESPONSE",
-    );
-    return;
-  }
-
   const recorded = await db.generationJob.updateMany({
     where: { id, status: "SUBMITTED" },
     data: {
       status: "PROCESSING",
-      providerRequestId: providerResponse.providerRequestId,
+      providerRequestId,
       errorCode: null,
       errorMessage: null,
     },
   });
   if (!recorded.count) return;
 
-  const rawUsage = providerResponse.rawUsage as
-    | {
-        prompt_tokens?: number;
-        completion_tokens?: number;
-        total_tokens?: number;
-        prompt_tokens_details?: { cached_tokens?: number };
-      }
-    | undefined;
   const promptTokens = rawUsage?.prompt_tokens;
   const completionTokens = rawUsage?.completion_tokens;
   const reportedTotalTokens = rawUsage?.total_tokens;
@@ -608,8 +636,9 @@ export async function processTextJob(
     price.usageRates &&
     typeof price.usageRates === "object" &&
     !Array.isArray(price.usageRates) &&
-    (price.usageRates as Record<string, unknown>).estimator ===
-      "byteplus-text-v1";
+    ["byteplus-text-v1", "text-token-v1"].includes(
+      String((price.usageRates as Record<string, unknown>).estimator),
+    );
 
   let actualCost: bigint;
   let configuredCredits: bigint;
@@ -700,7 +729,7 @@ export async function processTextJob(
         where: { id },
         data: {
           status: "SUCCEEDED",
-          providerRequestId: providerResponse.providerRequestId,
+          providerRequestId,
           actualUnits: Number(actualUnits),
           billableQuantity: totalTokens,
           actualProviderCostMicroUsd: actualCost,

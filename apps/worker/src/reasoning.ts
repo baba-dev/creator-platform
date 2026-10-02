@@ -1,6 +1,11 @@
-import { db, type Prisma } from "@aiwa/db";
+import { parseServerEnv } from "@aiwa/config";
+import { db, type Prisma, type ModelProvider } from "@aiwa/db";
 import { requireMembership } from "@aiwa/generation";
 import { ProviderRequestError, type ReasoningProvider } from "@aiwa/providers";
+import { createNvidiaProvider } from "@aiwa/providers/nvidia";
+import { createGroqProvider } from "@aiwa/providers/groq";
+import { createGeminiProvider } from "@aiwa/providers/gemini";
+import { createCloudflareAiProvider } from "@aiwa/providers/cloudflare";
 import { type Job } from "bullmq";
 
 type PromptEnhancementPayload = {
@@ -35,7 +40,7 @@ function readPromptEnhancementOutput(value: unknown): {
 } {
   if (!value || typeof value !== "object")
     throw new ProviderRequestError(
-      "NVIDIA returned an invalid prompt enhancement result",
+      "Provider returned an invalid prompt enhancement result",
       false,
       { code: "INVALID_PROVIDER_RESPONSE", stage: "parsing" },
     );
@@ -47,7 +52,7 @@ function readPromptEnhancementOutput(value: unknown): {
     enhancedPrompt.trim().length > 2000
   )
     throw new ProviderRequestError(
-      "NVIDIA returned an invalid prompt enhancement result",
+      "Provider returned an invalid prompt enhancement result",
       false,
       { code: "INVALID_PROVIDER_RESPONSE", stage: "parsing" },
     );
@@ -97,9 +102,84 @@ async function failReasoningJob(
   });
 }
 
+function isReasoningProvider(val: unknown): val is ReasoningProvider {
+  return (
+    typeof val === "object" &&
+    val !== null &&
+    typeof (val as ReasoningProvider).complete === "function"
+  );
+}
+
+function resolveReasoningProvider(
+  providerType: ModelProvider,
+  providerOrMap?:
+    ReasoningProvider | Partial<Record<ModelProvider, ReasoningProvider>>,
+): ReasoningProvider {
+  if (isReasoningProvider(providerOrMap)) {
+    return providerOrMap;
+  }
+  if (providerOrMap && typeof providerOrMap === "object") {
+    const matched = providerOrMap[providerType];
+    if (matched) return matched;
+  }
+
+  const env = parseServerEnv();
+  switch (providerType) {
+    case "GROQ":
+      if (env.GROQ_API_KEY) {
+        return createGroqProvider({
+          apiKey: env.GROQ_API_KEY,
+          baseUrl: env.GROQ_BASE_URL,
+          defaultModel: env.GROQ_DEFAULT_MODEL || "openai/gpt-oss-120b",
+          requestTimeoutMs: env.GROQ_REQUEST_TIMEOUT_MS,
+          idleTimeoutMs: env.GROQ_IDLE_TIMEOUT_MS,
+        });
+      }
+      break;
+    case "GEMINI":
+      if (env.GEMINI_API_KEY) {
+        return createGeminiProvider({
+          apiKey: env.GEMINI_API_KEY,
+          baseUrl: env.GEMINI_BASE_URL,
+          defaultModel: env.GEMINI_DEFAULT_MODEL || "gemini-3.8-flash",
+        });
+      }
+      break;
+    case "CLOUDFLARE":
+      if (env.CLOUDFLARE_API_TOKEN && env.CLOUDFLARE_ACCOUNT_ID) {
+        return createCloudflareAiProvider({
+          apiToken: env.CLOUDFLARE_API_TOKEN,
+          accountId: env.CLOUDFLARE_ACCOUNT_ID,
+          baseUrl: env.CLOUDFLARE_AI_BASE_URL,
+        });
+      }
+      break;
+    case "NVIDIA":
+      if (env.NVIDIA_API_KEY) {
+        return createNvidiaProvider({
+          apiKey: env.NVIDIA_API_KEY,
+          baseUrl: env.NVIDIA_BASE_URL,
+          defaultModel:
+            env.NVIDIA_REASONING_MODEL ||
+            "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+          requestTimeoutMs: env.NVIDIA_REQUEST_TIMEOUT_MS,
+          idleTimeoutMs: env.NVIDIA_IDLE_TIMEOUT_MS,
+        });
+      }
+      break;
+  }
+
+  throw new ProviderRequestError(
+    `Reasoning provider for ${providerType} is not configured`,
+    false,
+    { code: "PROVIDER_NOT_CONFIGURED" },
+  );
+}
+
 export async function processReasoningJob(
   job: Job,
-  nvidiaProvider: ReasoningProvider,
+  providerOrMap?:
+    ReasoningProvider | Partial<Record<ModelProvider, ReasoningProvider>>,
 ) {
   if (typeof job.data.jobId !== "string" || job.data.jobId !== job.id)
     throw new Error("Invalid reasoning queue payload");
@@ -151,7 +231,11 @@ export async function processReasoningJob(
 
   try {
     const payload = readPromptEnhancementPayload(dbJob.requestPayload);
-    const result = await nvidiaProvider.complete({
+    const provider = resolveReasoningProvider(
+      dbJob.providerModel.provider,
+      providerOrMap,
+    );
+    const result = await provider.complete({
       idempotencyKey: dbJob.idempotencyKey,
       modelId: dbJob.providerModel.providerModelId,
       systemPrompt: payload.systemPrompt,

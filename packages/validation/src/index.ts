@@ -282,7 +282,7 @@ const videoUsageRatesSchema = z
 
 const textUsageRatesSchema = z
   .object({
-    estimator: z.literal("byteplus-text-v1"),
+    estimator: z.enum(["byteplus-text-v1", "text-token-v1"]),
     tiers: z
       .array(
         z

@@ -49,13 +49,7 @@ jobs:
           bash -n infra/deploy/package-release.sh
 
       - name: Check formatting
-        run: |
-          if ! pnpm format:check; then
-            cp apps/worker/src/index.ts /tmp/worker-before.ts
-            pnpm exec prettier --write apps/worker/src/index.ts
-            diff -u /tmp/worker-before.ts apps/worker/src/index.ts || true
-            exit 1
-          fi
+        run: pnpm format:check
 
       - name: Lint
         run: pnpm lint

@@ -105,7 +105,7 @@ export async function readChunkWithDeadline<T>(
 }
 
 export interface SharedReadResponseOptions {
-  providerName: "BytePlus" | "NVIDIA";
+  providerName: "BytePlus" | "NVIDIA" | "Groq" | "Gemini" | "Cloudflare";
   onAbortCode?: string;
   onAbortRetryable?: boolean;
   onNetworkErrorCode?: string;
@@ -235,7 +235,7 @@ export interface ExecuteSafeFetchConfig {
   timeoutMs: number;
   idleTimeoutMs?: number;
   defaultIdleTimeoutMs?: number;
-  providerName: "BytePlus" | "NVIDIA";
+  providerName: "BytePlus" | "NVIDIA" | "Groq" | "Gemini" | "Cloudflare";
   onAbortCode?: string;
   onAbortRetryable?: boolean;
   onNetworkErrorCode?: string;

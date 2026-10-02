@@ -71,7 +71,7 @@ describe("talking-avatar source inspection", () => {
               id: "avatar",
               mediaKind: "IMAGE",
               mimeType: "image/jpeg",
-              byteSize: 5n * 1024n * 1024n,
+              byteSize: 5_000_000n,
               durationMs: null,
               width: 1024,
               height: 1024,

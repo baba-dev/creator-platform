@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { ProviderConfigurationError, ProviderRequestError } from "../src/index";
+import { createVisionAuthorizationHeaders } from "../src/byteplus/vision";
 import {
   createBytePlusProvider,
   isBytePlusVisionConfigured,
@@ -109,6 +110,27 @@ describe("BytePlus provider adapter", () => {
         BYTEPLUS_VISION_ACCESS_KEY_ID: "ak",
       }),
     ).toBe(false);
+  });
+
+  it("matches BytePlus canonical HMAC signing with the required header separator", () => {
+    const body =
+      '{"req_key":"realman_avatar_picture_omni15_cv","image_url":"https://creator.example/avatar.jpg","audio_url":"https://creator.example/speech.mp3","output_resolution":1080}';
+    const headers = createVisionAuthorizationHeaders({
+      accessKeyId: "test-access-key",
+      secretAccessKey: "test-secret-key",
+      url: new URL(
+        "https://cv.byteplusapi.com/?Action=CVSubmitTask&Version=2024-06-06",
+      ),
+      body,
+      now: new Date("2026-01-05T12:21:33Z"),
+    });
+
+    expect(headers["x-content-sha256"]).toBe(
+      "a5bb142ffbe9d0afacb3e75923239696e5eadd3c2b939ef6d0badd364ecf000c",
+    );
+    expect(headers.authorization).toBe(
+      "HMAC-SHA256 Credential=test-access-key/20260105/ap-singapore-1/cv/request, SignedHeaders=host;x-content-sha256;x-date, Signature=2d35a1ea9d3300e1c17ca70ea329d68f2ba9f7053b5013879ab18e9ad826aa7b",
+    );
   });
 
   it("submits OmniHuman through the signed Vision API instead of ModelArk", async () => {

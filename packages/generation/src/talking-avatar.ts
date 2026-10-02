@@ -17,7 +17,7 @@ export interface TalkingAvatarSourceFacts {
   billableDurationSeconds: number;
 }
 
-const MAX_AVATAR_IMAGE_BYTES = 5n * 1024n * 1024n;
+const MAX_AVATAR_IMAGE_BYTES = 5_000_000n;
 const MAX_DRIVING_AUDIO_BYTES = 25n * 1024n * 1024n;
 
 export function inspectTalkingAvatarSources(

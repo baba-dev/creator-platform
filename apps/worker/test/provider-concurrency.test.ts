@@ -48,7 +48,7 @@ describe("Seedance provider concurrency policy", () => {
       })?.limit,
     ).toBe(4);
   });
-  it("serializes OmniHuman at the documented provider concurrency limit", () => {
+  it("uses a conservative single-task OmniHuman operating limit", () => {
     expect(
       seedanceConcurrencySpec({
         providerModelId: "omnihuman-1.5",

@@ -117,11 +117,12 @@ export function createVisionAuthorizationHeaders(input: {
     )
     .join("&");
   const signedHeaders = "host;x-content-sha256;x-date";
-  const canonicalHeaders = [
-    `host:${input.url.host.toLowerCase()}`,
-    `x-content-sha256:${payloadHash}`,
-    `x-date:${xDate}`,
-  ].join("\n");
+  const canonicalHeaders =
+    [
+      `host:${input.url.host.toLowerCase()}`,
+      `x-content-sha256:${payloadHash}`,
+      `x-date:${xDate}`,
+    ].join("\n") + "\n";
   const canonicalRequest = [
     "POST",
     input.url.pathname || "/",
@@ -211,7 +212,7 @@ async function visionRequest(
       timeoutMs: config.requestTimeoutMs,
       idleTimeoutMs: config.idleTimeoutMs,
       defaultIdleTimeoutMs: 30_000,
-      providerName: "BytePlus Vision",
+      providerName: "BytePlus",
       onAbortCode: "REQUEST_TIMEOUT",
       onAbortRetryable: true,
       onNetworkErrorCode: "NETWORK_ERROR",
@@ -221,7 +222,7 @@ async function visionRequest(
   let raw = "";
   try {
     raw = await sharedReadResponseText(response, MAX_RESPONSE_BYTES, {
-      providerName: "BytePlus Vision",
+      providerName: "BytePlus",
       onAbortCode: "REQUEST_TIMEOUT",
       onAbortRetryable: true,
       onNetworkErrorCode: "NETWORK_ERROR",

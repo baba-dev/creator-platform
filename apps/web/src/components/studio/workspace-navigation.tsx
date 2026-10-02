@@ -9,6 +9,7 @@ const items: { label: string; segment: string; icon: IconName }[] = [
   { label: "Home", segment: "", icon: "dashboard" },
   { label: "Image", segment: "image", icon: "image" },
   { label: "Video", segment: "video", icon: "video" },
+  { label: "Spokesperson", segment: "spokesperson", icon: "sparkles" },
   { label: "Speech", segment: "speech", icon: "voice" },
   { label: "Chat", segment: "chat", icon: "chat" },
   { label: "Director", segment: "director", icon: "director" },

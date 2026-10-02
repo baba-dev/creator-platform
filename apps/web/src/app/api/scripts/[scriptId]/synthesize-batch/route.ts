@@ -338,7 +338,7 @@ export async function POST(
             content: {
               ...currentContent,
               scenes: updatedScenes,
-            } as Prisma.InputJsonValue,
+            } as unknown as Prisma.InputJsonValue,
             revision: { increment: 1 },
           },
           select: { revision: true },

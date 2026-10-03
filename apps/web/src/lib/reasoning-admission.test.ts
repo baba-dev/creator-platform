@@ -54,7 +54,7 @@ describe("admitReasoningJob atomic admission limits and provenance", () => {
       provider: "GROQ",
       providerModelId: "openai/gpt-oss-120b",
       displayName: "GPT-OSS 120B",
-      mediaKind: "REASONING",
+      mediaKind: "TEXT",
       enabled: true,
       capabilities: {
         reasoning: true,
@@ -142,7 +142,7 @@ describe("admitReasoningJob atomic admission limits and provenance", () => {
       provider: "GROQ",
       providerModelId: "openai/gpt-oss-120b",
       displayName: "GPT-OSS 120B",
-      mediaKind: "REASONING",
+      mediaKind: "TEXT",
       enabled: false,
       capabilities: { "task:prompt-enhancement": true },
     });

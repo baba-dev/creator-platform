@@ -547,7 +547,7 @@ async function validateReferenceImageInner(
 }
 
 export async function referenceImageDataUri(input: {
-  organizationId: string;
+  organizationId?: string;
   objectKey: string;
   mimeType: string;
   storageProvider: string;
@@ -560,22 +560,39 @@ export async function referenceImageDataUri(input: {
     );
   }
 
-  const env = parseServerEnv();
-  const storage = await resolveAssetStorageForAsset(db, input, {
-    storageRoot: env.ASSET_STORAGE_ROOT,
-    encryptionKey: env.STORAGE_ENCRYPTION_KEY,
-    googleClientId: env.GOOGLE_DRIVE_CLIENT_ID,
-    googleClientSecret: env.GOOGLE_DRIVE_CLIENT_SECRET,
-    onedriveClientId: env.ONEDRIVE_CLIENT_ID,
-    onedriveClientSecret: env.ONEDRIVE_CLIENT_SECRET,
-  });
-
   let bytes: Buffer;
   try {
-    bytes = await storage.read(
-      input.objectKey,
-      input.externalFileId ?? undefined,
-    );
+    if (input.storageProvider === "LOCAL") {
+      const root = process.env.ASSET_STORAGE_ROOT;
+      if (!root) {
+        throw new Error("Asset storage root is not configured.");
+      }
+      bytes = await new LocalAssetStorage(root).read(input.objectKey);
+    } else {
+      if (!input.organizationId) {
+        throw new Error("Reference asset organization is missing.");
+      }
+      const env = parseServerEnv();
+      const storage = await resolveAssetStorageForAsset(
+        db,
+        {
+          organizationId: input.organizationId,
+          storageProvider: input.storageProvider,
+        },
+        {
+          storageRoot: env.ASSET_STORAGE_ROOT,
+          encryptionKey: env.STORAGE_ENCRYPTION_KEY,
+          googleClientId: env.GOOGLE_DRIVE_CLIENT_ID,
+          googleClientSecret: env.GOOGLE_DRIVE_CLIENT_SECRET,
+          onedriveClientId: env.ONEDRIVE_CLIENT_ID,
+          onedriveClientSecret: env.ONEDRIVE_CLIENT_SECRET,
+        },
+      );
+      bytes = await storage.read(
+        input.objectKey,
+        input.externalFileId ?? undefined,
+      );
+    }
   } catch (error) {
     throw new ImageStorageError(
       "STORAGE_WRITE_FAILED",

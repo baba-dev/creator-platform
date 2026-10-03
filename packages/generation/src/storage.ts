@@ -1,6 +1,9 @@
 import { withMediaCapacity } from "@aiwa/assets/media-capacity";
 import { createHash, randomUUID } from "node:crypto";
-import { LocalAssetStorage, resolveAssetStorageForAsset } from "@aiwa/assets/storage";
+import {
+  LocalAssetStorage,
+  resolveAssetStorageForAsset,
+} from "@aiwa/assets/storage";
 import { lookup } from "node:dns/promises";
 import {
   mkdir,
@@ -544,9 +547,11 @@ async function validateReferenceImageInner(
 }
 
 export async function referenceImageDataUri(input: {
+  organizationId: string;
   objectKey: string;
   mimeType: string;
   storageProvider: string;
+  externalFileId?: string | null;
 }): Promise<string> {
   if (!["image/jpeg", "image/png", "image/webp"].includes(input.mimeType)) {
     throw new ImageStorageError(
@@ -554,22 +559,23 @@ export async function referenceImageDataUri(input: {
       "Reference asset has an unsupported media type.",
     );
   }
-  if (input.storageProvider !== "LOCAL") {
-    throw new ImageStorageError(
-      "IMAGE_OUTPUT_CONTENT_TYPE",
-      "Reference asset storage provider is not supported for generation yet.",
-    );
-  }
-  const root = process.env.ASSET_STORAGE_ROOT;
-  if (!root) {
-    throw new ImageStorageError(
-      "STORAGE_WRITE_FAILED",
-      "Asset storage root is not configured.",
-    );
-  }
+
+  const env = parseServerEnv();
+  const storage = await resolveAssetStorageForAsset(db, input, {
+    storageRoot: env.ASSET_STORAGE_ROOT,
+    encryptionKey: env.STORAGE_ENCRYPTION_KEY,
+    googleClientId: env.GOOGLE_DRIVE_CLIENT_ID,
+    googleClientSecret: env.GOOGLE_DRIVE_CLIENT_SECRET,
+    onedriveClientId: env.ONEDRIVE_CLIENT_ID,
+    onedriveClientSecret: env.ONEDRIVE_CLIENT_SECRET,
+  });
+
   let bytes: Buffer;
   try {
-    bytes = await new LocalAssetStorage(root).read(input.objectKey);
+    bytes = await storage.read(
+      input.objectKey,
+      input.externalFileId ?? undefined,
+    );
   } catch (error) {
     throw new ImageStorageError(
       "STORAGE_WRITE_FAILED",
@@ -577,6 +583,7 @@ export async function referenceImageDataUri(input: {
       { cause: error },
     );
   }
+
   if (bytes.byteLength <= 0 || bytes.byteLength > MAX_REFERENCE_IMAGE_BYTES) {
     throw new ImageStorageError(
       "IMAGE_OUTPUT_TOO_LARGE",

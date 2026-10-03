@@ -1,7 +1,5 @@
 import type { ProviderModelDescriptor } from "./index";
-import {
-  normalizeStudioTaskCapabilities,
-} from "./studio-tasks";
+import { normalizeStudioTaskCapabilities } from "./studio-tasks";
 import { VERIFIED_BYTEPLUS_MODELS as RAW_BYTEPLUS_MODELS } from "./byteplus";
 import { VERIFIED_CLOUDFLARE_MODELS as RAW_CLOUDFLARE_MODELS } from "./cloudflare";
 import { VERIFIED_GEMINI_MODELS as RAW_GEMINI_MODELS } from "./gemini";

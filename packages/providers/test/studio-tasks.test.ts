@@ -32,11 +32,16 @@ describe("studio task taxonomy", () => {
     expect(pro.capabilities["task:brand-strategy"]).toBe(true);
   });
 
-  it("keeps reasoning-only models out of text Studio tasks", () => {
+  it("keeps dual-use reasoners on explicit commercial text tasks", () => {
     const groqReasoning = model("openai/gpt-oss-120b");
+    expect(groqReasoning.mediaKind).toBe("text");
     expect(groqReasoning.capabilities["task:prompt-enhancement"]).toBe(true);
-    expect(supportsStudioTask(groqReasoning, "creative-director")).toBe(false);
+    expect(supportsStudioTask(groqReasoning, "creative-director")).toBe(true);
+    expect(supportsStudioTask(groqReasoning, "story-planning")).toBe(true);
+    expect(supportsStudioTask(groqReasoning, "character-chat")).toBe(false);
     expect(listStudioTasksForModel(groqReasoning)).toEqual([
+      "creative-director",
+      "story-planning",
       "prompt-enhancement",
     ]);
   });
@@ -91,12 +96,14 @@ describe("dynamic text Studio task assignments", () => {
     expect(supportsStudioTask(dola, "story-planning")).toBe(true);
   });
 
-  it("does not route reasoning-only creative models through TEXT Studio tasks", () => {
+  it("routes only the verified dual-use creative tasks through TEXT", () => {
     for (const id of ["openai/gpt-oss-120b", "gemini-3.8-flash"]) {
       const reasoning = model(id);
-      expect(reasoning.mediaKind).toBe("reasoning");
-      expect(supportsStudioTask(reasoning, "creative-director")).toBe(false);
-      expect(supportsStudioTask(reasoning, "story-planning")).toBe(false);
+      expect(reasoning.mediaKind).toBe("text");
+      expect(supportsStudioTask(reasoning, "creative-director")).toBe(true);
+      expect(supportsStudioTask(reasoning, "story-planning")).toBe(true);
+      expect(supportsStudioTask(reasoning, "chat")).toBe(false);
+      expect(supportsStudioTask(reasoning, "scriptwriting")).toBe(false);
     }
   });
 });

@@ -6,6 +6,7 @@ import { VideoEditor } from "@/components/studio/video-editor";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { Eyebrow } from "@/components/ui/creative";
 import { requireOrganizationPermission } from "@/lib/request-auth";
+import { getAvailableStudioModels } from "@/lib/studio-model-discovery";
 
 const pages = {
   image: {
@@ -48,6 +49,10 @@ export async function GenerationWorkspace({
     "workspace:view",
   );
   const page = pages[kind];
+  const promptEnhancement =
+    kind === "speech"
+      ? null
+      : await getAvailableStudioModels("prompt-enhancement");
   return (
     <main className="relative min-h-screen min-w-0 bg-background px-4 py-7 text-foreground sm:px-7 lg:px-9 lg:py-10">
       <div className="creative-glow pointer-events-none absolute inset-0" />
@@ -86,6 +91,10 @@ export async function GenerationWorkspace({
           )}
           initialMode={page.mode}
           variant="advanced"
+          promptEnhancementModels={promptEnhancement?.models ?? []}
+          promptEnhancementDefaultModelId={
+            promptEnhancement?.defaultModelId ?? null
+          }
         />
         {kind === "image" ? (
           <ImageEditor

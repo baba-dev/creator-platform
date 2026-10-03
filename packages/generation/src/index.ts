@@ -139,6 +139,7 @@ export const textRequestSchema = z
       .max(50),
     temperature: z.number().min(0).max(2).default(0.7),
     maxTokens: z.number().int().positive().max(8192).default(2048),
+    responseFormat: z.enum(["text", "json_object"]).default("text"),
   })
   .strict()
   .superRefine((value, context) => {

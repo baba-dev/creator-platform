@@ -136,6 +136,7 @@ Premise: ${input.premise}`;
         modelId: selectedModel.id,
         messages,
         maxTokens,
+        responseFormat: "json_object",
       });
       return NextResponse.json({ quote });
     }
@@ -150,6 +151,7 @@ Premise: ${input.premise}`;
       messages,
       temperature: 0.7,
       maxTokens,
+      responseFormat: "json_object",
     });
     const result = textResultFromJob(job);
     if (!result)

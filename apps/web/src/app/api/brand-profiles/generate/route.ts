@@ -113,6 +113,7 @@ ${input.targetMarket ? `Target Market: ${input.targetMarket}` : ""}`;
         modelId: selectedModel.id,
         messages,
         maxTokens,
+        responseFormat: "json_object",
       });
       return NextResponse.json({ quote });
     }
@@ -127,6 +128,7 @@ ${input.targetMarket ? `Target Market: ${input.targetMarket}` : ""}`;
       messages,
       temperature: 0.7,
       maxTokens,
+      responseFormat: "json_object",
     });
     const result = textResultFromJob(job);
     if (!result)

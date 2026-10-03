@@ -106,6 +106,7 @@ export function quoteParameters(
     sourceAssetId?: string;
     language?: string;
     transcription?: boolean;
+    responseFormat?: "text" | "json_object";
   },
 ): Record<string, unknown> {
   if (mediaKind === "VIDEO") {
@@ -180,6 +181,9 @@ export function quoteParameters(
           ? null
           : createHash("sha256").update(input.text.trim()).digest("hex"),
       units: input.units ?? 1024,
+      ...(input.responseFormat === "json_object"
+        ? { responseFormat: "json_object" }
+        : {}),
       billableQuantity:
         input.text === undefined ? (input.billableQuantity ?? null) : null,
     };

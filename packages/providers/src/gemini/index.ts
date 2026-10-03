@@ -458,13 +458,15 @@ export const VERIFIED_GEMINI_MODELS: readonly ProviderModelDescriptor[] = [
     provider: "gemini",
     displayName: "Gemini 3.8 Flash",
     description:
-      "Stable production Gemini model for long-context reasoning, creative direction, and prompt enhancement.",
-    mediaKind: "reasoning",
+      "Long-context Gemini reasoning and commercial text model for creative direction, story planning, and prompt enhancement.",
+    mediaKind: "text",
     capabilities: {
       contextWindow: 1048576,
       reasoning: true,
       creativeDirector: true,
       storyPlanning: true,
+      "task:creative-director": true,
+      "task:story-planning": true,
       "task:prompt-enhancement": true,
     },
   },

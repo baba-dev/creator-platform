@@ -55,7 +55,7 @@ const selected = {
   providerModelId: "openai/gpt-oss-120b",
   name: "GPT-OSS 120B",
   description: "Reasoning",
-  mediaKind: "REASONING",
+  mediaKind: "TEXT",
   contextWindow: 131072,
   maxTokens: null,
   flags: { reasoning: true, fast: false },

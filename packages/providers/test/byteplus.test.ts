@@ -1156,6 +1156,47 @@ describe("BytePlus provider adapter", () => {
     });
   });
 
+  it("requests JSON object mode for structured BytePlus text features", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        id: "chatcmpl-json-1",
+        choices: [
+          {
+            message: {
+              role: "assistant",
+              content: '{"tagline":"Create boldly"}',
+            },
+            finish_reason: "stop",
+          },
+        ],
+        usage: {
+          prompt_tokens: 12,
+          completion_tokens: 6,
+          total_tokens: 18,
+        },
+      }),
+    );
+    const provider = createBytePlusProvider({
+      ...validConfig,
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await provider.submit({
+      idempotencyKey: "chat-json-1",
+      modelId: "seed-2-0-pro-260328",
+      mediaKind: "text",
+      input: {
+        messages: [{ role: "user", content: "Return brand JSON." }],
+        responseFormat: "json_object",
+      },
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      response_format: { type: "json_object" },
+    });
+  });
+
   it("submits Character Chat using doubao-seed-character-260628", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({

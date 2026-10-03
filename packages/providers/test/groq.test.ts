@@ -83,11 +83,16 @@ describe("createGroqProvider", () => {
       idempotencyKey: "groq-key-1",
       modelId: "openai/gpt-oss-20b",
       messages: [{ role: "user", content: "Hi" }],
+      responseFormat: "json_object",
     });
 
     expect(result.content).toBe("Hello from Groq LPU!");
     expect(result.usage?.totalTokens).toBe(23);
     expect(fetchMock).toHaveBeenCalled();
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      response_format: { type: "json_object" },
+    });
   });
 
   it("completes a reasoning request and strips think tokens", async () => {

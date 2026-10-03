@@ -1,6 +1,6 @@
 import { withMediaCapacity } from "@aiwa/assets/media-capacity";
 import { createHash, randomUUID } from "node:crypto";
-import { LocalAssetStorage } from "@aiwa/assets/storage";
+import { LocalAssetStorage, resolveAssetStorageForAsset } from "@aiwa/assets/storage";
 import { lookup } from "node:dns/promises";
 import {
   mkdir,
@@ -17,6 +17,8 @@ import { isAbsolute, resolve } from "node:path";
 import sharp, { type Metadata } from "sharp";
 import { MAX_AUDIO_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES } from "./index";
 import { storeGeneratedMedia } from "./byos-storage";
+import { parseServerEnv } from "@aiwa/config";
+import { db } from "@aiwa/db";
 
 const MAX_REDIRECTS = 3;
 const DOWNLOAD_TIMEOUT_MS = 120_000;

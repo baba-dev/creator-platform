@@ -3,9 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   db: { $transaction: vi.fn() },
   release: vi.fn(),
+  releaseStorage: vi.fn(),
 }));
 vi.mock("@aiwa/db", () => ({ db: mocks.db }));
 vi.mock("@aiwa/credits", () => ({ releaseOrRefundCredits: mocks.release }));
+vi.mock("@aiwa/assets", () => ({
+  releaseAssetStorage: mocks.releaseStorage,
+}));
 import {
   cancelQueuedGenerationJob,
   CancelGenerationError,
@@ -43,7 +47,10 @@ function fixture(
         .fn()
         .mockResolvedValue({ mediaKind: "VIDEO", provider: "BYTEPLUS" }),
     },
-    asset: { updateMany: vi.fn() },
+    asset: {
+      aggregate: vi.fn().mockResolvedValue({ _sum: { byteSize: 3_000_000n } }),
+      updateMany: vi.fn(),
+    },
     auditEvent: { create: vi.fn() },
   };
   mocks.db.$transaction.mockImplementation((fn) => fn(tx));
@@ -73,9 +80,18 @@ describe("queued generation cancellation", () => {
         idempotencyKey: "generation-release-job1",
       }),
     );
+    expect(mocks.releaseStorage).toHaveBeenCalledWith(tx, {
+      organizationId: "org1",
+      reservedBytes: 3_000_000n,
+    });
     expect(tx.asset.updateMany).toHaveBeenCalledWith({
       where: { generationJobId: "job1", status: "PENDING" },
-      data: { status: "DELETED", byteSize: 0n },
+      data: {
+        status: "DELETED",
+        byteSize: 0n,
+        deletedAt: expect.any(Date),
+        purgeAfter: expect.any(Date),
+      },
     });
     expect(tx.generationJob.update).toHaveBeenCalledWith(
       expect.objectContaining({

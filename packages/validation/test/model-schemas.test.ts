@@ -201,17 +201,19 @@ describe("model validation schemas", () => {
       "Pricing dimension 'CHARACTER' is not supported for VIDEO models",
     );
 
-    // VOICE allows CHARACTER and REQUEST
+    // VOICE is the shared media kind for TTS and transcription. Generic
+    // validation permits CHARACTER, SECOND and REQUEST; task-specific admin
+    // validation prevents TTS/transcription pricing from crossing surfaces.
     expect(isPricingDimensionSupportedForMedia("VOICE", "CHARACTER")).toBe(
       true,
     );
     expect(isPricingDimensionSupportedForMedia("VOICE", "REQUEST")).toBe(true);
-    expect(isPricingDimensionSupportedForMedia("VOICE", "SECOND")).toBe(false);
+    expect(isPricingDimensionSupportedForMedia("VOICE", "SECOND")).toBe(true);
     expect(() =>
       assertPricingDimensionMatchesMediaKind("VOICE", "CHARACTER"),
     ).not.toThrow();
     expect(() =>
       assertPricingDimensionMatchesMediaKind("VOICE", "SECOND"),
-    ).toThrow("Pricing dimension 'SECOND' is not supported for VOICE models");
+    ).not.toThrow();
   });
 });

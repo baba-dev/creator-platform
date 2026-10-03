@@ -391,6 +391,8 @@ export async function claimExpiredAssetForPurge(
     organizationId: asset.organizationId,
     objectKey: asset.objectKey,
     byteSize: asset.byteSize,
+    storageProvider: asset.storageProvider,
+    externalFileId: asset.externalFileId,
     variants,
   };
 }

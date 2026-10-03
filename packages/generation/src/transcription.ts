@@ -469,6 +469,17 @@ export async function processTranscriptionJob(
               purgeAfter: new Date(),
             },
           });
+          if (current.status === "PROCESSING") {
+            await tx.generationJob.update({
+              where: { id },
+              data: {
+                status: "MANUAL_REVIEW",
+                errorCode: "STORAGE_COMMIT_FAILED",
+                errorMessage:
+                  "Transcription completed but output commit failed. Credits remain reserved for operator reconciliation.",
+              },
+            });
+          }
         })
         .catch(() => undefined);
     }

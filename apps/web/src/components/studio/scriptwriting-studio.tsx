@@ -9,7 +9,6 @@ import { AudioWaveformPlayer } from "@/components/ui/audio-waveform-player";
 import { VoiceCastingBooth } from "@/components/ui/voice-casting-booth";
 import {
   StudioModelSelect,
-  studioModelOptionLabel,
   type StudioModelOption,
 } from "@/components/studio/studio-model-select";
 import {
@@ -1513,12 +1512,7 @@ export function ScriptwritingStudio({
                 />
                 <p className="mt-1 text-[10px] text-muted-foreground">
                   {textModels.find((model) => model.id === selectedTextModel)
-                    ? studioModelOptionLabel(
-                        textModels.find(
-                          (model) => model.id === selectedTextModel,
-                        )!,
-                      )
-                    : "No scriptwriting model available."}
+                    ?.description ?? "No scriptwriting model available."}
                 </p>
               </div>
 

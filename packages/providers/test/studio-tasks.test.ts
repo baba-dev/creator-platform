@@ -44,6 +44,7 @@ describe("studio task taxonomy", () => {
   it("separates transcription from speech synthesis", () => {
     const whisper = model("whisper-large-v3-turbo");
     expect(whisper.capabilities["task:transcription"]).toBe(true);
+    expect(supportsStudioTask(whisper, "transcription")).toBe(true);
     expect(whisper.capabilities["task:speech-synthesis"]).not.toBe(true);
 
     const speech = model("seed-tts-2.0");

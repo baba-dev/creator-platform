@@ -428,6 +428,8 @@ describe("video processing", () => {
     expect(mocks.storeVideo).toHaveBeenCalledWith(
       "job1.mp4",
       Buffer.from("mp4"),
+      "org1",
+      "asset1",
     );
     expect(mocks.storeVideo.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.capture.mock.invocationCallOrder[0]!,
@@ -819,7 +821,12 @@ describe("image processing", () => {
       "https://cdn.bytepluscdn.com/output.jpeg",
       "jpeg",
     );
-    expect(mocks.store).toHaveBeenCalledWith("job1.jpg", expect.any(Buffer));
+    expect(mocks.store).toHaveBeenCalledWith(
+      "job1.jpg",
+      expect.any(Buffer),
+      "org1",
+      "asset1",
+    );
     expect(tx.asset.update).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: "asset1" } }),
     );
@@ -1097,7 +1104,12 @@ describe("voice processing", () => {
         modelId: "seed-tts-2.0",
       }),
     );
-    expect(mocks.storeAudio).toHaveBeenCalledWith("job1.mp3", audioBytes);
+    expect(mocks.storeAudio).toHaveBeenCalledWith(
+      "job1.mp3",
+      audioBytes,
+      "org1",
+      "asset1",
+    );
     expect(mocks.storeAudio.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.capture.mock.invocationCallOrder[0]!,
     );

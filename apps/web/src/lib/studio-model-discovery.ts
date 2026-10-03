@@ -104,8 +104,7 @@ function priceSupportsStudioTask(
 ): boolean {
   if (COMMERCIAL_TEXT_TASKS.has(task)) {
     return (
-      row.mediaKind === "TEXT" &&
-      hasValidTextTokenPricing(price, row.provider)
+      row.mediaKind === "TEXT" && hasValidTextTokenPricing(price, row.provider)
     );
   }
   if (task === "prompt-enhancement") {

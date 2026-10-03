@@ -312,8 +312,15 @@ export function createCloudflareAiProvider(
 
       logger.info("Cloudflare reasoning request succeeded", { modelId });
 
+      const usage =
+        typeof parsed.data.result === "string"
+          ? undefined
+          : parsed.data.result.usage;
+
       return {
         content: contentJson,
+        inputTokens: usage?.prompt_tokens,
+        outputTokens: usage?.completion_tokens,
       };
     },
 
@@ -462,6 +469,7 @@ export const VERIFIED_CLOUDFLARE_MODELS: readonly ProviderModelDescriptor[] = [
       chat: true,
       scriptwriting: true,
       creativeDirector: true,
+      "task:prompt-enhancement": true,
     },
   },
 ];

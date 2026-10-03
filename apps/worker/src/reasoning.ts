@@ -1,4 +1,5 @@
 import { parseServerEnv } from "@aiwa/config";
+import { settleReasoningProviderCost } from "@aiwa/credits";
 import { db, type Prisma, type ModelProvider } from "@aiwa/db";
 import { requireMembership } from "@aiwa/generation";
 import { ProviderRequestError, type ReasoningProvider } from "@aiwa/providers";
@@ -187,12 +188,21 @@ export async function processReasoningJob(
   const jobId = job.data.jobId;
   const dbJob = await db.reasoningJob.findUniqueOrThrow({
     where: { id: jobId },
-    include: { providerModel: true },
+    include: { providerModel: true, priceVersion: true },
   });
 
   if (dbJob.status !== "QUEUED") return;
 
-  if (dbJob.providerModel.enabled === false) return;
+  if (dbJob.providerModel.enabled === false) {
+    await failReasoningJob(
+      jobId,
+      dbJob.organizationId,
+      dbJob.createdById,
+      "MODEL_DISABLED",
+      "The selected prompt enhancement model was disabled before submission.",
+    );
+    return;
+  }
 
   if (!(await ensureCurrentAccess(dbJob.organizationId, dbJob.createdById))) {
     await failReasoningJob(
@@ -216,16 +226,18 @@ export async function processReasoningJob(
   });
   if (!claimed.count) return;
 
-  const modelId = dbJob.providerModel.id ?? dbJob.providerModelId;
   const currentModel = await db.providerModel.findUnique({
-    where: { id: modelId },
+    where: { id: dbJob.providerModel.id },
     select: { enabled: true },
   });
   if (!currentModel || currentModel.enabled === false) {
-    await db.reasoningJob.updateMany({
-      where: { id: jobId, status: "PROCESSING" },
-      data: { status: "QUEUED", processingAt: null },
-    });
+    await failReasoningJob(
+      jobId,
+      dbJob.organizationId,
+      dbJob.createdById,
+      "MODEL_DISABLED",
+      "The selected prompt enhancement model was disabled before submission.",
+    );
     return;
   }
 
@@ -243,6 +255,20 @@ export async function processReasoningJob(
       responseSchemaName: payload.responseSchemaName,
     });
     const output = readPromptEnhancementOutput(result.content);
+    const providerCost = (() => {
+      try {
+        return settleReasoningProviderCost({
+          price: dbJob.priceVersion,
+          inputTokens: result.inputTokens,
+          outputTokens: result.outputTokens,
+        });
+      } catch {
+        return {
+          providerCostMicroUsd: null,
+          basis: "USAGE_UNAVAILABLE" as const,
+        };
+      }
+    })();
 
     await db.$transaction(async (tx) => {
       const updated = await tx.reasoningJob.updateMany({
@@ -253,6 +279,9 @@ export async function processReasoningJob(
           outputPayload: output as Prisma.InputJsonValue,
           inputTokens: result.inputTokens,
           outputTokens: result.outputTokens,
+          actualProviderCostMicroUsd:
+            providerCost.providerCostMicroUsd ?? undefined,
+          providerCostBasis: providerCost.basis ?? undefined,
           errorCode: null,
           errorMessage: null,
           completedAt: new Date(),
@@ -268,8 +297,14 @@ export async function processReasoningJob(
           targetType: "ReasoningJob",
           targetId: jobId,
           metadata: {
+            provider: dbJob.providerModel.provider,
+            providerModelId: dbJob.providerModel.providerModelId,
+            priceVersionId: dbJob.priceVersionId,
             inputTokens: result.inputTokens,
             outputTokens: result.outputTokens,
+            actualProviderCostMicroUsd:
+              providerCost.providerCostMicroUsd?.toString() ?? null,
+            providerCostBasis: providerCost.basis,
           },
         },
       });

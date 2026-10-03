@@ -1,8 +1,6 @@
 import { hasOrganizationPermission } from "@aiwa/authz";
-import {
-  calculateBillableUnits,
-  checkMemberSpendingBudget,
-} from "@aiwa/credits";
+import { calculateBillableUnits } from "@aiwa/credits";
+import { checkMemberSpendingBudget } from "@aiwa/organizations";
 import { db } from "@aiwa/db";
 import {
   issueGenerationQuote,

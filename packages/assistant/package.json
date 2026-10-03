@@ -1,0 +1,28 @@
+{
+  "name": "@aiwa/assistant",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "eslint src test --max-warnings=0",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aiwa/config": "workspace:*",
+    "@aiwa/db": "workspace:*",
+    "@aiwa/generation": "workspace:*",
+    "@aiwa/mail": "workspace:*",
+    "@aiwa/providers": "workspace:*",
+    "bullmq": "6.3.5",
+    "ioredis": "^5.8.1",
+    "zod": "^4.6.4"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.11"
+  }
+}

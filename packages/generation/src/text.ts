@@ -34,6 +34,14 @@ export interface TextGenerationOptions {
     | ReturnType<typeof createBytePlusProvider>;
 }
 
+export interface TextJobAdmissionOptions {
+  /**
+   * Platform-sponsored jobs still use canonical pricing for provider-cost
+   * accounting, but never reserve or capture customer wallet credits.
+   */
+  sponsored?: boolean;
+}
+
 export interface TextGenerationResult {
   jobId: string;
   status: "SUCCEEDED";
@@ -44,6 +52,7 @@ export interface TextGenerationResult {
     totalTokens: number;
   };
   chargedCredits: number;
+  providerRequestId?: string;
 }
 
 export interface TextMessage {
@@ -57,6 +66,7 @@ type TextJobShape = {
   outputPayload: unknown;
   chargedCredits: bigint;
   errorMessage: string | null;
+  providerRequestId?: string | null;
 };
 
 function capabilityContextWindow(capabilities: unknown): number {
@@ -175,6 +185,7 @@ function sameIdempotentRequest(
     maxTokens: number;
   },
   resolvedTemplateId: string | null,
+  sponsored: boolean,
 ): boolean {
   if (
     existing.projectId !== (input.projectId ?? null) ||
@@ -184,6 +195,7 @@ function sameIdempotentRequest(
   )
     return false;
   const existingPayload = payloadObject(existing.requestPayload);
+  if ((existingPayload.sponsored === true) !== sponsored) return false;
   const hash = existingPayload.clientRequestHash;
   if (typeof hash === "string") return hash === requestFingerprint(input);
   return (
@@ -223,6 +235,7 @@ export function textResultFromJob(
       content: output.content,
       usage,
       chargedCredits: Number(job.chargedCredits),
+      providerRequestId: job.providerRequestId ?? undefined,
     };
   }
   if (job.status === "FAILED" || job.status === "CANCELLED")
@@ -243,8 +256,13 @@ export function textResultFromJob(
  * Admission only: validates, prices, reserves, and queues a durable TEXT job.
  * Provider I/O is intentionally excluded so web requests never call BytePlus.
  */
-export async function createTextJob(userId: string, raw: unknown) {
+export async function createTextJob(
+  userId: string,
+  raw: unknown,
+  options: TextJobAdmissionOptions = {},
+) {
   const input = textRequestSchema.parse(raw);
+  const sponsored = options.sponsored === true;
   const key = createHash("sha256")
     .update(`${input.organizationId}:${userId}:${input.idempotencyKey}`)
     .digest("hex");
@@ -268,7 +286,7 @@ export async function createTextJob(userId: string, raw: unknown) {
         where: { idempotencyKey: key },
       });
       if (existing) {
-        if (!sameIdempotentRequest(existing, input, templateId))
+        if (!sameIdempotentRequest(existing, input, templateId, sponsored))
           throw new GenerationError(
             "Request key was already used for different inputs.",
             409,
@@ -343,18 +361,22 @@ export async function createTextJob(userId: string, raw: unknown) {
         );
       }
 
-      await assertWithinMonthlySpendingCap(tx, {
-        organizationId: input.organizationId,
-        userId,
-        cap: member.monthlySpendingCapCredits,
-        additionalCredits: credits,
-        now,
-      });
-      const wallet = await tx.wallet.findUnique({
-        where: { organizationId: input.organizationId },
-      });
-      if (!wallet)
-        throw new GenerationError("Workspace wallet is unavailable.");
+      const wallet = sponsored
+        ? null
+        : await tx.wallet.findUnique({
+            where: { organizationId: input.organizationId },
+          });
+      if (!sponsored) {
+        await assertWithinMonthlySpendingCap(tx, {
+          organizationId: input.organizationId,
+          userId,
+          cap: member.monthlySpendingCapCredits,
+          additionalCredits: credits,
+          now,
+        });
+        if (!wallet)
+          throw new GenerationError("Workspace wallet is unavailable.");
+      }
 
       const job = await tx.generationJob.create({
         data: {
@@ -369,6 +391,7 @@ export async function createTextJob(userId: string, raw: unknown) {
             messages,
             temperature: input.temperature,
             maxTokens: input.maxTokens,
+            sponsored,
             clientRequestHash: requestFingerprint(input),
           } as unknown as Prisma.InputJsonObject,
           status: "QUEUED",
@@ -379,12 +402,14 @@ export async function createTextJob(userId: string, raw: unknown) {
         },
       });
 
-      await reserveCreditsForJob(tx, {
-        walletId: wallet.id,
-        amountCredits: credits,
-        idempotencyKey: `generation-reserve-${job.id}`,
-        jobId: job.id,
-      });
+      if (!sponsored && wallet) {
+        await reserveCreditsForJob(tx, {
+          walletId: wallet.id,
+          amountCredits: credits,
+          idempotencyKey: `generation-reserve-${job.id}`,
+          jobId: job.id,
+        });
+      }
       await tx.auditEvent.create({
         data: {
           actorUserId: userId,
@@ -392,7 +417,7 @@ export async function createTextJob(userId: string, raw: unknown) {
           action: "generation.queued",
           targetType: "GenerationJob",
           targetId: job.id,
-          metadata: { mediaKind: "TEXT" },
+          metadata: { mediaKind: "TEXT", sponsored },
         },
       });
       return job;
@@ -413,15 +438,18 @@ async function failTextJob(
       where: { id },
     });
     if (current.status !== expectedStatus) return;
-    const wallet = await tx.wallet.findUniqueOrThrow({
-      where: { organizationId: current.organizationId },
-    });
-    await releaseOrRefundCredits(tx, {
-      walletId: wallet.id,
-      jobId: id,
-      reason: message,
-      idempotencyKey: `generation-release-${id}`,
-    });
+    const sponsored = payloadObject(current.requestPayload).sponsored === true;
+    if (!sponsored) {
+      const wallet = await tx.wallet.findUniqueOrThrow({
+        where: { organizationId: current.organizationId },
+      });
+      await releaseOrRefundCredits(tx, {
+        walletId: wallet.id,
+        jobId: id,
+        reason: message,
+        idempotencyKey: `generation-release-${id}`,
+      });
+    }
     await tx.generationJob.update({
       where: { id },
       data: {
@@ -483,6 +511,7 @@ export async function processTextJob(
   }
 
   const payload = payloadObject(job.requestPayload);
+  const sponsored = payload.sponsored === true;
   const messages = Array.isArray(payload.messages)
     ? (payload.messages as TextMessage[])
     : [];
@@ -569,8 +598,9 @@ export async function processTextJob(
         data: {
           status: "MANUAL_REVIEW",
           errorCode: "PROVIDER_OUTCOME_UNKNOWN",
-          errorMessage:
-            "The text provider outcome is unknown. Credits remain reserved to prevent duplicate billing; an operator can reconcile this job.",
+          errorMessage: sponsored
+            ? "The text provider outcome is unknown. This sponsored generation requires operator reconciliation before retry."
+            : "The text provider outcome is unknown. Credits remain reserved to prevent duplicate billing; an operator can reconcile this job.",
         },
       });
       return;
@@ -661,16 +691,18 @@ export async function processTextJob(
       data: {
         status: "MANUAL_REVIEW",
         errorCode: "INVALID_SETTLEMENT_USAGE",
-        errorMessage:
-          "Provider token usage could not be safely priced. Credits remain reserved for review.",
+        errorMessage: sponsored
+          ? "Provider token usage could not be safely priced for this sponsored generation."
+          : "Provider token usage could not be safely priced. Credits remain reserved for review.",
         outputPayload: { content, settlementPending: true },
       },
     });
     return;
   }
 
-  const actualCredits =
-    usageIsReliable || job.reservedCredits <= 0n
+  const actualCredits = sponsored
+    ? 0n
+    : usageIsReliable || job.reservedCredits <= 0n
       ? configuredCredits
       : job.reservedCredits;
   const usage = usageIsReliable
@@ -681,7 +713,7 @@ export async function processTextJob(
       }
     : undefined;
 
-  if (actualCredits > job.reservedCredits) {
+  if (!sponsored && actualCredits > job.reservedCredits) {
     await db.generationJob.updateMany({
       where: { id, status: "PROCESSING" },
       data: {
@@ -703,9 +735,11 @@ export async function processTextJob(
     return;
   }
 
-  const wallet = await db.wallet.findUniqueOrThrow({
-    where: { organizationId: job.organizationId },
-  });
+  const wallet = sponsored
+    ? null
+    : await db.wallet.findUniqueOrThrow({
+        where: { organizationId: job.organizationId },
+      });
 
   try {
     await db.$transaction(async (tx) => {
@@ -715,16 +749,18 @@ export async function processTextJob(
       });
       if (currentJob.status !== "PROCESSING") return;
 
-      await captureCreditsForJob(tx, {
-        walletId: wallet.id,
-        jobId: id,
-        amountCredits: actualCredits,
-        idempotencyKey: `generation-capture-${id}`,
-        metadata: {
-          ...(usage ?? {}),
-          usageFallback: !usageIsReliable,
-        },
-      });
+      if (!sponsored && wallet) {
+        await captureCreditsForJob(tx, {
+          walletId: wallet.id,
+          jobId: id,
+          amountCredits: actualCredits,
+          idempotencyKey: `generation-capture-${id}`,
+          metadata: {
+            ...(usage ?? {}),
+            usageFallback: !usageIsReliable,
+          },
+        });
+      }
       await tx.generationJob.update({
         where: { id },
         data: {
@@ -756,6 +792,7 @@ export async function processTextJob(
             ...(usage ?? {}),
             usageFallback: !usageIsReliable,
             chargedCredits: actualCredits.toString(),
+            sponsored,
           },
         },
       });
@@ -766,8 +803,9 @@ export async function processTextJob(
       data: {
         status: "MANUAL_REVIEW",
         errorCode: "SETTLEMENT_REVIEW_REQUIRED",
-        errorMessage:
-          "The provider completed this text generation, but billing settlement requires review. Credits remain reserved.",
+        errorMessage: sponsored
+          ? "The provider completed this sponsored text generation, but provider-cost settlement requires review."
+          : "The provider completed this text generation, but billing settlement requires review. Credits remain reserved.",
         outputPayload: usage
           ? { content, usage, settlementPending: true }
           : { content, usageEstimated: true, settlementPending: true },

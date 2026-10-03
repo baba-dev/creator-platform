@@ -216,6 +216,28 @@ describe("durable text generation billing", () => {
     );
   });
 
+  it("queues sponsored text without reserving customer credits", async () => {
+    const tx = admissionTx();
+    mocks.db.$transaction.mockImplementationOnce(async (callback) =>
+      callback(tx),
+    );
+
+    const job = await createTextJob("user_1", validInput, {
+      sponsored: true,
+    });
+
+    expect(job.status).toBe("QUEUED");
+    expect(tx.wallet.findUnique).not.toHaveBeenCalled();
+    expect(mocks.credits.reserveCreditsForJob).not.toHaveBeenCalled();
+    expect(tx.generationJob.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          requestPayload: expect.objectContaining({ sponsored: true }),
+        }),
+      }),
+    );
+  });
+
   it("replays identical requests and rejects changed inputs", async () => {
     const existing = {
       id: "job_cached",
@@ -379,6 +401,55 @@ describe("durable text generation billing", () => {
       );
     },
   );
+
+  it("records sponsored provider cost while charging zero customer credits", async () => {
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue(
+      queuedJob({
+        reservedCredits: 0n,
+        requestPayload: {
+          messages: [{ role: "user", content: "Greetings!" }],
+          temperature: 0.7,
+          maxTokens: 1_024,
+          sponsored: true,
+        },
+      }),
+    );
+    const tx = settlementTx();
+    mocks.db.$transaction.mockImplementationOnce(async (callback) =>
+      callback(tx),
+    );
+
+    await processTextJob(
+      "job_text_1",
+      providerResponse({
+        prompt_tokens: 50,
+        completion_tokens: 120,
+        total_tokens: 170,
+      }),
+    );
+
+    expect(mocks.db.wallet.findUniqueOrThrow).not.toHaveBeenCalled();
+    expect(mocks.credits.captureCreditsForJob).not.toHaveBeenCalled();
+    expect(tx.generationJob.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "SUCCEEDED",
+          chargedCredits: 0n,
+          actualProviderCostMicroUsd: 5_000n,
+        }),
+      }),
+    );
+    expect(tx.auditEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          metadata: expect.objectContaining({
+            sponsored: true,
+            chargedCredits: "0",
+          }),
+        }),
+      }),
+    );
+  });
 
   it("never captures above the authorized reservation", async () => {
     mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue(queuedJob());

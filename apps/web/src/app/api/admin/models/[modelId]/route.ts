@@ -109,7 +109,10 @@ export async function PATCH(
         activePrice.pricingDimension === "TOKEN"
       ) {
         try {
-          parseTextUsageRatesForProvider(activePrice.usageRates, model.provider);
+          parseTextUsageRatesForProvider(
+            activePrice.usageRates,
+            model.provider,
+          );
         } catch (error) {
           return NextResponse.json(
             {

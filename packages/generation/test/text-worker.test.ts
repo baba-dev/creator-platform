@@ -48,7 +48,16 @@ const basePrice = {
   providerCostMicroUsd: 1_000n,
   pricingDimension: "TOKEN",
   unitQuantity: 1_000,
-  usageRates: null,
+  usageRates: {
+    estimator: "byteplus-text-v1",
+    tiers: [
+      {
+        maxPromptTokens: 262144,
+        inputMicroUsdPerMillionTokens: "500000",
+        outputMicroUsdPerMillionTokens: "2500000",
+      },
+    ],
+  },
   fxBaisaNumerator: 769n,
   fxBaisaDenominator: 2n,
   targetMarginBps: 2_500,
@@ -84,6 +93,7 @@ function admissionTx(existing: unknown = null) {
     providerModel: {
       findFirst: vi.fn().mockResolvedValue({
         id: "m_1",
+        provider: "BYTEPLUS",
         providerModelId: "doubao-seed-character-260628",
         enabled: true,
         capabilities: { contextWindow: 32_768 },
@@ -272,6 +282,61 @@ describe("durable text generation billing", () => {
         messages: [{ role: "user", content: "Changed" }],
       }),
     ).rejects.toThrow("different inputs");
+  });
+
+  it("binds and forwards structured response format for durable text jobs", async () => {
+    const tx = admissionTx();
+    mocks.db.$transaction.mockImplementationOnce(async (callback) =>
+      callback(tx),
+    );
+
+    await createTextJob("user_1", {
+      ...validInput,
+      responseFormat: "json_object",
+    });
+
+    expect(tx.generationJob.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          requestPayload: expect.objectContaining({
+            responseFormat: "json_object",
+          }),
+        }),
+      }),
+    );
+
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue(
+      queuedJob({
+        requestPayload: {
+          messages: [{ role: "user", content: "Return JSON" }],
+          temperature: 0.7,
+          maxTokens: 1_024,
+          responseFormat: "json_object",
+        },
+      }),
+    );
+    const settleTx = settlementTx();
+    mocks.db.$transaction.mockImplementationOnce(async (callback) =>
+      callback(settleTx),
+    );
+    const provider = {
+      name: "groq" as const,
+      chat: vi.fn().mockResolvedValue({
+        providerRequestId: "groq-json-1",
+        content: '{"ok":true}',
+        usage: {
+          promptTokens: 10,
+          completionTokens: 5,
+          totalTokens: 15,
+        },
+      }),
+    };
+
+    await processTextJob("job_text_1", provider);
+
+    expect(provider.chat).toHaveBeenCalledWith(
+      expect.objectContaining({ responseFormat: "json_object" }),
+    );
   });
 
   it("captures reliable provider usage after worker completion", async () => {

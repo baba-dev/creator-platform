@@ -298,4 +298,3 @@ describe("dynamic text Studio discovery", () => {
     ]);
   });
 });
-

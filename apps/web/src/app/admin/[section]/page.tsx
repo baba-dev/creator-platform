@@ -686,6 +686,9 @@ async function renderSection(
                         currentUnitQuantity={price?.unitQuantity}
                         canManage={canManage}
                         mediaKind={row.mediaKind}
+                        transcription={
+                          taskDescriptor.capabilities.transcription === true
+                        }
                       />
                     </Cell>
                   ) : null}

@@ -335,10 +335,14 @@ export async function processTranscriptionJob(
     return;
   }
 
-  await db.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM GenerationJob WHERE id = ${id} FOR UPDATE`;
-    const current = await tx.generationJob.findUniqueOrThrow({ where: { id } });
-    if (current.status !== "PROCESSING") return;
+  let committed = false;
+  try {
+    committed = await db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM GenerationJob WHERE id = ${id} FOR UPDATE`;
+      const current = await tx.generationJob.findUniqueOrThrow({
+        where: { id },
+      });
+      if (current.status !== "PROCESSING") return false;
 
     const wallet = await tx.wallet.findUniqueOrThrow({
       where: { organizationId: job.organizationId },
@@ -409,23 +413,64 @@ export async function processTranscriptionJob(
       },
     });
 
-    await tx.auditEvent.create({
-      data: {
-        organizationId: job.organizationId,
-        actorUserId: job.createdById,
-        action: "generation.succeeded",
-        targetType: "GenerationJob",
-        targetId: id,
-        metadata: {
-          task: "transcription",
-          sourceAssetId: source.id,
-          provider: job.providerModel.provider,
-          providerModelId: job.providerModel.providerModelId,
-          trustedDurationMs: source.durationMs,
-          segmentCount: subtitles.segmentCount,
-          actualProviderCostMicroUsd: actualProviderCostMicroUsd.toString(),
+      await tx.auditEvent.create({
+        data: {
+          organizationId: job.organizationId,
+          actorUserId: job.createdById,
+          action: "generation.succeeded",
+          targetType: "GenerationJob",
+          targetId: id,
+          metadata: {
+            task: "transcription",
+            sourceAssetId: source.id,
+            provider: job.providerModel.provider,
+            providerModelId: job.providerModel.providerModelId,
+            trustedDurationMs: source.durationMs,
+            segmentCount: subtitles.segmentCount,
+            actualProviderCostMicroUsd: actualProviderCostMicroUsd.toString(),
+          },
         },
-      },
+      });
+      return true;
     });
-  });
+  } catch {
+    committed = false;
+  }
+
+  if (!committed) {
+    for (const item of stored) {
+      await item.storage
+        .delete(item.objectKey, item.externalFileId)
+        .catch(() => undefined);
+    }
+    const pending = await db.asset.aggregate({
+      where: { generationJobId: id, status: "PENDING" },
+      _sum: { byteSize: true },
+    });
+    const reserved = pending._sum.byteSize ?? 0n;
+    if (reserved > 0n) {
+      await db
+        .$transaction(async (tx) => {
+          const current = await tx.generationJob.findUnique({
+            where: { id },
+            select: { status: true, organizationId: true },
+          });
+          if (!current || current.status === "SUCCEEDED") return;
+          await releaseAssetStorage(tx, {
+            organizationId: current.organizationId,
+            reservedBytes: reserved,
+          });
+          await tx.asset.updateMany({
+            where: { generationJobId: id, status: "PENDING" },
+            data: {
+              status: "DELETED",
+              byteSize: 0n,
+              deletedAt: new Date(),
+              purgeAfter: new Date(),
+            },
+          });
+        })
+        .catch(() => undefined);
+    }
+  }
 }

@@ -483,8 +483,8 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
     customerCredits: 63n,
     pricingDimension: "SECOND",
     unitQuantity: 1,
-    enabled: false,
-    seedPrice: false,
+    enabled: true,
+    seedPrice: true,
     providerCostBasisNote:
       "BytePlus OmniHuman 1.5 public PAYG list price: $0.12 per generated video second. Production price publication is operator-controlled.",
   },

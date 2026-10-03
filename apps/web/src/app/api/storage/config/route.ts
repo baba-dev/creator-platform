@@ -126,7 +126,9 @@ export async function POST(request: Request) {
         : Boolean(env.ONEDRIVE_CLIENT_ID && env.ONEDRIVE_CLIENT_SECRET));
     if (!serverReady) {
       return NextResponse.json(
-        { error: `Cannot switch to ${provider}: server integration is not configured.` },
+        {
+          error: `Cannot switch to ${provider}: server integration is not configured.`,
+        },
         { status: 503 },
       );
     }

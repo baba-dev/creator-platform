@@ -1,7 +1,7 @@
 # Speech transcription and subtitles
 
-The Speech Studio exposes transcription as a separate workflow from text-to-speech.
-The initial production provider is Groq Whisper Large v3 Turbo.
+The Speech Studio exposes transcription as a separate workflow from
+text-to-speech. The initial production provider is Groq Whisper Large v3 Turbo.
 
 ## Discovery and pricing
 
@@ -24,8 +24,8 @@ metadata, not from browser input or provider-reported duration.
 
 ## Durable lifecycle
 
-Transcription reuses `GenerationJob`, the generation wallet ledger, History,
-and Assets rather than creating a parallel job system.
+Transcription reuses `GenerationJob`, the generation wallet ledger, History, and
+Assets rather than creating a parallel job system.
 
 1. The creator selects or uploads a READY AUDIO/VIDEO Asset.
 2. The quote endpoint resolves the canonical transcription model and exact
@@ -80,10 +80,10 @@ When the provider does not supply timestamped segments, the system produces a
 single full-duration subtitle cue using the trusted source duration. This keeps
 all three output contracts available without inventing word-level timestamps.
 
-The GenerationJob output payload stores task, transcript text, detected
-language when available, provider duration, trusted source duration, segment
-count and output Asset IDs. Provider/model provenance remains available through
-the canonical ProviderModel relation.
+The GenerationJob output payload stores task, transcript text, detected language
+when available, provider duration, trusted source duration, segment count and
+output Asset IDs. Provider/model provenance remains available through the
+canonical ProviderModel relation.
 
 ## Deployment checks
 

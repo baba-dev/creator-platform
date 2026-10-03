@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
     captureCreditsForJob: vi.fn(),
     releaseOrRefundCredits: vi.fn(),
     textProviderCostMicroUsd: vi.fn(() => 5_000n),
+    parseTextUsageRatesForProvider: vi.fn((value) => value),
   },
 }));
 

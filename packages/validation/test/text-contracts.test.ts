@@ -114,3 +114,14 @@ describe("reasoning pricing validation", () => {
     );
   });
 });
+
+describe("voice task pricing validation", () => {
+  it("allows duration pricing for VOICE so transcription can bill trusted media seconds", () => {
+    expect(isPricingDimensionSupportedForMedia("VOICE", "SECOND")).toBe(true);
+    expect(isPricingDimensionSupportedForMedia("VOICE", "CHARACTER")).toBe(
+      true,
+    );
+    expect(isPricingDimensionSupportedForMedia("VOICE", "REQUEST")).toBe(true);
+    expect(isPricingDimensionSupportedForMedia("VOICE", "TOKEN")).toBe(false);
+  });
+});

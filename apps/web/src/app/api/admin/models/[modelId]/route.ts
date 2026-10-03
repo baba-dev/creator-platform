@@ -21,6 +21,39 @@ import { NextResponse } from "next/server";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
 
+function assertVoicePricingMatchesCapabilities(
+  model: {
+    mediaKind: string;
+    capabilities: unknown;
+  },
+  pricingDimension: string,
+): void {
+  if (model.mediaKind !== "VOICE") return;
+  const capabilities =
+    model.capabilities &&
+    typeof model.capabilities === "object" &&
+    !Array.isArray(model.capabilities)
+      ? (model.capabilities as Record<string, unknown>)
+      : {};
+  const transcription = capabilities.transcription === true;
+  if (
+    transcription &&
+    pricingDimension !== "SECOND" &&
+    pricingDimension !== "REQUEST"
+  ) {
+    throw new Error("Transcription models require SECOND or REQUEST pricing.");
+  }
+  if (
+    !transcription &&
+    pricingDimension !== "CHARACTER" &&
+    pricingDimension !== "REQUEST"
+  ) {
+    throw new Error(
+      "Speech synthesis models require CHARACTER or REQUEST pricing.",
+    );
+  }
+}
+
 function priceVersionResponse(price: ModelPriceVersion) {
   return {
     id: price.id,
@@ -104,6 +137,22 @@ export async function PATCH(
           },
           { status: 409 },
         );
+      try {
+        assertVoicePricingMatchesCapabilities(
+          model,
+          activePrice.pricingDimension,
+        );
+      } catch (error) {
+        return NextResponse.json(
+          {
+            error:
+              error instanceof Error
+                ? error.message
+                : "The active voice pricing snapshot is invalid.",
+          },
+          { status: 409 },
+        );
+      }
       if (
         (model.mediaKind === "TEXT" || model.mediaKind === "REASONING") &&
         activePrice.pricingDimension === "TOKEN"
@@ -271,6 +320,7 @@ export async function PATCH(
 
     try {
       assertPricingDimensionMatchesMediaKind(model.mediaKind, pricingDimension);
+      assertVoicePricingMatchesCapabilities(model, pricingDimension);
     } catch (err) {
       return NextResponse.json(
         {

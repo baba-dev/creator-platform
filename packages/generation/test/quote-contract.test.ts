@@ -72,6 +72,46 @@ describe("accepted generation quotes", () => {
       ),
     ).toThrow();
   });
+  it("binds transcription quotes to source asset, language, and trusted duration", () => {
+    const parameters = quoteParameters("VOICE", {
+      transcription: true,
+      sourceAssetId: "asset-audio-1",
+      language: "en",
+      billableQuantity: 61,
+    });
+    expect(parameters).toEqual({
+      transcription: true,
+      sourceAssetId: "asset-audio-1",
+      language: "en",
+      billableQuantity: 61,
+    });
+
+    const transcriptionContext = {
+      ...context,
+      parameters,
+    };
+    const quote = issueGenerationQuote(transcriptionContext, 100n, now);
+    expect(() =>
+      verifyGenerationQuote(quote.quoteToken, transcriptionContext, 100n, now),
+    ).not.toThrow();
+    expect(() =>
+      verifyGenerationQuote(
+        quote.quoteToken,
+        {
+          ...transcriptionContext,
+          parameters: quoteParameters("VOICE", {
+            transcription: true,
+            sourceAssetId: "asset-audio-2",
+            language: "en",
+            billableQuantity: 61,
+          }),
+        },
+        100n,
+        now,
+      ),
+    ).toThrow();
+  });
+
   it("canonicalizes voice text and matches quote image units to generation outputCount", () => {
     expect(quoteParameters("VOICE", { text: "  Hello world  " })).toEqual(
       quoteParameters("VOICE", { text: "Hello world" }),

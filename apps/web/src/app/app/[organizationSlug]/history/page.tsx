@@ -229,8 +229,10 @@ export default async function HistoryPage({
                   </span>
                 </div>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  {job.providerModel.mediaKind} ·{" "}
-                  {job.project?.name ?? "No project"} · {job.createdBy.name} ·{" "}
+                  {job.task === "transcription"
+                    ? "TRANSCRIPTION"
+                    : job.providerModel.mediaKind}{" "}
+                  · {job.project?.name ?? "No project"} · {job.createdBy.name} ·{" "}
                   {job.createdAt.toLocaleString()}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">

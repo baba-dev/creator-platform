@@ -103,6 +103,9 @@ export function quoteParameters(
     seed?: number;
     sourceDraftJobId?: string;
     extensionDirection?: string;
+    sourceAssetId?: string;
+    language?: string;
+    transcription?: boolean;
   },
 ): Record<string, unknown> {
   if (mediaKind === "VIDEO") {
@@ -155,14 +158,21 @@ export function quoteParameters(
     };
   }
   if (mediaKind === "VOICE")
-    return {
-      textHash:
-        input.text === undefined
-          ? null
-          : createHash("sha256").update(input.text.trim()).digest("hex"),
-      billableQuantity:
-        input.text === undefined ? (input.billableQuantity ?? null) : null,
-    };
+    return input.transcription
+      ? {
+          transcription: true,
+          sourceAssetId: input.sourceAssetId ?? null,
+          language: input.language ?? null,
+          billableQuantity: input.billableQuantity ?? null,
+        }
+      : {
+          textHash:
+            input.text === undefined
+              ? null
+              : createHash("sha256").update(input.text.trim()).digest("hex"),
+          billableQuantity:
+            input.text === undefined ? (input.billableQuantity ?? null) : null,
+        };
   if (mediaKind === "TEXT")
     return {
       textHash:

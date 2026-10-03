@@ -3,6 +3,7 @@ import {
   hasPlatformPermission,
   type PlatformRole,
 } from "@aiwa/authz";
+import { releaseAssetStorage } from "@aiwa/assets";
 import { releaseOrRefundCredits } from "@aiwa/credits";
 import { db } from "@aiwa/db";
 
@@ -79,9 +80,25 @@ export async function cancelQueuedGenerationJob(input: {
       reason: "Cancelled before provider submission.",
       idempotencyKey: `generation-release-${job.id}`,
     });
+    const pendingAssets = await tx.asset.aggregate({
+      where: { generationJobId: job.id, status: "PENDING" },
+      _sum: { byteSize: true },
+    });
+    const reservedAssetBytes = pendingAssets._sum.byteSize ?? 0n;
+    if (reservedAssetBytes > 0n) {
+      await releaseAssetStorage(tx, {
+        organizationId: job.organizationId,
+        reservedBytes: reservedAssetBytes,
+      });
+    }
     await tx.asset.updateMany({
       where: { generationJobId: job.id, status: "PENDING" },
-      data: { status: "DELETED", byteSize: 0n },
+      data: {
+        status: "DELETED",
+        byteSize: 0n,
+        deletedAt: new Date(),
+        purgeAfter: new Date(),
+      },
     });
     await tx.generationJob.update({
       where: { id: job.id },

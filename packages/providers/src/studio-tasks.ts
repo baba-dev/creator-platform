@@ -38,6 +38,7 @@ export const STUDIO_TASK_DEFAULT_PROVIDER_MODEL_IDS: Readonly<
   "story-planning": "dola-seed-2-1-turbo-260628",
   "prompt-enhancement": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
   "speech-synthesis": "seed-tts-2.0",
+  transcription: "whisper-large-v3-turbo",
   "image-generation": "seedream-5-0-260128",
 };
 

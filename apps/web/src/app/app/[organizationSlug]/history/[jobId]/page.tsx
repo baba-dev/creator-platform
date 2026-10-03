@@ -35,6 +35,8 @@ export default async function CustomerJobPage({
       : typeof request.text === "string"
         ? request.text
         : null;
+  const displayKind =
+    request.task === "transcription" ? "TRANSCRIPTION" : job.kind;
   const settings = Object.entries(request).filter(
     ([key]) => !["prompt", "text", "speaker"].includes(key),
   );
@@ -64,7 +66,7 @@ export default async function CustomerJobPage({
         </Link>
         <section className="rounded-3xl border border-border bg-card p-6">
           <p className="text-sm text-primary">
-            {job.kind} · {job.status.replaceAll("_", " ")}
+            {displayKind} · {job.status.replaceAll("_", " ")}
           </p>
           <h1 className="mt-2 font-display text-3xl font-bold">{job.model}</h1>
           <p className="mt-2 break-all font-mono text-xs text-muted-foreground">
@@ -244,7 +246,8 @@ export default async function CustomerJobPage({
                 className="rounded-xl border border-border p-3 text-sm"
               >
                 <p>
-                  {asset.mimeType} · {asset.status} · {asset.byteSize} bytes
+                  {asset.name ?? asset.mimeType} · {asset.status} ·{" "}
+                  {asset.byteSize} bytes
                   {asset.width && asset.height
                     ? ` · ${asset.width} × ${asset.height}`
                     : ""}

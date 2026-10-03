@@ -6,7 +6,11 @@ import {
   parseMarginPercent,
   formatMarginPercent,
 } from "@aiwa/credits/pricing";
-import type { TextUsageTier, UsageRate } from "@aiwa/credits";
+import {
+  textUsageEstimatorForProvider,
+  type TextUsageTier,
+  type UsageRate,
+} from "@aiwa/credits";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 
@@ -142,6 +146,7 @@ export function ModelActions({
   modelId,
   providerModelId,
   displayName,
+  provider,
   enabled,
   currentUsageRates,
   currentFxBaisaNumerator,
@@ -160,6 +165,7 @@ export function ModelActions({
   modelId: string;
   providerModelId?: string;
   displayName: string;
+  provider: "BYTEPLUS" | "NVIDIA" | "GROQ" | "GEMINI" | "CLOUDFLARE";
   enabled: boolean;
   mediaKind?: "IMAGE" | "VIDEO" | "VOICE" | "REASONING" | "TEXT";
   currentUsageRates?: unknown;
@@ -215,12 +221,17 @@ export function ModelActions({
       ? (currentUsageRates as { rates: UsageRate[] }).rates
       : defaultSeedanceUsageRates(providerModelId);
   const [usageRows, setUsageRows] = useState<UsageRate[]>(initialRates);
+  const currentTextEstimator =
+    currentUsageRates &&
+    typeof currentUsageRates === "object" &&
+    "estimator" in currentUsageRates
+      ? String((currentUsageRates as { estimator?: unknown }).estimator)
+      : null;
   const initialTextTiers =
     currentUsageRates &&
     typeof currentUsageRates === "object" &&
-    "estimator" in currentUsageRates &&
-    (currentUsageRates as { estimator?: unknown }).estimator ===
-      "byteplus-text-v1" &&
+    (currentTextEstimator === "byteplus-text-v1" ||
+      currentTextEstimator === "text-token-v1") &&
     "tiers" in currentUsageRates &&
     Array.isArray((currentUsageRates as { tiers?: unknown }).tiers)
       ? ((currentUsageRates as { tiers: TextUsageTier[] }).tiers ?? [])
@@ -358,7 +369,7 @@ export function ModelActions({
           ...(mediaKind === "TEXT" && pricingDimension === "TOKEN"
             ? {
                 usageRates: {
-                  estimator: "byteplus-text-v1",
+                  estimator: textUsageEstimatorForProvider(provider),
                   tiers: textUsageTiers.map((tier) => {
                     const {
                       cachedInputMicroUsdPerMillionTokens,
@@ -630,6 +641,11 @@ export function ModelActions({
                       prompt, cached prompt and output usage. Add a second tier
                       when the provider charges more above a context threshold.
                       Settlement uses the provider-reported token breakdown.
+                      This provider publishes{" "}
+                      <code className="font-mono">
+                        {textUsageEstimatorForProvider(provider)}
+                      </code>
+                      .
                     </p>
                     {textUsageTiers.map((tier, index) => (
                       <div

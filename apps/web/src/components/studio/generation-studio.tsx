@@ -1257,12 +1257,21 @@ export function GenerationStudio({
 
   async function enhancePrompt() {
     const sourcePrompt = prompt.trim();
-    if (!sourcePrompt || !model || isEnhancing || busy || !canGenerate) return;
+    if (
+      !sourcePrompt ||
+      !model ||
+      !promptEnhancementModelId ||
+      isEnhancing ||
+      busy ||
+      !canGenerate
+    )
+      return;
 
     const fingerprint = JSON.stringify({
       organizationId,
       sourcePrompt,
       targetMedia: model.mediaKind,
+      promptEnhancementModelId,
     });
     if (enhancementAttempt.current?.fingerprint !== fingerprint)
       enhancementAttempt.current = {
@@ -1281,6 +1290,7 @@ export function GenerationStudio({
           userPrompt: sourcePrompt,
           targetMedia: model.mediaKind,
           idempotencyKey: enhancementAttempt.current.key,
+          modelId: promptEnhancementModelId,
         }),
       });
       const body = await response.json();
@@ -1305,7 +1315,17 @@ export function GenerationStudio({
           const enhancedPrompt = job.outputPayload?.enhancedPrompt;
           if (typeof enhancedPrompt !== "string" || !enhancedPrompt.trim())
             throw new Error("Prompt enhancement returned an invalid result.");
+          if (
+            !job.model ||
+            typeof job.model.name !== "string" ||
+            typeof job.model.provider !== "string"
+          )
+            throw new Error("Prompt enhancement provenance is unavailable.");
           setPrompt(enhancedPrompt);
+          setEnhancementAttribution({
+            name: job.model.name,
+            provider: job.model.provider,
+          });
           enhancementAttempt.current = null;
           return;
         }

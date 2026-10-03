@@ -1,8 +1,5 @@
 import { hasOrganizationPermission } from "@aiwa/authz";
-import {
-  finalizeAssetStorage,
-  releaseAssetStorage,
-} from "@aiwa/assets";
+import { finalizeAssetStorage, releaseAssetStorage } from "@aiwa/assets";
 import { resolveAssetStorageForAsset } from "@aiwa/assets/storage";
 import { captureCreditsForJob } from "@aiwa/credits";
 import { parseServerEnv } from "@aiwa/config";
@@ -232,7 +229,7 @@ export async function processTranscriptionJob(
           : "Provider rejected the transcription request. Credits released.",
         "SUBMITTED",
         error instanceof ProviderRequestError
-          ? error.code ?? "PROVIDER_REJECTED"
+          ? (error.code ?? "PROVIDER_REJECTED")
           : "PROVIDER_UNAVAILABLE",
       );
       return;
@@ -344,74 +341,74 @@ export async function processTranscriptionJob(
       });
       if (current.status !== "PROCESSING") return false;
 
-    const wallet = await tx.wallet.findUniqueOrThrow({
-      where: { organizationId: job.organizationId },
-    });
-    await captureCreditsForJob(tx, {
-      walletId: wallet.id,
-      jobId: id,
-      amountCredits: current.reservedCredits,
-      idempotencyKey: `generation-capture-${id}`,
-    });
-
-    const readyAssetIds: string[] = [];
-    for (const item of stored) {
-      const pending = job.assets.find((asset) => asset.id === item.assetId)!;
-      await finalizeAssetStorage(tx, {
-        organizationId: job.organizationId,
-        reservedBytes: pending.byteSize,
-        actualBytes: item.byteSize,
+      const wallet = await tx.wallet.findUniqueOrThrow({
+        where: { organizationId: job.organizationId },
       });
-      const ready = await tx.asset.update({
-        where: { id: item.assetId },
+      await captureCreditsForJob(tx, {
+        walletId: wallet.id,
+        jobId: id,
+        amountCredits: current.reservedCredits,
+        idempotencyKey: `generation-capture-${id}`,
+      });
+
+      const readyAssetIds: string[] = [];
+      for (const item of stored) {
+        const pending = job.assets.find((asset) => asset.id === item.assetId)!;
+        await finalizeAssetStorage(tx, {
+          organizationId: job.organizationId,
+          reservedBytes: pending.byteSize,
+          actualBytes: item.byteSize,
+        });
+        const ready = await tx.asset.update({
+          where: { id: item.assetId },
+          data: {
+            status: "READY",
+            byteSize: item.byteSize,
+            sha256: item.sha256,
+            externalFileId: item.externalFileId ?? null,
+          },
+          select: { id: true },
+        });
+        readyAssetIds.push(ready.id);
+      }
+
+      const trustedBillableSeconds = Math.max(
+        1,
+        Math.ceil(source.durationMs! / 1000),
+      );
+      const actualUnits =
+        job.priceVersion.pricingDimension === "SECOND"
+          ? Number(
+              (BigInt(trustedBillableSeconds) +
+                BigInt(job.priceVersion.unitQuantity) -
+                1n) /
+                BigInt(job.priceVersion.unitQuantity),
+            )
+          : 1;
+      const actualProviderCostMicroUsd =
+        job.priceVersion.providerCostMicroUsd * BigInt(actualUnits);
+
+      await tx.generationJob.update({
+        where: { id },
         data: {
-          status: "READY",
-          byteSize: item.byteSize,
-          sha256: item.sha256,
-          externalFileId: item.externalFileId ?? null,
+          status: "SUCCEEDED",
+          actualUnits,
+          actualProviderCostMicroUsd,
+          providerCostBasis: "TRUSTED_MEDIA_DURATION",
+          completedAt: new Date(),
+          outputPayload: {
+            task: "transcription",
+            text: result.text,
+            language: result.language ?? null,
+            durationSeconds: result.durationSeconds ?? fallbackDurationSeconds,
+            trustedDurationMs: source.durationMs,
+            segmentCount: subtitles.segmentCount,
+            assetIds: readyAssetIds,
+          },
+          errorCode: null,
+          errorMessage: null,
         },
-        select: { id: true },
       });
-      readyAssetIds.push(ready.id);
-    }
-
-    const trustedBillableSeconds = Math.max(
-      1,
-      Math.ceil(source.durationMs! / 1000),
-    );
-    const actualUnits =
-      job.priceVersion.pricingDimension === "SECOND"
-        ? Number(
-            (BigInt(trustedBillableSeconds) +
-              BigInt(job.priceVersion.unitQuantity) -
-              1n) /
-              BigInt(job.priceVersion.unitQuantity),
-          )
-        : 1;
-    const actualProviderCostMicroUsd =
-      job.priceVersion.providerCostMicroUsd * BigInt(actualUnits);
-
-    await tx.generationJob.update({
-      where: { id },
-      data: {
-        status: "SUCCEEDED",
-        actualUnits,
-        actualProviderCostMicroUsd,
-        providerCostBasis: "TRUSTED_MEDIA_DURATION",
-        completedAt: new Date(),
-        outputPayload: {
-          task: "transcription",
-          text: result.text,
-          language: result.language ?? null,
-          durationSeconds: result.durationSeconds ?? fallbackDurationSeconds,
-          trustedDurationMs: source.durationMs,
-          segmentCount: subtitles.segmentCount,
-          assetIds: readyAssetIds,
-        },
-        errorCode: null,
-        errorMessage: null,
-      },
-    });
 
       await tx.auditEvent.create({
         data: {

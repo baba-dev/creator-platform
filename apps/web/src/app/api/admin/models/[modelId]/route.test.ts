@@ -297,8 +297,7 @@ describe("reasoning provider-cost pricing", () => {
     mocks.db.providerModel.findUnique.mockResolvedValue({
       id: modelId,
       provider: "NVIDIA",
-      providerModelId:
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+      providerModelId: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
       displayName: "Nemotron",
       mediaKind: "REASONING",
       capabilities: { "task:prompt-enhancement": true, reasoning: true },
@@ -362,4 +361,3 @@ describe("reasoning provider-cost pricing", () => {
     );
   });
 });
-

@@ -434,6 +434,8 @@ model ProviderModel {
   priceVersions         ModelPriceVersion[]
   generationJobs        GenerationJob[]
   reasoningJobs         ReasoningJob[]
+  personaPreferences    Persona[]            @relation("PersonaProviderModel")
+  chatThreads           ChatThread[]         @relation("ChatThreadProviderModel")
 
   @@unique([provider, providerModelId])
   @@index([mediaKind, enabled])
@@ -981,18 +983,21 @@ model Persona {
   tag            String?
   description    String?      @db.Text
   systemPrompt   String       @db.Text
-  voiceKey       String?
-  modelId        String       @default("doubao-seed-character-260628")
-  isPreset       Boolean      @default(false)
+  voiceKey              String?
+  modelId               String       @default("doubao-seed-character-260628")
+  providerModelRecordId String?
+  isPreset              Boolean      @default(false)
   createdById    String
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  createdBy      User         @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  createdBy      User          @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  providerModel  ProviderModel? @relation("PersonaProviderModel", fields: [providerModelRecordId], references: [id], onDelete: SetNull)
   chatThreads    ChatThread[]
 
   @@index([organizationId, isPreset, createdAt])
+  @@index([providerModelRecordId])
 }
 
 model ChatThread {
@@ -1001,9 +1006,10 @@ model ChatThread {
   projectId      String?
   createdById    String
   personaId      String?
-  title          String
-  modelId        String        @default("doubao-seed-character-260628")
-  systemPrompt   String?       @db.Text
+  title                 String
+  modelId               String        @default("doubao-seed-character-260628")
+  providerModelRecordId String?
+  systemPrompt          String?       @db.Text
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
@@ -1011,10 +1017,12 @@ model ChatThread {
   project        Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
   createdBy      User          @relation(fields: [createdById], references: [id], onDelete: Restrict)
   persona        Persona?      @relation(fields: [personaId], references: [id], onDelete: SetNull)
+  providerModel  ProviderModel? @relation("ChatThreadProviderModel", fields: [providerModelRecordId], references: [id], onDelete: SetNull)
   messages       ChatMessage[]
 
   @@index([organizationId, createdById, updatedAt])
   @@index([projectId])
+  @@index([providerModelRecordId])
 }
 
 model ChatMessage {

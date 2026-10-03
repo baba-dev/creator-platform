@@ -49,21 +49,7 @@ jobs:
           bash -n infra/deploy/package-release.sh
 
       - name: Check formatting
-        run: |
-          pnpm exec prettier --write \
-            apps/web/src/lib/studio-model-discovery.test.ts \
-            apps/web/src/lib/studio-model-discovery.ts \
-            docs/studio-model-discovery.md \
-            packages/providers/src/catalog.ts \
-            packages/providers/src/studio-tasks.ts \
-            packages/providers/test/studio-tasks.test.ts
-          git diff --no-color --exit-code -- \
-            apps/web/src/lib/studio-model-discovery.test.ts \
-            apps/web/src/lib/studio-model-discovery.ts \
-            docs/studio-model-discovery.md \
-            packages/providers/src/catalog.ts \
-            packages/providers/src/studio-tasks.ts \
-            packages/providers/test/studio-tasks.test.ts
+        run: pnpm format:check
 
       - name: Lint
         run: pnpm lint

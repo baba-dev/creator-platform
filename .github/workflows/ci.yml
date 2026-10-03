@@ -49,19 +49,7 @@ jobs:
           bash -n infra/deploy/package-release.sh
 
       - name: Check formatting
-        run: |
-          pnpm exec prettier --write \
-            apps/web/src/components/studio/creative-director-workspace.tsx \
-            apps/web/src/components/studio/scriptwriting-studio.tsx \
-            apps/web/src/lib/studio-model-discovery.test.ts \
-            docs/studio-model-discovery.md \
-            packages/providers/test/studio-tasks.test.ts
-          git diff --no-color --exit-code -- \
-            apps/web/src/components/studio/creative-director-workspace.tsx \
-            apps/web/src/components/studio/scriptwriting-studio.tsx \
-            apps/web/src/lib/studio-model-discovery.test.ts \
-            docs/studio-model-discovery.md \
-            packages/providers/test/studio-tasks.test.ts
+        run: pnpm format:check
 
       - name: Lint
         run: pnpm lint

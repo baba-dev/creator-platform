@@ -92,12 +92,7 @@ describe("accepted generation quotes", () => {
     };
     const quote = issueGenerationQuote(transcriptionContext, 100n, now);
     expect(() =>
-      verifyGenerationQuote(
-        quote.quoteToken,
-        transcriptionContext,
-        100n,
-        now,
-      ),
+      verifyGenerationQuote(quote.quoteToken, transcriptionContext, 100n, now),
     ).not.toThrow();
     expect(() =>
       verifyGenerationQuote(

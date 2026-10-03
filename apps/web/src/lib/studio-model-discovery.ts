@@ -6,7 +6,10 @@ import {
   type StudioTask,
 } from "@aiwa/providers";
 
-import { getProviderRuntimeReadiness } from "./provider-readiness";
+import {
+  getProviderRuntimeReadiness,
+  type ProviderEnvironment,
+} from "./provider-readiness";
 
 type ActivePrice = {
   id: string;
@@ -71,7 +74,7 @@ const PROVIDER_ORDER = new Map(
 export function selectDiscoverableStudioModels(
   rows: readonly StudioModelRow[],
   task: StudioTask,
-  environment: NodeJS.ProcessEnv = process.env,
+  environment: ProviderEnvironment = process.env,
 ): StudioModelDiscoveryResult {
   const preferredProviderModelId =
     STUDIO_TASK_DEFAULT_PROVIDER_MODEL_IDS[task] ?? null;
@@ -156,7 +159,7 @@ export async function getAvailableStudioModels(
   task: StudioTask,
   options: {
     now?: Date;
-    environment?: NodeJS.ProcessEnv;
+    environment?: ProviderEnvironment;
   } = {},
 ): Promise<StudioModelDiscoveryResult> {
   const now = options.now ?? new Date();
@@ -211,7 +214,7 @@ export async function resolveAvailableStudioModel(
   task: StudioTask,
   options: {
     now?: Date;
-    environment?: NodeJS.ProcessEnv;
+    environment?: ProviderEnvironment;
   } = {},
 ): Promise<PublicStudioModel> {
   const now = options.now ?? new Date();

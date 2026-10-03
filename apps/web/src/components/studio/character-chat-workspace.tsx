@@ -18,6 +18,8 @@ interface Persona {
   systemPrompt: string;
   voiceKey: string | null;
   modelId: string;
+  modelAvailable: boolean;
+  modelReference: "CANONICAL" | "LEGACY" | "UNAVAILABLE";
   isPreset: boolean;
 }
 
@@ -25,10 +27,23 @@ interface ChatThread {
   id: string;
   title: string;
   modelId: string;
+  modelAvailable: boolean;
+  modelReference: "CANONICAL" | "LEGACY" | "UNAVAILABLE";
   persona?: Persona | null;
   createdAt: string;
   updatedAt: string;
   _count?: { messages: number };
+}
+
+interface StudioChatModel {
+  id: string;
+  providerModelId: string;
+  name: string;
+  provider: string;
+  flags: {
+    reasoning: boolean;
+    fast: boolean;
+  };
 }
 
 interface ChatMessage {
@@ -111,36 +126,43 @@ export const VERIFIED_VOICES = [
   },
 ];
 
-const TEXT_MODEL_BADGES: Record<string, string> = {
-  "doubao-seed-character-260628": "Roleplay & Character",
-  "dola-seed-2-1-turbo-260628": "Flagship Fast",
-  "seed-2-0-pro-260328": "Deep Reasoning",
-  "seed-2-0-lite-260428": "Efficient",
-  "seed-2-0-mini-260428": "Ultra Lightweight",
-  "seed-2-0-code-preview-260328": "Technical Preview",
+const PROVIDER_LABELS: Record<string, string> = {
+  BYTEPLUS: "BytePlus",
+  GROQ: "Groq",
+  GEMINI: "Gemini",
+  CLOUDFLARE: "Cloudflare",
+  NVIDIA: "NVIDIA",
 };
+
+function modelOptionLabel(model: StudioChatModel): string {
+  const provider = PROVIDER_LABELS[model.provider] ?? model.provider;
+  return `${model.name} · ${provider}${model.flags.fast ? " · Fast" : ""}`;
+}
 
 export function CharacterChatWorkspace({
   organizationId,
   canGenerate,
+  defaultModelId,
   textModels,
 }: {
   organizationSlug: string;
   organizationId: string;
   canGenerate: boolean;
-  textModels: Array<{ id: string; name: string }>;
+  defaultModelId: string | null;
+  textModels: StudioChatModel[];
 }) {
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [selectedPersona, setSelectedPersona] = useState<Persona | null>(null);
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const defaultTextModel =
-    textModels.find((model) => model.id === "doubao-seed-character-260628")
-      ?.id ??
-    textModels[0]?.id ??
-    "";
+  const defaultTextModel = defaultModelId ?? textModels[0]?.id ?? "";
   const [selectedModel, setSelectedModel] = useState<string>(defaultTextModel);
+  const [activeThreadModelId, setActiveThreadModelId] = useState<string | null>(
+    null,
+  );
+  const [activeThreadModelAvailable, setActiveThreadModelAvailable] =
+    useState(true);
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -279,7 +301,11 @@ export function CharacterChatWorkspace({
           const data = await personasRes.json();
           setPersonas(data.personas || []);
           if (data.personas?.length) {
-            setSelectedPersona(data.personas[0]);
+            const firstPersona = data.personas[0] as Persona;
+            setSelectedPersona(firstPersona);
+            if (firstPersona.modelAvailable) {
+              setSelectedModel(firstPersona.modelId);
+            }
           }
         }
 
@@ -314,7 +340,18 @@ export function CharacterChatWorkspace({
               setSelectedPersona(data.thread.persona);
             }
             if (data.thread?.modelId) {
-              setSelectedModel(data.thread.modelId);
+              setActiveThreadModelId(data.thread.modelId);
+              setActiveThreadModelAvailable(
+                data.thread.modelAvailable !== false,
+              );
+              if (data.thread.modelAvailable !== false) {
+                setSelectedModel(data.thread.modelId);
+                setErrorMessage(null);
+              } else {
+                setErrorMessage(
+                  "This conversation's model is no longer available. Start a new chat with an available model to continue.",
+                );
+              }
             }
           }
         }
@@ -328,9 +365,29 @@ export function CharacterChatWorkspace({
     };
   }, [activeThreadId]);
 
-  async function handleStartNewThread(persona?: Persona) {
+  async function handleStartNewThread(
+    persona?: Persona,
+    usePersonaDefault = false,
+  ) {
     const targetPersona = persona || selectedPersona;
-    const modelToUse = targetPersona?.modelId || selectedModel;
+    if (usePersonaDefault && targetPersona && !targetPersona.modelAvailable) {
+      setSelectedPersona(targetPersona);
+      setErrorMessage(
+        `${targetPersona.name}'s preferred model is unavailable. Choose an available model above, then click New Chat to use it explicitly.`,
+      );
+      return;
+    }
+
+    const modelToUse =
+      usePersonaDefault && targetPersona ? targetPersona.modelId : selectedModel;
+    if (!modelToUse) {
+      setErrorMessage(
+        "No Character Chat model is currently available. Ask an administrator to enable, price, and configure one.",
+      );
+      return;
+    }
+
+    setErrorMessage(null);
     try {
       const res = await fetch("/api/chat/threads", {
         method: "POST",
@@ -344,16 +401,27 @@ export function CharacterChatWorkspace({
           modelId: modelToUse,
         }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        setThreads((prev) => [data.thread, ...prev]);
-        setActiveThreadId(data.thread.id);
-        if (targetPersona) setSelectedPersona(targetPersona);
-        setSelectedModel(modelToUse);
-        setMessages([]);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErrorMessage(
+          typeof data.error === "string"
+            ? data.error
+            : "Could not start the conversation.",
+        );
+        return;
       }
+
+      setThreads((prev) => [data.thread, ...prev]);
+      setActiveThreadId(data.thread.id);
+      setActiveThreadModelId(data.thread.modelId);
+      setActiveThreadModelAvailable(true);
+      if (targetPersona) setSelectedPersona(targetPersona);
+      setSelectedModel(data.thread.modelId);
+      setMessages([]);
     } catch (err) {
-      console.error("Failed to create thread", err);
+      setErrorMessage(
+        err instanceof Error ? err.message : "Could not start the conversation.",
+      );
     }
   }
 
@@ -364,10 +432,28 @@ export function CharacterChatWorkspace({
     setErrorMessage(null);
     let threadId = activeThreadId;
 
-    // Create a thread if none is active
+    if (threadId && !activeThreadModelAvailable) {
+      setErrorMessage(
+        "This conversation's model is unavailable. Start a new chat with an available model before sending another message.",
+      );
+      return;
+    }
+
+    // Creating a conversation by sending uses the explicitly selected model.
+    // An unavailable persona preference must be replaced via New Chat first.
     if (!threadId) {
       const targetPersona = selectedPersona;
-      const modelToUse = targetPersona?.modelId || selectedModel;
+      if (targetPersona && !targetPersona.modelAvailable) {
+        setErrorMessage(
+          `${targetPersona.name}'s preferred model is unavailable. Choose a model above and click New Chat to confirm the replacement.`,
+        );
+        return;
+      }
+      const modelToUse = selectedModel;
+      if (!modelToUse) {
+        setErrorMessage("No Character Chat model is currently available.");
+        return;
+      }
       const res = await fetch("/api/chat/threads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -378,14 +464,20 @@ export function CharacterChatWorkspace({
           modelId: modelToUse,
         }),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setErrorMessage("Could not initialize chat thread.");
+        setErrorMessage(
+          typeof data.error === "string"
+            ? data.error
+            : "Could not initialize chat thread.",
+        );
         return;
       }
-      const data = await res.json();
       threadId = data.thread.id;
       setThreads((prev) => [data.thread, ...prev]);
       setActiveThreadId(threadId);
+      setActiveThreadModelId(data.thread.modelId);
+      setActiveThreadModelAvailable(true);
     }
 
     const userText = inputText.trim();
@@ -507,7 +599,12 @@ export function CharacterChatWorkspace({
   async function handleCreatePersonaSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!newPersonaName.trim() || !newPersonaPrompt.trim()) return;
+    if (!selectedModel) {
+      setErrorMessage("Choose an available model before creating a persona.");
+      return;
+    }
 
+    setErrorMessage(null);
     try {
       const res = await fetch("/api/personas", {
         method: "POST",
@@ -523,19 +620,28 @@ export function CharacterChatWorkspace({
         }),
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        setPersonas((prev) => [...prev, data.persona]);
-        setSelectedPersona(data.persona);
-        setIsCreatingPersona(false);
-        setNewPersonaName("");
-        setNewPersonaTag("");
-        setNewPersonaDesc("");
-        setNewPersonaPrompt("");
-        setNewPersonaVoiceKey("jasper");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErrorMessage(
+          typeof data.error === "string"
+            ? data.error
+            : "Failed to create persona.",
+        );
+        return;
       }
+
+      setPersonas((prev) => [...prev, data.persona]);
+      setSelectedPersona(data.persona);
+      setIsCreatingPersona(false);
+      setNewPersonaName("");
+      setNewPersonaTag("");
+      setNewPersonaDesc("");
+      setNewPersonaPrompt("");
+      setNewPersonaVoiceKey("jasper");
     } catch (err) {
-      console.error("Failed to create persona", err);
+      setErrorMessage(
+        err instanceof Error ? err.message : "Failed to create persona.",
+      );
     }
   }
 
@@ -545,17 +651,17 @@ export function CharacterChatWorkspace({
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-4">
         <div>
           <div className="flex items-center gap-2">
-            <Eyebrow>BytePlus Seed Text Studio</Eyebrow>
+            <Eyebrow>Multi-provider Text Studio</Eyebrow>
             <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-bold text-primary">
-              All 9 Models Ready
+              {textModels.length} {textModels.length === 1 ? "model" : "models"} ready
             </span>
           </div>
           <h1 className="font-display mt-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
             Character Chat
           </h1>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Multi-turn persona dialogues powered by Doubao Seed character & Ark
-            LLM text models.
+            Multi-turn persona dialogues with task-verified models from your
+            configured AI providers.
           </p>
         </div>
 
@@ -564,17 +670,24 @@ export function CharacterChatWorkspace({
           <div className="relative">
             <select
               value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value)}
-              className="h-10 rounded-xl border border-border bg-card px-3 pr-8 text-xs font-semibold text-foreground shadow-xs transition hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-ring"
+              onChange={(e) => {
+                setSelectedModel(e.target.value);
+                setErrorMessage(null);
+              }}
+              disabled={textModels.length === 0}
+              aria-label="Model for new Character Chat conversations"
+              title="Model for new conversations. Existing conversations remain pinned to their original model."
+              className="h-10 rounded-xl border border-border bg-card px-3 pr-8 text-xs font-semibold text-foreground shadow-xs transition hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {textModels.map((model) => (
-                <option key={model.id} value={model.id}>
-                  {model.name}
-                  {TEXT_MODEL_BADGES[model.id]
-                    ? ` (${TEXT_MODEL_BADGES[model.id]})`
-                    : ""}
-                </option>
-              ))}
+              {textModels.length === 0 ? (
+                <option value="">No models available</option>
+              ) : (
+                textModels.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {modelOptionLabel(model)}
+                  </option>
+                ))
+              )}
             </select>
           </div>
 
@@ -582,6 +695,7 @@ export function CharacterChatWorkspace({
             variant="secondary"
             size="sm"
             onClick={() => setIsCreatingPersona(true)}
+            disabled={textModels.length === 0}
             className="gap-1.5"
           >
             <Icon name="plus" className="size-3.5" />
@@ -604,7 +718,8 @@ export function CharacterChatWorkspace({
 
           <Button
             size="sm"
-            onClick={() => handleStartNewThread()}
+            onClick={() => void handleStartNewThread()}
+            disabled={textModels.length === 0 || !selectedModel}
             className="gap-1.5"
           >
             <Icon name="chat" className="size-3.5" />
@@ -635,8 +750,16 @@ export function CharacterChatWorkspace({
                     key={persona.id}
                     onClick={() => {
                       setSelectedPersona(persona);
-                      handleStartNewThread(persona);
+                      if (persona.modelAvailable) {
+                        setSelectedModel(persona.modelId);
+                      }
+                      void handleStartNewThread(persona, true);
                     }}
+                    title={
+                      persona.modelAvailable
+                        ? `Start a new chat using ${persona.name}'s preferred model`
+                        : "Preferred model unavailable — choose a replacement model"
+                    }
                     className={`flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-left transition ${
                       isSelected
                         ? "border-primary bg-primary/10 text-primary"
@@ -653,6 +776,11 @@ export function CharacterChatWorkspace({
                       {persona.tag && (
                         <div className="text-[10px] text-muted-foreground">
                           {persona.tag}
+                        </div>
+                      )}
+                      {!persona.modelAvailable && (
+                        <div className="text-[10px] font-semibold text-destructive">
+                          Model unavailable
                         </div>
                       )}
                     </div>
@@ -688,8 +816,16 @@ export function CharacterChatWorkspace({
                     }`}
                   >
                     <span className="truncate">{thread.title}</span>
-                    <span className="text-[10px] opacity-70">
-                      {thread._count?.messages ?? 0} msgs
+                    <span
+                      className={`text-[10px] ${
+                        thread.modelAvailable
+                          ? "opacity-70"
+                          : "font-semibold text-destructive"
+                      }`}
+                    >
+                      {thread.modelAvailable
+                        ? `${thread._count?.messages ?? 0} msgs`
+                        : "model unavailable"}
                     </span>
                   </button>
                 );
@@ -729,8 +865,15 @@ export function CharacterChatWorkspace({
                   </span>
                 )}
                 <span className="rounded-md border border-border bg-card px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                  {textModels.find((model) => model.id === selectedModel)
-                    ?.name || selectedModel}
+                  {activeThreadId
+                    ? textModels.find(
+                        (model) => model.id === activeThreadModelId,
+                      )?.name ||
+                      (activeThreadModelAvailable
+                        ? "Pinned model"
+                        : "Model unavailable")
+                    : textModels.find((model) => model.id === selectedModel)
+                        ?.name || "Choose model"}
                 </span>
 
                 <button
@@ -875,7 +1018,11 @@ export function CharacterChatWorkspace({
                 <div className="flex items-center gap-2 rounded-2xl border border-border bg-card px-4 py-3 text-xs text-muted-foreground">
                   <span className="size-2 animate-ping rounded-full bg-primary" />
                   Generating response via{" "}
-                  {textModels.find((model) => model.id === selectedModel)?.name}
+                  {textModels.find(
+                    (model) =>
+                      model.id ===
+                      (activeThreadModelId ?? selectedModel),
+                  )?.name ?? "selected model"}
                   ...
                 </div>
               </div>
@@ -904,12 +1051,21 @@ export function CharacterChatWorkspace({
                     handleSendMessage();
                   }
                 }}
-                disabled={!canGenerate || isSending}
+                disabled={
+                  !canGenerate ||
+                  isSending ||
+                  (Boolean(activeThreadId) && !activeThreadModelAvailable) ||
+                  (!activeThreadId && !selectedModel)
+                }
                 rows={2}
                 placeholder={
-                  canGenerate
-                    ? `Message ${selectedPersona?.name || "companion"}... (Press Enter to send)`
-                    : "No permission to generate."
+                  !canGenerate
+                    ? "No permission to generate."
+                    : activeThreadId && !activeThreadModelAvailable
+                      ? "This conversation's model is unavailable. Start a new chat."
+                      : !selectedModel
+                        ? "No Character Chat model is available."
+                        : `Message ${selectedPersona?.name || "companion"}... (Press Enter to send)`
                 }
                 className="w-full resize-none rounded-xl border border-border bg-card p-3 pr-24 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
@@ -933,7 +1089,13 @@ export function CharacterChatWorkspace({
                 <Button
                   type="submit"
                   size="sm"
-                  disabled={!inputText.trim() || isSending || !canGenerate}
+                  disabled={
+                    !inputText.trim() ||
+                    isSending ||
+                    !canGenerate ||
+                    (Boolean(activeThreadId) && !activeThreadModelAvailable) ||
+                    (!activeThreadId && !selectedModel)
+                  }
                   className="rounded-lg px-4"
                 >
                   Send

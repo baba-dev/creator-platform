@@ -11,10 +11,14 @@ import {
 import {
   createAssetVariantObjectKey,
   LocalAssetStorage,
+  resolveAssetStorageForAsset,
 } from "@aiwa/assets/storage";
 import { parseServerEnv, parseMediaEnv } from "@aiwa/config";
 import { db, Prisma } from "@aiwa/db";
 import sharp from "sharp";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { mediaCommand } from "./video-media";
 import { resolveLocalAssetPath } from "@aiwa/assets/storage";
 import { audioWaveform, videoStoryboard } from "./media-variants";
@@ -84,22 +88,35 @@ export async function processAssetDerivatives(
     where: { id: assetId },
     include: { variants: true },
   });
-  if (!asset || asset.status !== "READY" || asset.storageProvider !== "LOCAL") {
-    return;
-  }
+  if (!asset || asset.status !== "READY") return;
+
+  const sourceStorage = await resolveAssetStorageForAsset(db, asset, {
+    storageRoot: env.ASSET_STORAGE_ROOT,
+    encryptionKey: env.STORAGE_ENCRYPTION_KEY,
+    googleClientId: env.GOOGLE_DRIVE_CLIENT_ID,
+    googleClientSecret: env.GOOGLE_DRIVE_CLIENT_SECRET,
+    onedriveClientId: env.ONEDRIVE_CLIENT_ID,
+    onedriveClientSecret: env.ONEDRIVE_CLIENT_SECRET,
+  });
 
   const kinds = new Set<string>(asset.variants.map((variant) => variant.kind));
-  if (onlyKind)
+  if (onlyKind) {
     for (const kind of [
       "THUMBNAIL",
       "PREVIEW",
       "POSTER",
       "STORYBOARD",
       "WAVEFORM",
-    ])
+    ]) {
       if (kind !== onlyKind) kinds.add(kind);
+    }
+  }
+
   if (asset.mediaKind === "IMAGE") {
-    const original = await storage.read(asset.objectKey);
+    const original = await sourceStorage.read(
+      asset.objectKey,
+      asset.externalFileId ?? undefined,
+    );
     if (!kinds.has("THUMBNAIL")) {
       const image = sharp(original, { failOn: "error" }).rotate();
       const bytes = await image
@@ -134,69 +151,92 @@ export async function processAssetDerivatives(
     return;
   }
 
-  if (asset.mediaKind === "VIDEO" && !kinds.has("POSTER")) {
-    const frame = await mediaCommand(
-      "ffmpeg",
-      [
-        "-nostdin",
-        "-v",
-        "error",
-        "-ss",
-        "0.1",
-        "-i",
-        resolveLocalAssetPath(env.ASSET_STORAGE_ROOT, asset.objectKey),
-        "-frames:v",
-        "1",
-        "-vf",
-        "scale=960:-2:force_original_aspect_ratio=decrease",
-        "-f",
-        "image2pipe",
-        "-vcodec",
-        "mjpeg",
-        "pipe:1",
-      ],
-      parseMediaEnv().MEDIA_DERIVATIVE_TIMEOUT_MS,
-    );
-    const poster = await sharp(frame)
-      .webp({ quality: 82 })
-      .toBuffer({ resolveWithObject: true });
-    await saveVariant({
-      assetId,
-      organizationId: asset.organizationId,
-      kind: "POSTER",
-      bytes: poster.data,
-      width: poster.info.width,
-      height: poster.info.height,
-    });
-  }
-  if (asset.mediaKind === "VIDEO" && !kinds.has("STORYBOARD")) {
-    const storyboard = await videoStoryboard(
-      env.ASSET_STORAGE_ROOT,
-      asset.objectKey,
-      asset.durationMs ?? 120_000,
-    );
-    await saveVariant({
-      assetId,
-      organizationId: asset.organizationId,
-      kind: "STORYBOARD",
-      bytes: storyboard.data,
-      width: storyboard.info.width,
-      height: storyboard.info.height,
-    });
-  }
-  if (asset.mediaKind === "AUDIO" && !kinds.has("WAVEFORM")) {
-    const waveform = await audioWaveform(
-      env.ASSET_STORAGE_ROOT,
-      asset.objectKey,
-    );
-    await saveVariant({
-      assetId,
-      organizationId: asset.organizationId,
-      kind: "WAVEFORM",
-      bytes: waveform.data,
-      width: waveform.info.width,
-      height: waveform.info.height,
-    });
+  const work = await mkdtemp(join(tmpdir(), "aiwa-asset-derivative-"));
+  const extension =
+    asset.mediaKind === "VIDEO"
+      ? "mp4"
+      : asset.mimeType === "audio/wav"
+        ? "wav"
+        : "mp3";
+  const tempKey = `source.${extension}`;
+  try {
+    const sourcePath = join(work, tempKey);
+    if (asset.storageProvider === "LOCAL") {
+      const original = await storage.read(asset.objectKey);
+      await writeFile(sourcePath, original, { mode: 0o600 });
+    } else {
+      const original = await sourceStorage.read(
+        asset.objectKey,
+        asset.externalFileId ?? undefined,
+      );
+      await writeFile(sourcePath, original, { mode: 0o600 });
+    }
+
+    if (asset.mediaKind === "VIDEO" && !kinds.has("POSTER")) {
+      const frame = await mediaCommand(
+        "ffmpeg",
+        [
+          "-nostdin",
+          "-v",
+          "error",
+          "-ss",
+          "0.1",
+          "-i",
+          sourcePath,
+          "-frames:v",
+          "1",
+          "-vf",
+          "scale=960:-2:force_original_aspect_ratio=decrease",
+          "-f",
+          "image2pipe",
+          "-vcodec",
+          "mjpeg",
+          "pipe:1",
+        ],
+        parseMediaEnv().MEDIA_DERIVATIVE_TIMEOUT_MS,
+      );
+      const poster = await sharp(frame)
+        .webp({ quality: 82 })
+        .toBuffer({ resolveWithObject: true });
+      await saveVariant({
+        assetId,
+        organizationId: asset.organizationId,
+        kind: "POSTER",
+        bytes: poster.data,
+        width: poster.info.width,
+        height: poster.info.height,
+      });
+    }
+
+    if (asset.mediaKind === "VIDEO" && !kinds.has("STORYBOARD")) {
+      const storyboard = await videoStoryboard(
+        work,
+        tempKey,
+        asset.durationMs ?? 120_000,
+      );
+      await saveVariant({
+        assetId,
+        organizationId: asset.organizationId,
+        kind: "STORYBOARD",
+        bytes: storyboard.data,
+        width: storyboard.info.width,
+        height: storyboard.info.height,
+      });
+    }
+
+    if (asset.mediaKind === "AUDIO" && !kinds.has("WAVEFORM")) {
+      const waveform = await audioWaveform(work, tempKey);
+      await saveVariant({
+        assetId,
+        organizationId: asset.organizationId,
+        kind: "WAVEFORM",
+        bytes: waveform.data,
+        width: waveform.info.width,
+        height: waveform.info.height,
+      });
+    }
+  } finally {
+    await rm(work, { recursive: true, force: true }).catch(() => undefined);
   }
 }
 
@@ -253,7 +293,18 @@ export async function purgeExpiredAssets(limit = 50): Promise<number> {
       for (const variant of claimed.variants) {
         await storage.delete(variant.objectKey);
       }
-      await storage.delete(claimed.objectKey);
+      const canonicalStorage = await resolveAssetStorageForAsset(db, claimed, {
+        storageRoot: env.ASSET_STORAGE_ROOT,
+        encryptionKey: env.STORAGE_ENCRYPTION_KEY,
+        googleClientId: env.GOOGLE_DRIVE_CLIENT_ID,
+        googleClientSecret: env.GOOGLE_DRIVE_CLIENT_SECRET,
+        onedriveClientId: env.ONEDRIVE_CLIENT_ID,
+        onedriveClientSecret: env.ONEDRIVE_CLIENT_SECRET,
+      });
+      await canonicalStorage.delete(
+        claimed.objectKey,
+        claimed.externalFileId ?? undefined,
+      );
     } catch (deleteError) {
       // Record failure with bounded retry / backoff so this item does not block others every cycle
       console.error("Asset purge deletion failed; applying retry backoff.", {

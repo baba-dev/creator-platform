@@ -217,7 +217,15 @@ export async function POST(request: Request): Promise<NextResponse> {
         },
         estimationPolicy:
           activePriceVersion.pricingDimension === "TOKEN"
-            ? "byteplus-video-v1"
+            ? activePriceVersion.usageRates &&
+              typeof activePriceVersion.usageRates === "object" &&
+              !Array.isArray(activePriceVersion.usageRates) &&
+              "estimator" in activePriceVersion.usageRates
+              ? String(
+                  (activePriceVersion.usageRates as Record<string, unknown>)
+                    .estimator,
+                )
+              : "token-usage-v1"
             : "configured-unit-v1",
         confidence:
           estimate.estimatedTokens === null ? "FIXED_QUOTE" : "ESTIMATE",

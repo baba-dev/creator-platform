@@ -6,15 +6,24 @@ import {
   parseMarginPercent,
   formatMarginPercent,
 } from "@aiwa/credits/pricing";
-import {
-  textUsageEstimatorForProvider,
-  type TextUsageTier,
-  type UsageRate,
-} from "@aiwa/credits";
+import type { TextUsageTier, UsageRate } from "@aiwa/credits";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
+
+function textEstimatorForProvider(
+  provider: "BYTEPLUS" | "NVIDIA" | "GROQ" | "GEMINI" | "CLOUDFLARE",
+): "byteplus-text-v1" | "text-token-v1" {
+  if (provider === "BYTEPLUS") return "byteplus-text-v1";
+  if (
+    provider === "GROQ" ||
+    provider === "GEMINI" ||
+    provider === "CLOUDFLARE"
+  )
+    return "text-token-v1";
+  throw new Error("This provider does not support token-priced text models.");
+}
 
 function defaultSeedanceUsageRates(providerModelId?: string): UsageRate[] {
   if (providerModelId === "dreamina-seedance-2-0-mini-260615")
@@ -369,7 +378,7 @@ export function ModelActions({
           ...(mediaKind === "TEXT" && pricingDimension === "TOKEN"
             ? {
                 usageRates: {
-                  estimator: textUsageEstimatorForProvider(provider),
+                  estimator: textEstimatorForProvider(provider),
                   tiers: textUsageTiers.map((tier) => {
                     const {
                       cachedInputMicroUsdPerMillionTokens,
@@ -643,7 +652,7 @@ export function ModelActions({
                       Settlement uses the provider-reported token breakdown.
                       This provider publishes{" "}
                       <code className="font-mono">
-                        {textUsageEstimatorForProvider(provider)}
+                        {textEstimatorForProvider(provider)}
                       </code>
                       .
                     </p>

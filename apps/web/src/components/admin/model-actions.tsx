@@ -940,11 +940,13 @@ export function ModelActions({
                   <div className="mt-1 flex justify-between text-[11px] text-muted-foreground">
                     <span>Current effective:</span>
                     <span>
-                      {currentPricingDimension === "TOKEN"
-                        ? "Usage-based"
-                        : currentCustomerCredits
-                          ? `${currentCustomerCredits} credits`
-                          : "Unpriced"}
+                      {mediaKind === "REASONING"
+                        ? "Provider cost only · workspace uncharged"
+                        : currentPricingDimension === "TOKEN"
+                          ? "Usage-based"
+                          : currentCustomerCredits
+                            ? `${currentCustomerCredits} credits`
+                            : "Unpriced"}
                     </span>
                   </div>
                 </div>

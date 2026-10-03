@@ -1,7 +1,4 @@
-import {
-  hasOrganizationPermission,
-  hasPlatformPermission,
-} from "@aiwa/authz";
+import { hasOrganizationPermission, hasPlatformPermission } from "@aiwa/authz";
 import { db } from "@aiwa/db";
 import { NextResponse } from "next/server";
 

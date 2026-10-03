@@ -1,4 +1,4 @@
-import { createHmac } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { parseServerEnv } from "@aiwa/config";
 import { encryptSecret } from "@aiwa/assets/crypto";
 import {
@@ -8,6 +8,7 @@ import {
 import { db } from "@aiwa/db";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { getRequestSession } from "@/lib/request-auth";
 
 export async function GET(request: Request) {
   const env = parseServerEnv();
@@ -46,11 +47,28 @@ export async function GET(request: Request) {
       .digest("hex");
     if (signature !== expectedSig) throw new Error("Invalid state signature");
 
-    if (Date.now() - Number(timestampStr) > 900_000) {
+    const issuedAt = Number(timestampStr);
+    const age = Date.now() - issuedAt;
+    if (!Number.isFinite(issuedAt) || age < -60_000 || age > 600_000) {
       throw new Error("Expired state");
     }
   } catch {
     return NextResponse.redirect(`${env.APP_URL}/app?error=invalid_state`);
+  }
+
+  const session = await getRequestSession(request.headers);
+  if (!session || session.user.id !== userId) {
+    return NextResponse.redirect(`${env.APP_URL}/app?error=invalid_state`);
+  }
+
+  if (
+    !env.STORAGE_ENCRYPTION_KEY ||
+    !env.ONEDRIVE_CLIENT_ID ||
+    !env.ONEDRIVE_CLIENT_SECRET
+  ) {
+    return NextResponse.redirect(
+      `${env.APP_URL}/app?error=storage_not_configured`,
+    );
   }
 
   const org = await db.organization.findUnique({

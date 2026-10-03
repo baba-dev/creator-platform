@@ -209,6 +209,50 @@ export class StudioModelUnavailableError extends Error {
   override readonly name = "StudioModelUnavailableError";
 }
 
+export function selectStudioModelBySelection(
+  discovery: StudioModelDiscoveryResult,
+  selection: string,
+): PublicStudioModel {
+  const canonical = discovery.models.find((model) => model.id === selection);
+  if (canonical) return canonical;
+
+  const legacyMatches = discovery.models.filter(
+    (model) => model.providerModelId === selection,
+  );
+  if (legacyMatches.length === 1) return legacyMatches[0]!;
+  if (legacyMatches.length > 1) {
+    throw new StudioModelUnavailableError(
+      "This legacy model selection is ambiguous. Choose the model again.",
+    );
+  }
+  throw new StudioModelUnavailableError(
+    "The selected model is unavailable for this Studio task.",
+  );
+}
+
+export async function resolveStudioModelSelection(
+  selection: string,
+  task: StudioTask,
+  options: {
+    now?: Date;
+    environment?: ProviderEnvironment;
+  } = {},
+): Promise<PublicStudioModel> {
+  const canonical = await db.providerModel.findUnique({
+    where: { id: selection },
+    select: { id: true },
+  });
+
+  if (canonical) {
+    // Never reinterpret a known canonical id as a legacy upstream id if the
+    // model later becomes disabled, unpriced, unconfigured, or task-ineligible.
+    return resolveAvailableStudioModel(selection, task, options);
+  }
+
+  const available = await getAvailableStudioModels(task, options);
+  return selectStudioModelBySelection(available, selection);
+}
+
 export async function resolveAvailableStudioModel(
   modelId: string,
   task: StudioTask,

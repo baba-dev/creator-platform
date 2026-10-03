@@ -49,3 +49,19 @@ configuration control whether the model becomes discoverable.
 Do not add provider-specific Studio dropdown arrays. New Studio surfaces must
 consume the shared discovery service and should submit the returned
 `ProviderModel.id`, not assume upstream provider model IDs are globally unique.
+
+## Character Chat persistence
+
+Character Chat stores `ProviderModel.id` in the nullable `providerModelRecordId`
+relation for new personas and threads. The historical upstream `modelId` string
+remains as compatibility metadata during the migration window.
+
+The migration backfills historical BytePlus TEXT rows only. Read paths can
+upgrade a unique legacy upstream id to its canonical record, but a known
+canonical record that later becomes disabled, unpriced, unconfigured, or
+task-ineligible fails closed. It is never reinterpreted as another provider.
+
+A chat thread pins its provider-model record when created. Persona model
+preferences are defaults for new conversations and do not override an existing
+thread. If a persona preference is unavailable, the user must explicitly choose
+a replacement model before starting a replacement conversation.

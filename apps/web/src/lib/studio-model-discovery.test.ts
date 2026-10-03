@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   selectDiscoverableStudioModels,
+  selectStudioModelBySelection,
+  StudioModelUnavailableError,
   type StudioModelRow,
 } from "./studio-model-discovery";
 
@@ -141,5 +143,78 @@ describe("Studio model discovery", () => {
     });
     expect(result.models[0]).not.toHaveProperty("providerCostMicroUsd");
     expect(result.models[0]).not.toHaveProperty("customerCredits");
+  });
+});
+
+describe("Studio model selection compatibility", () => {
+  const discovery = {
+    task: "character-chat" as const,
+    defaultModelId: "byteplus-record",
+    models: [
+      {
+        id: "byteplus-record",
+        provider: "BYTEPLUS",
+        providerModelId: "doubao-seed-character-260628",
+        name: "Seed Character",
+        description: "Character model",
+        mediaKind: "TEXT",
+        contextWindow: 32768,
+        maxTokens: null,
+        flags: { reasoning: false, fast: false },
+        tasks: ["character-chat" as const],
+        pricing: {
+          priceVersionId: "price-1",
+          dimension: "TOKEN" as const,
+          unitQuantity: 1000,
+        },
+      },
+      {
+        id: "groq-record",
+        provider: "GROQ",
+        providerModelId: "openai/gpt-oss-20b",
+        name: "GPT-OSS 20B",
+        description: "Groq character model",
+        mediaKind: "TEXT",
+        contextWindow: 131072,
+        maxTokens: null,
+        flags: { reasoning: false, fast: true },
+        tasks: ["character-chat" as const],
+        pricing: {
+          priceVersionId: "price-2",
+          dimension: "TOKEN" as const,
+          unitQuantity: 1000,
+        },
+      },
+    ],
+  };
+
+  it("prefers canonical ProviderModel ids and accepts unique legacy ids", () => {
+    expect(selectStudioModelBySelection(discovery, "groq-record").id).toBe(
+      "groq-record",
+    );
+    expect(
+      selectStudioModelBySelection(discovery, "openai/gpt-oss-20b").id,
+    ).toBe("groq-record");
+  });
+
+  it("fails closed for stale selections", () => {
+    expect(() =>
+      selectStudioModelBySelection(discovery, "retired-model"),
+    ).toThrow(StudioModelUnavailableError);
+  });
+
+  it("rejects ambiguous legacy upstream ids", () => {
+    expect(() =>
+      selectStudioModelBySelection(
+        {
+          ...discovery,
+          models: [
+            ...discovery.models,
+            { ...discovery.models[1]!, id: "duplicate-record" },
+          ],
+        },
+        "openai/gpt-oss-20b",
+      ),
+    ).toThrow(/ambiguous/i);
   });
 });

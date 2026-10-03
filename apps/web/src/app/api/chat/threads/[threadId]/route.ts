@@ -1,8 +1,24 @@
 import { hasOrganizationPermission } from "@aiwa/authz";
 import { db } from "@aiwa/db";
 import { NextResponse } from "next/server";
+
+import { clientChatModelReference } from "@/lib/chat-model-selection";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
+import { getAvailableStudioModels } from "@/lib/studio-model-discovery";
+
+const personaSelect = {
+  id: true,
+  name: true,
+  avatarUrl: true,
+  tag: true,
+  description: true,
+  systemPrompt: true,
+  voiceKey: true,
+  modelId: true,
+  providerModelRecordId: true,
+  isPreset: true,
+} as const;
 
 export async function GET(
   request: Request,
@@ -19,7 +35,20 @@ export async function GET(
   const { threadId } = await params;
   const thread = await db.chatThread.findUnique({
     where: { id: threadId },
-    include: { persona: true },
+    select: {
+      id: true,
+      organizationId: true,
+      projectId: true,
+      createdById: true,
+      personaId: true,
+      title: true,
+      modelId: true,
+      providerModelRecordId: true,
+      systemPrompt: true,
+      createdAt: true,
+      updatedAt: true,
+      persona: { select: personaSelect },
+    },
   });
 
   if (!thread || thread.createdById !== session.user.id) {
@@ -39,17 +68,21 @@ export async function GET(
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
   }
 
-  const newestMessages = await db.chatMessage.findMany({
-    where: { threadId },
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    take: 200,
-  });
+  const [newestMessages, discovery] = await Promise.all([
+    db.chatMessage.findMany({
+      where: { threadId },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: 200,
+    }),
+    getAvailableStudioModels("character-chat"),
+  ]);
   const messages = newestMessages.reverse();
 
   const jobIds = messages
-    .map((m) => {
-      const meta = m.metadata as Record<string, unknown> | null;
-      return (meta?.audioJobId ?? meta?.generationJobId) as string | undefined;
+    .map((message) => {
+      const metadata = message.metadata as Record<string, unknown> | null;
+      return (metadata?.audioJobId ?? metadata?.generationJobId) as
+        string | undefined;
     })
     .filter((id): id is string => typeof id === "string");
 
@@ -64,24 +97,35 @@ export async function GET(
       })
     : [];
 
-  const assetByJobId = new Map(assets.map((a) => [a.generationJobId, a.id]));
-
-  const enrichedMessages = messages.map((m) => {
-    const meta = (m.metadata as Record<string, unknown> | null) ?? {};
-    const audioJobId = (meta.audioJobId ?? meta.generationJobId) as
+  const assetByJobId = new Map(
+    assets.map((asset) => [asset.generationJobId, asset.id]),
+  );
+  const enrichedMessages = messages.map((message) => {
+    const metadata = (message.metadata as Record<string, unknown> | null) ?? {};
+    const audioJobId = (metadata.audioJobId ?? metadata.generationJobId) as
       string | undefined;
-    const audioAssetId = audioJobId ? assetByJobId.get(audioJobId) : undefined;
     return {
-      ...m,
+      ...message,
       audioJobId,
-      audioAssetId,
+      audioAssetId: audioJobId ? assetByJobId.get(audioJobId) : undefined,
     };
   });
+
+  const persona = thread.persona
+    ? {
+        ...thread.persona,
+        ...clientChatModelReference(thread.persona, discovery.models),
+        providerModelRecordId: undefined,
+      }
+    : null;
 
   return NextResponse.json(
     {
       thread: {
         ...thread,
+        ...clientChatModelReference(thread, discovery.models),
+        providerModelRecordId: undefined,
+        persona,
         messages: enrichedMessages,
       },
     },

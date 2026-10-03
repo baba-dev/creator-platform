@@ -8,39 +8,80 @@ import {
   type TextMessage,
 } from "@aiwa/generation";
 
-export interface TextFeatureQuoteInput {
+type TextFeatureModelSelection =
+  | { modelId: string; providerModelId?: never }
+  | { providerModelId: string; modelId?: never };
+
+export type TextFeatureQuoteInput = {
   organizationId: string;
   userId: string;
-  providerModelId: string;
   messages: TextMessage[];
   maxTokens: number;
+} & TextFeatureModelSelection;
+
+async function resolveTextFeatureModel(
+  selection: TextFeatureModelSelection,
+  now: Date,
+) {
+  const activePriceWhere = {
+    effectiveFrom: { lte: now },
+    OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
+  };
+
+  if (selection.modelId) {
+    const model = await db.providerModel.findFirst({
+      where: {
+        id: selection.modelId,
+        mediaKind: "TEXT",
+        enabled: true,
+      },
+      include: {
+        priceVersions: {
+          where: activePriceWhere,
+          orderBy: { effectiveFrom: "desc" as const },
+          take: 1,
+        },
+      },
+    });
+    if (!model?.priceVersions[0])
+      throw new GenerationError(
+        "The selected text model is unavailable or has no active pricing.",
+        409,
+      );
+    return model;
+  }
+
+  const models = await db.providerModel.findMany({
+    where: {
+      providerModelId: selection.providerModelId,
+      mediaKind: "TEXT",
+      enabled: true,
+      priceVersions: { some: activePriceWhere },
+    },
+    include: {
+      priceVersions: {
+        where: activePriceWhere,
+        orderBy: { effectiveFrom: "desc" as const },
+        take: 1,
+      },
+    },
+    take: 2,
+  });
+  if (models.length !== 1 || !models[0]?.priceVersions[0]) {
+    throw new GenerationError(
+      models.length > 1
+        ? "The legacy text model selection is ambiguous. Choose the model again."
+        : "The selected text model is unavailable or has no active pricing.",
+      409,
+    );
+  }
+  return models[0];
 }
 
 export async function issueTextFeatureQuote(input: TextFeatureQuoteInput) {
   const now = new Date();
-  const model = await db.providerModel.findFirst({
-    where: {
-      providerModelId: input.providerModelId,
-      mediaKind: "TEXT",
-      enabled: true,
-    },
-    include: {
-      priceVersions: {
-        where: {
-          effectiveFrom: { lte: now },
-          OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
-        },
-        orderBy: { effectiveFrom: "desc" },
-        take: 1,
-      },
-    },
-  });
-  const price = model?.priceVersions[0];
-  if (!model || !price)
-    throw new GenerationError(
-      "The selected text model is unavailable or has no active pricing.",
-      409,
-    );
+  const model = await resolveTextFeatureModel(input, now);
+  const price = model.priceVersions[0]!;
 
   const messages = normalizeTextMessagesForModel(
     input.messages,
@@ -87,17 +128,20 @@ export async function issueTextFeatureQuote(input: TextFeatureQuoteInput) {
 
 export async function assertQuotedTextModel(
   quotedModelId: string,
-  expectedProviderModelId: string,
+  expectedModelSelection: string,
 ): Promise<void> {
   const model = await db.providerModel.findFirst({
     where: {
       id: quotedModelId,
       mediaKind: "TEXT",
-      providerModelId: expectedProviderModelId,
     },
-    select: { id: true },
+    select: { id: true, providerModelId: true },
   });
-  if (!model)
+  if (
+    !model ||
+    (model.id !== expectedModelSelection &&
+      model.providerModelId !== expectedModelSelection)
+  )
     throw new GenerationError(
       "The quoted model does not match this creative workflow.",
       409,

@@ -306,8 +306,7 @@ describe("prompt enhancement model discovery", () => {
         row({
           id: "nvidia-reasoning",
           provider: "NVIDIA",
-          providerModelId:
-            "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+          providerModelId: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
           displayName: "Nemotron",
           mediaKind: "REASONING",
           capabilities: {
@@ -375,4 +374,3 @@ describe("prompt enhancement model discovery", () => {
     );
   });
 });
-

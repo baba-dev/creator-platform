@@ -107,6 +107,44 @@ describe("POST /api/admin/models/sync", () => {
     expect(body.success).toBe(true);
     expect(body.count).toBeGreaterThan(0);
     expect(mocks.db.providerModel.upsert).toHaveBeenCalled();
+    expect(mocks.db.providerModel.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          provider_providerModelId: {
+            provider: "GROQ",
+            providerModelId: "openai/gpt-oss-120b",
+          },
+        },
+        update: expect.objectContaining({
+          mediaKind: "TEXT",
+          capabilities: expect.objectContaining({
+            reasoning: true,
+            "task:creative-director": true,
+            "task:story-planning": true,
+            "task:prompt-enhancement": true,
+          }),
+        }),
+      }),
+    );
+    expect(mocks.db.providerModel.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          provider_providerModelId: {
+            provider: "GEMINI",
+            providerModelId: "gemini-3.8-flash",
+          },
+        },
+        update: expect.objectContaining({
+          mediaKind: "TEXT",
+          capabilities: expect.objectContaining({
+            reasoning: true,
+            "task:creative-director": true,
+            "task:story-planning": true,
+            "task:prompt-enhancement": true,
+          }),
+        }),
+      }),
+    );
     expect(mocks.db.auditEvent.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({

@@ -117,11 +117,7 @@ describe("multi-provider prompt enhancement task assignments", () => {
       supportsStudioTask(model("openai/gpt-oss-20b"), "prompt-enhancement"),
     ).toBe(false);
     expect(
-      supportsStudioTask(
-        model("gemini-3.5-flash-lite"),
-        "prompt-enhancement",
-      ),
+      supportsStudioTask(model("gemini-3.5-flash-lite"), "prompt-enhancement"),
     ).toBe(false);
   });
 });
-

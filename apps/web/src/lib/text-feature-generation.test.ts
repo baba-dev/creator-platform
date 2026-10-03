@@ -9,11 +9,13 @@ const mocks = vi.hoisted(() => ({
   },
   estimateGeneration: vi.fn(),
   issueGenerationQuote: vi.fn(),
+  parseTextUsageRatesForProvider: vi.fn(),
 }));
 
 vi.mock("@aiwa/db", () => ({ db: mocks.db }));
 vi.mock("@aiwa/credits", () => ({
   estimateGeneration: mocks.estimateGeneration,
+  parseTextUsageRatesForProvider: mocks.parseTextUsageRatesForProvider,
 }));
 vi.mock("@aiwa/generation", () => ({
   GenerationError: class GenerationError extends Error {
@@ -37,11 +39,30 @@ const model = {
   providerModelId: "openai/gpt-oss-20b",
   displayName: "GPT-OSS 20B",
   capabilities: { characterChat: true },
-  priceVersions: [{ id: "price-1" }],
+  priceVersions: [
+    {
+      id: "price-1",
+      pricingDimension: "TOKEN",
+      usageRates: {
+        estimator: "text-token-v1",
+        tiers: [
+          {
+            maxPromptTokens: 131072,
+            inputMicroUsdPerMillionTokens: "1000000",
+            outputMicroUsdPerMillionTokens: "2000000",
+          },
+        ],
+      },
+    },
+  ],
 };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.parseTextUsageRatesForProvider.mockReturnValue({
+    estimator: "text-token-v1",
+    tiers: [],
+  });
   mocks.estimateGeneration.mockReturnValue({
     quote: { customerCredits: 8n },
     reservation: { customerCredits: 12n },
@@ -79,6 +100,53 @@ describe("canonical text feature quotes", () => {
     );
     expect(quote.quotedModelId).toBe("canonical-groq");
     expect(quote.providerModelId).toBe("openai/gpt-oss-20b");
+  });
+
+  it("rejects request-priced models from paid text features while leaving Prompt Enhance independent", async () => {
+    mocks.db.providerModel.findFirst.mockResolvedValue({
+      ...model,
+      priceVersions: [
+        {
+          id: "request-price",
+          pricingDimension: "REQUEST",
+          usageRates: null,
+        },
+      ],
+    });
+
+    await expect(
+      issueTextFeatureQuote({
+        organizationId: "org-1",
+        userId: "user-1",
+        modelId: "canonical-groq",
+        messages: [{ role: "user", content: "Hello" }],
+        maxTokens: 512,
+      }),
+    ).rejects.toThrow(/token pricing/i);
+    expect(mocks.estimateGeneration).not.toHaveBeenCalled();
+  });
+
+  it("binds structured output format into the signed text quote", async () => {
+    mocks.db.providerModel.findFirst.mockResolvedValue(model);
+
+    await issueTextFeatureQuote({
+      organizationId: "org-1",
+      userId: "user-1",
+      modelId: "canonical-groq",
+      messages: [{ role: "user", content: "Return JSON" }],
+      maxTokens: 512,
+      responseFormat: "json_object",
+    });
+
+    expect(mocks.issueGenerationQuote).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parameters: expect.objectContaining({
+          responseFormat: "json_object",
+        }),
+      }),
+      12n,
+      expect.any(Date),
+    );
   });
 
   it("rejects ambiguous legacy upstream ids instead of picking a provider", async () => {

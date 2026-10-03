@@ -7,7 +7,7 @@ import { z } from "zod";
 
 const switchSchema = z.object({
   organizationId: z.string().min(1),
-  provider: z.enum(["LOCAL", "GOOGLE_DRIVE", "ONEDRIVE", "S3"]),
+  provider: z.enum(["LOCAL", "GOOGLE_DRIVE", "ONEDRIVE"]),
 });
 
 export async function GET(request: Request) {
@@ -67,10 +67,14 @@ export async function GET(request: Request) {
     ),
     availableProviders: {
       googleDriveConfigured: Boolean(
-        env.GOOGLE_DRIVE_CLIENT_ID && env.GOOGLE_DRIVE_CLIENT_SECRET,
+        env.STORAGE_ENCRYPTION_KEY &&
+          env.GOOGLE_DRIVE_CLIENT_ID &&
+          env.GOOGLE_DRIVE_CLIENT_SECRET,
       ),
       oneDriveConfigured: Boolean(
-        env.ONEDRIVE_CLIENT_ID && env.ONEDRIVE_CLIENT_SECRET,
+        env.STORAGE_ENCRYPTION_KEY &&
+          env.ONEDRIVE_CLIENT_ID &&
+          env.ONEDRIVE_CLIENT_SECRET,
       ),
     },
     configs,
@@ -155,7 +159,7 @@ export async function DELETE(request: Request) {
   if (
     !organizationId ||
     !provider ||
-    !["GOOGLE_DRIVE", "ONEDRIVE", "S3"].includes(provider)
+    !["GOOGLE_DRIVE", "ONEDRIVE"].includes(provider)
   ) {
     return NextResponse.json({ error: "Invalid parameters" }, { status: 400 });
   }
@@ -180,11 +184,28 @@ export async function DELETE(request: Request) {
     );
   }
 
+  const dependentAssets = await db.asset.count({
+    where: {
+      organizationId,
+      storageProvider: provider as "GOOGLE_DRIVE" | "ONEDRIVE",
+    },
+  });
+  if (dependentAssets > 0) {
+    return NextResponse.json(
+      {
+        error:
+          "This connection still stores workspace assets. Move or permanently delete those assets before disconnecting it.",
+        dependentAssets,
+      },
+      { status: 409 },
+    );
+  }
+
   await db.$transaction(async (tx) => {
     await tx.externalStorageConfig.deleteMany({
       where: {
         organizationId,
-        provider: provider as "GOOGLE_DRIVE" | "ONEDRIVE" | "S3",
+        provider: provider as "GOOGLE_DRIVE" | "ONEDRIVE",
       },
     });
 

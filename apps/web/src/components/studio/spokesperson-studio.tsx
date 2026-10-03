@@ -323,10 +323,10 @@ export function SpokespersonStudio({
 
     const totalCredits = videoCredits + voiceCredits;
     const balanceNum = Number(data?.balance ?? 0);
-    const hasEnoughBalance =
+    const pricingAvailable =
       Boolean(omniHumanModel) &&
-      (audioMode !== "SCRIPT" || Boolean(voiceModel)) &&
-      balanceNum >= totalCredits;
+      (audioMode !== "SCRIPT" || Boolean(voiceModel));
+    const hasEnoughBalance = pricingAvailable && balanceNum >= totalCredits;
 
     return {
       videoCredits,
@@ -334,6 +334,7 @@ export function SpokespersonStudio({
       videoUnitQuantity,
       voiceCredits,
       totalCredits,
+      pricingAvailable,
       hasEnoughBalance,
       balance: balanceNum,
     };
@@ -661,7 +662,9 @@ export function SpokespersonStudio({
       }
 
       if (!createdAudioAssetId) {
-        throw new Error("Voice synthesis is taking unusually long. Please check the generation log before retrying.");
+        throw new Error(
+          "Voice synthesis is taking unusually long. Please check the generation log before retrying.",
+        );
       }
 
       // Step 2: Dispatch OmniHuman 1.5 Video Job with the newly created audio asset!
@@ -694,7 +697,10 @@ export function SpokespersonStudio({
     );
   }
 
-  const isConfigured = Boolean(data?.visionConfigured && data?.voiceConfigured);
+  const isConfigured = Boolean(
+    data?.visionConfigured &&
+      (audioMode === "AUDIO_ASSET" || data?.voiceConfigured),
+  );
 
   return (
     <div className="space-y-8">
@@ -1249,12 +1255,17 @@ export function SpokespersonStudio({
                 </div>
               </div>
 
-              {!creditBreakdown.hasEnoughBalance && (
+              {!creditBreakdown.pricingAvailable ? (
+                <p className="text-xs font-medium text-destructive">
+                  Active pricing is unavailable for the selected spokesperson
+                  pipeline. Refresh the Studio or contact an operator.
+                </p>
+              ) : !creditBreakdown.hasEnoughBalance ? (
                 <p className="text-xs font-medium text-destructive">
                   Insufficient balance ({creditBreakdown.balance} available).
                   Please top up your wallet.
                 </p>
-              )}
+              ) : null}
 
               <Button
                 type="button"

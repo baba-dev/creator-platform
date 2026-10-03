@@ -62,3 +62,40 @@ describe("studio task taxonomy", () => {
     expect(normalized["task:video-generation"]).not.toBe(true);
   });
 });
+
+describe("dynamic text Studio task assignments", () => {
+  it("exposes external TEXT models only to capabilities they explicitly support", () => {
+    const cloudflare = model("@cf/meta/llama-3.3-70b-instruct-fp8-fast");
+    expect(supportsStudioTask(cloudflare, "scriptwriting")).toBe(true);
+    expect(supportsStudioTask(cloudflare, "creative-director")).toBe(true);
+    expect(supportsStudioTask(cloudflare, "brand-strategy")).toBe(false);
+    expect(supportsStudioTask(cloudflare, "story-planning")).toBe(false);
+
+    const groqText = model("openai/gpt-oss-20b");
+    expect(supportsStudioTask(groqText, "scriptwriting")).toBe(true);
+    expect(supportsStudioTask(groqText, "creative-director")).toBe(false);
+
+    const geminiText = model("gemini-3.5-flash-lite");
+    expect(supportsStudioTask(geminiText, "scriptwriting")).toBe(true);
+    expect(supportsStudioTask(geminiText, "creative-director")).toBe(false);
+  });
+
+  it("keeps verified BytePlus Brand and Story defaults on the TEXT pipeline", () => {
+    const pro = model("seed-2-0-pro-260328");
+    expect(supportsStudioTask(pro, "brand-strategy")).toBe(true);
+    expect(supportsStudioTask(pro, "story-planning")).toBe(true);
+
+    const dola = model("dola-seed-2-1-turbo-260628");
+    expect(supportsStudioTask(dola, "creative-director")).toBe(true);
+    expect(supportsStudioTask(dola, "story-planning")).toBe(true);
+  });
+
+  it("does not route reasoning-only creative models through TEXT Studio tasks", () => {
+    for (const id of ["openai/gpt-oss-120b", "gemini-3.8-flash"]) {
+      const reasoning = model(id);
+      expect(reasoning.mediaKind).toBe("reasoning");
+      expect(supportsStudioTask(reasoning, "creative-director")).toBe(false);
+      expect(supportsStudioTask(reasoning, "story-planning")).toBe(false);
+    }
+  });
+});

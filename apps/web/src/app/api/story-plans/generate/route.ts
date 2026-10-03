@@ -14,6 +14,10 @@ import {
   assertQuotedTextModel,
   issueTextFeatureQuote,
 } from "@/lib/text-feature-generation";
+import {
+  resolveStudioModelSelection,
+  StudioModelUnavailableError,
+} from "@/lib/studio-model-discovery";
 
 const storyGenerateSchema = z
   .object({
@@ -111,7 +115,10 @@ export async function POST(request: Request) {
     )
       return NextResponse.json({ error: "Access denied." }, { status: 403 });
 
-    const providerModelId = input.modelId || "dola-seed-2-1-turbo-260628";
+    const selectedModel = await resolveStudioModelSelection(
+      input.modelId ?? "dola-seed-2-1-turbo-260628",
+      "story-planning",
+    );
     const userPromptContent = `Story Title: ${input.title}
 Genre: ${input.genre || "Drama / Cinematic"}
 Structure: ${input.structureType}
@@ -126,14 +133,14 @@ Premise: ${input.premise}`;
       const quote = await issueTextFeatureQuote({
         organizationId: input.organizationId,
         userId: session.user.id,
-        providerModelId,
+        modelId: selectedModel.id,
         messages,
         maxTokens,
       });
       return NextResponse.json({ quote });
     }
 
-    await assertQuotedTextModel(input.quotedModelId!, providerModelId);
+    await assertQuotedTextModel(input.quotedModelId!, selectedModel.id);
     const job = await createTextJob(session.user.id, {
       organizationId: input.organizationId,
       modelId: input.quotedModelId,
@@ -192,6 +199,8 @@ Premise: ${input.premise}`;
         { error: error.message },
         { status: error.status },
       );
+    if (error instanceof StudioModelUnavailableError)
+      return NextResponse.json({ error: error.message }, { status: 409 });
     return NextResponse.json(
       { error: "Story plan generation failed." },
       { status: 502 },

@@ -6,6 +6,10 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { CreativeSurface, Eyebrow } from "@/components/ui/creative";
 import { Icon } from "@/components/ui/icon";
+import {
+  StudioModelSelect,
+  type StudioModelOption,
+} from "@/components/studio/studio-model-select";
 import { runQuotedTextFeature } from "@/lib/text-feature-client";
 
 interface DirectorMessage {
@@ -16,37 +20,18 @@ interface DirectorMessage {
   tokensUsed?: number;
 }
 
-const SEED_DIRECTOR_MODELS = [
-  {
-    id: "dola-seed-2-1-turbo-260628",
-    name: "Dola Seed 2.1 Turbo",
-    desc: "Flagship creative director model",
-  },
-  {
-    id: "seed-2-0-pro-260328",
-    name: "Seed 2.0 Pro",
-    desc: "High depth & complex art direction",
-  },
-  {
-    id: "seed-2-0-lite-260428",
-    name: "Seed 2.0 Lite",
-    desc: "Fast ideation & concept variations",
-  },
-  {
-    id: "doubao-seed-character-260628",
-    name: "Doubao Seed Character",
-    desc: "Specialized character & dialogue",
-  },
-];
-
 export function CreativeDirectorWorkspace({
   organizationSlug,
   organizationId,
   canGenerate,
+  defaultModelId,
+  textModels,
 }: {
   organizationSlug: string;
   organizationId: string;
   canGenerate: boolean;
+  defaultModelId: string | null;
+  textModels: StudioModelOption[];
 }) {
   const [messages, setMessages] = useState<DirectorMessage[]>([
     {
@@ -57,7 +42,7 @@ export function CreativeDirectorWorkspace({
     },
   ]);
   const [selectedModel, setSelectedModel] = useState<string>(
-    "dola-seed-2-1-turbo-260628",
+    defaultModelId ?? textModels[0]?.id ?? "",
   );
   const [inputPrompt, setInputPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -116,7 +101,7 @@ export function CreativeDirectorWorkspace({
 
   async function handleSend(promptText?: string) {
     const textToSend = promptText || inputPrompt;
-    if (!textToSend.trim() || isGenerating) return;
+    if (!textToSend.trim() || isGenerating || !selectedModel) return;
 
     setErrorNotice(null);
     setInputPrompt("");
@@ -181,17 +166,15 @@ export function CreativeDirectorWorkspace({
         </div>
 
         <div className="flex items-center gap-3">
-          <select
+          <StudioModelSelect
+            models={textModels}
             value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value)}
-            className="h-10 rounded-xl border border-border bg-card px-3 pr-8 text-xs font-semibold text-foreground shadow-xs transition hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            {SEED_DIRECTOR_MODELS.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </select>
+            onChange={(value) => {
+              setSelectedModel(value);
+              setErrorNotice(null);
+            }}
+            ariaLabel="Creative Director model"
+          />
 
           <Button
             variant="secondary"
@@ -339,12 +322,14 @@ export function CreativeDirectorWorkspace({
                     handleSend();
                   }
                 }}
-                disabled={!canGenerate || isGenerating}
+                disabled={!canGenerate || isGenerating || !selectedModel}
                 rows={2}
                 placeholder={
-                  canGenerate
-                    ? "Direct your vision: describe a theme, product, video sequence, or mood..."
-                    : "No permission to generate."
+                  !canGenerate
+                    ? "No permission to generate."
+                    : !selectedModel
+                      ? "No Creative Director model is currently available."
+                      : "Direct your vision: describe a theme, product, video sequence, or mood..."
                 }
                 className="w-full resize-none rounded-xl border border-border bg-card p-3 pr-24 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
@@ -352,7 +337,12 @@ export function CreativeDirectorWorkspace({
                 <Button
                   type="submit"
                   size="sm"
-                  disabled={!inputPrompt.trim() || isGenerating || !canGenerate}
+                  disabled={
+                    !inputPrompt.trim() ||
+                    isGenerating ||
+                    !canGenerate ||
+                    !selectedModel
+                  }
                   className="rounded-lg px-4"
                 >
                   Direct
@@ -400,7 +390,7 @@ export function CreativeDirectorWorkspace({
                 <button
                   key={idx}
                   onClick={() => handleSend(brief.prompt)}
-                  disabled={isGenerating || !canGenerate}
+                  disabled={isGenerating || !canGenerate || !selectedModel}
                   className="group block w-full rounded-xl border border-border bg-surface-sunken p-3 text-left transition hover:border-primary/50 hover:bg-primary/[0.04]"
                 >
                   <div className="text-xs font-semibold text-foreground group-hover:text-primary">

@@ -8,6 +8,10 @@ import { StatusBadge } from "@/components/admin/primitives";
 import { AudioWaveformPlayer } from "@/components/ui/audio-waveform-player";
 import { VoiceCastingBooth } from "@/components/ui/voice-casting-booth";
 import {
+  StudioModelSelect,
+  type StudioModelOption,
+} from "@/components/studio/studio-model-select";
+import {
   assembleMasterStoryAudio,
   type AssembledAudioResult,
 } from "@/lib/audio-assembly";
@@ -105,10 +109,14 @@ export const VERIFIED_VOICES = [
 export function ScriptwritingStudio({
   organizationId,
   canGenerate,
+  defaultModelId,
+  textModels,
 }: {
   organizationSlug?: string;
   organizationId: string;
   canGenerate: boolean;
+  defaultModelId: string | null;
+  textModels: StudioModelOption[];
 }) {
   const [scripts, setScripts] = useState<ScriptDocument[]>([]);
   const [activeScript, setActiveScript] = useState<ScriptDocument | null>(null);
@@ -120,6 +128,9 @@ export function ScriptwritingStudio({
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiAction, setAiAction] = useState<"dialogue" | "continue" | "polish">(
     "dialogue",
+  );
+  const [selectedTextModel, setSelectedTextModel] = useState(
+    defaultModelId ?? textModels[0]?.id ?? "",
   );
 
   // Voice synthesis & multi-voice timeline state
@@ -430,7 +441,8 @@ export function ScriptwritingStudio({
   }
 
   async function handleAiGenerate() {
-    if (!activeScript || !aiPrompt.trim() || isGenerating) return;
+    if (!activeScript || !aiPrompt.trim() || isGenerating || !selectedTextModel)
+      return;
     setIsGenerating(true);
     setStatusMessage(null);
 
@@ -448,6 +460,7 @@ export function ScriptwritingStudio({
         prompt: aiPrompt,
         action: aiAction,
         currentScene: currentContext.slice(-1500),
+        modelId: selectedTextModel,
       });
       const generatedText = data.content as string;
 
@@ -1474,10 +1487,30 @@ export function ScriptwritingStudio({
               Dialogue & Scene Expander
             </h3>
             <p className="mt-1 text-xs text-muted-foreground">
-              Powered by BytePlus Seed 2.0 text model.
+              Use any configured model verified for screenplay generation.
             </p>
 
             <div className="mt-4 space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-foreground">
+                  Writing Model
+                </label>
+                <StudioModelSelect
+                  models={textModels}
+                  value={selectedTextModel}
+                  onChange={(value) => {
+                    setSelectedTextModel(value);
+                    setStatusMessage(null);
+                  }}
+                  ariaLabel="Scriptwriting model"
+                  className="mt-1 w-full"
+                />
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  {textModels.find((model) => model.id === selectedTextModel)
+                    ?.description ?? "No scriptwriting model available."}
+                </p>
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-foreground">
                   Action
@@ -1524,9 +1557,14 @@ export function ScriptwritingStudio({
                 size="sm"
                 className="w-full"
                 onClick={handleAiGenerate}
-                disabled={!aiPrompt.trim() || isGenerating || !canGenerate}
+                disabled={
+                  !aiPrompt.trim() ||
+                  isGenerating ||
+                  !canGenerate ||
+                  !selectedTextModel
+                }
               >
-                {isGenerating ? "Generating Line..." : "Generate with Seed LLM"}
+                {isGenerating ? "Generating Line..." : "Generate with AI"}
               </Button>
             </div>
           </div>

@@ -13,6 +13,10 @@ import {
   assertQuotedTextModel,
   issueTextFeatureQuote,
 } from "@/lib/text-feature-generation";
+import {
+  resolveStudioModelSelection,
+  StudioModelUnavailableError,
+} from "@/lib/studio-model-discovery";
 
 const brandGenerateSchema = z
   .object({
@@ -88,7 +92,10 @@ export async function POST(request: Request) {
     )
       return NextResponse.json({ error: "Access denied." }, { status: 403 });
 
-    const providerModelId = input.modelId || "seed-2-0-pro-260328";
+    const selectedModel = await resolveStudioModelSelection(
+      input.modelId ?? "seed-2-0-pro-260328",
+      "brand-strategy",
+    );
     const userPromptContent = `Brand Name: ${input.brandName}
 ${input.industry ? `Industry: ${input.industry}` : ""}
 ${input.vision ? `Vision / Mission: ${input.vision}` : ""}
@@ -103,14 +110,14 @@ ${input.targetMarket ? `Target Market: ${input.targetMarket}` : ""}`;
       const quote = await issueTextFeatureQuote({
         organizationId: input.organizationId,
         userId: session.user.id,
-        providerModelId,
+        modelId: selectedModel.id,
         messages,
         maxTokens,
       });
       return NextResponse.json({ quote });
     }
 
-    await assertQuotedTextModel(input.quotedModelId!, providerModelId);
+    await assertQuotedTextModel(input.quotedModelId!, selectedModel.id);
     const job = await createTextJob(session.user.id, {
       organizationId: input.organizationId,
       modelId: input.quotedModelId,
@@ -161,6 +168,8 @@ ${input.targetMarket ? `Target Market: ${input.targetMarket}` : ""}`;
         { error: error.message },
         { status: error.status },
       );
+    if (error instanceof StudioModelUnavailableError)
+      return NextResponse.json({ error: error.message }, { status: 409 });
     return NextResponse.json(
       { error: "Brand generation failed." },
       { status: 502 },

@@ -65,3 +65,27 @@ A chat thread pins its provider-model record when created. Persona model
 preferences are defaults for new conversations and do not override an existing
 thread. If a persona preference is unavailable, the user must explicitly choose
 a replacement model before starting a replacement conversation.
+
+## Dynamic TEXT Studio integration
+
+Creative Director, Scriptwriting, Brand Strategy, and Story Planning consume the
+same discovery and canonical model-resolution layer as Character Chat.
+
+Each surface submits the canonical `ProviderModel.id`. The API resolves that
+selection again for the exact task before issuing a quote or creating a job, so
+frontend visibility is not treated as an authorization boundary. Legacy upstream
+model IDs remain accepted only when they resolve uniquely.
+
+These four workflows intentionally remain on the durable TEXT job pipeline.
+Models with `mediaKind=REASONING` are excluded even if they advertise a related
+creative capability. They must use the reasoning admission/billing path rather
+than being silently charged as text generation.
+
+Current verified task examples include:
+
+- Scriptwriting: BytePlus Seed 2.0 Lite, Groq GPT-OSS 20B, Gemini Flash-Lite,
+  and Cloudflare Llama when each is enabled, priced, and configured.
+- Creative Director: verified BytePlus TEXT director models plus Cloudflare
+  Llama.
+- Brand Strategy and Story Planning: only catalog models explicitly verified for
+  those tasks; no generic chat-model fallback is performed.

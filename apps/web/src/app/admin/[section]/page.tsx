@@ -639,11 +639,13 @@ async function renderSection(
                     </StatusBadge>
                   </Cell>
                   <NumericCell>
-                    {price?.pricingDimension === "TOKEN"
-                      ? "Usage-based"
-                      : price
-                        ? formatBigInt(price.customerCredits)
-                        : "—"}
+                    {row.mediaKind === "REASONING"
+                      ? "Uncharged"
+                      : price?.pricingDimension === "TOKEN"
+                        ? "Usage-based"
+                        : price
+                          ? formatBigInt(price.customerCredits)
+                          : "—"}
                   </NumericCell>
                   <NumericCell>
                     {price ? formatBigInt(price.providerCostMicroUsd) : "—"}

@@ -361,3 +361,94 @@ describe("reasoning provider-cost pricing", () => {
     );
   });
 });
+
+describe("transcription pricing separation", () => {
+  beforeEach(() => {
+    mocks.db.providerModel.findUnique.mockResolvedValue({
+      id: modelId,
+      provider: "GROQ",
+      providerModelId: "whisper-large-v3-turbo",
+      displayName: "Whisper Large v3 Turbo",
+      mediaKind: "VOICE",
+      capabilities: {
+        transcription: true,
+        subtitles: true,
+        fast: true,
+      },
+    });
+    mocks.db.modelPriceVersion.findUnique.mockResolvedValue(null);
+    mocks.db.modelPriceVersion.findFirst.mockResolvedValue({
+      pricingDimension: "SECOND",
+      unitQuantity: 60,
+      providerCostMicroUsd: 4000n,
+      fxBaisaNumerator: 769n,
+      fxBaisaDenominator: 2n,
+    });
+  });
+
+  it("allows duration pricing for transcription models", async () => {
+    const res = await PATCH(
+      request({
+        providerCostMicroUsd: "4000",
+        pricingDimension: "SECOND",
+        unitQuantity: 60,
+        targetMarginBps: 2500,
+        idempotencyKey: "d32208ba-cb6e-490e-9356-55822dd8b61f",
+      }),
+      context,
+    );
+
+    expect(res.status).toBe(200);
+    expect(mocks.db.modelPriceVersion.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          pricingDimension: "SECOND",
+          unitQuantity: 60,
+        }),
+      }),
+    );
+  });
+
+  it("rejects character pricing for transcription models", async () => {
+    const res = await PATCH(
+      request({
+        providerCostMicroUsd: "4000",
+        pricingDimension: "CHARACTER",
+        unitQuantity: 1000,
+        targetMarginBps: 2500,
+        idempotencyKey: "0bc5c95d-1da2-4036-bccc-a44ae38b67a4",
+      }),
+      context,
+    );
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({
+      error: expect.stringContaining("Transcription models require"),
+    });
+  });
+
+  it("rejects duration pricing for TTS models", async () => {
+    mocks.db.providerModel.findUnique.mockResolvedValue({
+      id: modelId,
+      provider: "BYTEPLUS",
+      providerModelId: "seed-tts-2.0",
+      displayName: "Seed TTS 2.0",
+      mediaKind: "VOICE",
+      capabilities: { speechSynthesis: true },
+    });
+    const res = await PATCH(
+      request({
+        providerCostMicroUsd: "4000",
+        pricingDimension: "SECOND",
+        unitQuantity: 60,
+        targetMarginBps: 2500,
+        idempotencyKey: "54e263aa-adb7-4552-88f0-00435942efcf",
+      }),
+      context,
+    );
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({
+      error: expect.stringContaining("Speech synthesis models require"),
+    });
+  });
+});
+

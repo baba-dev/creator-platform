@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { hasOrganizationPermission } from "@aiwa/authz";
 import { defaultAssetName, reserveAssetStorage } from "@aiwa/assets";
+import { createAssetObjectKey } from "@aiwa/assets/storage";
 import {
   calculateBillableUnits,
   estimateGeneration,
@@ -34,12 +35,15 @@ export * from "./quote-contract";
 export * from "./text";
 export * from "./speech-trial";
 export * from "./video-contract";
+export * from "./transcription";
 import { verifyGenerationQuote, quoteParameters } from "./quote-contract";
 
 export const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 export const MAX_REFERENCE_SET_BYTES = 80 * 1024 * 1024;
 export const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 export const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
+export const MAX_TRANSCRIPTION_SOURCE_BYTES = 25 * 1024 * 1024;
+export const MAX_TRANSCRIPT_OUTPUT_BYTES = 1_000_000;
 
 export const imageRequestSchema = z
   .object({
@@ -86,6 +90,20 @@ export const voiceRequestSchema = z
     voiceKey: z.string().trim().min(1).max(100),
     speechRate: z.number().min(0.5).max(2.0).default(1.0),
     format: z.literal("mp3").default("mp3"),
+  })
+  .strict();
+
+export const transcriptionRequestSchema = z
+  .object({
+    organizationId: z.string().min(1).max(100),
+    projectId: z.string().min(1).max(100).nullable().optional(),
+    modelId: z.string().min(1).max(100),
+    priceVersionId: z.string().min(1).max(100),
+    quoteToken: z.string().min(1).max(2048).optional(),
+    idempotencyKey: z.uuid(),
+    sourceAssetId: z.string().min(1).max(100),
+    language: z.string().trim().min(2).max(20).optional(),
+    prompt: z.string().trim().max(1000).optional(),
   })
   .strict();
 
@@ -1383,3 +1401,285 @@ export async function createVoiceJob(userId: string, raw: unknown) {
 
 export * from "./estimate";
 export * from "./byos-storage";
+
+export async function createTranscriptionJob(userId: string, raw: unknown) {
+  const input = transcriptionRequestSchema.parse(raw);
+  const payload = {
+    task: "transcription",
+    sourceAssetId: input.sourceAssetId,
+    language: input.language ?? null,
+    prompt: input.prompt ?? null,
+    outputFormats: ["txt", "srt", "vtt"],
+  };
+  const key = createHash("sha256")
+    .update(`${input.organizationId}:${userId}:${input.idempotencyKey}`)
+    .digest("hex");
+
+  return db.$transaction(
+    async (tx) => {
+      await tx.$queryRaw`SELECT id FROM Organization WHERE id = ${input.organizationId} FOR UPDATE`;
+      const member = await requireMembership(
+        tx,
+        input.organizationId,
+        userId,
+        true,
+      );
+
+      const existing = await tx.generationJob.findUnique({
+        where: { idempotencyKey: key },
+      });
+      if (existing) {
+        const previous = existing.requestPayload as Record<string, unknown>;
+        if (
+          existing.providerModelId !== input.modelId ||
+          existing.priceVersionId !== input.priceVersionId ||
+          previous.task !== "transcription" ||
+          previous.sourceAssetId !== input.sourceAssetId ||
+          previous.language !== (input.language ?? null) ||
+          previous.prompt !== (input.prompt ?? null)
+        ) {
+          throw new GenerationError(
+            "Request key was already used for different transcription inputs.",
+            409,
+          );
+        }
+        return existing;
+      }
+
+      await assertAssignableProject(tx, input.organizationId, input.projectId);
+      const now = new Date();
+      const model = await tx.providerModel.findFirst({
+        where: {
+          id: input.modelId,
+          enabled: true,
+          provider: "GROQ",
+          mediaKind: "VOICE",
+        },
+        include: {
+          priceVersions: {
+            where: {
+              effectiveFrom: { lte: now },
+              OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
+            },
+            orderBy: { effectiveFrom: "desc" },
+            take: 1,
+          },
+        },
+      });
+      const capabilities =
+        model?.capabilities &&
+        typeof model.capabilities === "object" &&
+        !Array.isArray(model.capabilities)
+          ? (model.capabilities as Record<string, unknown>)
+          : {};
+      const price = model?.priceVersions[0];
+      if (
+        !model ||
+        capabilities.transcription !== true ||
+        !price ||
+        price.id !== input.priceVersionId
+      ) {
+        throw new GenerationError(
+          "Transcription model or price changed. Refresh and try again.",
+          409,
+        );
+      }
+      if (
+        price.pricingDimension !== "SECOND" &&
+        price.pricingDimension !== "REQUEST"
+      ) {
+        throw new GenerationError(
+          "Selected transcription pricing is unsupported.",
+          409,
+        );
+      }
+
+      const source = await tx.asset.findFirst({
+        where: {
+          id: input.sourceAssetId,
+          organizationId: input.organizationId,
+          status: "READY",
+          mediaKind: { in: ["AUDIO", "VIDEO"] },
+        },
+        select: {
+          id: true,
+          projectId: true,
+          byteSize: true,
+          durationMs: true,
+          mimeType: true,
+          storageProvider: true,
+        },
+      });
+      if (
+        !source ||
+        source.durationMs === null ||
+        source.durationMs <= 0 ||
+        source.byteSize <= 0n ||
+        source.byteSize > BigInt(MAX_TRANSCRIPTION_SOURCE_BYTES)
+      ) {
+        throw new GenerationError(
+          "Choose a ready audio or video asset under 25 MB with a valid duration.",
+          400,
+        );
+      }
+
+      const billableSeconds = Math.max(1, Math.ceil(source.durationMs / 1000));
+      const units =
+        price.pricingDimension === "SECOND"
+          ? calculateBillableUnits(
+              BigInt(billableSeconds),
+              BigInt(price.unitQuantity),
+            )
+          : 1n;
+      const providerCostMicroUsd = price.providerCostMicroUsd * units;
+      const credits = priceCredits({
+        ...price,
+        providerCostMicroUsd,
+      });
+
+      try {
+        verifyGenerationQuote(
+          input.quoteToken,
+          {
+            organizationId: input.organizationId,
+            userId,
+            modelId: model.id,
+            priceVersionId: price.id,
+            parameters: quoteParameters("VOICE", {
+              transcription: true,
+              sourceAssetId: source.id,
+              language: input.language,
+              billableQuantity: billableSeconds,
+            }),
+          },
+          credits,
+          now,
+        );
+      } catch (error) {
+        throw new GenerationError(
+          error instanceof Error ? error.message : "Quote is invalid.",
+          409,
+        );
+      }
+
+      await assertWithinMonthlySpendingCap(tx, {
+        organizationId: input.organizationId,
+        userId,
+        cap: member.monthlySpendingCapCredits,
+        additionalCredits: credits,
+        now,
+      });
+
+      const wallet = await tx.wallet.findUnique({
+        where: { organizationId: input.organizationId },
+      });
+      if (!wallet) throw new GenerationError("Workspace wallet is unavailable.");
+
+      const outputProjectId = input.projectId ?? source.projectId ?? null;
+      const org = await tx.organization.findUnique({
+        where: { id: input.organizationId },
+        select: { defaultStorageProvider: true },
+      });
+      const storageProvider = org?.defaultStorageProvider ?? "LOCAL";
+      const reservedOutputBytes = BigInt(MAX_TRANSCRIPT_OUTPUT_BYTES * 3);
+      await reserveAssetStorage(tx, {
+        organizationId: input.organizationId,
+        userId,
+        proposedBytes: reservedOutputBytes,
+      });
+
+      const job = await tx.generationJob.create({
+        data: {
+          organizationId: input.organizationId,
+          projectId: outputProjectId,
+          createdById: userId,
+          providerModelId: model.id,
+          priceVersionId: price.id,
+          idempotencyKey: key,
+          requestPayload: payload,
+          status: "QUOTED",
+          quotedAt: now,
+          billableQuantity: billableSeconds,
+          quotedUnits: Number(units),
+        },
+      });
+
+      await reserveCreditsForJob(tx, {
+        walletId: wallet.id,
+        amountCredits: credits,
+        idempotencyKey: `generation-reserve-${job.id}`,
+        jobId: job.id,
+      });
+
+      const outputs = [
+        {
+          index: 0,
+          extension: "txt",
+          mimeType: "text/plain",
+          name: "Transcript.txt",
+        },
+        {
+          index: 1,
+          extension: "srt",
+          mimeType: "application/x-subrip",
+          name: "Subtitles.srt",
+        },
+        {
+          index: 2,
+          extension: "vtt",
+          mimeType: "text/vtt",
+          name: "Subtitles.vtt",
+        },
+      ] as const;
+
+      for (const output of outputs) {
+        await tx.asset.create({
+          data: {
+            organizationId: input.organizationId,
+            projectId: outputProjectId,
+            generationJobId: job.id,
+            sourceAssetId: source.id,
+            generationOutputIndex: output.index,
+            storageOwnerUserId: userId,
+            createdById: userId,
+            status: "PENDING",
+            mediaKind: "DOCUMENT",
+            sourceType: "GENERATED",
+            storageProvider,
+            name: output.name,
+            objectKey: createAssetObjectKey(
+              input.organizationId,
+              output.extension,
+            ),
+            mimeType: output.mimeType,
+            byteSize: BigInt(MAX_TRANSCRIPT_OUTPUT_BYTES),
+          },
+        });
+      }
+
+      await tx.auditEvent.create({
+        data: {
+          actorUserId: userId,
+          organizationId: input.organizationId,
+          action: "generation.queued",
+          targetType: "GenerationJob",
+          targetId: job.id,
+          metadata: {
+            task: "transcription",
+            sourceAssetId: source.id,
+            provider: model.provider,
+            providerModelId: model.providerModelId,
+            billableSeconds,
+          },
+        },
+      });
+
+      return tx.generationJob.update({
+        where: { id: job.id },
+        data: { status: "QUEUED", queuedAt: now },
+      });
+    },
+    { isolationLevel: "ReadCommitted", timeout: 15_000 },
+  );
+}
+

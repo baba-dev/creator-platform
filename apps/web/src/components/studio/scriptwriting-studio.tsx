@@ -441,12 +441,7 @@ export function ScriptwritingStudio({
   }
 
   async function handleAiGenerate() {
-    if (
-      !activeScript ||
-      !aiPrompt.trim() ||
-      isGenerating ||
-      !selectedTextModel
-    )
+    if (!activeScript || !aiPrompt.trim() || isGenerating || !selectedTextModel)
       return;
     setIsGenerating(true);
     setStatusMessage(null);

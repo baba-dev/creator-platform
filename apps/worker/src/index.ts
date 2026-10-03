@@ -23,7 +23,10 @@ import {
   processVideoSubmitJob,
   processVoiceJob,
 } from "@aiwa/generation/process";
-import { processTextJob } from "@aiwa/generation";
+import {
+  processTextJob,
+  processTranscriptionJob,
+} from "@aiwa/generation";
 import { mailJobId } from "@aiwa/mail";
 import {
   closeSmtpTransport,
@@ -324,6 +327,11 @@ const generationWorker = createWorker(
         if (!bytePlusProvider)
           throw new Error("BytePlus generation provider is not configured");
         await processVoiceJob(job.data.jobId, bytePlusProvider);
+        return;
+      case "transcription":
+        if (!groqProvider)
+          throw new Error("Groq transcription provider is not configured");
+        await processTranscriptionJob(job.data.jobId, groqProvider);
         return;
       case "text": {
         const row = await db.generationJob.findUnique({
@@ -828,6 +836,7 @@ async function dispatchGeneration() {
         id: true,
         status: true,
         organizationId: true,
+        requestPayload: true,
         providerModel: { select: { mediaKind: true } },
       },
       orderBy: { id: "asc" },
@@ -850,7 +859,8 @@ async function dispatchGeneration() {
             id: true,
             status: true,
             organizationId: true,
-            providerModel: { select: { mediaKind: true } },
+            requestPayload: true,
+        providerModel: { select: { mediaKind: true } },
           },
           orderBy: { id: "asc" },
           take: GENERATION_BATCH_SIZE,
@@ -889,6 +899,7 @@ async function dispatchGeneration() {
         id: true,
         status: true,
         organizationId: true,
+        requestPayload: true,
         providerModel: { select: { mediaKind: true } },
       },
       orderBy: { id: "asc" },
@@ -910,7 +921,8 @@ async function dispatchGeneration() {
             id: true,
             status: true,
             organizationId: true,
-            providerModel: { select: { mediaKind: true } },
+            requestPayload: true,
+        providerModel: { select: { mediaKind: true } },
           },
           orderBy: { id: "asc" },
           take: GENERATION_BATCH_SIZE,
@@ -941,7 +953,14 @@ async function dispatchGeneration() {
       if (mediaKind === "VIDEO") {
         jobName = job.status === "QUEUED" ? "video-submit" : "video-poll";
       } else if (mediaKind === "VOICE") {
-        jobName = "voice";
+        const payload =
+          job.requestPayload &&
+          typeof job.requestPayload === "object" &&
+          !Array.isArray(job.requestPayload)
+            ? (job.requestPayload as Record<string, unknown>)
+            : {};
+        jobName =
+          payload.task === "transcription" ? "transcription" : "voice";
       } else if (mediaKind === "TEXT") {
         if (job.status !== "QUEUED") continue;
         jobName = "text";

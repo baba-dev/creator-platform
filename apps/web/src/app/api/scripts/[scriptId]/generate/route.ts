@@ -13,6 +13,10 @@ import {
   assertQuotedTextModel,
   issueTextFeatureQuote,
 } from "@/lib/text-feature-generation";
+import {
+  resolveStudioModelSelection,
+  StudioModelUnavailableError,
+} from "@/lib/studio-model-discovery";
 
 const scriptGenerateSchema = z
   .object({
@@ -86,7 +90,10 @@ export async function POST(
       return NextResponse.json({ error: "Access denied." }, { status: 403 });
 
     const input = scriptGenerateSchema.parse(await request.json());
-    const providerModelId = input.modelId || "seed-2-0-lite-260428";
+    const selectedModel = await resolveStudioModelSelection(
+      input.modelId ?? "seed-2-0-lite-260428",
+      "scriptwriting",
+    );
     const userPromptContent = [
       `Script Title: ${scriptRow.title}`,
       scriptRow.logline ? `Logline: ${scriptRow.logline}` : null,
@@ -109,14 +116,14 @@ export async function POST(
       const quote = await issueTextFeatureQuote({
         organizationId: scriptRow.organizationId,
         userId: session.user.id,
-        providerModelId,
+        modelId: selectedModel.id,
         messages,
         maxTokens,
       });
       return NextResponse.json({ quote });
     }
 
-    await assertQuotedTextModel(input.quotedModelId!, providerModelId);
+    await assertQuotedTextModel(input.quotedModelId!, selectedModel.id);
     const job = await createTextJob(session.user.id, {
       organizationId: scriptRow.organizationId,
       projectId: scriptRow.projectId,
@@ -154,6 +161,8 @@ export async function POST(
         { error: error.message },
         { status: error.status },
       );
+    if (error instanceof StudioModelUnavailableError)
+      return NextResponse.json({ error: error.message }, { status: 409 });
     return NextResponse.json(
       { error: "Script generation failed." },
       { status: 502 },

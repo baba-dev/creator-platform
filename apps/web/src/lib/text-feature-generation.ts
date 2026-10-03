@@ -1,4 +1,7 @@
-import { estimateGeneration } from "@aiwa/credits";
+import {
+  estimateGeneration,
+  parseTextUsageRatesForProvider,
+} from "@aiwa/credits";
 import { db } from "@aiwa/db";
 import {
   GenerationError,
@@ -17,6 +20,7 @@ export type TextFeatureQuoteInput = {
   userId: string;
   messages: TextMessage[];
   maxTokens: number;
+  responseFormat?: "text" | "json_object";
 } & TextFeatureModelSelection;
 
 async function resolveTextFeatureModel(
@@ -82,6 +86,20 @@ export async function issueTextFeatureQuote(input: TextFeatureQuoteInput) {
   const now = new Date();
   const model = await resolveTextFeatureModel(input, now);
   const price = model.priceVersions[0]!;
+  if (price.pricingDimension !== "TOKEN") {
+    throw new GenerationError(
+      "Paid text generation requires token pricing for this model.",
+      409,
+    );
+  }
+  try {
+    parseTextUsageRatesForProvider(price.usageRates, model.provider);
+  } catch {
+    throw new GenerationError(
+      "The selected text model does not have valid provider token rates.",
+      409,
+    );
+  }
 
   const messages = normalizeTextMessagesForModel(
     input.messages,
@@ -107,6 +125,7 @@ export async function issueTextFeatureQuote(input: TextFeatureQuoteInput) {
       parameters: quoteParameters("TEXT", {
         text: promptText,
         units: input.maxTokens,
+        responseFormat: input.responseFormat ?? "text",
       }),
     },
     estimate.reservation.customerCredits,

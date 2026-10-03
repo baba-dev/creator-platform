@@ -82,8 +82,7 @@ export async function GET(
     .map((message) => {
       const metadata = message.metadata as Record<string, unknown> | null;
       return (metadata?.audioJobId ?? metadata?.generationJobId) as
-        | string
-        | undefined;
+        string | undefined;
     })
     .filter((id): id is string => typeof id === "string");
 
@@ -98,13 +97,13 @@ export async function GET(
       })
     : [];
 
-  const assetByJobId = new Map(assets.map((asset) => [asset.generationJobId, asset.id]));
+  const assetByJobId = new Map(
+    assets.map((asset) => [asset.generationJobId, asset.id]),
+  );
   const enrichedMessages = messages.map((message) => {
-    const metadata =
-      (message.metadata as Record<string, unknown> | null) ?? {};
+    const metadata = (message.metadata as Record<string, unknown> | null) ?? {};
     const audioJobId = (metadata.audioJobId ?? metadata.generationJobId) as
-      | string
-      | undefined;
+      string | undefined;
     return {
       ...message,
       audioJobId,

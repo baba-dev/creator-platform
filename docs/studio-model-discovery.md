@@ -102,7 +102,6 @@ The current verified set can include NVIDIA Nemotron, Groq GPT-OSS 120B, Gemini
 priced, and runtime-configured. NVIDIA remains the preferred default when
 available.
 
-The selected `ProviderModel.id` and active `ModelPriceVersion.id` are pinned
-to the durable ReasoningJob. Fresh discovery may change later, but an admitted
-job cannot switch providers during retry or settlement.
-
+The selected `ProviderModel.id` and active `ModelPriceVersion.id` are pinned to
+the durable ReasoningJob. Fresh discovery may change later, but an admitted job
+cannot switch providers during retry or settlement.

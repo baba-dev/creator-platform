@@ -99,4 +99,3 @@ describe("dynamic text Studio task assignments", () => {
     }
   });
 });
-

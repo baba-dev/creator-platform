@@ -125,4 +125,3 @@ describe("voice task pricing validation", () => {
     expect(isPricingDimensionSupportedForMedia("VOICE", "TOKEN")).toBe(false);
   });
 });
-

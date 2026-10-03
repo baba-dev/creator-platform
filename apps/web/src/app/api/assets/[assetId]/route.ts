@@ -49,7 +49,15 @@ export async function GET(
         ? "mp3"
         : asset.mimeType === "image/jpeg"
           ? "jpg"
-          : "png";
+          : asset.mimeType === "text/plain"
+            ? "txt"
+            : asset.mimeType === "application/x-subrip"
+              ? "srt"
+              : asset.mimeType === "text/vtt"
+                ? "vtt"
+                : asset.mimeType === "application/pdf"
+                  ? "pdf"
+                  : "png";
     const download = new URL(request.url).searchParams.has("download");
     const range = !download && isMedia ? request.headers.get("range") : null;
     let body: Buffer;

@@ -9,6 +9,7 @@ import {
 import { chatMessageCreateSchema } from "@aiwa/validation";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { resolvePersistedChatModel } from "@/lib/chat-model-selection";
 import { deterministicUuid } from "@/lib/idempotency";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
@@ -16,6 +17,7 @@ import {
   assertQuotedTextModel,
   issueTextFeatureQuote,
 } from "@/lib/text-feature-generation";
+import { StudioModelUnavailableError } from "@/lib/studio-model-discovery";
 
 const chatGenerationSchema = chatMessageCreateSchema
   .extend({
@@ -75,10 +77,12 @@ export async function POST(
     )
       return NextResponse.json({ error: "Access denied." }, { status: 403 });
 
-    const targetModelId =
-      thread.persona?.modelId ??
-      thread.modelId ??
-      "doubao-seed-character-260628";
+    // The thread model is immutable for billing/provenance. A persona only
+    // supplies a default when a new thread is created.
+    const targetModel = await resolvePersistedChatModel({
+      modelId: thread.modelId,
+      providerModelRecordId: thread.providerModelRecordId,
+    });
     const recentMessages = await db.chatMessage.findMany({
       where: {
         threadId,
@@ -115,14 +119,14 @@ export async function POST(
       const quote = await issueTextFeatureQuote({
         organizationId: thread.organizationId,
         userId: session.user.id,
-        providerModelId: targetModelId,
+        modelId: targetModel.id,
         messages,
         maxTokens,
       });
       return NextResponse.json({ quote });
     }
 
-    await assertQuotedTextModel(input.quotedModelId!, targetModelId);
+    await assertQuotedTextModel(input.quotedModelId!, targetModel.id);
     const job = await createTextJob(session.user.id, {
       organizationId: thread.organizationId,
       projectId: thread.projectId,
@@ -276,6 +280,8 @@ export async function POST(
         { error: error.message },
         { status: error.status },
       );
+    if (error instanceof StudioModelUnavailableError)
+      return NextResponse.json({ error: error.message }, { status: 409 });
     return NextResponse.json(
       { error: "Text generation failed. Please try again." },
       { status: 502 },

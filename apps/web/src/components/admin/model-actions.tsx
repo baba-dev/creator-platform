@@ -920,11 +920,13 @@ export function ModelActions({
                       Calculated Customer Price:
                     </span>
                     <span className="font-semibold text-foreground">
-                      {pricingDimension === "TOKEN"
-                        ? mediaKind === "TEXT"
-                          ? "Calculated from actual input / cache / output tokens"
-                          : "Calculated from actual completion tokens; see Studio estimate"
-                        : estimatedCredits
+                      {mediaKind === "REASONING"
+                        ? "Uncharged to workspace; provider cost is tracked internally"
+                        : pricingDimension === "TOKEN"
+                          ? mediaKind === "TEXT"
+                            ? "Calculated from actual input / cache / output tokens"
+                            : "Calculated from actual completion tokens; see Studio estimate"
+                          : estimatedCredits
                           ? `${estimatedCredits} credits / ${
                               pricingDimension === "CHARACTER"
                                 ? `${unitQuantity || "—"} characters`

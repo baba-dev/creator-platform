@@ -1,6 +1,10 @@
-import { hasOrganizationPermission } from "@aiwa/authz";
+import {
+  hasOrganizationPermission,
+  hasPlatformPermission,
+} from "@aiwa/authz";
 import { db } from "@aiwa/db";
 import { NextResponse } from "next/server";
+
 import { getRequestSession } from "@/lib/request-auth";
 
 export async function GET(
@@ -21,12 +25,28 @@ export async function GET(
       id: true,
       organizationId: true,
       createdById: true,
+      providerModelId: true,
+      priceVersionId: true,
       status: true,
       outputPayload: true,
+      providerRequestId: true,
+      inputTokens: true,
+      outputTokens: true,
+      estimatedProviderCostMicroUsd: true,
+      actualProviderCostMicroUsd: true,
+      providerCostBasis: true,
       errorCode: true,
       errorMessage: true,
       createdAt: true,
       completedAt: true,
+      providerModel: {
+        select: {
+          id: true,
+          provider: true,
+          providerModelId: true,
+          displayName: true,
+        },
+      },
     },
   });
 
@@ -53,11 +73,39 @@ export async function GET(
   )
     return NextResponse.json({ error: "Job not found." }, { status: 404 });
 
+  const commercial = hasPlatformPermission(
+    session.user.platformRole,
+    "payments:read",
+  );
+
   return NextResponse.json(
     {
       id: job.id,
       status: job.status,
       outputPayload: job.outputPayload,
+      providerRequestId: job.providerRequestId,
+      model: {
+        id: job.providerModel.id,
+        provider: job.providerModel.provider,
+        providerModelId: job.providerModel.providerModelId,
+        name: job.providerModel.displayName,
+      },
+      priceVersionId: job.priceVersionId,
+      usage: {
+        inputTokens: job.inputTokens,
+        outputTokens: job.outputTokens,
+      },
+      ...(commercial
+        ? {
+            providerCost: {
+              estimatedMicroUsd:
+                job.estimatedProviderCostMicroUsd?.toString() ?? null,
+              actualMicroUsd:
+                job.actualProviderCostMicroUsd?.toString() ?? null,
+              basis: job.providerCostBasis,
+            },
+          }
+        : {}),
       errorCode: job.errorCode,
       errorMessage: job.errorMessage,
       createdAt: job.createdAt,

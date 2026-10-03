@@ -73,8 +73,8 @@ same discovery and canonical model-resolution layer as Character Chat.
 
 Each surface submits the canonical `ProviderModel.id`. The API resolves that
 selection again for the exact task before issuing a quote or creating a job, so
-frontend visibility is not treated as an authorization boundary. Legacy
-upstream model IDs remain accepted only when they resolve uniquely.
+frontend visibility is not treated as an authorization boundary. Legacy upstream
+model IDs remain accepted only when they resolve uniquely.
 
 These four workflows intentionally remain on the durable TEXT job pipeline.
 Models with `mediaKind=REASONING` are excluded even if they advertise a related
@@ -89,4 +89,3 @@ Current verified task examples include:
   Llama.
 - Brand Strategy and Story Planning: only catalog models explicitly verified for
   those tasks; no generic chat-model fallback is performed.
-

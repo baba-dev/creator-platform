@@ -7,24 +7,51 @@ import {
   type StudioModelRow,
 } from "./studio-model-discovery";
 
-const price = {
+const bytePlusPrice = {
   id: "price-1",
   pricingDimension: "TOKEN" as const,
   unitQuantity: 1000,
+  usageRates: {
+    estimator: "byteplus-text-v1",
+    tiers: [
+      {
+        maxPromptTokens: 262144,
+        inputMicroUsdPerMillionTokens: "500000",
+        outputMicroUsdPerMillionTokens: "2500000",
+      },
+    ],
+  },
+};
+
+const externalPrice = {
+  id: "price-1",
+  pricingDimension: "TOKEN" as const,
+  unitQuantity: 1000,
+  usageRates: {
+    estimator: "text-token-v1",
+    tiers: [
+      {
+        maxPromptTokens: 1048576,
+        inputMicroUsdPerMillionTokens: "1000000",
+        outputMicroUsdPerMillionTokens: "2000000",
+      },
+    ],
+  },
 };
 
 function row(
   overrides: Partial<StudioModelRow> &
     Pick<StudioModelRow, "id" | "providerModelId">,
 ): StudioModelRow {
+  const provider = overrides.provider ?? "BYTEPLUS";
   return {
-    provider: "BYTEPLUS",
+    provider,
     displayName: overrides.providerModelId,
     description: "Test model",
     mediaKind: "TEXT",
     enabled: true,
     capabilities: { chat: true },
-    priceVersions: [price],
+    priceVersions: [provider === "BYTEPLUS" ? bytePlusPrice : externalPrice],
     ...overrides,
     id: overrides.id,
     providerModelId: overrides.providerModelId,
@@ -296,6 +323,121 @@ describe("dynamic text Studio discovery", () => {
     expect(result.models.map((model) => model.id)).toEqual([
       "cloudflare-director",
     ]);
+  });
+});
+
+describe("dual-use reasoning commercialization", () => {
+  it("keeps REQUEST-priced dual-use models in Prompt Enhance but out of paid TEXT Studios", () => {
+    const requestPrice = {
+      id: "reasoning-request-price",
+      pricingDimension: "REQUEST" as const,
+      unitQuantity: 1,
+      usageRates: null,
+    };
+    const dualUse = row({
+      id: "groq-120b",
+      provider: "GROQ",
+      providerModelId: "openai/gpt-oss-120b",
+      mediaKind: "TEXT",
+      capabilities: {
+        reasoning: true,
+        creativeDirector: true,
+        storyPlanning: true,
+        "task:prompt-enhancement": true,
+      },
+      priceVersions: [requestPrice],
+    });
+
+    expect(
+      selectDiscoverableStudioModels(
+        [dualUse],
+        "prompt-enhancement",
+        { GROQ_API_KEY: "groq" },
+      ).models.map((model) => model.id),
+    ).toEqual(["groq-120b"]);
+    expect(
+      selectDiscoverableStudioModels(
+        [dualUse],
+        "creative-director",
+        { GROQ_API_KEY: "groq" },
+      ).models,
+    ).toEqual([]);
+    expect(
+      selectDiscoverableStudioModels(
+        [dualUse],
+        "story-planning",
+        { GROQ_API_KEY: "groq" },
+      ).models,
+    ).toEqual([]);
+  });
+
+  it("exposes dual-use Groq and Gemini models to paid creative tasks only with valid external token rates", () => {
+    const rows = [
+      row({
+        id: "groq-120b",
+        provider: "GROQ",
+        providerModelId: "openai/gpt-oss-120b",
+        mediaKind: "TEXT",
+        capabilities: {
+          reasoning: true,
+          creativeDirector: true,
+          storyPlanning: true,
+          "task:prompt-enhancement": true,
+        },
+      }),
+      row({
+        id: "gemini-38",
+        provider: "GEMINI",
+        providerModelId: "gemini-3.8-flash",
+        mediaKind: "TEXT",
+        capabilities: {
+          reasoning: true,
+          creativeDirector: true,
+          storyPlanning: true,
+          "task:prompt-enhancement": true,
+        },
+      }),
+    ];
+
+    const env = { GROQ_API_KEY: "groq", GEMINI_API_KEY: "gemini" };
+    expect(
+      new Set(
+        selectDiscoverableStudioModels(rows, "creative-director", env).models.map(
+          (model) => model.id,
+        ),
+      ),
+    ).toEqual(new Set(["groq-120b", "gemini-38"]));
+    expect(
+      new Set(
+        selectDiscoverableStudioModels(rows, "story-planning", env).models.map(
+          (model) => model.id,
+        ),
+      ),
+    ).toEqual(new Set(["groq-120b", "gemini-38"]));
+    expect(
+      new Set(
+        selectDiscoverableStudioModels(rows, "prompt-enhancement", env).models.map(
+          (model) => model.id,
+        ),
+      ),
+    ).toEqual(new Set(["groq-120b", "gemini-38"]));
+  });
+
+  it("hides externally-priced text models when the estimator belongs to the wrong provider class", () => {
+    const bad = row({
+      id: "groq-bad-price",
+      provider: "GROQ",
+      providerModelId: "openai/gpt-oss-120b",
+      capabilities: { creativeDirector: true },
+      priceVersions: [bytePlusPrice],
+    });
+    expect(
+      selectDiscoverableStudioModels(
+        [bad],
+        "creative-director",
+        { GROQ_API_KEY: "groq" },
+      ).models,
+    ).toEqual([]);
   });
 });
 

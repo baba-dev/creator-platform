@@ -35,9 +35,7 @@ describe("studio task taxonomy", () => {
   it("keeps reasoning-only models out of text Studio tasks", () => {
     const groqReasoning = model("openai/gpt-oss-120b");
     expect(groqReasoning.capabilities["task:prompt-enhancement"]).toBe(true);
-    expect(
-      supportsStudioTask(groqReasoning, "creative-director"),
-    ).toBe(false);
+    expect(supportsStudioTask(groqReasoning, "creative-director")).toBe(false);
     expect(listStudioTasksForModel(groqReasoning)).toEqual([
       "prompt-enhancement",
     ]);

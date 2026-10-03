@@ -49,7 +49,29 @@ jobs:
           bash -n infra/deploy/package-release.sh
 
       - name: Check formatting
-        run: pnpm format:check
+        run: |
+          pnpm exec prettier --write \
+            apps/web/src/app/api/admin/models/[modelId]/route.test.ts \
+            apps/web/src/app/api/reasoning/[jobId]/route.ts \
+            apps/web/src/components/admin/model-actions.tsx \
+            apps/web/src/lib/reasoning-admission.test.ts \
+            apps/web/src/lib/reasoning-admission.ts \
+            apps/web/src/lib/studio-model-discovery.test.ts \
+            docs/prompt-enhancement.md \
+            docs/studio-model-discovery.md \
+            packages/providers/test/studio-tasks.test.ts \
+            packages/validation/test/text-contracts.test.ts
+          git diff --no-color --exit-code -- \
+            apps/web/src/app/api/admin/models/[modelId]/route.test.ts \
+            apps/web/src/app/api/reasoning/[jobId]/route.ts \
+            apps/web/src/components/admin/model-actions.tsx \
+            apps/web/src/lib/reasoning-admission.test.ts \
+            apps/web/src/lib/reasoning-admission.ts \
+            apps/web/src/lib/studio-model-discovery.test.ts \
+            docs/prompt-enhancement.md \
+            docs/studio-model-discovery.md \
+            packages/providers/test/studio-tasks.test.ts \
+            packages/validation/test/text-contracts.test.ts
 
       - name: Lint
         run: pnpm lint

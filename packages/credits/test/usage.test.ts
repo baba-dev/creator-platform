@@ -217,7 +217,6 @@ describe("generation pricing policies", () => {
     ).toThrow("must be positive");
   });
 
-
   it("maps text pricing estimators to the provider family", () => {
     expect(textUsageEstimatorForProvider("BYTEPLUS")).toBe("byteplus-text-v1");
     for (const provider of ["GROQ", "GEMINI", "CLOUDFLARE"]) {
@@ -242,9 +241,9 @@ describe("generation pricing policies", () => {
     expect(parseTextUsageRatesForProvider(generic, "GROQ").estimator).toBe(
       "text-token-v1",
     );
-    expect(() =>
-      parseTextUsageRatesForProvider(generic, "BYTEPLUS"),
-    ).toThrow("byteplus-text-v1");
+    expect(() => parseTextUsageRatesForProvider(generic, "BYTEPLUS")).toThrow(
+      "byteplus-text-v1",
+    );
 
     const byteplus = { ...generic, estimator: "byteplus-text-v1" };
     expect(parseTextUsageRatesForProvider(byteplus, "BYTEPLUS").estimator).toBe(

@@ -109,9 +109,8 @@ describe("reasoning pricing validation", () => {
     expect(isPricingDimensionSupportedForMedia("REASONING", "SECOND")).toBe(
       false,
     );
-    expect(
-      isPricingDimensionSupportedForMedia("REASONING", "CHARACTER"),
-    ).toBe(false);
+    expect(isPricingDimensionSupportedForMedia("REASONING", "CHARACTER")).toBe(
+      false,
+    );
   });
 });
-

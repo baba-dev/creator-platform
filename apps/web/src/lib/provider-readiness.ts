@@ -3,6 +3,8 @@ export type ProviderRuntimeReadiness = {
   reason: "READY" | "MISSING_CREDENTIALS";
 };
 
+export type ProviderEnvironment = Readonly<Record<string, string | undefined>>;
+
 type ReadinessInput = {
   provider: string;
   mediaKind: string;
@@ -15,7 +17,7 @@ function configured(value: string | undefined): boolean {
 
 export function getProviderRuntimeReadiness(
   input: ReadinessInput,
-  environment: NodeJS.ProcessEnv = process.env,
+  environment: ProviderEnvironment = process.env,
 ): ProviderRuntimeReadiness {
   const provider = input.provider.toUpperCase();
   const mediaKind = input.mediaKind.toUpperCase();

@@ -212,7 +212,9 @@ describe("admitReasoningJob atomic admission limits and provenance", () => {
       .mockResolvedValueOnce(3)
       .mockResolvedValueOnce(10);
 
-    await expect(admitReasoningJob(sampleInput, txClient)).rejects.toMatchObject({
+    await expect(
+      admitReasoningJob(sampleInput, txClient),
+    ).rejects.toMatchObject({
       status: 429,
       retryAfterSeconds: 5,
     });
@@ -220,7 +222,9 @@ describe("admitReasoningJob atomic admission limits and provenance", () => {
     fakeTx.reasoningJob.count
       .mockResolvedValueOnce(1)
       .mockResolvedValueOnce(60);
-    await expect(admitReasoningJob(sampleInput, txClient)).rejects.toMatchObject({
+    await expect(
+      admitReasoningJob(sampleInput, txClient),
+    ).rejects.toMatchObject({
       status: 429,
       retryAfterSeconds: 60,
     });

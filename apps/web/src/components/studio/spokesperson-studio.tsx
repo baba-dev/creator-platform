@@ -913,7 +913,6 @@ export function SpokespersonStudio({
                         type="button"
                         onClick={() => {
                           setAvatarAssetId(asset.id);
-                          setSelectedPresetId(null);
                         }}
                         className={`group relative size-20 shrink-0 overflow-hidden rounded-2xl border transition-all ${
                           isSelected

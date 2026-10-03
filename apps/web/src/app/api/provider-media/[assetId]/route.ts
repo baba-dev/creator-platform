@@ -79,12 +79,8 @@ async function serve(request: Request, assetId: string, head: boolean) {
       onedriveClientSecret: env.ONEDRIVE_CLIENT_SECRET,
     });
     const size = Number(
-      (
-        await storage.stat(
-          asset.objectKey,
-          asset.externalFileId ?? undefined,
-        )
-      ).byteSize,
+      (await storage.stat(asset.objectKey, asset.externalFileId ?? undefined))
+        .byteSize,
     );
     const maximumBytes =
       asset.mediaKind === "VIDEO"
@@ -144,7 +140,10 @@ async function serve(request: Request, assetId: string, head: boolean) {
     headers.set("Content-Length", String(end - start + 1));
     if (head) return new Response(null, { status, headers });
     if (storage instanceof LocalAssetStorage) {
-      const path = resolveLocalAssetPath(env.ASSET_STORAGE_ROOT, asset.objectKey);
+      const path = resolveLocalAssetPath(
+        env.ASSET_STORAGE_ROOT,
+        asset.objectKey,
+      );
       const stream = Readable.toWeb(
         createReadStream(path, { start, end }),
       ) as ReadableStream<Uint8Array>;

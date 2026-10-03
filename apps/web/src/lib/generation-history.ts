@@ -211,6 +211,7 @@ export async function getCustomerJob(
       assets: {
         select: {
           id: true,
+          name: true,
           status: true,
           mimeType: true,
           byteSize: true,

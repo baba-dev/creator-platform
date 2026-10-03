@@ -3,6 +3,7 @@ import {
   calculateBillableUnits,
   estimateGeneration,
   textProviderCostMicroUsd,
+  parseTextUsageRatesForProvider,
   reserveCreditsForJob,
   captureCreditsForJob,
   releaseOrRefundCredits,
@@ -145,6 +146,7 @@ function requestFingerprint(input: {
   messages: TextMessage[];
   temperature: number;
   maxTokens: number;
+  responseFormat: "text" | "json_object";
 }): string {
   return createHash("sha256")
     .update(
@@ -156,6 +158,7 @@ function requestFingerprint(input: {
         messages: input.messages,
         temperature: input.temperature,
         maxTokens: input.maxTokens,
+        responseFormat: input.responseFormat,
       }),
     )
     .digest("hex");
@@ -183,6 +186,7 @@ function sameIdempotentRequest(
     messages: TextMessage[];
     temperature: number;
     maxTokens: number;
+    responseFormat: "text" | "json_object";
   },
   resolvedTemplateId: string | null,
   sponsored: boolean,
@@ -204,6 +208,7 @@ function sameIdempotentRequest(
       messages: input.messages,
       temperature: input.temperature,
       maxTokens: input.maxTokens,
+      responseFormat: input.responseFormat,
     })
   );
 }
@@ -320,6 +325,20 @@ export async function createTextJob(
           "Model or price changed. Refresh the estimate and try again.",
           409,
         );
+      if (priceRow.pricingDimension !== "TOKEN") {
+        throw new GenerationError(
+          "Paid text generation requires token pricing for this model.",
+          409,
+        );
+      }
+      try {
+        parseTextUsageRatesForProvider(priceRow.usageRates, modelRow.provider);
+      } catch {
+        throw new GenerationError(
+          "The selected text model does not have valid provider token rates.",
+          409,
+        );
+      }
 
       const messages = normalizeTextMessagesForModel(
         input.messages,
@@ -349,6 +368,7 @@ export async function createTextJob(
             parameters: quoteParameters("TEXT", {
               text: promptText,
               units: input.maxTokens,
+              responseFormat: input.responseFormat,
             }),
           },
           credits,
@@ -391,6 +411,7 @@ export async function createTextJob(
             messages,
             temperature: input.temperature,
             maxTokens: input.maxTokens,
+            responseFormat: input.responseFormat,
             sponsored,
             clientRequestHash: requestFingerprint(input),
           } as unknown as Prisma.InputJsonObject,
@@ -519,6 +540,8 @@ export async function processTextJob(
     typeof payload.temperature === "number" ? payload.temperature : 0.7;
   const maxTokens =
     typeof payload.maxTokens === "number" ? payload.maxTokens : 2048;
+  const responseFormat =
+    payload.responseFormat === "json_object" ? "json_object" : "text";
   if (!messages.length) {
     await failTextJob(
       id,
@@ -548,6 +571,7 @@ export async function processTextJob(
         messages,
         temperature,
         maxTokens,
+        responseFormat,
       });
       content = result.content;
       providerRequestId = result.providerRequestId;
@@ -563,7 +587,7 @@ export async function processTextJob(
         idempotencyKey: job.idempotencyKey,
         modelId: job.providerModel.providerModelId,
         mediaKind: "text",
-        input: { messages, temperature, maxTokens },
+        input: { messages, temperature, maxTokens, responseFormat },
       });
       content =
         providerResponse.textOutput?.content ??

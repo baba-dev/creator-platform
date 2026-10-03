@@ -200,7 +200,9 @@ export async function POST(request: Request): Promise<NextResponse> {
               ? model.mediaKind === "VOICE"
                 ? "CHARACTER"
                 : "IMAGE"
-              : "COMPLETION_TOKEN",
+              : model.mediaKind === "TEXT"
+                ? "TOKEN"
+                : "COMPLETION_TOKEN",
           quantity:
             estimate.estimatedTokens?.toString() ??
             estimate.billableQuantity.toString(),

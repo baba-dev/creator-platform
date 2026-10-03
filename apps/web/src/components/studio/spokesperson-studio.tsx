@@ -83,69 +83,6 @@ interface StudioData {
   jobs: Job[];
 }
 
-const PRESET_AVATARS = [
-  {
-    id: "preset-sarah",
-    name: "Sarah Jenkins",
-    role: "Corporate Executive",
-    tagline: "Professional, authoritative & poised",
-    gender: "female",
-    style: "Business / Executive",
-    initials: "SJ",
-    avatarBg: "from-sky-700 to-indigo-900",
-  },
-  {
-    id: "preset-david",
-    name: "David Kim",
-    role: "News Anchor",
-    tagline: "Clear, reliable & journalistic",
-    gender: "male",
-    style: "Broadcast / News",
-    initials: "DK",
-    avatarBg: "from-emerald-700 to-teal-900",
-  },
-  {
-    id: "preset-maya",
-    name: "Maya Patel",
-    role: "Creative Director",
-    tagline: "Dynamic, modern & expressive",
-    gender: "female",
-    style: "Creative & Agency",
-    initials: "MP",
-    avatarBg: "from-purple-700 to-pink-900",
-  },
-  {
-    id: "preset-alex",
-    name: "Alex Rivera",
-    role: "Tech Specialist",
-    tagline: "Approachable, smart & friendly",
-    gender: "male",
-    style: "Tech / Product",
-    initials: "AR",
-    avatarBg: "from-amber-600 to-rose-900",
-  },
-  {
-    id: "preset-elena",
-    name: "Elena Rostova",
-    role: "Keynote Presenter",
-    tagline: "Inspiring, articulate & global",
-    gender: "female",
-    style: "Keynote / Events",
-    initials: "ER",
-    avatarBg: "from-cyan-700 to-blue-950",
-  },
-  {
-    id: "preset-marcus",
-    name: "Marcus Vance",
-    role: "Legal & Compliance",
-    tagline: "Credible, measured & trustworthy",
-    gender: "male",
-    style: "Advisory / Finance",
-    initials: "MV",
-    avatarBg: "from-slate-700 to-zinc-900",
-  },
-];
-
 export function SpokespersonStudio({
   organizationId,
   organizationSlug,
@@ -167,7 +104,6 @@ export function SpokespersonStudio({
   );
   const [avatarAssets, setAvatarAssets] = useState<ReferenceAsset[]>([]);
   const [avatarUploadBusy, setAvatarUploadBusy] = useState(false);
-  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
 
   // Audio Mode: "SCRIPT" | "AUDIO_ASSET"
   const [audioMode, setAudioMode] = useState<"SCRIPT" | "AUDIO_ASSET">(
@@ -362,28 +298,53 @@ export function SpokespersonStudio({
   }, [audioMode, selectedAudioTrack, scriptText, speechRate]);
 
   const creditBreakdown = useMemo(() => {
-    const videoCostPerSec = 63; // 63 credits/second list rate for OmniHuman 1.5
-    const videoCredits = estimatedSeconds * videoCostPerSec;
+    const videoCreditsPerUnit = Math.max(
+      0,
+      Number(omniHumanModel?.credits ?? 0),
+    );
+    const videoUnitQuantity = Math.max(
+      1,
+      Number(omniHumanModel?.unitQuantity ?? 1),
+    );
+    const videoCredits =
+      Math.ceil(estimatedSeconds / videoUnitQuantity) * videoCreditsPerUnit;
 
     let voiceCredits = 0;
-    if (audioMode === "SCRIPT") {
+    if (audioMode === "SCRIPT" && voiceModel) {
       const chars = scriptText.trim().length;
-      // 16 credits per 1,000 characters
-      voiceCredits = Math.ceil((chars / 1000) * 16);
+      const voiceCreditsPerUnit = Math.max(0, Number(voiceModel.credits ?? 0));
+      const voiceUnitQuantity = Math.max(
+        1,
+        Number(voiceModel.unitQuantity ?? 1000),
+      );
+      voiceCredits =
+        Math.ceil(chars / voiceUnitQuantity) * voiceCreditsPerUnit;
     }
 
     const totalCredits = videoCredits + voiceCredits;
     const balanceNum = Number(data?.balance ?? 0);
-    const hasEnoughBalance = balanceNum >= totalCredits;
+    const hasEnoughBalance =
+      Boolean(omniHumanModel) &&
+      (audioMode !== "SCRIPT" || Boolean(voiceModel)) &&
+      balanceNum >= totalCredits;
 
     return {
       videoCredits,
+      videoCreditsPerUnit,
+      videoUnitQuantity,
       voiceCredits,
       totalCredits,
       hasEnoughBalance,
       balance: balanceNum,
     };
-  }, [estimatedSeconds, audioMode, scriptText, data?.balance]);
+  }, [
+    estimatedSeconds,
+    audioMode,
+    scriptText,
+    data?.balance,
+    omniHumanModel,
+    voiceModel,
+  ]);
 
   // Upload Avatar Image
   const handleAvatarUpload = async (file: File) => {
@@ -414,7 +375,6 @@ export function SpokespersonStudio({
       }
       setAvatarAssets((prev) => [json.asset, ...prev]);
       setAvatarAssetId(json.asset.id);
-      setSelectedPresetId(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed.");
     } finally {
@@ -683,8 +643,8 @@ export function SpokespersonStudio({
 
       // Poll until voice job completes to obtain the generated Audio Asset ID
       let createdAudioAssetId: string | null = null;
-      for (let i = 0; i < 30; i++) {
-        await new Promise((r) => setTimeout(r, 1000));
+      for (let i = 0; i < 60; i++) {
+        await new Promise((r) => setTimeout(r, 2000));
         const checkRes = await fetch(
           `/api/generation-jobs/${encodeURIComponent(voiceBody.jobId)}?organizationId=${encodeURIComponent(organizationId)}`,
         );
@@ -701,7 +661,7 @@ export function SpokespersonStudio({
       }
 
       if (!createdAudioAssetId) {
-        throw new Error("Voice synthesis timed out. Please try again.");
+        throw new Error("Voice synthesis is taking unusually long. Please check the generation log before retrying.");
       }
 
       // Step 2: Dispatch OmniHuman 1.5 Video Job with the newly created audio asset!
@@ -862,7 +822,7 @@ export function SpokespersonStudio({
                   No Avatar Portrait Selected
                 </h3>
                 <p className="mt-1 max-w-xs text-xs text-white/60">
-                  Choose a curated spokesperson preset below or upload a
+                  Choose a portrait from your organization library or upload a
                   front-facing portrait photo.
                 </p>
               </div>
@@ -927,40 +887,10 @@ export function SpokespersonStudio({
               </label>
             </div>
 
-            {/* Curated Presets Grid */}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {PRESET_AVATARS.map((preset) => {
-                const isSelected = selectedPresetId === preset.id;
-                return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedPresetId(preset.id);
-                    }}
-                    className={`flex flex-col items-start rounded-2xl border p-3 text-left transition-all ${
-                      isSelected
-                        ? "border-primary bg-primary/5 ring-2 ring-primary/20"
-                        : "border-border bg-card hover:border-border hover:bg-accent/40"
-                    }`}
-                  >
-                    <div
-                      className={`mb-2.5 flex size-12 items-center justify-center rounded-xl bg-gradient-to-br text-base font-bold text-white shadow-xs ${preset.avatarBg}`}
-                    >
-                      {preset.initials}
-                    </div>
-                    <span className="text-xs font-bold text-foreground">
-                      {preset.name}
-                    </span>
-                    <span className="text-[0.6875rem] text-muted-foreground">
-                      {preset.role}
-                    </span>
-                    <span className="mt-1 text-[0.625rem] text-primary">
-                      {preset.style}
-                    </span>
-                  </button>
-                );
-              })}
+            <div className="rounded-2xl border border-dashed border-border bg-surface-sunken p-4 text-xs text-muted-foreground">
+              Use a real portrait from your organization library or upload a new
+              front-facing JPEG/PNG. Curated stock avatars are intentionally not
+              shown until they are backed by licensed source assets.
             </div>
 
             {/* Asset Library Avatars */}
@@ -1293,7 +1223,11 @@ export function SpokespersonStudio({
               <div className="space-y-1 text-xs">
                 <div className="flex items-center justify-between text-muted-foreground">
                   <span>
-                    OmniHuman 1.5 Video ({estimatedSeconds}s @ 63 cr/s)
+                    OmniHuman 1.5 Video ({estimatedSeconds}s @{" "}
+                    {creditBreakdown.videoCreditsPerUnit} cr/
+                    {creditBreakdown.videoUnitQuantity === 1
+                      ? "s"
+                      : `${creditBreakdown.videoUnitQuantity}s`})
                   </span>
                   <span className="font-mono tabular-nums">
                     {creditBreakdown.videoCredits} cr
@@ -1330,6 +1264,8 @@ export function SpokespersonStudio({
                   generationStage === "synthesizing_speech" ||
                   generationStage === "generating_video" ||
                   !creditBreakdown.hasEnoughBalance ||
+                  !omniHumanModel ||
+                  (audioMode === "SCRIPT" && !voiceModel) ||
                   !avatarAssetId
                 }
                 className="w-full gap-2 py-6 text-sm font-bold shadow-md"

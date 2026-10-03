@@ -614,90 +614,48 @@ export function ModelActions({
 
                 {(mediaKind === "TEXT" || mediaKind === "REASONING") &&
                   pricingDimension === "TOKEN" && (
-                  <fieldset className="space-y-3 rounded-xl border border-border p-4">
-                    <legend className="px-1 text-sm font-semibold">
-                      {mediaKind === "REASONING"
-                        ? "Reasoning token rates"
-                        : "Text token rates"}
-                    </legend>
-                    <p className="text-xs text-muted-foreground">
-                      Configure provider micro-USD per 1,000,000 tokens for
-                      prompt, cached prompt and output usage. Add a second tier
-                      when the provider charges more above a context threshold.
-                      {mediaKind === "REASONING"
-                        ? "Prompt Enhance uses these rates for provider-cost observability; workspace credits are not charged by this feature. "
-                        : "Settlement uses the provider-reported token breakdown. "}
-                      This provider publishes{" "}
-                      <code className="font-mono">
-                        {adminTextEstimatorForProvider(provider)}
-                      </code>
-                      .
-                    </p>
-                    {textUsageTiers.map((tier, index) => (
-                      <div
-                        key={index}
-                        className="grid gap-2 rounded-xl bg-surface-sunken/50 p-3 sm:grid-cols-2"
-                      >
-                        <label className="text-xs">
-                          Max prompt tokens
-                          <input
-                            aria-label={`Text tier ${index + 1} max prompt tokens`}
-                            type="number"
-                            min="1"
-                            max="1048576"
-                            required
-                            value={tier.maxPromptTokens}
-                            onChange={(event) =>
-                              setTextUsageTiers((tiers) =>
-                                tiers.map((row, i) =>
-                                  i === index
-                                    ? {
-                                        ...row,
-                                        maxPromptTokens: Number(
-                                          event.target.value,
-                                        ),
-                                      }
-                                    : row,
-                                ),
-                              )
-                            }
-                            className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-2 font-mono"
-                          />
-                        </label>
-                        {(
-                          [
-                            [
-                              "Input / M tokens",
-                              "inputMicroUsdPerMillionTokens",
-                            ],
-                            [
-                              "Cached input / M tokens",
-                              "cachedInputMicroUsdPerMillionTokens",
-                            ],
-                            [
-                              "Output / M tokens",
-                              "outputMicroUsdPerMillionTokens",
-                            ],
-                          ] as const
-                        ).map(([label, key]) => (
-                          <label key={key} className="text-xs">
-                            {label} (micro-USD)
+                    <fieldset className="space-y-3 rounded-xl border border-border p-4">
+                      <legend className="px-1 text-sm font-semibold">
+                        {mediaKind === "REASONING"
+                          ? "Reasoning token rates"
+                          : "Text token rates"}
+                      </legend>
+                      <p className="text-xs text-muted-foreground">
+                        Configure provider micro-USD per 1,000,000 tokens for
+                        prompt, cached prompt and output usage. Add a second
+                        tier when the provider charges more above a context
+                        threshold.
+                        {mediaKind === "REASONING"
+                          ? "Prompt Enhance uses these rates for provider-cost observability; workspace credits are not charged by this feature. "
+                          : "Settlement uses the provider-reported token breakdown. "}
+                        This provider publishes{" "}
+                        <code className="font-mono">
+                          {adminTextEstimatorForProvider(provider)}
+                        </code>
+                        .
+                      </p>
+                      {textUsageTiers.map((tier, index) => (
+                        <div
+                          key={index}
+                          className="grid gap-2 rounded-xl bg-surface-sunken/50 p-3 sm:grid-cols-2"
+                        >
+                          <label className="text-xs">
+                            Max prompt tokens
                             <input
-                              aria-label={`Text tier ${index + 1} ${label}`}
-                              inputMode="numeric"
-                              required={
-                                key !== "cachedInputMicroUsdPerMillionTokens"
-                              }
-                              value={tier[key] ?? ""}
+                              aria-label={`Text tier ${index + 1} max prompt tokens`}
+                              type="number"
+                              min="1"
+                              max="1048576"
+                              required
+                              value={tier.maxPromptTokens}
                               onChange={(event) =>
                                 setTextUsageTiers((tiers) =>
                                   tiers.map((row, i) =>
                                     i === index
                                       ? {
                                           ...row,
-                                          [key]: event.target.value.replace(
-                                            /\D/g,
-                                            "",
+                                          maxPromptTokens: Number(
+                                            event.target.value,
                                           ),
                                         }
                                       : row,
@@ -707,55 +665,98 @@ export function ModelActions({
                               className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-2 font-mono"
                             />
                           </label>
-                        ))}
-                        <div className="sm:col-span-2 flex justify-end">
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            disabled={textUsageTiers.length === 1}
-                            onClick={() =>
-                              setTextUsageTiers((tiers) =>
-                                tiers.filter((_, i) => i !== index),
-                              )
-                            }
-                          >
-                            Remove tier
-                          </Button>
+                          {(
+                            [
+                              [
+                                "Input / M tokens",
+                                "inputMicroUsdPerMillionTokens",
+                              ],
+                              [
+                                "Cached input / M tokens",
+                                "cachedInputMicroUsdPerMillionTokens",
+                              ],
+                              [
+                                "Output / M tokens",
+                                "outputMicroUsdPerMillionTokens",
+                              ],
+                            ] as const
+                          ).map(([label, key]) => (
+                            <label key={key} className="text-xs">
+                              {label} (micro-USD)
+                              <input
+                                aria-label={`Text tier ${index + 1} ${label}`}
+                                inputMode="numeric"
+                                required={
+                                  key !== "cachedInputMicroUsdPerMillionTokens"
+                                }
+                                value={tier[key] ?? ""}
+                                onChange={(event) =>
+                                  setTextUsageTiers((tiers) =>
+                                    tiers.map((row, i) =>
+                                      i === index
+                                        ? {
+                                            ...row,
+                                            [key]: event.target.value.replace(
+                                              /\D/g,
+                                              "",
+                                            ),
+                                          }
+                                        : row,
+                                    ),
+                                  )
+                                }
+                                className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-2 font-mono"
+                              />
+                            </label>
+                          ))}
+                          <div className="sm:col-span-2 flex justify-end">
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              disabled={textUsageTiers.length === 1}
+                              onClick={() =>
+                                setTextUsageTiers((tiers) =>
+                                  tiers.filter((_, i) => i !== index),
+                                )
+                              }
+                            >
+                              Remove tier
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      disabled={textUsageTiers.length >= 4}
-                      onClick={() =>
-                        setTextUsageTiers((tiers) => {
-                          const last = tiers.at(-1);
-                          return [
-                            ...tiers,
-                            {
-                              maxPromptTokens: Math.min(
-                                1_048_576,
-                                Math.max(
-                                  (last?.maxPromptTokens ?? 65536) + 1,
-                                  (last?.maxPromptTokens ?? 65536) * 2,
+                      ))}
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={textUsageTiers.length >= 4}
+                        onClick={() =>
+                          setTextUsageTiers((tiers) => {
+                            const last = tiers.at(-1);
+                            return [
+                              ...tiers,
+                              {
+                                maxPromptTokens: Math.min(
+                                  1_048_576,
+                                  Math.max(
+                                    (last?.maxPromptTokens ?? 65536) + 1,
+                                    (last?.maxPromptTokens ?? 65536) * 2,
+                                  ),
                                 ),
-                              ),
-                              inputMicroUsdPerMillionTokens:
-                                last?.inputMicroUsdPerMillionTokens ?? "",
-                              cachedInputMicroUsdPerMillionTokens:
-                                last?.cachedInputMicroUsdPerMillionTokens,
-                              outputMicroUsdPerMillionTokens:
-                                last?.outputMicroUsdPerMillionTokens ?? "",
-                            },
-                          ];
-                        })
-                      }
-                    >
-                      Add context tier
-                    </Button>
-                  </fieldset>
-                )}
+                                inputMicroUsdPerMillionTokens:
+                                  last?.inputMicroUsdPerMillionTokens ?? "",
+                                cachedInputMicroUsdPerMillionTokens:
+                                  last?.cachedInputMicroUsdPerMillionTokens,
+                                outputMicroUsdPerMillionTokens:
+                                  last?.outputMicroUsdPerMillionTokens ?? "",
+                              },
+                            ];
+                          })
+                        }
+                      >
+                        Add context tier
+                      </Button>
+                    </fieldset>
+                  )}
 
                 {mediaKind === "VIDEO" && pricingDimension === "TOKEN" && (
                   <fieldset className="space-y-3 rounded-xl border border-border p-4">
@@ -927,14 +928,14 @@ export function ModelActions({
                             ? "Calculated from actual input / cache / output tokens"
                             : "Calculated from actual completion tokens; see Studio estimate"
                           : estimatedCredits
-                          ? `${estimatedCredits} credits / ${
-                              pricingDimension === "CHARACTER"
-                                ? `${unitQuantity || "—"} characters`
-                                : pricingDimension === "SECOND"
-                                  ? `${unitQuantity || "—"}s block`
-                                  : "request"
-                            }`
-                          : "Invalid input"}
+                            ? `${estimatedCredits} credits / ${
+                                pricingDimension === "CHARACTER"
+                                  ? `${unitQuantity || "—"} characters`
+                                  : pricingDimension === "SECOND"
+                                    ? `${unitQuantity || "—"}s block`
+                                    : "request"
+                              }`
+                            : "Invalid input"}
                     </span>
                   </div>
                   <div className="mt-1 flex justify-between text-[11px] text-muted-foreground">

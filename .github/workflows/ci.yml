@@ -49,15 +49,7 @@ jobs:
           bash -n infra/deploy/package-release.sh
 
       - name: Check formatting
-        run: |
-          pnpm exec prettier --write \
-            apps/web/src/app/api/chat/threads/[threadId]/route.ts \
-            apps/web/src/components/studio/character-chat-workspace.tsx \
-            docs/studio-model-discovery.md
-          git diff --no-color --exit-code -- \
-            apps/web/src/app/api/chat/threads/[threadId]/route.ts \
-            apps/web/src/components/studio/character-chat-workspace.tsx \
-            docs/studio-model-discovery.md
+        run: pnpm format:check
 
       - name: Lint
         run: pnpm lint

@@ -402,23 +402,29 @@ describe("dual-use reasoning commercialization", () => {
     const env = { GROQ_API_KEY: "groq", GEMINI_API_KEY: "gemini" };
     expect(
       new Set(
-        selectDiscoverableStudioModels(rows, "creative-director", env).models.map(
-          (model) => model.id,
-        ),
+        selectDiscoverableStudioModels(
+          rows,
+          "creative-director",
+          env,
+        ).models.map((model) => model.id),
       ),
     ).toEqual(new Set(["groq-120b", "gemini-38"]));
     expect(
       new Set(
-        selectDiscoverableStudioModels(rows, "story-planning", env).models.map(
-          (model) => model.id,
-        ),
+        selectDiscoverableStudioModels(
+          rows,
+          "story-planning",
+          env,
+        ).models.map((model) => model.id),
       ),
     ).toEqual(new Set(["groq-120b", "gemini-38"]));
     expect(
       new Set(
-        selectDiscoverableStudioModels(rows, "prompt-enhancement", env).models.map(
-          (model) => model.id,
-        ),
+        selectDiscoverableStudioModels(
+          rows,
+          "prompt-enhancement",
+          env,
+        ).models.map((model) => model.id),
       ),
     ).toEqual(new Set(["groq-120b", "gemini-38"]));
   });

@@ -299,7 +299,8 @@ export function ModelActions({
         throw new Error("Margin percentage must be between 0% and 99.99%.");
       }
       const textFallbackCost =
-        mediaKind === "TEXT" && pricingDimension === "TOKEN"
+        (mediaKind === "TEXT" || mediaKind === "REASONING") &&
+        pricingDimension === "TOKEN"
           ? textUsageTiers.reduce((highest, tier) => {
               const outputPerMillion = BigInt(
                 tier.outputMicroUsdPerMillionTokens || "0",
@@ -311,7 +312,8 @@ export function ModelActions({
       const costBigInt = BigInt(
         mediaKind === "VIDEO" && pricingDimension === "TOKEN"
           ? (usageRows[0]?.microUsdPerThousandTokens ?? "0")
-          : mediaKind === "TEXT" && pricingDimension === "TOKEN"
+          : (mediaKind === "TEXT" || mediaKind === "REASONING") &&
+              pricingDimension === "TOKEN"
             ? textFallbackCost.toString()
             : costMicroUsd,
       );
@@ -343,7 +345,8 @@ export function ModelActions({
                 },
               }
             : {}),
-          ...(mediaKind === "TEXT" && pricingDimension === "TOKEN"
+          ...((mediaKind === "TEXT" || mediaKind === "REASONING") &&
+          pricingDimension === "TOKEN"
             ? {
                 usageRates: {
                   estimator: adminTextEstimatorForProvider(provider),
@@ -505,11 +508,12 @@ export function ModelActions({
                     )}
                     {(!mediaKind ||
                       mediaKind === "VIDEO" ||
-                      mediaKind === "TEXT") && (
+                      mediaKind === "TEXT" ||
+                      mediaKind === "REASONING") && (
                       <option value="TOKEN">
-                        {mediaKind === "TEXT"
-                          ? "Per token block"
-                          : "Per completion token"}
+                        {mediaKind === "VIDEO"
+                          ? "Per completion token"
+                          : "Per input / output token"}
                       </option>
                     )}
                     {(!mediaKind || mediaKind === "VIDEO") && (
@@ -608,16 +612,21 @@ export function ModelActions({
                   </div>
                 ) : null}
 
-                {mediaKind === "TEXT" && pricingDimension === "TOKEN" && (
+                {(mediaKind === "TEXT" || mediaKind === "REASONING") &&
+                  pricingDimension === "TOKEN" && (
                   <fieldset className="space-y-3 rounded-xl border border-border p-4">
                     <legend className="px-1 text-sm font-semibold">
-                      Text token rates
+                      {mediaKind === "REASONING"
+                        ? "Reasoning token rates"
+                        : "Text token rates"}
                     </legend>
                     <p className="text-xs text-muted-foreground">
                       Configure provider micro-USD per 1,000,000 tokens for
                       prompt, cached prompt and output usage. Add a second tier
                       when the provider charges more above a context threshold.
-                      Settlement uses the provider-reported token breakdown.
+                      {mediaKind === "REASONING"
+                        ? "Prompt Enhance uses these rates for provider-cost observability; workspace credits are not charged by this feature. "
+                        : "Settlement uses the provider-reported token breakdown. "}
                       This provider publishes{" "}
                       <code className="font-mono">
                         {adminTextEstimatorForProvider(provider)}

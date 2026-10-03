@@ -503,8 +503,8 @@ describe("durable text generation billing", () => {
         data: expect.objectContaining({
           status: "SUCCEEDED",
           chargedCredits: 0n,
-          actualProviderCostMicroUsd: 1_000n,
-          providerCostBasis: "CONFIGURED_RATE",
+          actualProviderCostMicroUsd: 5_000n,
+          providerCostBasis: "PROVIDER_USAGE",
         }),
       }),
     );

@@ -68,13 +68,13 @@ export async function GET(request: Request) {
     availableProviders: {
       googleDriveConfigured: Boolean(
         env.STORAGE_ENCRYPTION_KEY &&
-          env.GOOGLE_DRIVE_CLIENT_ID &&
-          env.GOOGLE_DRIVE_CLIENT_SECRET,
+        env.GOOGLE_DRIVE_CLIENT_ID &&
+        env.GOOGLE_DRIVE_CLIENT_SECRET,
       ),
       oneDriveConfigured: Boolean(
         env.STORAGE_ENCRYPTION_KEY &&
-          env.ONEDRIVE_CLIENT_ID &&
-          env.ONEDRIVE_CLIENT_SECRET,
+        env.ONEDRIVE_CLIENT_ID &&
+        env.ONEDRIVE_CLIENT_SECRET,
       ),
     },
     configs,

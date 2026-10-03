@@ -67,14 +67,13 @@ Reasoning price versions support:
 For token pricing, admission records a conservative cost estimate. Successful
 settlement uses provider-reported input and output tokens when available.
 NVIDIA, Groq and Gemini expose token usage through their OpenAI-compatible
-responses; the Cloudflare adapter normalizes Workers AI `result.usage`.
-Missing or unusable token telemetry does not discard a successful enhancement:
-the job succeeds with `USAGE_UNAVAILABLE` cost basis and no invented actual
-cost.
+responses; the Cloudflare adapter normalizes Workers AI `result.usage`. Missing
+or unusable token telemetry does not discard a successful enhancement: the job
+succeeds with `USAGE_UNAVAILABLE` cost basis and no invented actual cost.
 
 Provider-cost micro-USD fields are returned only to platform roles with
-`payments:read`. The creator-facing status includes the exact provider and
-model used, token usage, and output, but not commercial cost internals.
+`payments:read`. The creator-facing status includes the exact provider and model
+used, token usage, and output, but not commercial cost internals.
 
 ## Durable lifecycle
 

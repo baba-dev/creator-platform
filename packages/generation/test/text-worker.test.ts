@@ -378,7 +378,9 @@ describe("durable text generation billing", () => {
 
   it.each([
     ["groq", "openai/gpt-oss-20b"],
+    ["groq", "openai/gpt-oss-120b"],
     ["gemini", "gemini-3.5-flash-lite"],
+    ["gemini", "gemini-3.8-flash"],
     ["cloudflare", "@cf/meta/llama-3.3-70b-instruct-fp8-fast"],
   ])(
     "settles %s text generation from provider-reported usage",

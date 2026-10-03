@@ -191,14 +191,14 @@ Both estimators store integer micro-USD rates per 1,000,000 input, cached-input
 and output tokens. The generic `text-token-v1` policy is provider-neutral; it
 does not reuse BytePlus video or text estimator labels.
 
-The admin pricing editor reloads either text estimator from the current immutable
-price snapshot. Republishing an external text price always writes
+The admin pricing editor reloads either text estimator from the current
+immutable price snapshot. Republishing an external text price always writes
 `text-token-v1`. Server publication and model-enable paths reject an estimator
 that does not match the model provider.
 
 Quotes expose the estimator recorded in the active price version rather than a
-hard-coded BytePlus estimator name. Text quote usage is labelled `TOKEN`
-because the estimate contains prompt plus requested completion tokens.
+hard-coded BytePlus estimator name. Text quote usage is labelled `TOKEN` because
+the estimate contains prompt plus requested completion tokens.
 
 Settlement continues to use the job's immutable price snapshot and
 provider-reported token usage. Groq and Gemini OpenAI-compatible usage and
@@ -206,4 +206,3 @@ Cloudflare Workers AI `result.usage` are normalized to prompt, completion and
 total tokens before settlement. If reliable token usage is unavailable, the
 existing conservative reservation fallback remains in effect; the platform does
 not invent token counts.
-

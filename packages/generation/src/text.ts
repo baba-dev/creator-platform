@@ -415,7 +415,9 @@ export async function createTextJob(
             messages,
             temperature: input.temperature,
             maxTokens: input.maxTokens,
-            responseFormat: input.responseFormat,
+            ...(input.responseFormat === "json_object"
+              ? { responseFormat: "json_object" }
+              : {}),
             sponsored,
             clientRequestHash: requestFingerprint(input),
           } as unknown as Prisma.InputJsonObject,

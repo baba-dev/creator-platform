@@ -10,9 +10,7 @@ describe("admin model pricing helpers", () => {
     expect(adminTextEstimatorForProvider("GROQ")).toBe("text-token-v1");
     expect(adminTextEstimatorForProvider("GEMINI")).toBe("text-token-v1");
     expect(adminTextEstimatorForProvider("CLOUDFLARE")).toBe("text-token-v1");
-    expect(adminTextEstimatorForProvider("BYTEPLUS")).toBe(
-      "byteplus-text-v1",
-    );
+    expect(adminTextEstimatorForProvider("BYTEPLUS")).toBe("byteplus-text-v1");
   });
 
   it("loads existing external text-token-v1 tiers without replacing them", () => {

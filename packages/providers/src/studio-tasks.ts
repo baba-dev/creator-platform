@@ -36,8 +36,7 @@ export const STUDIO_TASK_DEFAULT_PROVIDER_MODEL_IDS: Readonly<
   scriptwriting: "seed-2-0-lite-260428",
   "brand-strategy": "seed-2-0-pro-260328",
   "story-planning": "dola-seed-2-1-turbo-260628",
-  "prompt-enhancement":
-    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+  "prompt-enhancement": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
   "speech-synthesis": "seed-tts-2.0",
   "image-generation": "seedream-5-0-260128",
 };
@@ -79,19 +78,15 @@ const LEGACY_CAPABILITIES: Readonly<
   transcription: ["transcription"],
 };
 
-const VERIFIED_TASK_OVERRIDES: Readonly<
-  Record<string, readonly StudioTask[]>
-> = {
-  "byteplus:dola-seed-2-1-turbo-260628": [
-    "creative-director",
-    "story-planning",
-  ],
-  "byteplus:seed-2-0-pro-260328": [
-    "creative-director",
-    "brand-strategy",
-  ],
-  "byteplus:seed-tts-2.0": ["speech-synthesis"],
-};
+const VERIFIED_TASK_OVERRIDES: Readonly<Record<string, readonly StudioTask[]>> =
+  {
+    "byteplus:dola-seed-2-1-turbo-260628": [
+      "creative-director",
+      "story-planning",
+    ],
+    "byteplus:seed-2-0-pro-260328": ["creative-director", "brand-strategy"],
+    "byteplus:seed-tts-2.0": ["speech-synthesis"],
+  };
 
 function normalizeProvider(value: string): string {
   return value.trim().toLowerCase();

@@ -63,6 +63,16 @@ describe("canonical Studio model resolution", () => {
             id: "price-1",
             pricingDimension: "TOKEN",
             unitQuantity: 1000,
+            usageRates: {
+              estimator: "text-token-v1",
+              tiers: [
+                {
+                  maxPromptTokens: 131072,
+                  inputMicroUsdPerMillionTokens: "1000000",
+                  outputMicroUsdPerMillionTokens: "2000000",
+                },
+              ],
+            },
           },
         ],
       },

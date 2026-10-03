@@ -118,6 +118,19 @@ export async function POST(request: Request) {
   }
 
   if (provider !== "LOCAL") {
+    const env = parseServerEnv();
+    const serverReady =
+      Boolean(env.STORAGE_ENCRYPTION_KEY) &&
+      (provider === "GOOGLE_DRIVE"
+        ? Boolean(env.GOOGLE_DRIVE_CLIENT_ID && env.GOOGLE_DRIVE_CLIENT_SECRET)
+        : Boolean(env.ONEDRIVE_CLIENT_ID && env.ONEDRIVE_CLIENT_SECRET));
+    if (!serverReady) {
+      return NextResponse.json(
+        { error: `Cannot switch to ${provider}: server integration is not configured.` },
+        { status: 503 },
+      );
+    }
+
     const config = await db.externalStorageConfig.findUnique({
       where: {
         organizationId_provider: {

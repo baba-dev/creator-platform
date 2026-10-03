@@ -178,3 +178,32 @@ Provider-native layer decomposition is not priced through the normal image
 generation estimator because it has separate per-layer billing and variable
 output cardinality. It must use a dedicated quote/reserve/settle contract before
 being enabled.
+
+## External text provider pricing
+
+Token-priced text models use provider-family estimator identifiers so a price
+snapshot cannot be accidentally published with BytePlus semantics:
+
+- BytePlus TEXT: `byteplus-text-v1`
+- Groq, Gemini and Cloudflare TEXT: `text-token-v1`
+
+Both estimators store integer micro-USD rates per 1,000,000 input, cached-input
+and output tokens. The generic `text-token-v1` policy is provider-neutral; it
+does not reuse BytePlus video or text estimator labels.
+
+The admin pricing editor reloads either text estimator from the current immutable
+price snapshot. Republishing an external text price always writes
+`text-token-v1`. Server publication and model-enable paths reject an estimator
+that does not match the model provider.
+
+Quotes expose the estimator recorded in the active price version rather than a
+hard-coded BytePlus estimator name. Text quote usage is labelled `TOKEN`
+because the estimate contains prompt plus requested completion tokens.
+
+Settlement continues to use the job's immutable price snapshot and
+provider-reported token usage. Groq and Gemini OpenAI-compatible usage and
+Cloudflare Workers AI `result.usage` are normalized to prompt, completion and
+total tokens before settlement. If reliable token usage is unavailable, the
+existing conservative reservation fallback remains in effect; the platform does
+not invent token counts.
+

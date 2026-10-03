@@ -12,6 +12,10 @@ import { Eyebrow } from "@/components/ui/creative";
 import { StatusDot, Tape } from "@/components/ui/sketch";
 import { AudioWaveformPlayer } from "@/components/ui/audio-waveform-player";
 import { VoiceCastingBooth } from "@/components/ui/voice-casting-booth";
+import {
+  StudioModelSelect,
+  type StudioModelOption,
+} from "@/components/studio/studio-model-select";
 import { announceGenerationStarted } from "@/lib/generation-activity";
 import {
   capabilityValues,
@@ -152,12 +156,16 @@ export function GenerationStudio({
   organizationSlug,
   variant = "advanced",
   initialMode = "IMAGE",
+  promptEnhancementModels = [],
+  promptEnhancementDefaultModelId = null,
 }: {
   canGenerate: boolean;
   organizationId: string;
   organizationSlug: string;
   variant?: "quick" | "advanced";
   initialMode?: MediaKind;
+  promptEnhancementModels?: StudioModelOption[];
+  promptEnhancementDefaultModelId?: string | null;
 }) {
   const [data, setData] = useState<Studio | null>(null);
   const [activeMode, setActiveMode] = useState<MediaKind>(initialMode);
@@ -223,6 +231,13 @@ export function GenerationStudio({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEnhancing, setIsEnhancing] = useState(false);
+  const [promptEnhancementModelId, setPromptEnhancementModelId] = useState(
+    promptEnhancementDefaultModelId ?? promptEnhancementModels[0]?.id ?? "",
+  );
+  const [enhancementAttribution, setEnhancementAttribution] = useState<{
+    name: string;
+    provider: string;
+  } | null>(null);
   const consumedTemplateHandoff = useRef<string | null>(null);
   const attempt = useRef<{ fingerprint: string; key: string } | null>(null);
   const enhancementAttempt = useRef<{

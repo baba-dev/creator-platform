@@ -7,6 +7,7 @@ import {
 
 describe("admin model pricing helpers", () => {
   it("uses generic text-token-v1 for external providers", () => {
+    expect(adminTextEstimatorForProvider("NVIDIA")).toBe("text-token-v1");
     expect(adminTextEstimatorForProvider("GROQ")).toBe("text-token-v1");
     expect(adminTextEstimatorForProvider("GEMINI")).toBe("text-token-v1");
     expect(adminTextEstimatorForProvider("CLOUDFLARE")).toBe("text-token-v1");

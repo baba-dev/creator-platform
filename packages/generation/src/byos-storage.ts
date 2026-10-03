@@ -53,6 +53,14 @@ export async function storeGeneratedMedia(input: {
     };
   }
 
+  // Persist the canonical object first. Derivatives are best-effort and must
+  // never exist as the only surviving representation of a failed generation.
+  const stored = await targetStorage.put(
+    input.objectKey,
+    input.bytes,
+    input.mimeType,
+  );
+
   // Hybrid Approach C: Generate lightweight derivatives locally on platform storage
   let calculatedWidth = input.width;
   let calculatedHeight = input.height;
@@ -95,13 +103,6 @@ export async function storeGeneratedMedia(input: {
       // Derivative generation non-fatal
     }
   }
-
-  // Stream heavy canonical original directly to User's BYOS (Google Drive / OneDrive Creators-Data folder)
-  const stored = await targetStorage.put(
-    input.objectKey,
-    input.bytes,
-    input.mimeType,
-  );
 
   return {
     byteSize: stored.byteSize,

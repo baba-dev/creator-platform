@@ -379,7 +379,9 @@ export function CharacterChatWorkspace({
     }
 
     const modelToUse =
-      usePersonaDefault && targetPersona ? targetPersona.modelId : selectedModel;
+      usePersonaDefault && targetPersona
+        ? targetPersona.modelId
+        : selectedModel;
     if (!modelToUse) {
       setErrorMessage(
         "No Character Chat model is currently available. Ask an administrator to enable, price, and configure one.",
@@ -420,7 +422,9 @@ export function CharacterChatWorkspace({
       setMessages([]);
     } catch (err) {
       setErrorMessage(
-        err instanceof Error ? err.message : "Could not start the conversation.",
+        err instanceof Error
+          ? err.message
+          : "Could not start the conversation.",
       );
     }
   }
@@ -653,7 +657,8 @@ export function CharacterChatWorkspace({
           <div className="flex items-center gap-2">
             <Eyebrow>Multi-provider Text Studio</Eyebrow>
             <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-bold text-primary">
-              {textModels.length} {textModels.length === 1 ? "model" : "models"} ready
+              {textModels.length} {textModels.length === 1 ? "model" : "models"}{" "}
+              ready
             </span>
           </div>
           <h1 className="font-display mt-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
@@ -848,8 +853,7 @@ export function CharacterChatWorkspace({
                     {selectedPersona.name}
                   </h3>
                   <p className="text-xs text-muted-foreground">
-                    {selectedPersona.description ||
-                      "AI character intelligence"}
+                    {selectedPersona.description || "AI character intelligence"}
                   </p>
                 </div>
               </div>
@@ -1028,8 +1032,7 @@ export function CharacterChatWorkspace({
                   Generating response via{" "}
                   {textModels.find(
                     (model) =>
-                      model.id ===
-                      (activeThreadModelId ?? selectedModel),
+                      model.id === (activeThreadModelId ?? selectedModel),
                   )?.name ?? "selected model"}
                   ...
                 </div>

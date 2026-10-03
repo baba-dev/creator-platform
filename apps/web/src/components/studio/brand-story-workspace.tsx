@@ -6,6 +6,10 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { CreativeSurface, Eyebrow } from "@/components/ui/creative";
 import { Icon } from "@/components/ui/icon";
+import {
+  StudioModelSelect,
+  type StudioModelOption,
+} from "@/components/studio/studio-model-select";
 import { runQuotedTextFeature } from "@/lib/text-feature-client";
 
 interface BrandProfile {
@@ -50,10 +54,18 @@ export function BrandStoryWorkspace({
   organizationSlug,
   organizationId,
   canGenerate,
+  brandDefaultModelId,
+  brandModels,
+  storyDefaultModelId,
+  storyModels,
 }: {
   organizationSlug: string;
   organizationId: string;
   canGenerate: boolean;
+  brandDefaultModelId: string | null;
+  brandModels: StudioModelOption[];
+  storyDefaultModelId: string | null;
+  storyModels: StudioModelOption[];
 }) {
   const [activeTab, setActiveTab] = useState<"brand" | "story">("brand");
 
@@ -61,6 +73,9 @@ export function BrandStoryWorkspace({
   const [brandProfiles, setBrandProfiles] = useState<BrandProfile[]>([]);
   const [selectedBrand, setSelectedBrand] = useState<BrandProfile | null>(null);
   const [isGeneratingBrand, setIsGeneratingBrand] = useState(false);
+  const [selectedBrandModel, setSelectedBrandModel] = useState(
+    brandDefaultModelId ?? brandModels[0]?.id ?? "",
+  );
   const [brandForm, setBrandForm] = useState({
     name: "",
     industry: "",
@@ -72,6 +87,9 @@ export function BrandStoryWorkspace({
   const [storyPlans, setStoryPlans] = useState<StoryPlan[]>([]);
   const [selectedStory, setSelectedStory] = useState<StoryPlan | null>(null);
   const [isGeneratingStory, setIsGeneratingStory] = useState(false);
+  const [selectedStoryModel, setSelectedStoryModel] = useState(
+    storyDefaultModelId ?? storyModels[0]?.id ?? "",
+  );
   const [storyForm, setStoryForm] = useState({
     title: "",
     premise: "",
@@ -118,7 +136,8 @@ export function BrandStoryWorkspace({
 
   async function handleGenerateBrand(e: React.FormEvent) {
     e.preventDefault();
-    if (!brandForm.name.trim() || isGeneratingBrand) return;
+    if (!brandForm.name.trim() || isGeneratingBrand || !selectedBrandModel)
+      return;
 
     setIsGeneratingBrand(true);
     setStatusNotice(null);
@@ -138,6 +157,7 @@ export function BrandStoryWorkspace({
         industry: brandForm.industry || undefined,
         vision: brandForm.vision || undefined,
         targetMarket: brandForm.targetMarket || undefined,
+        modelId: selectedBrandModel,
       });
       const generated = data.profile;
 
@@ -177,7 +197,8 @@ export function BrandStoryWorkspace({
     if (
       !storyForm.title.trim() ||
       !storyForm.premise.trim() ||
-      isGeneratingStory
+      isGeneratingStory ||
+      !selectedStoryModel
     )
       return;
 
@@ -194,6 +215,7 @@ export function BrandStoryWorkspace({
         premise: storyForm.premise,
         genre: storyForm.genre,
         structureType: storyForm.structureType,
+        modelId: selectedStoryModel,
       });
 
       // Save story plan
@@ -235,7 +257,7 @@ export function BrandStoryWorkspace({
           <div className="flex items-center gap-2">
             <Eyebrow>Brand Strategy & Narrative Architecture</Eyebrow>
             <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-bold text-primary">
-              Seed 2.0 Pro & Turbo
+              Task-aware model routing
             </span>
           </div>
           <h1 className="font-display mt-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
@@ -406,14 +428,30 @@ export function BrandStoryWorkspace({
 
           {/* AI Brand Strategist Generator */}
           <div className="rounded-2xl border border-border bg-card p-5 shadow-xs overflow-y-auto">
-            <Eyebrow>Seed 2.0 Pro Architect</Eyebrow>
+            <Eyebrow>Brand Strategy Model</Eyebrow>
             <h3 className="font-display mt-2 text-base font-bold text-foreground">
               Generate Brand Voice
             </h3>
             <p className="mt-1 text-xs text-muted-foreground">
-              Deep reasoning model designs tagline, tone, audience, and key
-              vocabulary.
+              Generate structured brand voice, audience, messaging, and
+              vocabulary with a verified strategy model.
             </p>
+
+            <div className="mt-4">
+              <label className="block text-xs font-semibold text-foreground">
+                Strategy Model
+              </label>
+              <StudioModelSelect
+                models={brandModels}
+                value={selectedBrandModel}
+                onChange={(value) => {
+                  setSelectedBrandModel(value);
+                  setStatusNotice(null);
+                }}
+                ariaLabel="Brand strategy model"
+                className="mt-1 w-full"
+              />
+            </div>
 
             <form onSubmit={handleGenerateBrand} className="mt-4 space-y-3">
               <div>
@@ -482,12 +520,13 @@ export function BrandStoryWorkspace({
                 size="sm"
                 className="w-full"
                 disabled={
-                  !brandForm.name.trim() || isGeneratingBrand || !canGenerate
+                  !brandForm.name.trim() ||
+                  isGeneratingBrand ||
+                  !canGenerate ||
+                  !selectedBrandModel
                 }
               >
-                {isGeneratingBrand
-                  ? "Strategizing..."
-                  : "Generate with Seed 2.0 Pro"}
+                {isGeneratingBrand ? "Strategizing..." : "Generate Brand Voice"}
               </Button>
             </form>
           </div>
@@ -658,14 +697,30 @@ export function BrandStoryWorkspace({
 
           {/* AI Story Architect Generator */}
           <div className="rounded-2xl border border-border bg-card p-5 shadow-xs overflow-y-auto">
-            <Eyebrow>Dola Seed 2.1 Architect</Eyebrow>
+            <Eyebrow>Story Planning Model</Eyebrow>
             <h3 className="font-display mt-2 text-base font-bold text-foreground">
               Generate Story Beats
             </h3>
             <p className="mt-1 text-xs text-muted-foreground">
-              Transforms your core premise into a full act structure and
-              character ensemble.
+              Transform a premise into a structured act outline and character
+              ensemble with a verified story-planning model.
             </p>
+
+            <div className="mt-4">
+              <label className="block text-xs font-semibold text-foreground">
+                Story Model
+              </label>
+              <StudioModelSelect
+                models={storyModels}
+                value={selectedStoryModel}
+                onChange={(value) => {
+                  setSelectedStoryModel(value);
+                  setStatusNotice(null);
+                }}
+                ariaLabel="Story planning model"
+                className="mt-1 w-full"
+              />
+            </div>
 
             <form onSubmit={handleGenerateStory} className="mt-4 space-y-3">
               <div>
@@ -752,7 +807,8 @@ export function BrandStoryWorkspace({
                   !storyForm.title.trim() ||
                   !storyForm.premise.trim() ||
                   isGeneratingStory ||
-                  !canGenerate
+                  !canGenerate ||
+                  !selectedStoryModel
                 }
               >
                 {isGeneratingStory

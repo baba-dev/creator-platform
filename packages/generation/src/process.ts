@@ -624,8 +624,12 @@ export async function processVideoPollJob(
   let storedVideo: Awaited<ReturnType<typeof storeVideo>>;
   try {
     const bytes = await downloadVideo(result.outputUrls[0]!);
-    const videoAssetForStorage = await db.asset.findUniqueOrThrow({
-      where: { objectKey: videoObjectKey },
+    const videoAssetForStorage = await db.asset.findFirstOrThrow({
+      where: {
+        generationJobId: id,
+        objectKey: videoObjectKey,
+        mediaKind: "VIDEO",
+      },
       select: { id: true },
     });
     storedVideo = await storeVideo(
@@ -1483,8 +1487,12 @@ export async function processVoiceJob(
   }
   let stored: Awaited<ReturnType<typeof storeAudio>> | null = null;
   let lastStorageError: unknown = null;
-  const voiceAssetForStorage = await db.asset.findUniqueOrThrow({
-    where: { objectKey: `${id}.mp3` },
+  const voiceAssetForStorage = await db.asset.findFirstOrThrow({
+    where: {
+      generationJobId: id,
+      objectKey: `${id}.mp3`,
+      mediaKind: "AUDIO",
+    },
     select: { id: true },
   });
 

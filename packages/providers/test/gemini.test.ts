@@ -72,12 +72,17 @@ describe("createGeminiProvider", () => {
       idempotencyKey: "gemini-key-1",
       modelId: "gemini-3.5-flash-lite",
       messages: [{ role: "user", content: "Inspire me" }],
+      responseFormat: "json_object",
     });
 
     expect(result.content).toBe(
       "Structured creative advice from Gemini Flash.",
     );
     expect(result.usage?.totalTokens).toBe(42);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      response_format: { type: "json_object" },
+    });
   });
 
   it("completes a structured reasoning request", async () => {

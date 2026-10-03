@@ -51,7 +51,10 @@ export async function GET(request: Request) {
     !env.ONEDRIVE_CLIENT_SECRET
   ) {
     return NextResponse.json(
-      { error: "OneDrive OAuth or storage encryption is not configured on the server." },
+      {
+        error:
+          "OneDrive OAuth or storage encryption is not configured on the server.",
+      },
       { status: 503 },
     );
   }

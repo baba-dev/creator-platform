@@ -214,6 +214,7 @@ export async function POST(request: Request) {
       },
     });
 
+    const discovery = await getAvailableStudioModels("character-chat");
     return NextResponse.json(
       {
         thread: {
@@ -222,7 +223,7 @@ export async function POST(request: Request) {
           modelAvailable: true,
           modelReference: "CANONICAL",
           providerModelRecordId: undefined,
-          persona: serializePersona(thread.persona, [selectedModel]),
+          persona: serializePersona(thread.persona, discovery.models),
         },
       },
       { status: 201 },

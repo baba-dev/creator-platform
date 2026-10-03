@@ -14,6 +14,7 @@ if (process.env.NODE_ENV !== "production") {
 
 export {
   Prisma,
+  PrismaClient,
   PaymentStatus,
   PaymentMethod,
   LedgerEntryType,
@@ -24,6 +25,10 @@ export {
   MediaKind,
   ModelProvider,
   GenerationTemplateStatus,
+  AssetStorageProvider,
+  AssetStatus,
+  AssetMediaKind,
+  AssetSourceType,
 } from "@prisma/client";
 
 export type {
@@ -43,4 +48,5 @@ export type {
   TwoFactor,
   User,
   Wallet,
+  ExternalStorageConfig,
 } from "@prisma/client";

@@ -15,6 +15,7 @@ import { createReadStream } from "node:fs";
 export interface StoredAssetObject {
   readonly byteSize: bigint;
   readonly sha256: string;
+  readonly externalFileId?: string;
 }
 
 export interface AssetObjectStat {
@@ -23,11 +24,20 @@ export interface AssetObjectStat {
 
 export interface AssetStorage {
   readonly provider: "LOCAL" | "S3" | "GOOGLE_DRIVE" | "ONEDRIVE";
-  put(objectKey: string, bytes: Buffer): Promise<StoredAssetObject>;
-  read(objectKey: string): Promise<Buffer>;
-  readRange(objectKey: string, start: number, end: number): Promise<Buffer>;
-  stat(objectKey: string): Promise<AssetObjectStat>;
-  delete(objectKey: string): Promise<void>;
+  put(
+    objectKey: string,
+    bytes: Buffer,
+    mimeType?: string,
+  ): Promise<StoredAssetObject>;
+  read(objectKey: string, externalFileId?: string): Promise<Buffer>;
+  readRange(
+    objectKey: string,
+    start: number,
+    end: number,
+    externalFileId?: string,
+  ): Promise<Buffer>;
+  stat(objectKey: string, externalFileId?: string): Promise<AssetObjectStat>;
+  delete(objectKey: string, externalFileId?: string): Promise<void>;
 }
 
 /**
@@ -169,3 +179,7 @@ export class LocalAssetStorage implements AssetStorage {
     await rm(this.path(objectKey), { force: true });
   }
 }
+
+export * from "./byos/google-drive";
+export * from "./byos/onedrive";
+export * from "./byos/resolver";

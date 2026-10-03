@@ -202,6 +202,7 @@ model User {
   scripts                Script[]
   brandProfiles          BrandProfile[]
   storyPlans             StoryPlan[]
+  externalStorageConfigs ExternalStorageConfig[]
 
   @@index([platformRole, disabledAt])
 }
@@ -310,6 +311,8 @@ model Organization {
   scripts                Script[]
   brandProfiles          BrandProfile[]
   storyPlans             StoryPlan[]
+  defaultStorageProvider AssetStorageProvider     @default(LOCAL)
+  externalStorageConfigs ExternalStorageConfig[]
 
   @@index([status])
   @@index([ownerUserId])
@@ -564,6 +567,7 @@ model Asset {
   name                  String?
   originalFilename      String?
   objectKey             String                 @unique
+  externalFileId        String?
   mimeType              String
   byteSize              BigInt
   sha256                String?
@@ -1089,3 +1093,27 @@ model StoryPlan {
 
   @@index([organizationId, updatedAt])
 }
+
+model ExternalStorageConfig {
+  id                    String               @id @default(cuid())
+  organizationId        String
+  userId                String?
+  provider              AssetStorageProvider
+  status                String               @default("ACTIVE")
+  accountEmail          String?
+  rootFolderId          String
+  rootFolderName        String               @default("Creators-Data")
+  encryptedRefreshToken String               @db.Text
+  encryptedAccessToken  String?              @db.Text
+  accessTokenExpiresAt  DateTime?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  organization          Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user                  User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, provider])
+  @@index([organizationId])
+  @@index([userId])
+}
+

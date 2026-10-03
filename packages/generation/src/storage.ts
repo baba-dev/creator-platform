@@ -1,6 +1,9 @@
 import { withMediaCapacity } from "@aiwa/assets/media-capacity";
 import { createHash, randomUUID } from "node:crypto";
-import { LocalAssetStorage } from "@aiwa/assets/storage";
+import {
+  LocalAssetStorage,
+  resolveAssetStorageForAsset,
+} from "@aiwa/assets/storage";
 import { lookup } from "node:dns/promises";
 import {
   mkdir,
@@ -16,6 +19,9 @@ import { BlockList, isIP } from "node:net";
 import { isAbsolute, resolve } from "node:path";
 import sharp, { type Metadata } from "sharp";
 import { MAX_AUDIO_BYTES, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES } from "./index";
+import { storeGeneratedMedia } from "./byos-storage";
+import { parseServerEnv } from "@aiwa/config";
+import { db } from "@aiwa/db";
 
 const MAX_REDIRECTS = 3;
 const DOWNLOAD_TIMEOUT_MS = 120_000;
@@ -541,9 +547,11 @@ async function validateReferenceImageInner(
 }
 
 export async function referenceImageDataUri(input: {
+  organizationId?: string;
   objectKey: string;
   mimeType: string;
   storageProvider: string;
+  externalFileId?: string | null;
 }): Promise<string> {
   if (!["image/jpeg", "image/png", "image/webp"].includes(input.mimeType)) {
     throw new ImageStorageError(
@@ -551,22 +559,40 @@ export async function referenceImageDataUri(input: {
       "Reference asset has an unsupported media type.",
     );
   }
-  if (input.storageProvider !== "LOCAL") {
-    throw new ImageStorageError(
-      "IMAGE_OUTPUT_CONTENT_TYPE",
-      "Reference asset storage provider is not supported for generation yet.",
-    );
-  }
-  const root = process.env.ASSET_STORAGE_ROOT;
-  if (!root) {
-    throw new ImageStorageError(
-      "STORAGE_WRITE_FAILED",
-      "Asset storage root is not configured.",
-    );
-  }
+
   let bytes: Buffer;
   try {
-    bytes = await new LocalAssetStorage(root).read(input.objectKey);
+    if (input.storageProvider === "LOCAL") {
+      const root = process.env.ASSET_STORAGE_ROOT;
+      if (!root) {
+        throw new Error("Asset storage root is not configured.");
+      }
+      bytes = await new LocalAssetStorage(root).read(input.objectKey);
+    } else {
+      if (!input.organizationId) {
+        throw new Error("Reference asset organization is missing.");
+      }
+      const env = parseServerEnv();
+      const storage = await resolveAssetStorageForAsset(
+        db,
+        {
+          organizationId: input.organizationId,
+          storageProvider: input.storageProvider,
+        },
+        {
+          storageRoot: env.ASSET_STORAGE_ROOT,
+          encryptionKey: env.STORAGE_ENCRYPTION_KEY,
+          googleClientId: env.GOOGLE_DRIVE_CLIENT_ID,
+          googleClientSecret: env.GOOGLE_DRIVE_CLIENT_SECRET,
+          onedriveClientId: env.ONEDRIVE_CLIENT_ID,
+          onedriveClientSecret: env.ONEDRIVE_CLIENT_SECRET,
+        },
+      );
+      bytes = await storage.read(
+        input.objectKey,
+        input.externalFileId ?? undefined,
+      );
+    }
   } catch (error) {
     throw new ImageStorageError(
       "STORAGE_WRITE_FAILED",
@@ -574,6 +600,7 @@ export async function referenceImageDataUri(input: {
       { cause: error },
     );
   }
+
   if (bytes.byteLength <= 0 || bytes.byteLength > MAX_REFERENCE_IMAGE_BYTES) {
     throw new ImageStorageError(
       "IMAGE_OUTPUT_TOO_LARGE",
@@ -583,7 +610,32 @@ export async function referenceImageDataUri(input: {
   return `data:${input.mimeType};base64,${bytes.toString("base64")}`;
 }
 
-export async function storeImage(key: string, bytes: Buffer) {
+export async function storeImage(
+  key: string,
+  bytes: Buffer,
+  organizationId?: string,
+  assetId?: string,
+) {
+  if (organizationId) {
+    if (!assetId) {
+      throw new ImageStorageError(
+        "STORAGE_WRITE_FAILED",
+        "Asset id is required for organization-scoped storage.",
+      );
+    }
+    return storeGeneratedMedia({
+      organizationId,
+      assetId,
+      objectKey: key,
+      bytes,
+      mimeType:
+        key.endsWith(".jpg") || key.endsWith(".jpeg")
+          ? "image/jpeg"
+          : "image/png",
+      mediaKind: "IMAGE",
+    });
+  }
+
   const path = storagePath(key);
   const temporary = `${path}.${randomUUID()}.tmp`;
 
@@ -803,7 +855,29 @@ export async function downloadVideo(urlString: string) {
   return bytes;
 }
 
-export async function storeVideo(key: string, bytes: Buffer) {
+export async function storeVideo(
+  key: string,
+  bytes: Buffer,
+  organizationId?: string,
+  assetId?: string,
+) {
+  if (organizationId) {
+    if (!assetId) {
+      throw new ImageStorageError(
+        "STORAGE_WRITE_FAILED",
+        "Asset id is required for organization-scoped storage.",
+      );
+    }
+    return storeGeneratedMedia({
+      organizationId,
+      assetId,
+      objectKey: key,
+      bytes,
+      mimeType: "video/mp4",
+      mediaKind: "VIDEO",
+    });
+  }
+
   const path = storagePath(key);
   const temporary = `${path}.${randomUUID()}.tmp`;
 
@@ -904,8 +978,30 @@ export function validateMp3Bytes(bytes: Buffer): { durationMs: number | null } {
   return { durationMs: null };
 }
 
-export async function storeAudio(key: string, bytes: Buffer) {
+export async function storeAudio(
+  key: string,
+  bytes: Buffer,
+  organizationId?: string,
+  assetId?: string,
+) {
   validateMp3Bytes(bytes);
+  if (organizationId) {
+    if (!assetId) {
+      throw new ImageStorageError(
+        "STORAGE_WRITE_FAILED",
+        "Asset id is required for organization-scoped storage.",
+      );
+    }
+    return storeGeneratedMedia({
+      organizationId,
+      assetId,
+      objectKey: key,
+      bytes,
+      mimeType: "audio/mpeg",
+      mediaKind: "AUDIO",
+    });
+  }
+
   const path = storagePath(key);
   const temporary = `${path}.${randomUUID()}.tmp`;
 

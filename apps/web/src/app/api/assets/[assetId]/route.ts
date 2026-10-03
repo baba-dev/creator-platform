@@ -1,4 +1,9 @@
 import { normalizeAssetName, normalizeTagName } from "@aiwa/assets";
+import {
+  resolveAssetStorageForAsset,
+  OneDriveAssetStorage,
+} from "@aiwa/assets/storage";
+import { parseServerEnv } from "@aiwa/config";
 import { db } from "@aiwa/db";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -57,37 +62,102 @@ export async function GET(
     });
 
     if (isMedia) headers.set("Accept-Ranges", "bytes");
-    if (range) {
-      const byteSize = await storedAssetSize(asset.objectKey);
-      const match = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
-      if (!match) {
-        headers.set("Content-Range", `bytes */${byteSize}`);
-        return new Response(null, { status: 416, headers });
+
+    if (asset.storageProvider !== "LOCAL") {
+      const env = parseServerEnv();
+      const storage = await resolveAssetStorageForAsset(db, asset, {
+        storageRoot: env.ASSET_STORAGE_ROOT,
+        encryptionKey: env.STORAGE_ENCRYPTION_KEY,
+        googleClientId: env.GOOGLE_DRIVE_CLIENT_ID,
+        googleClientSecret: env.GOOGLE_DRIVE_CLIENT_SECRET,
+        onedriveClientId: env.ONEDRIVE_CLIENT_ID,
+        onedriveClientSecret: env.ONEDRIVE_CLIENT_SECRET,
+      });
+
+      if (storage instanceof OneDriveAssetStorage) {
+        const directUrl = await storage.getDirectDownloadUrl(
+          asset.objectKey,
+          asset.externalFileId ?? undefined,
+        );
+        if (directUrl) {
+          return NextResponse.redirect(directUrl, 302);
+        }
       }
-      const isSuffixRange = !match[1];
-      const requestedStart = match[1] ? Number(match[1]) : 0;
-      const requestedEnd = match[2] ? Number(match[2]) : byteSize - 1;
-      const start = isSuffixRange
-        ? Math.max(0, byteSize - requestedEnd)
-        : requestedStart;
-      const end = isSuffixRange
-        ? byteSize - 1
-        : Math.min(requestedEnd, byteSize - 1);
-      if (
-        !Number.isSafeInteger(start) ||
-        !Number.isSafeInteger(end) ||
-        start < 0 ||
-        (isSuffixRange && requestedEnd <= 0) ||
-        start > end ||
-        start >= byteSize
-      ) {
-        headers.set("Content-Range", `bytes */${byteSize}`);
-        return new Response(null, { status: 416, headers });
+
+      const byteSize = Number(asset.byteSize);
+      if (range) {
+        const match = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
+        if (!match) {
+          headers.set("Content-Range", `bytes */${byteSize}`);
+          return new Response(null, { status: 416, headers });
+        }
+        const isSuffixRange = !match[1];
+        const requestedStart = match[1] ? Number(match[1]) : 0;
+        const requestedEnd = match[2] ? Number(match[2]) : byteSize - 1;
+        const start = isSuffixRange
+          ? Math.max(0, byteSize - requestedEnd)
+          : requestedStart;
+        const end = isSuffixRange
+          ? byteSize - 1
+          : Math.min(requestedEnd, byteSize - 1);
+        if (
+          !Number.isSafeInteger(start) ||
+          !Number.isSafeInteger(end) ||
+          start < 0 ||
+          (isSuffixRange && requestedEnd <= 0) ||
+          start > end ||
+          start >= byteSize
+        ) {
+          headers.set("Content-Range", `bytes */${byteSize}`);
+          return new Response(null, { status: 416, headers });
+        }
+        body = await storage.readRange(
+          asset.objectKey,
+          start,
+          end,
+          asset.externalFileId ?? undefined,
+        );
+        status = 206;
+        headers.set("Content-Range", `bytes ${start}-${end}/${byteSize}`);
+      } else {
+        body = await storage.read(
+          asset.objectKey,
+          asset.externalFileId ?? undefined,
+        );
       }
-      body = await readStoredAssetRange(asset.objectKey, start, end);
-      status = 206;
-      headers.set("Content-Range", `bytes ${start}-${end}/${byteSize}`);
-    } else body = await readStoredAsset(asset.objectKey);
+    } else {
+      if (range) {
+        const byteSize = await storedAssetSize(asset.objectKey);
+        const match = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
+        if (!match) {
+          headers.set("Content-Range", `bytes */${byteSize}`);
+          return new Response(null, { status: 416, headers });
+        }
+        const isSuffixRange = !match[1];
+        const requestedStart = match[1] ? Number(match[1]) : 0;
+        const requestedEnd = match[2] ? Number(match[2]) : byteSize - 1;
+        const start = isSuffixRange
+          ? Math.max(0, byteSize - requestedEnd)
+          : requestedStart;
+        const end = isSuffixRange
+          ? byteSize - 1
+          : Math.min(requestedEnd, byteSize - 1);
+        if (
+          !Number.isSafeInteger(start) ||
+          !Number.isSafeInteger(end) ||
+          start < 0 ||
+          (isSuffixRange && requestedEnd <= 0) ||
+          start > end ||
+          start >= byteSize
+        ) {
+          headers.set("Content-Range", `bytes */${byteSize}`);
+          return new Response(null, { status: 416, headers });
+        }
+        body = await readStoredAssetRange(asset.objectKey, start, end);
+        status = 206;
+        headers.set("Content-Range", `bytes ${start}-${end}/${byteSize}`);
+      } else body = await readStoredAsset(asset.objectKey);
+    }
 
     headers.set("Content-Length", String(body.length));
     return new Response(new Uint8Array(body), {

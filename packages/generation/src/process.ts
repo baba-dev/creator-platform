@@ -320,7 +320,6 @@ export async function processVideoSubmitJob(
           input.role === "LEGACY" ||
           asset.organizationId !== job.organizationId ||
           asset.status !== "READY" ||
-          asset.storageProvider !== "LOCAL" ||
           (asset.purpose === "REFERENCE_INPUT" &&
             asset.storageOwnerUserId !== job.createdById)
         ) {
@@ -377,9 +376,7 @@ export async function processVideoSubmitJob(
             (asset.purpose === "REFERENCE_INPUT" &&
               asset.storageOwnerUserId !== job.createdById) ||
             (asset.id === referenceVideoId
-              ? asset.mediaKind !== "VIDEO" ||
-                asset.mimeType !== "video/mp4" ||
-                asset.storageProvider !== "LOCAL"
+              ? asset.mediaKind !== "VIDEO" || asset.mimeType !== "video/mp4"
               : asset.mediaKind !== "IMAGE"),
         )
       ) {
@@ -626,7 +623,20 @@ export async function processVideoPollJob(
   let storedVideo: Awaited<ReturnType<typeof storeVideo>>;
   try {
     const bytes = await downloadVideo(result.outputUrls[0]!);
-    storedVideo = await storeVideo(videoObjectKey, bytes);
+    const videoAssetForStorage = await db.asset.findFirstOrThrow({
+      where: {
+        generationJobId: id,
+        objectKey: videoObjectKey,
+        mediaKind: "VIDEO",
+      },
+      select: { id: true },
+    });
+    storedVideo = await storeVideo(
+      videoObjectKey,
+      bytes,
+      job.organizationId,
+      videoAssetForStorage.id,
+    );
   } catch (error) {
     await recordStorageFailure(id, error, "video");
     throw error;
@@ -637,7 +647,23 @@ export async function processVideoPollJob(
   if (wantsLastFrame && result.lastFrameUrl) {
     try {
       const bytes = await downloadImage(result.lastFrameUrl, "jpeg");
-      storedLastFrame = await storeImage(`${id}-last-frame.jpg`, bytes);
+      const lastFrameAssetForStorage = await db.asset.findFirst({
+        where: {
+          generationJobId: id,
+          generationOutputIndex: 1,
+          mediaKind: "IMAGE",
+        },
+        select: { id: true },
+      });
+      if (!lastFrameAssetForStorage) {
+        throw new Error("Last-frame asset reservation is missing.");
+      }
+      storedLastFrame = await storeImage(
+        `${id}-last-frame.jpg`,
+        bytes,
+        job.organizationId,
+        lastFrameAssetForStorage.id,
+      );
     } catch {
       // The video itself is the paid primary output. A provider-side last-frame
       // failure degrades the continuity feature but must not convert a valid
@@ -924,7 +950,6 @@ export async function processImageJob(
             asset.organizationId === job.organizationId &&
             asset.mediaKind === "IMAGE" &&
             asset.status === "READY" &&
-            asset.storageProvider === "LOCAL" &&
             (asset.purpose === "GENERAL" ||
               (asset.purpose === "REFERENCE_INPUT" &&
                 asset.storageOwnerUserId === job.createdById));
@@ -937,9 +962,11 @@ export async function processImageJob(
           }
           try {
             return await referenceImageDataUri({
+              organizationId: asset.organizationId,
               objectKey: asset.objectKey,
               mimeType: asset.mimeType,
               storageProvider: asset.storageProvider,
+              externalFileId: asset.externalFileId,
             });
           } catch (error) {
             throw new ProviderRequestError(
@@ -1127,7 +1154,12 @@ export async function processImageJob(
         outputUrls[outputIndex]!,
         asset.mimeType === "image/jpeg" ? "jpeg" : "png",
       );
-      const stored = await storeImage(asset.objectKey, bytes);
+      const stored = await storeImage(
+        asset.objectKey,
+        bytes,
+        job.organizationId,
+        asset.id,
+      );
       await db.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM Asset WHERE id = ${asset.id} FOR UPDATE`;
         const currentAsset = await tx.asset.findUniqueOrThrow({
@@ -1454,10 +1486,23 @@ export async function processVoiceJob(
   }
   let stored: Awaited<ReturnType<typeof storeAudio>> | null = null;
   let lastStorageError: unknown = null;
+  const voiceAssetForStorage = await db.asset.findFirstOrThrow({
+    where: {
+      generationJobId: id,
+      objectKey: `${id}.mp3`,
+      mediaKind: "AUDIO",
+    },
+    select: { id: true },
+  });
 
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      stored = await storeAudio(`${id}.mp3`, audioBytes);
+      stored = await storeAudio(
+        `${id}.mp3`,
+        audioBytes,
+        job.organizationId,
+        voiceAssetForStorage.id,
+      );
       break;
     } catch (error) {
       lastStorageError = error;
@@ -1511,7 +1556,7 @@ async function finalizeVoiceJob(
     createdById: string;
     priceVersion: { providerCostMicroUsd: bigint; unitQuantity: number };
   },
-  stored: { byteSize: bigint; sha256: string },
+  stored: Awaited<ReturnType<typeof storeAudio>>,
 ) {
   let finalBillableQuantity: number | null = null;
   await db.$transaction(async (tx) => {

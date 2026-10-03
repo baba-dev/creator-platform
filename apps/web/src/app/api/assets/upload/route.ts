@@ -5,7 +5,12 @@ import {
   finalizeUploadedAsset,
   inspectAssetUpload,
 } from "@aiwa/assets";
-import { createAssetObjectKey, LocalAssetStorage } from "@aiwa/assets/storage";
+import {
+  createAssetObjectKey,
+  createAssetVariantObjectKey,
+  LocalAssetStorage,
+  resolveOrganizationStorage,
+} from "@aiwa/assets/storage";
 import { inspectAndProbeUploadedMedia } from "@aiwa/assets/media-probe";
 import { parseServerEnv } from "@aiwa/config";
 import { db } from "@aiwa/db";
@@ -47,6 +52,10 @@ export async function POST(request: Request) {
         objectKey: string;
       }
     | undefined;
+  let pendingStorage:
+    Awaited<ReturnType<typeof resolveOrganizationStorage>> | undefined;
+  let pendingExternalFileId: string | undefined;
+  let pendingThumbnailKey: string | undefined;
   const storage = new LocalAssetStorage(env.ASSET_STORAGE_ROOT);
 
   try {
@@ -105,6 +114,16 @@ export async function POST(request: Request) {
     assertUploadSize(inspected.mediaKind, BigInt(bytes.byteLength));
     const objectKey = createAssetObjectKey(organizationId, inspected.extension);
 
+    const targetStorage = await resolveOrganizationStorage(db, organizationId, {
+      storageRoot: env.ASSET_STORAGE_ROOT,
+      encryptionKey: env.STORAGE_ENCRYPTION_KEY,
+      googleClientId: env.GOOGLE_DRIVE_CLIENT_ID,
+      googleClientSecret: env.GOOGLE_DRIVE_CLIENT_SECRET,
+      onedriveClientId: env.ONEDRIVE_CLIENT_ID,
+      onedriveClientSecret: env.ONEDRIVE_CLIENT_SECRET,
+    });
+    pendingStorage = targetStorage;
+
     const created = await db.$transaction((tx) =>
       createPendingUpload(tx, {
         organizationId,
@@ -116,6 +135,7 @@ export async function POST(request: Request) {
         mimeType: inspected.mimeType,
         byteSize: BigInt(bytes.byteLength),
         originalFilename: file.name,
+        storageProvider: targetStorage.provider,
       }),
     );
     pending = created;
@@ -133,7 +153,43 @@ export async function POST(request: Request) {
       },
     });
 
-    const stored = await storage.put(objectKey, bytes);
+    const stored = await targetStorage.put(
+      objectKey,
+      bytes,
+      inspected.mimeType,
+    );
+    pendingExternalFileId = stored.externalFileId;
+
+    // If BYOS is active and asset is an image, store thumbnail locally on platform storage for instant grid preview
+    if (targetStorage.provider !== "LOCAL" && inspected.mediaKind === "IMAGE") {
+      try {
+        const thumbBytes = await sharp(bytes)
+          .rotate()
+          .resize(560, 560, { fit: "inside", withoutEnlargement: true })
+          .webp({ quality: 80 })
+          .toBuffer({ resolveWithObject: true });
+
+        const thumbKey = createAssetVariantObjectKey(organizationId, "webp");
+        pendingThumbnailKey = thumbKey;
+        const storedThumb = await storage.put(thumbKey, thumbBytes.data);
+
+        await db.assetVariant.create({
+          data: {
+            assetId: created.id,
+            kind: "THUMBNAIL",
+            storageProvider: "LOCAL",
+            objectKey: thumbKey,
+            mimeType: "image/webp",
+            byteSize: storedThumb.byteSize,
+            sha256: storedThumb.sha256,
+            width: thumbBytes.info.width,
+            height: thumbBytes.info.height,
+          },
+        });
+      } catch {
+        // Derivative generation non-fatal
+      }
+    }
 
     const asset = await db.$transaction((tx) =>
       finalizeUploadedAsset(tx, {
@@ -145,6 +201,8 @@ export async function POST(request: Request) {
         width: media.width,
         height: media.height,
         durationMs: media.durationMs,
+        externalFileId: stored.externalFileId ?? null,
+        storageProvider: targetStorage.provider,
       }),
     );
 
@@ -159,8 +217,16 @@ export async function POST(request: Request) {
           }),
         )
         .catch(() => false);
-      if (cancelled)
-        await storage.delete(pending.objectKey).catch(() => undefined);
+      if (cancelled) {
+        if (pendingStorage) {
+          await pendingStorage
+            .delete(pending.objectKey, pendingExternalFileId)
+            .catch(() => undefined);
+        }
+        if (pendingThumbnailKey) {
+          await storage.delete(pendingThumbnailKey).catch(() => undefined);
+        }
+      }
     }
     return NextResponse.json(
       { error: safeErrorMessage(error, "Upload failed.") },

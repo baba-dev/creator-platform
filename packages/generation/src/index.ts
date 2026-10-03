@@ -1573,7 +1573,8 @@ export async function createTranscriptionJob(userId: string, raw: unknown) {
       const wallet = await tx.wallet.findUnique({
         where: { organizationId: input.organizationId },
       });
-      if (!wallet) throw new GenerationError("Workspace wallet is unavailable.");
+      if (!wallet)
+        throw new GenerationError("Workspace wallet is unavailable.");
 
       const outputProjectId = input.projectId ?? source.projectId ?? null;
       const org = await tx.organization.findUnique({
@@ -1682,4 +1683,3 @@ export async function createTranscriptionJob(userId: string, raw: unknown) {
     { isolationLevel: "ReadCommitted", timeout: 15_000 },
   );
 }
-

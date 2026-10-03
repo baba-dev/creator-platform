@@ -162,6 +162,7 @@ export function ModelActions({
   currentUnitQuantity,
   canManage,
   mediaKind,
+  transcription = false,
 }: {
   modelId: string;
   providerModelId?: string;
@@ -169,6 +170,7 @@ export function ModelActions({
   provider: AdminModelProvider;
   enabled: boolean;
   mediaKind?: "IMAGE" | "VIDEO" | "VOICE" | "REASONING" | "TEXT";
+  transcription?: boolean;
   currentUsageRates?: unknown;
   currentFxBaisaNumerator?: string;
   currentFxBaisaDenominator?: string;
@@ -516,12 +518,15 @@ export function ModelActions({
                           : "Per input / output token"}
                       </option>
                     )}
-                    {(!mediaKind || mediaKind === "VIDEO") && (
+                    {(!mediaKind ||
+                      mediaKind === "VIDEO" ||
+                      (mediaKind === "VOICE" && transcription)) && (
                       <option value="SECOND">
                         Per duration block (seconds)
                       </option>
                     )}
-                    {(!mediaKind || mediaKind === "VOICE") && (
+                    {(!mediaKind ||
+                      (mediaKind === "VOICE" && !transcription)) && (
                       <option value="CHARACTER">Per character block</option>
                     )}
                   </select>

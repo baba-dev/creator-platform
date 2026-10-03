@@ -154,11 +154,7 @@ export async function POST(request: Request) {
       },
     });
 
-    const stored = await targetStorage.put(
-      objectKey,
-      bytes,
-      inspected.mimeType,
-    );
+    const stored = await targetStorage.put(objectKey, bytes, inspected.mimeType);
     pendingExternalFileId = stored.externalFileId;
 
     // If BYOS is active and asset is an image, store thumbnail locally on platform storage for instant grid preview

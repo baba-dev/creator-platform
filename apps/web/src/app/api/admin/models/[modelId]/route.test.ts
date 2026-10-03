@@ -280,3 +280,86 @@ describe("provider-aware text pricing", () => {
     });
   });
 });
+
+describe("reasoning provider-cost pricing", () => {
+  const reasoningRates = {
+    estimator: "text-token-v1",
+    tiers: [
+      {
+        maxPromptTokens: 131072,
+        inputMicroUsdPerMillionTokens: "1000000",
+        outputMicroUsdPerMillionTokens: "2000000",
+      },
+    ],
+  };
+
+  beforeEach(() => {
+    mocks.db.providerModel.findUnique.mockResolvedValue({
+      id: modelId,
+      provider: "NVIDIA",
+      providerModelId:
+        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+      displayName: "Nemotron",
+      mediaKind: "REASONING",
+      capabilities: { "task:prompt-enhancement": true, reasoning: true },
+    });
+    mocks.db.modelPriceVersion.findUnique.mockResolvedValue(null);
+    mocks.db.modelPriceVersion.findFirst.mockResolvedValue({
+      pricingDimension: "REQUEST",
+      unitQuantity: 1,
+      providerCostMicroUsd: 2500n,
+      fxBaisaNumerator: 769n,
+      fxBaisaDenominator: 2n,
+    });
+  });
+
+  it("publishes token rates for reasoning while keeping workspace customer charge zero", async () => {
+    const res = await PATCH(
+      request({
+        providerCostMicroUsd: "2000",
+        pricingDimension: "TOKEN",
+        targetMarginBps: 2500,
+        idempotencyKey: "8e0ec2bd-c65d-489f-af11-b1baf9720fb2",
+        usageRates: reasoningRates,
+      }),
+      context,
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.priceVersion.customerCredits).toBe("0");
+    expect(body.priceVersion.usageRates).toEqual(reasoningRates);
+    expect(mocks.db.modelPriceVersion.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          pricingDimension: "TOKEN",
+          customerCredits: 0n,
+          usageRates: reasoningRates,
+        }),
+      }),
+    );
+  });
+
+  it("also keeps fixed per-request reasoning snapshots uncharged", async () => {
+    const res = await PATCH(
+      request({
+        providerCostMicroUsd: "2500",
+        pricingDimension: "REQUEST",
+        targetMarginBps: 2500,
+        idempotencyKey: "71953e3e-ef70-447c-b132-f14e3fab9bbd",
+      }),
+      context,
+    );
+
+    expect(res.status).toBe(200);
+    expect(mocks.db.modelPriceVersion.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          pricingDimension: "REQUEST",
+          customerCredits: 0n,
+        }),
+      }),
+    );
+  });
+});
+

@@ -12,3 +12,16 @@ ALTER TABLE `ReasoningJob`
   ADD CONSTRAINT `ReasoningJob_priceVersionId_fkey`
   FOREIGN KEY (`priceVersionId`) REFERENCES `ModelPriceVersion`(`id`)
   ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- The Cloudflare Llama row predates task-aware prompt enhancement. Normalize the
+-- persisted catalog capability so existing deployments discover it immediately;
+-- future model syncs carry the same capability from the verified catalog.
+UPDATE `ProviderModel`
+SET `capabilities` = JSON_SET(
+  COALESCE(`capabilities`, JSON_OBJECT()),
+  '$."task:prompt-enhancement"',
+  TRUE
+)
+WHERE `provider` = 'CLOUDFLARE'
+  AND `providerModelId` = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+

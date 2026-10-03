@@ -1,0 +1,51 @@
+# Studio model discovery
+
+Studio model availability is server-authoritative and task-based.
+
+A model is discoverable only when all of the following are true:
+
+1. the catalog marks the model as supporting the requested `StudioTask`;
+2. the model is enabled in `ProviderModel`;
+3. an active `ModelPriceVersion` exists;
+4. the provider credentials required by that model family are configured.
+
+The public endpoint is:
+
+```
+GET /api/studio/models?organizationId=<id>&task=<studio-task>
+```
+
+It requires an authenticated member with `workspace:view` permission and returns
+only customer-safe metadata. Provider costs, negotiated discounts, margins,
+credentials, and internal pricing notes are never returned.
+
+## Canonical tasks
+
+- `chat`
+- `character-chat`
+- `scriptwriting`
+- `creative-director`
+- `brand-strategy`
+- `story-planning`
+- `prompt-enhancement`
+- `speech-synthesis`
+- `transcription`
+- `image-generation`
+- `video-generation`
+
+Catalog synchronization normalizes legacy capability keys to `task:<task>`.
+Media kind is still enforced, so a reasoning-only model cannot become a billable
+text Studio model merely because it advertises a similarly named legacy
+capability.
+
+## Adding a model
+
+Add the provider descriptor and verified capabilities to the provider catalog.
+Prefer explicit `task:<task>` capabilities. Legacy capabilities are normalized
+for existing models, and narrowly scoped verified overrides preserve current
+product defaults. After catalog sync, pricing, enablement, and runtime
+configuration control whether the model becomes discoverable.
+
+Do not add provider-specific Studio dropdown arrays. New Studio surfaces must
+consume the shared discovery service and should submit the returned
+`ProviderModel.id`, not assume upstream provider model IDs are globally unique.

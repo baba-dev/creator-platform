@@ -5,6 +5,7 @@ import {
 } from "@aiwa/authz";
 import { db } from "@aiwa/db";
 import { calculateSpeechTrialUsage } from "@aiwa/generation";
+import { listStudioTasksForModel, STUDIO_TASK_LABELS } from "@aiwa/providers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -25,6 +26,7 @@ import {
   type AdminListFilters,
 } from "@/lib/admin-filters";
 import { requirePlatformPermission } from "@/lib/request-auth";
+import { getProviderRuntimeReadiness } from "@/lib/provider-readiness";
 
 const PAGE_SIZE = 20;
 const sections = {
@@ -450,6 +452,7 @@ async function renderSection(
           provider: true,
           mediaKind: true,
           enabled: true,
+          capabilities: true,
           priceVersions: {
             where: priceWhere,
             select: {
@@ -565,6 +568,8 @@ async function renderSection(
               "Model",
               "Provider",
               "Kind",
+              "Available in",
+              "Runtime",
               "Customer credits",
               "Provider micro-USD",
               "Status",
@@ -575,6 +580,26 @@ async function renderSection(
             {rows.map((row) => {
               const price = row.priceVersions[0];
               const isSeedSpeech = row.providerModelId === "seed-tts-2.0";
+              const taskDescriptor = {
+                id: row.providerModelId,
+                provider: row.provider,
+                mediaKind: row.mediaKind,
+                capabilities:
+                  row.capabilities &&
+                  typeof row.capabilities === "object" &&
+                  !Array.isArray(row.capabilities)
+                    ? (row.capabilities as Record<
+                        string,
+                        boolean | number | string
+                      >)
+                    : {},
+              };
+              const availableTasks = listStudioTasksForModel(taskDescriptor);
+              const runtime = getProviderRuntimeReadiness({
+                provider: row.provider,
+                mediaKind: row.mediaKind,
+                providerModelId: row.providerModelId,
+              });
               return (
                 <tr key={row.id}>
                   <Cell>
@@ -599,6 +624,20 @@ async function renderSection(
                   </Cell>
                   <Cell>{titleCase(row.provider)}</Cell>
                   <Cell>{titleCase(row.mediaKind)}</Cell>
+                  <Cell>
+                    {availableTasks.length
+                      ? availableTasks
+                          .map((task) => STUDIO_TASK_LABELS[task])
+                          .join(", ")
+                      : "No frontend surface"}
+                  </Cell>
+                  <Cell>
+                    <StatusBadge
+                      tone={runtime.configured ? "success" : "warning"}
+                    >
+                      {runtime.configured ? "Ready" : "Credentials missing"}
+                    </StatusBadge>
+                  </Cell>
                   <NumericCell>
                     {price?.pricingDimension === "TOKEN"
                       ? "Usage-based"

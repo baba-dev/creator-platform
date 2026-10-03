@@ -52,6 +52,11 @@ export async function POST(request: Request) {
         objectKey: string;
       }
     | undefined;
+  let pendingStorage:
+    | Awaited<ReturnType<typeof resolveOrganizationStorage>>
+    | undefined;
+  let pendingExternalFileId: string | undefined;
+  let pendingThumbnailKey: string | undefined;
   const storage = new LocalAssetStorage(env.ASSET_STORAGE_ROOT);
 
   try {
@@ -118,6 +123,7 @@ export async function POST(request: Request) {
       onedriveClientId: env.ONEDRIVE_CLIENT_ID,
       onedriveClientSecret: env.ONEDRIVE_CLIENT_SECRET,
     });
+    pendingStorage = targetStorage;
 
     const created = await db.$transaction((tx) =>
       createPendingUpload(tx, {
@@ -153,6 +159,7 @@ export async function POST(request: Request) {
       bytes,
       inspected.mimeType,
     );
+    pendingExternalFileId = stored.externalFileId;
 
     // If BYOS is active and asset is an image, store thumbnail locally on platform storage for instant grid preview
     if (targetStorage.provider !== "LOCAL" && inspected.mediaKind === "IMAGE") {
@@ -164,6 +171,7 @@ export async function POST(request: Request) {
           .toBuffer({ resolveWithObject: true });
 
         const thumbKey = createAssetVariantObjectKey(organizationId, "webp");
+        pendingThumbnailKey = thumbKey;
         const storedThumb = await storage.put(thumbKey, thumbBytes.data);
 
         await db.assetVariant.create({
@@ -210,8 +218,16 @@ export async function POST(request: Request) {
           }),
         )
         .catch(() => false);
-      if (cancelled)
-        await storage.delete(pending.objectKey).catch(() => undefined);
+      if (cancelled) {
+        if (pendingStorage) {
+          await pendingStorage
+            .delete(pending.objectKey, pendingExternalFileId)
+            .catch(() => undefined);
+        }
+        if (pendingThumbnailKey) {
+          await storage.delete(pendingThumbnailKey).catch(() => undefined);
+        }
+      }
     }
     return NextResponse.json(
       { error: safeErrorMessage(error, "Upload failed.") },

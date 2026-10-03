@@ -20,12 +20,7 @@ UPDATE `ProviderModel`
 SET `capabilities` = JSON_SET(
   COALESCE(`capabilities`, JSON_OBJECT()),
   '$."task:prompt-enhancement"',
-  JSON_EXTRACT('true', '
-WHERE `provider` = 'CLOUDFLARE'
-  AND `providerModelId` = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
-
-)
+  JSON_EXTRACT('true', '$')
 )
 WHERE `provider` = 'CLOUDFLARE'
   AND `providerModelId` = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
-

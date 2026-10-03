@@ -116,6 +116,17 @@ type Studio = {
   projects: ProjectOption[];
   jobs: Job[];
 };
+function providerDisplayName(provider: string): string {
+  const labels: Record<string, string> = {
+    BYTEPLUS: "BytePlus",
+    NVIDIA: "NVIDIA",
+    GROQ: "Groq",
+    GEMINI: "Gemini",
+    CLOUDFLARE: "Cloudflare",
+  };
+  return labels[provider] ?? provider;
+}
+
 function statusLabel(status: string, mediaKind: MediaKind): string {
   const media =
     mediaKind === "VIDEO" ? "video" : mediaKind === "VOICE" ? "voice" : "image";
@@ -1870,7 +1881,7 @@ export function GenerationStudio({
                   className="mt-2 text-xs font-medium text-muted-foreground"
                 >
                   Enhanced with {enhancementAttribution.name} ·{" "}
-                  {enhancementAttribution.provider}
+                  {providerDisplayName(enhancementAttribution.provider)}
                 </p>
               ) : promptEnhancementModels.length === 0 ? (
                 <p className="mt-2 text-xs text-muted-foreground">

@@ -1,5 +1,8 @@
 import type { ReactNode } from "react";
+import { hasOrganizationPermission } from "@aiwa/authz";
 import { GenerationActivityCenter } from "@/components/process/generation-activity-center";
+import { AssistantWidget } from "@/components/assistant/assistant-widget";
+import { getAssistantSettings } from "@aiwa/assistant";
 import { Brand } from "@/components/ui/brand";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { WorkspaceNavigation } from "@/components/studio/workspace-navigation";
@@ -17,6 +20,12 @@ export default async function OrganizationLayout({
     organizationSlug,
     "workspace:view",
   );
+  const assistantSettings = await getAssistantSettings();
+  const canUseAssistant = hasOrganizationPermission(
+    membership.role,
+    "generation:create",
+  );
+
   return (
     <div className="min-h-screen min-w-0 bg-background text-foreground lg:grid lg:grid-cols-[232px_minmax(0,1fr)]">
       <aside className="hidden border-r border-border bg-sidebar/90 lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col">
@@ -47,6 +56,14 @@ export default async function OrganizationLayout({
           organizationId={membership.organizationId}
           organizationSlug={organizationSlug}
         />
+        {canUseAssistant &&
+        assistantSettings.enabled &&
+        assistantSettings.providerModel ? (
+          <AssistantWidget
+            organizationId={membership.organizationId}
+            organizationSlug={organizationSlug}
+          />
+        ) : null}
       </div>
     </div>
   );

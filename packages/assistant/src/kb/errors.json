@@ -1,0 +1,44 @@
+[
+  {
+    "pattern": "Insufficient credits",
+    "title": "Not enough credits",
+    "explanation": "Your workspace credit balance is too low to complete this generation. Each generation reserves credits before it starts.",
+    "remediation": "Top up your wallet via Settings → Billing, or ask your workspace admin to add credits.",
+    "keywords": ["insufficient", "credits", "balance", "low"]
+  },
+  {
+    "pattern": "Failed to load studio configuration",
+    "title": "Studio not configured",
+    "explanation": "The AI model for this studio isn't enabled yet on your platform.",
+    "remediation": "Contact the Aiwa team or platform administrator to enable the required model.",
+    "keywords": ["studio", "configuration", "not configured"]
+  },
+  {
+    "pattern": "provider",
+    "title": "Provider error",
+    "explanation": "The AI provider (Groq, BytePlus, or NVIDIA) returned an error or is temporarily unavailable.",
+    "remediation": "Wait a few moments and try again. If the error persists, use the support button to escalate to the dev team.",
+    "keywords": ["provider", "byteplus", "groq", "nvidia", "unavailable"]
+  },
+  {
+    "pattern": "timed out",
+    "title": "Generation timed out",
+    "explanation": "The generation took longer than expected and timed out. Your credits were automatically released or refunded.",
+    "remediation": "Check the generation log. If the job failed, you can safely retry.",
+    "keywords": ["timeout", "timed out", "too long"]
+  },
+  {
+    "pattern": "MANUAL_REVIEW",
+    "title": "Job under manual review",
+    "explanation": "This generation was flagged for manual review by the platform. It has not failed — our team will inspect it shortly.",
+    "remediation": "Please do not resubmit the request. Wait for the review to settle, or contact developer support.",
+    "keywords": ["manual review", "MANUAL_REVIEW", "review", "flagged"]
+  },
+  {
+    "pattern": "upload",
+    "title": "Upload failed",
+    "explanation": "Your file could not be uploaded. This is usually caused by file size, format mismatch, or a temporary network glitch.",
+    "remediation": "Check that your file is within limits (5 MB for image portraits, 25 MB for audio) and is a supported MIME type (JPEG/PNG, MP3/WAV).",
+    "keywords": ["upload", "failed", "file"]
+  }
+]

@@ -203,6 +203,9 @@ model User {
   brandProfiles          BrandProfile[]
   storyPlans             StoryPlan[]
   externalStorageConfigs ExternalStorageConfig[]
+  assistantReminders     AssistantReminder[]
+  supportRequests        SupportRequest[]
+  assistantSettings      AssistantSetting[]
 
   @@index([platformRole, disabledAt])
 }
@@ -313,6 +316,8 @@ model Organization {
   storyPlans             StoryPlan[]
   defaultStorageProvider AssetStorageProvider     @default(LOCAL)
   externalStorageConfigs ExternalStorageConfig[]
+  assistantReminders     AssistantReminder[]
+  supportRequests        SupportRequest[]
 
   @@index([status])
   @@index([ownerUserId])
@@ -436,6 +441,7 @@ model ProviderModel {
   reasoningJobs         ReasoningJob[]
   personaPreferences    Persona[]            @relation("PersonaProviderModel")
   chatThreads           ChatThread[]         @relation("ChatThreadProviderModel")
+  assistantSettings     AssistantSetting[]
 
   @@unique([provider, providerModelId])
   @@index([mediaKind, enabled])
@@ -1019,6 +1025,8 @@ model ChatThread {
   persona        Persona?      @relation(fields: [personaId], references: [id], onDelete: SetNull)
   providerModel  ProviderModel? @relation("ChatThreadProviderModel", fields: [providerModelRecordId], references: [id], onDelete: SetNull)
   messages       ChatMessage[]
+  assistantReminders AssistantReminder[]
+  supportRequests    SupportRequest[]
 
   @@index([organizationId, createdById, updatedAt])
   @@index([projectId])
@@ -1125,3 +1133,60 @@ model ExternalStorageConfig {
   @@index([userId])
 }
 
+
+
+model AssistantReminder {
+  id             String    @id @default(cuid())
+  organizationId String
+  userId         String
+  threadId       String
+  idempotencyKey String    @unique
+  message        String    @db.Text
+  remindAt       DateTime
+  notifiedAt     DateTime?
+  cancelledAt    DateTime?
+  createdAt      DateTime  @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  thread         ChatThread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([userId, remindAt])
+  @@index([organizationId, remindAt])
+}
+
+model SupportRequest {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  threadId       String?
+  idempotencyKey String   @unique
+  subject        String
+  body           String   @db.Text
+  ticketRef      String   @unique
+  status         String   @default("OPEN")
+  createdAt      DateTime @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  thread         ChatThread?  @relation(fields: [threadId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status, createdAt])
+  @@index([userId, createdAt])
+}
+
+model AssistantSetting {
+  id                    String   @id @default("default")
+  providerModelRecordId String?
+  pricingMode           String   @default("FREE")
+  systemPromptOverride  String?  @db.Text
+  enabled               Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  updatedById           String?
+
+  providerModel         ProviderModel? @relation(fields: [providerModelRecordId], references: [id], onDelete: SetNull)
+  updatedBy             User?          @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([providerModelRecordId])
+}

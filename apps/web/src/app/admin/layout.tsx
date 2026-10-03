@@ -44,6 +44,12 @@ const navigation: readonly (AdminNavigationItem & {
     permission: "models:read",
   },
   {
+    href: "/admin/assistant",
+    label: "AI Assistant",
+    icon: "sparkles",
+    permission: "models:read",
+  },
+  {
     href: "/admin/jobs",
     label: "Generation jobs",
     icon: "activity",

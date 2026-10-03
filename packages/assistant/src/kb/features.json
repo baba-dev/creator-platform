@@ -1,0 +1,81 @@
+[
+  {
+    "key": "image-generation",
+    "title": "Image Generation",
+    "summary": "Generate AI images from text prompts using models like BytePlus Seedream 3.0. Supports 1:1, 16:9, 9:16 and other aspect ratios. Priced per request.",
+    "route": "/assets",
+    "keywords": ["image", "generate", "photo", "picture", "seedream", "create"]
+  },
+  {
+    "key": "video-generation",
+    "title": "Video Generation",
+    "summary": "Generate AI videos from text or images using BytePlus MegaCreator and Wan models. Supports 5-10s clips in various aspect ratios. Priced per second.",
+    "route": "/assets",
+    "keywords": ["video", "generate", "clip", "animation", "megacreator", "wan"]
+  },
+  {
+    "key": "voice-generation",
+    "title": "Voice & TTS",
+    "summary": "Generate natural speech from text using BytePlus Seed-TTS 2.0. Choose from multiple voices and languages. Priced per 1,000 characters.",
+    "route": "/assets",
+    "keywords": ["voice", "tts", "speech", "audio", "seed-tts", "narration"]
+  },
+  {
+    "key": "spokesperson-studio",
+    "title": "Digital Spokesperson Studio",
+    "summary": "Create talking avatar videos with OmniHuman 1.5 — upload a portrait image and provide a script or audio. Priced per second of video.",
+    "route": "/studio/spokesperson",
+    "keywords": [
+      "spokesperson",
+      "avatar",
+      "talking",
+      "omnihuman",
+      "portrait",
+      "lip-sync"
+    ]
+  },
+  {
+    "key": "templates",
+    "title": "Generation Templates",
+    "summary": "Use pre-built templates for common workflows — fill in variables and generate in one click.",
+    "route": "/templates",
+    "keywords": ["template", "workflow", "preset", "quick"]
+  },
+  {
+    "key": "assets",
+    "title": "Asset Library",
+    "summary": "All your generated and uploaded files live here. Organise with folders, tags and favourites. Originals are kept private; grid views use optimised thumbnails.",
+    "route": "/assets",
+    "keywords": ["asset", "library", "files", "folder", "gallery", "media"]
+  },
+  {
+    "key": "credits",
+    "title": "Credits & Billing",
+    "summary": "Credits are the currency for generation. Top up via manual payment. 1 credit = 1 baisa. Credits are reserved before generation starts and charged on completion.",
+    "route": "/settings",
+    "keywords": [
+      "credit",
+      "balance",
+      "billing",
+      "payment",
+      "wallet",
+      "top-up",
+      "baisa",
+      "omr"
+    ]
+  },
+  {
+    "key": "projects",
+    "title": "Projects",
+    "summary": "Organise your generation work into projects. Each generation job can belong to a project for easy filtering.",
+    "route": "/projects",
+    "keywords": ["project", "folder", "organise", "group"]
+  },
+  {
+    "key": "chat",
+    "title": "AI Chat (Creative Characters)",
+    "summary": "Chat with AI personas — roleplay characters, creative directors, and more. Supports voice output via Seed-TTS.",
+    "route": "/studio/chat",
+    "keywords": ["chat", "conversation", "persona", "character", "roleplay"]
+  }
+]

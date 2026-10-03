@@ -1,0 +1,27 @@
+[
+  {
+    "q": "How do I generate an image?",
+    "a": "Navigate to the main workspace, choose Image as your creative type, enter your prompt, pick an aspect ratio, and click Generate. Required credits are reserved upfront.",
+    "keywords": ["image", "generate", "how", "create", "prompt"]
+  },
+  {
+    "q": "Why was my generation charged even though it failed?",
+    "a": "Credits are temporarily reserved when starting. If a job fails or times out, reservations are automatically released or refunded. Check your wallet ledger in Settings → Billing.",
+    "keywords": ["charged", "failed", "refund", "credits", "ledger"]
+  },
+  {
+    "q": "Can I download my generated assets?",
+    "a": "Yes! Open any asset from the Asset Library (/assets) and click Download. Bounded derivatives are served in the UI, but original media is exported intact.",
+    "keywords": ["download", "export", "save", "asset"]
+  },
+  {
+    "q": "How do I top up my credits?",
+    "a": "Go to Settings → Billing and record a payment or contact your workspace finance admin. 1 credit = 1 baisa.",
+    "keywords": ["top up", "add credits", "pay", "billing", "wallet"]
+  },
+  {
+    "q": "What models are available?",
+    "a": "Aiwa Creator supports models across providers: BytePlus Seedream 3.0 (images), MegaCreator/Wan (video), Seed-TTS 2.0 (voice), OmniHuman 1.5 (talking avatars), and Groq ultra-fast LPU models (GPT-OSS 20B/120B).",
+    "keywords": ["model", "available", "which", "list", "groq", "byteplus"]
+  }
+]

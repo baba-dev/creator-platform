@@ -320,7 +320,6 @@ export async function processVideoSubmitJob(
           input.role === "LEGACY" ||
           asset.organizationId !== job.organizationId ||
           asset.status !== "READY" ||
-          asset.storageProvider !== "LOCAL" ||
           (asset.purpose === "REFERENCE_INPUT" &&
             asset.storageOwnerUserId !== job.createdById)
         ) {
@@ -378,8 +377,7 @@ export async function processVideoSubmitJob(
               asset.storageOwnerUserId !== job.createdById) ||
             (asset.id === referenceVideoId
               ? asset.mediaKind !== "VIDEO" ||
-                asset.mimeType !== "video/mp4" ||
-                asset.storageProvider !== "LOCAL"
+                asset.mimeType !== "video/mp4"
               : asset.mediaKind !== "IMAGE"),
         )
       ) {
@@ -949,7 +947,6 @@ export async function processImageJob(
             asset.organizationId === job.organizationId &&
             asset.mediaKind === "IMAGE" &&
             asset.status === "READY" &&
-            asset.storageProvider === "LOCAL" &&
             (asset.purpose === "GENERAL" ||
               (asset.purpose === "REFERENCE_INPUT" &&
                 asset.storageOwnerUserId === job.createdById));
@@ -962,9 +959,11 @@ export async function processImageJob(
           }
           try {
             return await referenceImageDataUri({
+              organizationId: asset.organizationId,
               objectKey: asset.objectKey,
               mimeType: asset.mimeType,
               storageProvider: asset.storageProvider,
+              externalFileId: asset.externalFileId,
             });
           } catch (error) {
             throw new ProviderRequestError(

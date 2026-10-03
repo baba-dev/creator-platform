@@ -136,6 +136,7 @@ export async function listGenerationHistory(
       id: true,
       status: true,
       createdAt: true,
+      requestPayload: true,
       completedAt: true,
       createdBy: { select: { id: true, name: true } },
       providerModel: {
@@ -156,11 +157,21 @@ export async function listGenerationHistory(
   const page = jobs.slice(0, input.limit);
   const last = page.at(-1);
   return {
-    jobs: page.map((job) => ({
-      ...job,
-      reservedCredits: job.reservedCredits.toString(),
-      chargedCredits: job.chargedCredits.toString(),
-    })),
+    jobs: page.map((job) => {
+      const payload =
+        job.requestPayload &&
+        typeof job.requestPayload === "object" &&
+        !Array.isArray(job.requestPayload)
+          ? (job.requestPayload as Record<string, unknown>)
+          : {};
+      return {
+        ...job,
+        task: payload.task === "transcription" ? "transcription" : null,
+        requestPayload: undefined,
+        reservedCredits: job.reservedCredits.toString(),
+        chargedCredits: job.chargedCredits.toString(),
+      };
+    }),
     nextCursor:
       jobs.length > input.limit && last
         ? Buffer.from(

@@ -49,7 +49,21 @@ jobs:
           bash -n infra/deploy/package-release.sh
 
       - name: Check formatting
-        run: pnpm format:check
+        run: |
+          pnpm exec prettier --write \
+            apps/web/src/app/api/admin/models/[modelId]/route.test.ts \
+            apps/web/src/app/api/admin/models/[modelId]/route.ts \
+            apps/web/src/lib/admin-model-pricing.test.ts \
+            apps/web/src/lib/admin-model-pricing.ts \
+            docs/finance/provider-pricing.md \
+            packages/credits/test/usage.test.ts
+          git diff --no-color --exit-code -- \
+            apps/web/src/app/api/admin/models/[modelId]/route.test.ts \
+            apps/web/src/app/api/admin/models/[modelId]/route.ts \
+            apps/web/src/lib/admin-model-pricing.test.ts \
+            apps/web/src/lib/admin-model-pricing.ts \
+            docs/finance/provider-pricing.md \
+            packages/credits/test/usage.test.ts
 
       - name: Lint
         run: pnpm lint

@@ -52,10 +52,9 @@ consume the shared discovery service and should submit the returned
 
 ## Character Chat persistence
 
-Character Chat stores `ProviderModel.id` in the nullable
-`providerModelRecordId` relation for new personas and threads. The historical
-upstream `modelId` string remains as compatibility metadata during the
-migration window.
+Character Chat stores `ProviderModel.id` in the nullable `providerModelRecordId`
+relation for new personas and threads. The historical upstream `modelId` string
+remains as compatibility metadata during the migration window.
 
 The migration backfills historical BytePlus TEXT rows only. Read paths can
 upgrade a unique legacy upstream id to its canonical record, but a known

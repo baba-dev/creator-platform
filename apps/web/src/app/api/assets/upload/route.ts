@@ -53,8 +53,7 @@ export async function POST(request: Request) {
       }
     | undefined;
   let pendingStorage:
-    | Awaited<ReturnType<typeof resolveOrganizationStorage>>
-    | undefined;
+    Awaited<ReturnType<typeof resolveOrganizationStorage>> | undefined;
   let pendingExternalFileId: string | undefined;
   let pendingThumbnailKey: string | undefined;
   const storage = new LocalAssetStorage(env.ASSET_STORAGE_ROOT);
@@ -154,7 +153,11 @@ export async function POST(request: Request) {
       },
     });
 
-    const stored = await targetStorage.put(objectKey, bytes, inspected.mimeType);
+    const stored = await targetStorage.put(
+      objectKey,
+      bytes,
+      inspected.mimeType,
+    );
     pendingExternalFileId = stored.externalFileId;
 
     // If BYOS is active and asset is an image, store thumbnail locally on platform storage for instant grid preview

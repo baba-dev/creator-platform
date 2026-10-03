@@ -20,7 +20,6 @@ interface DirectorMessage {
   tokensUsed?: number;
 }
 
-
 export function CreativeDirectorWorkspace({
   organizationSlug,
   organizationId,

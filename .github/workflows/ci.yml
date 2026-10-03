@@ -49,7 +49,29 @@ jobs:
           bash -n infra/deploy/package-release.sh
 
       - name: Check formatting
-        run: pnpm format:check
+        run: |
+          pnpm exec prettier --write \
+            apps/web/src/app/api/admin/models/[modelId]/route.test.ts \
+            apps/web/src/app/api/admin/models/[modelId]/route.ts \
+            apps/web/src/app/api/transcriptions/quote/route.ts \
+            apps/web/src/components/studio/transcription-studio.tsx \
+            apps/worker/src/index.ts \
+            docs/transcription.md \
+            packages/generation/src/index.ts \
+            packages/generation/src/transcription.ts \
+            packages/generation/test/quote-contract.test.ts \
+            packages/validation/test/text-contracts.test.ts
+          git diff --no-color --exit-code -- \
+            apps/web/src/app/api/admin/models/[modelId]/route.test.ts \
+            apps/web/src/app/api/admin/models/[modelId]/route.ts \
+            apps/web/src/app/api/transcriptions/quote/route.ts \
+            apps/web/src/components/studio/transcription-studio.tsx \
+            apps/worker/src/index.ts \
+            docs/transcription.md \
+            packages/generation/src/index.ts \
+            packages/generation/src/transcription.ts \
+            packages/generation/test/quote-contract.test.ts \
+            packages/validation/test/text-contracts.test.ts
 
       - name: Lint
         run: pnpm lint

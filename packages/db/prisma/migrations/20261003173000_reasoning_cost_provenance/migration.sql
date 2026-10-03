@@ -17,10 +17,9 @@ ALTER TABLE `ReasoningJob`
 -- persisted catalog capability so existing deployments discover it immediately;
 -- future model syncs carry the same capability from the verified catalog.
 UPDATE `ProviderModel`
-SET `capabilities` = JSON_SET(
+SET `capabilities` = JSON_MERGE_PATCH(
   COALESCE(`capabilities`, JSON_OBJECT()),
-  '$."task:prompt-enhancement"',
-  JSON_EXTRACT('true', '$')
+  '{"task:prompt-enhancement": true}'
 )
 WHERE `provider` = 'CLOUDFLARE'
   AND `providerModelId` = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';

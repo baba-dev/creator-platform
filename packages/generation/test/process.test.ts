@@ -146,6 +146,7 @@ beforeEach(() => {
   mocks.db.generationJob.updateMany.mockResolvedValue({ count: 1 });
   mocks.db.providerModel.findUnique.mockResolvedValue({ enabled: true });
   mocks.db.asset.findFirstOrThrow.mockResolvedValue({
+    id: "asset1",
     objectKey: "job1.png",
     mimeType: "image/png",
   });

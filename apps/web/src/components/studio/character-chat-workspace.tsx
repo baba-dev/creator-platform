@@ -849,7 +849,7 @@ export function CharacterChatWorkspace({
                   </h3>
                   <p className="text-xs text-muted-foreground">
                     {selectedPersona.description ||
-                      "Doubao Character Intelligence"}
+                      "AI character intelligence"}
                   </p>
                 </div>
               </div>
@@ -866,14 +866,22 @@ export function CharacterChatWorkspace({
                 )}
                 <span className="rounded-md border border-border bg-card px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
                   {activeThreadId
-                    ? textModels.find(
-                        (model) => model.id === activeThreadModelId,
-                      )?.name ||
-                      (activeThreadModelAvailable
-                        ? "Pinned model"
-                        : "Model unavailable")
-                    : textModels.find((model) => model.id === selectedModel)
-                        ?.name || "Choose model"}
+                    ? (() => {
+                        const model = textModels.find(
+                          (candidate) => candidate.id === activeThreadModelId,
+                        );
+                        return model
+                          ? modelOptionLabel(model)
+                          : activeThreadModelAvailable
+                            ? "Pinned model"
+                            : "Model unavailable";
+                      })()
+                    : (() => {
+                        const model = textModels.find(
+                          (candidate) => candidate.id === selectedModel,
+                        );
+                        return model ? modelOptionLabel(model) : "Choose model";
+                      })()}
                 </span>
 
                 <button

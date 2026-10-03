@@ -83,9 +83,28 @@ export interface TextUsageTier {
   outputMicroUsdPerMillionTokens: string;
   cachedInputMicroUsdPerMillionTokens?: string;
 }
+export type TextUsageEstimator = "byteplus-text-v1" | "text-token-v1";
+
 export interface TextUsageRates {
-  estimator: "byteplus-text-v1" | "text-token-v1";
+  estimator: TextUsageEstimator;
   tiers: TextUsageTier[];
+}
+
+const EXTERNAL_TEXT_PRICING_PROVIDERS = new Set([
+  "GROQ",
+  "GEMINI",
+  "CLOUDFLARE",
+]);
+
+export function textUsageEstimatorForProvider(
+  provider: string,
+): TextUsageEstimator {
+  const normalized = provider.trim().toUpperCase();
+  if (normalized === "BYTEPLUS") return "byteplus-text-v1";
+  if (EXTERNAL_TEXT_PRICING_PROVIDERS.has(normalized)) return "text-token-v1";
+  throw new RangeError(
+    `Token-priced text billing is not registered for provider '${provider}'.`,
+  );
 }
 
 export function parseTextUsageRates(value: unknown): TextUsageRates {
@@ -137,6 +156,20 @@ export function parseTextUsageRates(value: unknown): TextUsageRates {
     };
   });
   return { estimator: config.estimator as TextUsageRates["estimator"], tiers };
+}
+
+export function parseTextUsageRatesForProvider(
+  value: unknown,
+  provider: string,
+): TextUsageRates {
+  const table = parseTextUsageRates(value);
+  const expected = textUsageEstimatorForProvider(provider);
+  if (table.estimator !== expected) {
+    throw new RangeError(
+      `Provider ${provider.toUpperCase()} requires the ${expected} text pricing estimator.`,
+    );
+  }
+  return table;
 }
 
 function divideRoundUpBigInt(numerator: bigint, denominator: bigint): bigint {

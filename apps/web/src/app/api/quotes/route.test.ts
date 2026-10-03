@@ -137,6 +137,7 @@ describe("authoritative quote API", () => {
     const body = await response.json();
     expect(body.quote.estimatedCredits).toBe("594");
     expect(body.quote.estimatedUsage.quantity).toBe("108000");
+    expect(body.quote.estimationPolicy).toBe("byteplus-video-v1");
     expect(BigInt(body.quote.reservationCredits)).toBeGreaterThan(594n);
     expect(mocks.budget).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -144,6 +145,45 @@ describe("authoritative quote API", () => {
       }),
     );
   });
+  it("reports text-token-v1 for external text quotes without BytePlus labeling", async () => {
+    mocks.db.providerModel.findFirst.mockResolvedValue({
+      ...model,
+      provider: "GROQ",
+      mediaKind: "TEXT",
+      providerModelId: "openai/gpt-oss-20b",
+      displayName: "GPT-OSS 20B",
+      capabilities: {
+        contextWindow: 131072,
+        scriptwriting: true,
+      },
+      priceVersions: [
+        {
+          ...price,
+          providerCostMicroUsd: 2000n,
+          pricingDimension: "TOKEN",
+          unitQuantity: 1000,
+          usageRates: {
+            estimator: "text-token-v1",
+            tiers: [
+              {
+                maxPromptTokens: 131072,
+                inputMicroUsdPerMillionTokens: "1000000",
+                outputMicroUsdPerMillionTokens: "2000000",
+              },
+            ],
+          },
+        },
+      ],
+    });
+    const response = await POST(request({ text: "abcd", units: 1000 }));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.quote.estimationPolicy).toBe("text-token-v1");
+    expect(body.quote.estimatedUsage.unit).toBe("TOKEN");
+    expect(body.quote.settlement).toBe("ACTUAL_USAGE");
+    expect(body.quote.customerCredits).toBe(body.quote.reservationCredits);
+  });
+
   it("rejects unauthorized boundaries and unsupported parameters", async () => {
     expect((await POST(request({ units: 16 }))).status).toBe(400);
     expect((await POST(request({ resolution: "4K" }))).status).toBe(400);

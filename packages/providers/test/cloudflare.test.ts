@@ -48,6 +48,11 @@ describe("createCloudflareAiProvider", () => {
         JSON.stringify({
           result: {
             response: "Screenplay lines generated via Cloudflare Llama 3.3.",
+            usage: {
+              prompt_tokens: 21,
+              completion_tokens: 9,
+              total_tokens: 30,
+            },
           },
           success: true,
           errors: [],
@@ -71,6 +76,11 @@ describe("createCloudflareAiProvider", () => {
     expect(result.content).toBe(
       "Screenplay lines generated via Cloudflare Llama 3.3.",
     );
+    expect(result.usage).toEqual({
+      promptTokens: 21,
+      completionTokens: 9,
+      totalTokens: 30,
+    });
     expect(fetchMock).toHaveBeenCalled();
   });
 

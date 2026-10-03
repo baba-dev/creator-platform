@@ -667,6 +667,7 @@ async function renderSection(
                         modelId={row.id}
                         providerModelId={row.providerModelId}
                         displayName={row.displayName}
+                        provider={row.provider}
                         enabled={row.enabled}
                         currentUsageRates={price?.usageRates}
                         currentProviderCostBasisNote={

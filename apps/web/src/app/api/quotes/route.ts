@@ -200,7 +200,9 @@ export async function POST(request: Request): Promise<NextResponse> {
               ? model.mediaKind === "VOICE"
                 ? "CHARACTER"
                 : "IMAGE"
-              : "COMPLETION_TOKEN",
+              : model.mediaKind === "TEXT"
+                ? "TOKEN"
+                : "COMPLETION_TOKEN",
           quantity:
             estimate.estimatedTokens?.toString() ??
             estimate.billableQuantity.toString(),
@@ -217,7 +219,15 @@ export async function POST(request: Request): Promise<NextResponse> {
         },
         estimationPolicy:
           activePriceVersion.pricingDimension === "TOKEN"
-            ? "byteplus-video-v1"
+            ? activePriceVersion.usageRates &&
+              typeof activePriceVersion.usageRates === "object" &&
+              !Array.isArray(activePriceVersion.usageRates) &&
+              "estimator" in activePriceVersion.usageRates
+              ? String(
+                  (activePriceVersion.usageRates as Record<string, unknown>)
+                    .estimator,
+                )
+              : "token-usage-v1"
             : "configured-unit-v1",
         confidence:
           estimate.estimatedTokens === null ? "FIXED_QUOTE" : "ESTIMATE",

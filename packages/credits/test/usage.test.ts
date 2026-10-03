@@ -3,10 +3,12 @@ import {
   estimateGeneration,
   estimateVideoTokens,
   parseTextUsageRates,
+  parseTextUsageRatesForProvider,
   parseUsageRates,
   quoteImageOutputs,
   selectUsageRate,
   textProviderCostMicroUsd,
+  textUsageEstimatorForProvider,
   type PriceSnapshot,
 } from "../src/index";
 import { parseMarginPercent, createCreditQuote } from "../src/pricing";
@@ -214,6 +216,77 @@ describe("generation pricing policies", () => {
       }),
     ).toThrow("must be positive");
   });
+
+  it("maps text pricing estimators to the provider family", () => {
+    expect(textUsageEstimatorForProvider("BYTEPLUS")).toBe("byteplus-text-v1");
+    for (const provider of ["GROQ", "GEMINI", "CLOUDFLARE"]) {
+      expect(textUsageEstimatorForProvider(provider)).toBe("text-token-v1");
+    }
+    expect(() => textUsageEstimatorForProvider("NVIDIA")).toThrow(
+      "not registered",
+    );
+  });
+
+  it("rejects cross-provider text estimator snapshots at publication boundaries", () => {
+    const generic = {
+      estimator: "text-token-v1",
+      tiers: [
+        {
+          maxPromptTokens: 131072,
+          inputMicroUsdPerMillionTokens: "1000000",
+          outputMicroUsdPerMillionTokens: "2000000",
+        },
+      ],
+    };
+    expect(parseTextUsageRatesForProvider(generic, "GROQ").estimator).toBe(
+      "text-token-v1",
+    );
+    expect(() => parseTextUsageRatesForProvider(generic, "BYTEPLUS")).toThrow(
+      "byteplus-text-v1",
+    );
+
+    const byteplus = { ...generic, estimator: "byteplus-text-v1" };
+    expect(parseTextUsageRatesForProvider(byteplus, "BYTEPLUS").estimator).toBe(
+      "byteplus-text-v1",
+    );
+    expect(() => parseTextUsageRatesForProvider(byteplus, "GEMINI")).toThrow(
+      "text-token-v1",
+    );
+  });
+
+  it.each([
+    ["GROQ", "openai/gpt-oss-20b"],
+    ["GEMINI", "gemini-3.5-flash-lite"],
+    ["CLOUDFLARE", "@cf/meta/llama-3.3-70b-instruct-fp8-fast"],
+  ])(
+    "quotes %s text usage with the generic external estimator",
+    (_provider, providerModelId) => {
+      const externalRates = {
+        estimator: "text-token-v1",
+        tiers: [
+          {
+            maxPromptTokens: 1_048_576,
+            inputMicroUsdPerMillionTokens: "1000000",
+            outputMicroUsdPerMillionTokens: "2000000",
+          },
+        ],
+      };
+      const result = estimateGeneration({
+        price: {
+          ...price,
+          providerCostMicroUsd: 2000n,
+          usageRates: externalRates,
+        },
+        mediaKind: "TEXT",
+        providerModelId,
+        text: "abcd",
+        units: 1000,
+      });
+      expect(result.settlement).toBe("ACTUAL_USAGE");
+      expect(result.quote.providerCostMicroUsd).toBe(2002n);
+      expect(result.reservation.providerCostMicroUsd).toBe(2004n);
+    },
+  );
 
   it("uses generic external text token rates for both quote and reservation", () => {
     const textRates = {

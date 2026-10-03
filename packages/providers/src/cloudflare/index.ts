@@ -31,6 +31,13 @@ const cloudflareAiResponseSchema = z.object({
   result: z.union([
     z.object({
       response: z.string().optional(),
+      usage: z
+        .object({
+          prompt_tokens: z.number().int().nonnegative().optional(),
+          completion_tokens: z.number().int().nonnegative().optional(),
+          total_tokens: z.number().int().nonnegative().optional(),
+        })
+        .optional(),
     }),
     z.string(),
   ]),
@@ -372,8 +379,20 @@ export function createCloudflareAiProvider(
 
       logger.info("Cloudflare text chat request succeeded", { modelId });
 
+      const usage =
+        typeof parsed.data.result === "string"
+          ? undefined
+          : parsed.data.result.usage;
+
       return {
         content,
+        usage: usage
+          ? {
+              promptTokens: usage.prompt_tokens ?? 0,
+              completionTokens: usage.completion_tokens ?? 0,
+              totalTokens: usage.total_tokens ?? 0,
+            }
+          : undefined,
       };
     },
 

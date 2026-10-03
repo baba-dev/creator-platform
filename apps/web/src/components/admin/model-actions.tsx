@@ -11,6 +11,11 @@ import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
+import {
+  adminTextEstimatorForProvider,
+  initialTextUsageTiers,
+  type AdminModelProvider,
+} from "@/lib/admin-model-pricing";
 
 function defaultSeedanceUsageRates(providerModelId?: string): UsageRate[] {
   if (providerModelId === "dreamina-seedance-2-0-mini-260615")
@@ -142,6 +147,7 @@ export function ModelActions({
   modelId,
   providerModelId,
   displayName,
+  provider,
   enabled,
   currentUsageRates,
   currentFxBaisaNumerator,
@@ -160,6 +166,7 @@ export function ModelActions({
   modelId: string;
   providerModelId?: string;
   displayName: string;
+  provider: AdminModelProvider;
   enabled: boolean;
   mediaKind?: "IMAGE" | "VIDEO" | "VOICE" | "REASONING" | "TEXT";
   currentUsageRates?: unknown;
@@ -215,29 +222,10 @@ export function ModelActions({
       ? (currentUsageRates as { rates: UsageRate[] }).rates
       : defaultSeedanceUsageRates(providerModelId);
   const [usageRows, setUsageRows] = useState<UsageRate[]>(initialRates);
-  const initialTextTiers =
-    currentUsageRates &&
-    typeof currentUsageRates === "object" &&
-    "estimator" in currentUsageRates &&
-    (currentUsageRates as { estimator?: unknown }).estimator ===
-      "byteplus-text-v1" &&
-    "tiers" in currentUsageRates &&
-    Array.isArray((currentUsageRates as { tiers?: unknown }).tiers)
-      ? ((currentUsageRates as { tiers: TextUsageTier[] }).tiers ?? [])
-      : ([
-          {
-            maxPromptTokens: 262144,
-            inputMicroUsdPerMillionTokens: String(
-              BigInt(defaultCost || "1") * 1000n,
-            ),
-            cachedInputMicroUsdPerMillionTokens: String(
-              BigInt(defaultCost || "1") * 1000n,
-            ),
-            outputMicroUsdPerMillionTokens: String(
-              BigInt(defaultCost || "1") * 1000n,
-            ),
-          },
-        ] as TextUsageTier[]);
+  const initialTextTiers = initialTextUsageTiers(
+    currentUsageRates,
+    defaultCost,
+  );
   const [textUsageTiers, setTextUsageTiers] =
     useState<TextUsageTier[]>(initialTextTiers);
   const [costNote, setCostNote] = useState(currentProviderCostBasisNote ?? "");
@@ -358,7 +346,7 @@ export function ModelActions({
           ...(mediaKind === "TEXT" && pricingDimension === "TOKEN"
             ? {
                 usageRates: {
-                  estimator: "byteplus-text-v1",
+                  estimator: adminTextEstimatorForProvider(provider),
                   tiers: textUsageTiers.map((tier) => {
                     const {
                       cachedInputMicroUsdPerMillionTokens,
@@ -630,6 +618,11 @@ export function ModelActions({
                       prompt, cached prompt and output usage. Add a second tier
                       when the provider charges more above a context threshold.
                       Settlement uses the provider-reported token breakdown.
+                      This provider publishes{" "}
+                      <code className="font-mono">
+                        {adminTextEstimatorForProvider(provider)}
+                      </code>
+                      .
                     </p>
                     {textUsageTiers.map((tier, index) => (
                       <div

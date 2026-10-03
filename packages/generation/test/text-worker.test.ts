@@ -289,6 +289,97 @@ describe("durable text generation billing", () => {
     );
   });
 
+  it.each([
+    ["groq", "openai/gpt-oss-20b"],
+    ["gemini", "gemini-3.5-flash-lite"],
+    ["cloudflare", "@cf/meta/llama-3.3-70b-instruct-fp8-fast"],
+  ])(
+    "settles %s text generation from provider-reported usage",
+    async (providerName, providerModelId) => {
+      const externalRates = {
+        estimator: "text-token-v1",
+        tiers: [
+          {
+            maxPromptTokens: 1_048_576,
+            inputMicroUsdPerMillionTokens: "1000000",
+            outputMicroUsdPerMillionTokens: "2000000",
+          },
+        ],
+      };
+      mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue(
+        queuedJob({
+          providerModel: {
+            mediaKind: "TEXT",
+            providerModelId,
+          },
+          priceVersion: {
+            ...basePrice,
+            providerCostMicroUsd: 2000n,
+            usageRates: externalRates,
+          },
+        }),
+      );
+      const tx = settlementTx();
+      mocks.db.$transaction.mockImplementationOnce(async (callback) =>
+        callback(tx),
+      );
+      const provider = {
+        name: providerName,
+        chat: vi.fn().mockResolvedValue({
+          providerRequestId: `${providerName}-request-1`,
+          content: "External provider answer.",
+          usage: {
+            promptTokens: 50,
+            completionTokens: 120,
+            totalTokens: 170,
+          },
+        }),
+      };
+
+      await processTextJob(
+        "job_text_1",
+        provider as Parameters<typeof processTextJob>[1],
+      );
+
+      expect(provider.chat).toHaveBeenCalledWith(
+        expect.objectContaining({
+          modelId: providerModelId,
+        }),
+      );
+      expect(mocks.credits.textProviderCostMicroUsd).toHaveBeenCalledWith(
+        externalRates,
+        {
+          promptTokens: 50,
+          completionTokens: 120,
+          cachedPromptTokens: 0,
+        },
+      );
+      expect(mocks.credits.captureCreditsForJob).toHaveBeenCalledWith(
+        tx,
+        expect.objectContaining({
+          jobId: "job_text_1",
+          amountCredits: 5n,
+          metadata: expect.objectContaining({
+            promptTokens: 50,
+            completionTokens: 120,
+            totalTokens: 170,
+            usageFallback: false,
+          }),
+        }),
+      );
+      expect(tx.generationJob.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: "SUCCEEDED",
+            actualProviderCostMicroUsd: 5_000n,
+            providerCostBasis: "PROVIDER_USAGE",
+            chargedCredits: 5n,
+          }),
+        }),
+      );
+    },
+  );
+
   it("never captures above the authorized reservation", async () => {
     mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue(queuedJob());
     mocks.credits.createCreditQuote.mockReturnValue({ customerCredits: 20n });

@@ -70,6 +70,7 @@ beforeEach(() => {
   });
   mocks.db.providerModel.findUnique.mockResolvedValue({
     id: modelId,
+    provider: "BYTEPLUS",
     providerModelId: "dreamina-seedance-2-5-260628",
     displayName: "Seedance",
     mediaKind: "VIDEO",
@@ -167,5 +168,115 @@ describe("token price publication", () => {
       (await PATCH(request({ ...params, targetMarginBps: 3000 }), context))
         .status,
     ).toBe(409);
+  });
+});
+
+describe("provider-aware text pricing", () => {
+  const textUsageRates = {
+    estimator: "text-token-v1",
+    tiers: [
+      {
+        maxPromptTokens: 131072,
+        inputMicroUsdPerMillionTokens: "1000000",
+        outputMicroUsdPerMillionTokens: "2000000",
+      },
+    ],
+  };
+  const bytePlusTextUsageRates = {
+    ...textUsageRates,
+    estimator: "byteplus-text-v1",
+  };
+  const textParams = {
+    providerCostMicroUsd: "2000",
+    pricingDimension: "TOKEN",
+    targetMarginBps: 2500,
+    idempotencyKey: "69331a23-2ea7-419a-b82d-a095de67568b",
+    usageRates: textUsageRates,
+  };
+
+  beforeEach(() => {
+    mocks.db.providerModel.findUnique.mockResolvedValue({
+      id: modelId,
+      provider: "GROQ",
+      providerModelId: "openai/gpt-oss-20b",
+      displayName: "GPT-OSS 20B",
+      mediaKind: "TEXT",
+      capabilities: { contextWindow: 131072, scriptwriting: true },
+    });
+    mocks.db.modelPriceVersion.findUnique.mockResolvedValue(null);
+    mocks.db.modelPriceVersion.findFirst.mockResolvedValue({
+      pricingDimension: "TOKEN",
+      unitQuantity: 1000,
+      providerCostMicroUsd: 2000n,
+      usageRates: textUsageRates,
+      fxBaisaNumerator: 769n,
+      fxBaisaDenominator: 2n,
+    });
+  });
+
+  it("publishes text-token-v1 for external text providers", async () => {
+    const res = await PATCH(request(textParams), context);
+    expect(res.status).toBe(200);
+    expect(mocks.db.modelPriceVersion.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          providerCostMicroUsd: 2000n,
+          usageRates: textUsageRates,
+          pricingDimension: "TOKEN",
+          unitQuantity: 1000,
+        }),
+      }),
+    );
+  });
+
+  it("rejects the BytePlus text estimator for an external provider", async () => {
+    const res = await PATCH(
+      request({
+        ...textParams,
+        idempotencyKey: "c607a068-69d0-4545-af2a-0c9c0bb90210",
+        usageRates: bytePlusTextUsageRates,
+      }),
+      context,
+    );
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({
+      error: expect.stringContaining("text-token-v1"),
+    });
+  });
+
+  it("rejects text-token-v1 for BytePlus text models", async () => {
+    mocks.db.providerModel.findUnique.mockResolvedValue({
+      id: modelId,
+      provider: "BYTEPLUS",
+      providerModelId: "seed-2-0-lite-260428",
+      displayName: "Seed 2.0 Lite",
+      mediaKind: "TEXT",
+      capabilities: { contextWindow: 262144, scriptwriting: true },
+    });
+    const res = await PATCH(
+      request({
+        ...textParams,
+        idempotencyKey: "68a2bfcb-ce21-4845-a567-62ac1ad0ee35",
+      }),
+      context,
+    );
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({
+      error: expect.stringContaining("byteplus-text-v1"),
+    });
+  });
+
+  it("refuses to enable an external text model with a mismatched active estimator", async () => {
+    mocks.db.modelPriceVersion.findFirst.mockResolvedValue({
+      pricingDimension: "TOKEN",
+      unitQuantity: 1000,
+      providerCostMicroUsd: 2000n,
+      usageRates: bytePlusTextUsageRates,
+    });
+    const res = await PATCH(request({ enabled: true }), context);
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toMatchObject({
+      error: expect.stringContaining("text-token-v1"),
+    });
   });
 });

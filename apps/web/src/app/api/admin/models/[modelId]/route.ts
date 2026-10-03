@@ -4,7 +4,7 @@ import {
   assertFlatVideoPriceCoversWorstCase,
   createCreditQuote,
   DEFAULT_FX_RATE,
-  parseTextUsageRates,
+  parseTextUsageRatesForProvider,
   parseUsageRates,
   selectUsageRate,
 } from "@aiwa/credits";
@@ -104,6 +104,27 @@ export async function PATCH(
           },
           { status: 409 },
         );
+      if (
+        model.mediaKind === "TEXT" &&
+        activePrice.pricingDimension === "TOKEN"
+      ) {
+        try {
+          parseTextUsageRatesForProvider(
+            activePrice.usageRates,
+            model.provider,
+          );
+        } catch (error) {
+          return NextResponse.json(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "The active text pricing snapshot is invalid for this provider.",
+            },
+            { status: 409 },
+          );
+        }
+      }
     }
 
     const updated = await db.$transaction(async (tx) => {
@@ -276,7 +297,7 @@ export async function PATCH(
       );
     if (pricingDimension === "TOKEN" && model.mediaKind === "TEXT") {
       try {
-        parseTextUsageRates(usageRates);
+        parseTextUsageRatesForProvider(usageRates, model.provider);
       } catch (error) {
         return NextResponse.json(
           {

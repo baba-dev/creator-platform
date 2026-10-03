@@ -553,13 +553,15 @@ export const VERIFIED_GROQ_MODELS: readonly ProviderModelDescriptor[] = [
     provider: "groq",
     displayName: "GPT-OSS 120B (Groq)",
     description:
-      "Production Groq reasoning model for prompt enhancement, creative planning, and high-depth synthesis.",
-    mediaKind: "reasoning",
+      "High-depth Groq reasoning and commercial text model for creative direction, story planning, and prompt enhancement.",
+    mediaKind: "text",
     capabilities: {
       contextWindow: 131072,
       reasoning: true,
       creativeDirector: true,
       storyPlanning: true,
+      "task:creative-director": true,
+      "task:story-planning": true,
       "task:prompt-enhancement": true,
     },
   },

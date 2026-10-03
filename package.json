@@ -17,7 +17,7 @@
     "db:seed": "pnpm --filter @aiwa/db seed",
     "dev": "turbo run dev --parallel",
     "format": "prettier --write .",
-    "format:check": "prettier --write packages/generation/test/text-worker.test.ts && git diff -- packages/generation/test/text-worker.test.ts && exit 1",
+    "format:check": "prettier --check .",
     "lint": "turbo run lint",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck"

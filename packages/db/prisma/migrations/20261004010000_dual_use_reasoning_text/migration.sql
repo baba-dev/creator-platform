@@ -12,14 +12,7 @@ SET
   `description` = 'High-depth Groq reasoning and commercial text model for creative direction, story planning, and prompt enhancement.',
   `capabilities` = JSON_MERGE_PATCH(
     COALESCE(`capabilities`, JSON_OBJECT()),
-    JSON_OBJECT(
-      'reasoning', TRUE,
-      'creativeDirector', TRUE,
-      'storyPlanning', TRUE,
-      'task:creative-director', TRUE,
-      'task:story-planning', TRUE,
-      'task:prompt-enhancement', TRUE
-    )
+    '{"reasoning":true,"creativeDirector":true,"storyPlanning":true,"task:creative-director":true,"task:story-planning":true,"task:prompt-enhancement":true}'
   )
 WHERE `provider` = 'GROQ'
   AND `providerModelId` = 'openai/gpt-oss-120b';
@@ -30,14 +23,7 @@ SET
   `description` = 'Long-context Gemini reasoning and commercial text model for creative direction, story planning, and prompt enhancement.',
   `capabilities` = JSON_MERGE_PATCH(
     COALESCE(`capabilities`, JSON_OBJECT()),
-    JSON_OBJECT(
-      'reasoning', TRUE,
-      'creativeDirector', TRUE,
-      'storyPlanning', TRUE,
-      'task:creative-director', TRUE,
-      'task:story-planning', TRUE,
-      'task:prompt-enhancement', TRUE
-    )
+    '{"reasoning":true,"creativeDirector":true,"storyPlanning":true,"task:creative-director":true,"task:story-planning":true,"task:prompt-enhancement":true}'
   )
 WHERE `provider` = 'GEMINI'
   AND `providerModelId` = 'gemini-3.8-flash';

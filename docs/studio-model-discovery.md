@@ -89,3 +89,20 @@ Current verified task examples include:
   Llama.
 - Brand Strategy and Story Planning: only catalog models explicitly verified for
   those tasks; no generic chat-model fallback is performed.
+
+## Prompt Enhance reasoning discovery
+
+Prompt Enhance uses the same canonical discovery contract as the text Studios,
+with one deliberate extension: the task accepts REASONING models and explicitly
+verified TEXT models. A TEXT model is never eligible merely because it supports
+chat; it must advertise `task:prompt-enhancement`.
+
+The current verified set can include NVIDIA Nemotron, Groq GPT-OSS 120B, Gemini
+3.8 Flash, and Cloudflare Llama 3.3 70B when each model is enabled, actively
+priced, and runtime-configured. NVIDIA remains the preferred default when
+available.
+
+The selected `ProviderModel.id` and active `ModelPriceVersion.id` are pinned
+to the durable ReasoningJob. Fresh discovery may change later, but an admitted
+job cannot switch providers during retry or settlement.
+

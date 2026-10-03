@@ -588,24 +588,26 @@ export async function storeImage(
   key: string,
   bytes: Buffer,
   organizationId?: string,
+  assetId?: string,
 ) {
   if (organizationId) {
-    try {
-      return await storeGeneratedMedia({
-        organizationId,
-        assetId: key,
-        objectKey: key,
-        bytes,
-        mimeType:
-          key.endsWith(".jpg") || key.endsWith(".jpeg")
-            ? "image/jpeg"
-            : "image/png",
-        mediaKind: "IMAGE",
-      });
-    } catch (error) {
-      if (error instanceof ImageStorageError) throw error;
-      // Fallback to local
+    if (!assetId) {
+      throw new ImageStorageError(
+        "STORAGE_WRITE_FAILED",
+        "Asset id is required for organization-scoped storage.",
+      );
     }
+    return storeGeneratedMedia({
+      organizationId,
+      assetId,
+      objectKey: key,
+      bytes,
+      mimeType:
+        key.endsWith(".jpg") || key.endsWith(".jpeg")
+          ? "image/jpeg"
+          : "image/png",
+      mediaKind: "IMAGE",
+    });
   }
 
   const path = storagePath(key);
@@ -831,21 +833,23 @@ export async function storeVideo(
   key: string,
   bytes: Buffer,
   organizationId?: string,
+  assetId?: string,
 ) {
   if (organizationId) {
-    try {
-      return await storeGeneratedMedia({
-        organizationId,
-        assetId: key,
-        objectKey: key,
-        bytes,
-        mimeType: "video/mp4",
-        mediaKind: "VIDEO",
-      });
-    } catch (error) {
-      if (error instanceof ImageStorageError) throw error;
-      // Fallback to local
+    if (!assetId) {
+      throw new ImageStorageError(
+        "STORAGE_WRITE_FAILED",
+        "Asset id is required for organization-scoped storage.",
+      );
     }
+    return storeGeneratedMedia({
+      organizationId,
+      assetId,
+      objectKey: key,
+      bytes,
+      mimeType: "video/mp4",
+      mediaKind: "VIDEO",
+    });
   }
 
   const path = storagePath(key);
@@ -952,22 +956,24 @@ export async function storeAudio(
   key: string,
   bytes: Buffer,
   organizationId?: string,
+  assetId?: string,
 ) {
   validateMp3Bytes(bytes);
   if (organizationId) {
-    try {
-      return await storeGeneratedMedia({
-        organizationId,
-        assetId: key,
-        objectKey: key,
-        bytes,
-        mimeType: "audio/mpeg",
-        mediaKind: "AUDIO",
-      });
-    } catch (error) {
-      if (error instanceof ImageStorageError) throw error;
-      // Fallback to local
+    if (!assetId) {
+      throw new ImageStorageError(
+        "STORAGE_WRITE_FAILED",
+        "Asset id is required for organization-scoped storage.",
+      );
     }
+    return storeGeneratedMedia({
+      organizationId,
+      assetId,
+      objectKey: key,
+      bytes,
+      mimeType: "audio/mpeg",
+      mediaKind: "AUDIO",
+    });
   }
 
   const path = storagePath(key);

@@ -12,7 +12,8 @@ const price = {
 };
 
 function row(
-  overrides: Partial<StudioModelRow> & Pick<StudioModelRow, "id" | "providerModelId">,
+  overrides: Partial<StudioModelRow> &
+    Pick<StudioModelRow, "id" | "providerModelId">,
 ): StudioModelRow {
   return {
     provider: "BYTEPLUS",

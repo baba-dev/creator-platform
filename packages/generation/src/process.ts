@@ -376,8 +376,7 @@ export async function processVideoSubmitJob(
             (asset.purpose === "REFERENCE_INPUT" &&
               asset.storageOwnerUserId !== job.createdById) ||
             (asset.id === referenceVideoId
-              ? asset.mediaKind !== "VIDEO" ||
-                asset.mimeType !== "video/mp4"
+              ? asset.mediaKind !== "VIDEO" || asset.mimeType !== "video/mp4"
               : asset.mediaKind !== "IMAGE"),
         )
       ) {

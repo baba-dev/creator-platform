@@ -23,10 +23,7 @@ import {
   processVideoSubmitJob,
   processVoiceJob,
 } from "@aiwa/generation/process";
-import {
-  processTextJob,
-  processTranscriptionJob,
-} from "@aiwa/generation";
+import { processTextJob, processTranscriptionJob } from "@aiwa/generation";
 import { mailJobId } from "@aiwa/mail";
 import {
   closeSmtpTransport,
@@ -860,7 +857,7 @@ async function dispatchGeneration() {
             status: true,
             organizationId: true,
             requestPayload: true,
-        providerModel: { select: { mediaKind: true } },
+            providerModel: { select: { mediaKind: true } },
           },
           orderBy: { id: "asc" },
           take: GENERATION_BATCH_SIZE,
@@ -922,7 +919,7 @@ async function dispatchGeneration() {
             status: true,
             organizationId: true,
             requestPayload: true,
-        providerModel: { select: { mediaKind: true } },
+            providerModel: { select: { mediaKind: true } },
           },
           orderBy: { id: "asc" },
           take: GENERATION_BATCH_SIZE,
@@ -959,8 +956,7 @@ async function dispatchGeneration() {
           !Array.isArray(job.requestPayload)
             ? (job.requestPayload as Record<string, unknown>)
             : {};
-        jobName =
-          payload.task === "transcription" ? "transcription" : "voice";
+        jobName = payload.task === "transcription" ? "transcription" : "voice";
       } else if (mediaKind === "TEXT") {
         if (job.status !== "QUEUED") continue;
         jobName = "text";

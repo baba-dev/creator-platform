@@ -1,6 +1,10 @@
 import { createReadStream } from "node:fs";
 import { Readable } from "node:stream";
-import { LocalAssetStorage, resolveLocalAssetPath } from "@aiwa/assets/storage";
+import {
+  LocalAssetStorage,
+  resolveAssetStorageForAsset,
+  resolveLocalAssetPath,
+} from "@aiwa/assets/storage";
 import { parseServerEnv } from "@aiwa/config";
 import { db } from "@aiwa/db";
 import { verifyProviderMediaGrant } from "@aiwa/generation/provider-media-grant";
@@ -46,6 +50,7 @@ async function serve(request: Request, assetId: string, head: boolean) {
           purpose: true,
           storageOwnerUserId: true,
           objectKey: true,
+          externalFileId: true,
         },
       },
     },
@@ -58,7 +63,6 @@ async function serve(request: Request, assetId: string, head: boolean) {
     asset.organizationId !== job.organizationId ||
     !["SUBMITTED", "PROCESSING"].includes(job.status) ||
     asset.status !== "READY" ||
-    asset.storageProvider !== "LOCAL" ||
     !["IMAGE", "VIDEO", "AUDIO"].includes(asset.mediaKind) ||
     (asset.purpose === "REFERENCE_INPUT" &&
       asset.storageOwnerUserId !== job.createdById)
@@ -66,8 +70,22 @@ async function serve(request: Request, assetId: string, head: boolean) {
     return new Response(null, { status: 404 });
 
   try {
-    const storage = new LocalAssetStorage(env.ASSET_STORAGE_ROOT);
-    const size = Number((await storage.stat(asset.objectKey)).byteSize);
+    const storage = await resolveAssetStorageForAsset(db, asset, {
+      storageRoot: env.ASSET_STORAGE_ROOT,
+      encryptionKey: env.STORAGE_ENCRYPTION_KEY,
+      googleClientId: env.GOOGLE_DRIVE_CLIENT_ID,
+      googleClientSecret: env.GOOGLE_DRIVE_CLIENT_SECRET,
+      onedriveClientId: env.ONEDRIVE_CLIENT_ID,
+      onedriveClientSecret: env.ONEDRIVE_CLIENT_SECRET,
+    });
+    const size = Number(
+      (
+        await storage.stat(
+          asset.objectKey,
+          asset.externalFileId ?? undefined,
+        )
+      ).byteSize,
+    );
     const maximumBytes =
       asset.mediaKind === "VIDEO"
         ? 100_000_000
@@ -125,11 +143,20 @@ async function serve(request: Request, assetId: string, head: boolean) {
     }
     headers.set("Content-Length", String(end - start + 1));
     if (head) return new Response(null, { status, headers });
-    const path = resolveLocalAssetPath(env.ASSET_STORAGE_ROOT, asset.objectKey);
-    const stream = Readable.toWeb(
-      createReadStream(path, { start, end }),
-    ) as ReadableStream<Uint8Array>;
-    return new Response(stream, { status, headers });
+    if (storage instanceof LocalAssetStorage) {
+      const path = resolveLocalAssetPath(env.ASSET_STORAGE_ROOT, asset.objectKey);
+      const stream = Readable.toWeb(
+        createReadStream(path, { start, end }),
+      ) as ReadableStream<Uint8Array>;
+      return new Response(stream, { status, headers });
+    }
+    const bytes = await storage.readRange(
+      asset.objectKey,
+      start,
+      end,
+      asset.externalFileId ?? undefined,
+    );
+    return new Response(new Uint8Array(bytes), { status, headers });
   } catch {
     return new Response(null, { status: 503 });
   }

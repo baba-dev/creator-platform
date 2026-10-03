@@ -49,18 +49,7 @@ jobs:
           bash -n infra/deploy/package-release.sh
 
       - name: Check formatting
-        run: |
-          pnpm exec prettier --write \
-            apps/web/src/app/api/assets/upload/route.ts \
-            'apps/web/src/app/api/provider-media/[assetId]/route.ts' \
-            apps/web/src/app/api/storage/config/route.ts \
-            packages/generation/src/process.ts
-          git diff -- \
-            apps/web/src/app/api/assets/upload/route.ts \
-            'apps/web/src/app/api/provider-media/[assetId]/route.ts' \
-            apps/web/src/app/api/storage/config/route.ts \
-            packages/generation/src/process.ts
-          exit 1
+        run: pnpm format:check
 
       - name: Lint
         run: pnpm lint

@@ -58,7 +58,7 @@ const TASK_MEDIA_KINDS: Readonly<Record<StudioTask, readonly string[]>> = {
   "creative-director": ["text"],
   "brand-strategy": ["text"],
   "story-planning": ["text"],
-  "prompt-enhancement": ["reasoning"],
+  "prompt-enhancement": ["reasoning", "text"],
   "speech-synthesis": ["voice"],
   transcription: ["voice"],
   "image-generation": ["image"],

@@ -3,8 +3,56 @@ import { db } from "@aiwa/db";
 import { chatThreadCreateSchema } from "@aiwa/validation";
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
+
+import {
+  clientChatModelReference,
+  resolveRequestedChatModel,
+} from "@/lib/chat-model-selection";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
+import {
+  getAvailableStudioModels,
+  StudioModelUnavailableError,
+  type PublicStudioModel,
+} from "@/lib/studio-model-discovery";
+
+const personaSelect = {
+  id: true,
+  name: true,
+  avatarUrl: true,
+  tag: true,
+  description: true,
+  systemPrompt: true,
+  voiceKey: true,
+  modelId: true,
+  providerModelRecordId: true,
+  isPreset: true,
+} as const;
+
+type PersonaSummary = {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+  tag: string | null;
+  description: string | null;
+  systemPrompt: string;
+  voiceKey: string | null;
+  modelId: string;
+  providerModelRecordId: string | null;
+  isPreset: boolean;
+};
+
+function serializePersona(
+  persona: PersonaSummary | null,
+  models: readonly PublicStudioModel[],
+) {
+  if (!persona) return null;
+  return {
+    ...persona,
+    ...clientChatModelReference(persona, models),
+    providerModelRecordId: undefined,
+  };
+}
 
 export async function GET(request: Request) {
   const session = await getRequestSession(request.headers);
@@ -40,33 +88,37 @@ export async function GET(request: Request) {
     );
   }
 
-  const threads = await db.chatThread.findMany({
-    where: {
-      organizationId,
-      createdById: session.user.id,
-    },
-    include: {
-      persona: {
-        select: {
-          id: true,
-          name: true,
-          avatarUrl: true,
-          tag: true,
-          description: true,
-          modelId: true,
-          voiceKey: true,
-        },
+  const [threads, discovery] = await Promise.all([
+    db.chatThread.findMany({
+      where: {
+        organizationId,
+        createdById: session.user.id,
       },
-      _count: {
-        select: { messages: true },
+      select: {
+        id: true,
+        title: true,
+        modelId: true,
+        providerModelRecordId: true,
+        createdAt: true,
+        updatedAt: true,
+        persona: { select: personaSelect },
+        _count: { select: { messages: true } },
       },
-    },
-    orderBy: { updatedAt: "desc" },
-    take: 100,
-  });
+      orderBy: { updatedAt: "desc" },
+      take: 100,
+    }),
+    getAvailableStudioModels("character-chat"),
+  ]);
 
   return NextResponse.json(
-    { threads },
+    {
+      threads: threads.map((thread) => ({
+        ...thread,
+        ...clientChatModelReference(thread, discovery.models),
+        providerModelRecordId: undefined,
+        persona: serializePersona(thread.persona, discovery.models),
+      })),
+    },
     { headers: { "Cache-Control": "no-store" } },
   );
 }
@@ -85,9 +137,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const json = await request.json();
-    const input = chatThreadCreateSchema.parse(json);
-
+    const input = chatThreadCreateSchema.parse(await request.json());
     const membership = await db.membership.findUnique({
       where: {
         organizationId_userId: {
@@ -141,22 +191,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const model = await db.providerModel.findFirst({
-      where: {
-        provider: "BYTEPLUS",
-        providerModelId: input.modelId,
-        mediaKind: "TEXT",
-        enabled: true,
-      },
-      select: { id: true },
-    });
-    if (!model) {
-      return NextResponse.json(
-        { error: "Selected text model is unavailable." },
-        { status: 400 },
-      );
-    }
-
+    const selectedModel = await resolveRequestedChatModel(input.modelId);
     const thread = await db.chatThread.create({
       data: {
         organizationId: input.organizationId,
@@ -164,21 +199,43 @@ export async function POST(request: Request) {
         createdById: session.user.id,
         personaId: input.personaId ?? null,
         title: input.title,
-        modelId: input.modelId,
+        modelId: selectedModel.providerModelId,
+        providerModelRecordId: selectedModel.id,
         systemPrompt: input.systemPrompt ?? null,
       },
-      include: {
-        persona: true,
+      select: {
+        id: true,
+        title: true,
+        modelId: true,
+        providerModelRecordId: true,
+        createdAt: true,
+        updatedAt: true,
+        persona: { select: personaSelect },
       },
     });
 
-    return NextResponse.json({ thread }, { status: 201 });
+    return NextResponse.json(
+      {
+        thread: {
+          ...thread,
+          modelId: selectedModel.id,
+          modelAvailable: true,
+          modelReference: "CANONICAL",
+          providerModelRecordId: undefined,
+          persona: serializePersona(thread.persona, [selectedModel]),
+        },
+      },
+      { status: 201 },
+    );
   } catch (error) {
     if (error instanceof ZodError) {
       return NextResponse.json(
         { error: "Invalid thread parameters.", issues: error.issues },
         { status: 400 },
       );
+    }
+    if (error instanceof StudioModelUnavailableError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
     }
     return NextResponse.json(
       { error: "Failed to create chat thread." },

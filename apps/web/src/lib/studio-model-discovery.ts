@@ -329,6 +329,7 @@ export async function resolveAvailableStudioModel(
           id: true,
           pricingDimension: true,
           unitQuantity: true,
+          usageRates: true,
         },
       },
     },

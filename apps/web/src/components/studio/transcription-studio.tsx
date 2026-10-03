@@ -323,8 +323,7 @@ export function TranscriptionStudio({
   }
 
   const resultText =
-    activeJob?.output &&
-    typeof activeJob.output.text === "string"
+    activeJob?.output && typeof activeJob.output.text === "string"
       ? activeJob.output.text
       : activeJob?.outputPayload &&
           typeof activeJob.outputPayload.text === "string"

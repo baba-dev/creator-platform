@@ -62,7 +62,9 @@ function capabilityRecord(value: unknown): Record<string, unknown> {
 }
 
 function positiveInteger(value: unknown): number | null {
-  return Number.isSafeInteger(value) && Number(value) > 0 ? Number(value) : null;
+  return Number.isSafeInteger(value) && Number(value) > 0
+    ? Number(value)
+    : null;
 }
 
 const PROVIDER_ORDER = new Map(
@@ -117,9 +119,7 @@ export function selectDiscoverableStudioModels(
         maxTokens: positiveInteger(capabilities.maxTokens),
         flags: {
           reasoning: capabilities.reasoning === true,
-          fast:
-            capabilities.fast === true ||
-            capabilities.flash === true,
+          fast: capabilities.fast === true || capabilities.flash === true,
         },
         tasks: listStudioTasksForModel(descriptor),
         pricing: {

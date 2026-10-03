@@ -91,6 +91,7 @@ export interface TextUsageRates {
 }
 
 const EXTERNAL_TEXT_PRICING_PROVIDERS = new Set([
+  "NVIDIA",
   "GROQ",
   "GEMINI",
   "CLOUDFLARE",

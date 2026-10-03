@@ -3,8 +3,63 @@ import { db } from "@aiwa/db";
 import { personaCreateSchema } from "@aiwa/validation";
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
+
+import {
+  clientChatModelReference,
+  resolveRequestedChatModel,
+} from "@/lib/chat-model-selection";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
+import {
+  getAvailableStudioModels,
+  StudioModelUnavailableError,
+  type PublicStudioModel,
+} from "@/lib/studio-model-discovery";
+
+const personaSelect = {
+  id: true,
+  organizationId: true,
+  name: true,
+  avatarUrl: true,
+  tag: true,
+  description: true,
+  systemPrompt: true,
+  voiceKey: true,
+  modelId: true,
+  providerModelRecordId: true,
+  isPreset: true,
+  createdById: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
+type PersonaRow = {
+  id: string;
+  organizationId: string;
+  name: string;
+  avatarUrl: string | null;
+  tag: string | null;
+  description: string | null;
+  systemPrompt: string;
+  voiceKey: string | null;
+  modelId: string;
+  providerModelRecordId: string | null;
+  isPreset: boolean;
+  createdById: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+function serializePersona(
+  persona: PersonaRow,
+  models: readonly PublicStudioModel[],
+) {
+  return {
+    ...persona,
+    ...clientChatModelReference(persona, models),
+    providerModelRecordId: undefined,
+  };
+}
 
 export async function GET(request: Request) {
   const session = await getRequestSession(request.headers);
@@ -39,14 +94,22 @@ export async function GET(request: Request) {
     );
   }
 
-  const personas = await db.persona.findMany({
-    where: { organizationId },
-    orderBy: [{ isPreset: "desc" }, { createdAt: "asc" }],
-    take: 100,
-  });
+  const [personas, discovery] = await Promise.all([
+    db.persona.findMany({
+      where: { organizationId },
+      select: personaSelect,
+      orderBy: [{ isPreset: "desc" }, { createdAt: "asc" }],
+      take: 100,
+    }),
+    getAvailableStudioModels("character-chat"),
+  ]);
 
   return NextResponse.json(
-    { personas },
+    {
+      personas: personas.map((persona) =>
+        serializePersona(persona, discovery.models),
+      ),
+    },
     { headers: { "Cache-Control": "no-store" } },
   );
 }
@@ -64,9 +127,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const json = await request.json();
-    const input = personaCreateSchema.parse(json);
-
+    const input = personaCreateSchema.parse(await request.json());
     const membership = await db.membership.findUnique({
       where: {
         organizationId_userId: {
@@ -87,30 +148,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const model = await db.providerModel.findFirst({
-      where: {
-        provider: "BYTEPLUS",
-        providerModelId: input.modelId,
-        mediaKind: "TEXT",
-        enabled: true,
-        priceVersions: {
-          some: {
-            effectiveFrom: { lte: new Date() },
-            OR: [{ effectiveTo: null }, { effectiveTo: { gt: new Date() } }],
-          },
-        },
-      },
-      select: { id: true },
-    });
-    if (!model) {
-      return NextResponse.json(
-        {
-          error: "Selected text model is unavailable or has no active pricing.",
-        },
-        { status: 400 },
-      );
-    }
-
+    const selectedModel = await resolveRequestedChatModel(input.modelId);
     const persona = await db.persona.create({
       data: {
         organizationId: input.organizationId,
@@ -121,18 +159,32 @@ export async function POST(request: Request) {
         description: input.description ?? null,
         systemPrompt: input.systemPrompt,
         voiceKey: input.voiceKey ?? null,
-        modelId: input.modelId ?? "doubao-seed-character-260628",
+        modelId: selectedModel.providerModelId,
+        providerModelRecordId: selectedModel.id,
         isPreset: false,
       },
+      select: personaSelect,
     });
 
-    return NextResponse.json({ persona }, { status: 201 });
+    return NextResponse.json(
+      {
+        persona: {
+          ...serializePersona(persona, [selectedModel]),
+          modelAvailable: true,
+          modelReference: "CANONICAL",
+        },
+      },
+      { status: 201 },
+    );
   } catch (error) {
     if (error instanceof ZodError) {
       return NextResponse.json(
         { error: "Invalid persona parameters.", issues: error.issues },
         { status: 400 },
       );
+    }
+    if (error instanceof StudioModelUnavailableError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
     }
     return NextResponse.json(
       { error: "Failed to create persona." },

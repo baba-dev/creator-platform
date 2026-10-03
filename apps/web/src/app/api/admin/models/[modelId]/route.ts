@@ -41,9 +41,7 @@ function assertVoicePricingMatchesCapabilities(
     pricingDimension !== "SECOND" &&
     pricingDimension !== "REQUEST"
   ) {
-    throw new Error(
-      "Transcription models require SECOND or REQUEST pricing.",
-    );
+    throw new Error("Transcription models require SECOND or REQUEST pricing.");
   }
   if (
     !transcription &&

@@ -105,7 +105,7 @@ export async function PATCH(
           { status: 409 },
         );
       if (
-        model.mediaKind === "TEXT" &&
+        (model.mediaKind === "TEXT" || model.mediaKind === "REASONING") &&
         activePrice.pricingDimension === "TOKEN"
       ) {
         try {
@@ -288,14 +288,23 @@ export async function PATCH(
         { error: "Usage rates require TOKEN pricing." },
         { status: 400 },
       );
-    if (usageRates && model.mediaKind !== "VIDEO" && model.mediaKind !== "TEXT")
+    if (
+      usageRates &&
+      model.mediaKind !== "VIDEO" &&
+      model.mediaKind !== "TEXT" &&
+      model.mediaKind !== "REASONING"
+    )
       return NextResponse.json(
         {
-          error: "Usage-rate tables are only valid for video or text models.",
+          error:
+            "Usage-rate tables are only valid for video, text, or reasoning models.",
         },
         { status: 400 },
       );
-    if (pricingDimension === "TOKEN" && model.mediaKind === "TEXT") {
+    if (
+      pricingDimension === "TOKEN" &&
+      (model.mediaKind === "TEXT" || model.mediaKind === "REASONING")
+    ) {
       try {
         parseTextUsageRatesForProvider(usageRates, model.provider);
       } catch (error) {

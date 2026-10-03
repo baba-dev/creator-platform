@@ -45,7 +45,14 @@ export async function GET(request: Request) {
     const expectedSig = createHmac("sha256", env.AUTH_SECRET)
       .update(payload)
       .digest("hex");
-    if (signature !== expectedSig) throw new Error("Invalid state signature");
+    const received = Buffer.from(signature, "hex");
+    const expected = Buffer.from(expectedSig, "hex");
+    if (
+      received.length !== expected.length ||
+      !timingSafeEqual(received, expected)
+    ) {
+      throw new Error("Invalid state signature");
+    }
 
     const issuedAt = Number(timestampStr);
     const age = Date.now() - issuedAt;

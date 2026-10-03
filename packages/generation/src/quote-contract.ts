@@ -181,7 +181,9 @@ export function quoteParameters(
           ? null
           : createHash("sha256").update(input.text.trim()).digest("hex"),
       units: input.units ?? 1024,
-      responseFormat: input.responseFormat ?? "text",
+      ...(input.responseFormat === "json_object"
+        ? { responseFormat: "json_object" }
+        : {}),
       billableQuantity:
         input.text === undefined ? (input.billableQuantity ?? null) : null,
     };

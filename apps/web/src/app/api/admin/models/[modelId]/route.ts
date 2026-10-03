@@ -436,7 +436,9 @@ export async function PATCH(
             videoInputRate720p: videoInputRate720p ?? null,
             videoInputRate1080p: videoInputRate1080p ?? null,
             customerCredits:
-              pricingDimension === "TOKEN" ? 0n : quote.customerCredits,
+              model.mediaKind === "REASONING" || pricingDimension === "TOKEN"
+                ? 0n
+                : quote.customerCredits,
             fxBaisaNumerator,
             fxBaisaDenominator,
             targetMarginBps,

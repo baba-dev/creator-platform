@@ -317,8 +317,7 @@ export function SpokespersonStudio({
         1,
         Number(voiceModel.unitQuantity ?? 1000),
       );
-      voiceCredits =
-        Math.ceil(chars / voiceUnitQuantity) * voiceCreditsPerUnit;
+      voiceCredits = Math.ceil(chars / voiceUnitQuantity) * voiceCreditsPerUnit;
     }
 
     const totalCredits = videoCredits + voiceCredits;
@@ -699,7 +698,7 @@ export function SpokespersonStudio({
 
   const isConfigured = Boolean(
     data?.visionConfigured &&
-      (audioMode === "AUDIO_ASSET" || data?.voiceConfigured),
+    (audioMode === "AUDIO_ASSET" || data?.voiceConfigured),
   );
 
   return (
@@ -1233,7 +1232,8 @@ export function SpokespersonStudio({
                     {creditBreakdown.videoCreditsPerUnit} cr/
                     {creditBreakdown.videoUnitQuantity === 1
                       ? "s"
-                      : `${creditBreakdown.videoUnitQuantity}s`})
+                      : `${creditBreakdown.videoUnitQuantity}s`}
+                    )
                   </span>
                   <span className="font-mono tabular-nums">
                     {creditBreakdown.videoCredits} cr

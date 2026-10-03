@@ -313,6 +313,7 @@ export const bytePlusTextInputSchema = z.object({
   temperature: z.number().min(0).max(2).default(0.7),
   maxTokens: z.number().int().positive().max(8192).default(2048),
   topP: z.number().min(0).max(1).optional(),
+  responseFormat: z.enum(["text", "json_object"]).default("text"),
 });
 
 export const VERIFIED_BYTEPLUS_MODELS: readonly ProviderModelDescriptor[] = [
@@ -1707,6 +1708,9 @@ export function createBytePlusProvider(
                 max_tokens: input.data.maxTokens,
                 ...(input.data.topP !== undefined
                   ? { top_p: input.data.topP }
+                  : {}),
+                ...(input.data.responseFormat === "json_object"
+                  ? { response_format: { type: "json_object" } }
                   : {}),
               }),
             },

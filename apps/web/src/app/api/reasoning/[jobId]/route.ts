@@ -83,7 +83,6 @@ export async function GET(
       id: job.id,
       status: job.status,
       outputPayload: job.outputPayload,
-      providerRequestId: job.providerRequestId,
       model: {
         id: job.providerModel.id,
         provider: job.providerModel.provider,

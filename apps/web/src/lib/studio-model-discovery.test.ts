@@ -298,3 +298,81 @@ describe("dynamic text Studio discovery", () => {
     ]);
   });
 });
+
+describe("prompt enhancement model discovery", () => {
+  it("discovers configured NVIDIA, Groq, Gemini, and explicit Cloudflare models", () => {
+    const result = selectDiscoverableStudioModels(
+      [
+        row({
+          id: "nvidia-reasoning",
+          provider: "NVIDIA",
+          providerModelId:
+            "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+          displayName: "Nemotron",
+          mediaKind: "REASONING",
+          capabilities: {
+            reasoning: true,
+            "task:prompt-enhancement": true,
+          },
+        }),
+        row({
+          id: "groq-reasoning",
+          provider: "GROQ",
+          providerModelId: "openai/gpt-oss-120b",
+          displayName: "GPT-OSS 120B",
+          mediaKind: "REASONING",
+          capabilities: {
+            reasoning: true,
+            "task:prompt-enhancement": true,
+          },
+        }),
+        row({
+          id: "gemini-reasoning",
+          provider: "GEMINI",
+          providerModelId: "gemini-3.8-flash",
+          displayName: "Gemini 3.8 Flash",
+          mediaKind: "REASONING",
+          capabilities: {
+            reasoning: true,
+            "task:prompt-enhancement": true,
+          },
+        }),
+        row({
+          id: "cloudflare-text",
+          provider: "CLOUDFLARE",
+          providerModelId: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+          displayName: "Llama 3.3 70B",
+          mediaKind: "TEXT",
+          capabilities: { "task:prompt-enhancement": true },
+        }),
+        row({
+          id: "generic-text",
+          provider: "GROQ",
+          providerModelId: "openai/gpt-oss-20b",
+          mediaKind: "TEXT",
+          capabilities: { chat: true },
+        }),
+      ],
+      "prompt-enhancement",
+      {
+        NVIDIA_API_KEY: "nvidia",
+        GROQ_API_KEY: "groq",
+        GEMINI_API_KEY: "gemini",
+        CLOUDFLARE_API_TOKEN: "cloudflare",
+        CLOUDFLARE_ACCOUNT_ID: "account",
+      },
+    );
+
+    expect(result.defaultModelId).toBe("nvidia-reasoning");
+    expect(result.models.map((model) => model.id)).toEqual([
+      "nvidia-reasoning",
+      "gemini-reasoning",
+      "groq-reasoning",
+      "cloudflare-text",
+    ]);
+    expect(result.models.some((model) => model.id === "generic-text")).toBe(
+      false,
+    );
+  });
+});
+

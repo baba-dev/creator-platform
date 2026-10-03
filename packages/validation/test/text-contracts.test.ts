@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   chatMessageCreateSchema,
+  isPricingDimensionSupportedForMedia,
   publishPriceVersionSchema,
   scriptUpdateSchema,
 } from "../src/index";
@@ -94,5 +95,22 @@ describe("text and voice workspace validation contracts", () => {
     });
 
     expect(parsed.usageRates?.estimator).toBe("byteplus-text-v1");
+  });
+});
+
+describe("reasoning pricing validation", () => {
+  it("allows request or token pricing for reasoning but not media-only dimensions", () => {
+    expect(isPricingDimensionSupportedForMedia("REASONING", "REQUEST")).toBe(
+      true,
+    );
+    expect(isPricingDimensionSupportedForMedia("REASONING", "TOKEN")).toBe(
+      true,
+    );
+    expect(isPricingDimensionSupportedForMedia("REASONING", "SECOND")).toBe(
+      false,
+    );
+    expect(isPricingDimensionSupportedForMedia("REASONING", "CHARACTER")).toBe(
+      false,
+    );
   });
 });

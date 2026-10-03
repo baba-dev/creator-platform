@@ -471,6 +471,7 @@ model ModelPriceVersion {
   providerModel         ProviderModel    @relation(fields: [providerModelId], references: [id], onDelete: Restrict)
   createdBy             User             @relation("PriceVersionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   generationJobs        GenerationJob[]
+  reasoningJobs         ReasoningJob[]
 
   @@index([providerModelId, effectiveFrom])
   @@index([effectiveFrom, effectiveTo])
@@ -896,14 +897,18 @@ model ReasoningJob {
   organizationId    String
   createdById       String
   providerModelId   String
+  priceVersionId    String?
   status            ReasoningJobStatus @default(QUEUED)
   idempotencyKey    String             @unique
   requestPayload    Json
   outputPayload     Json?
   providerRequestId String?
-  inputTokens       Int?
-  outputTokens      Int?
-  errorCode         String?
+  inputTokens                   Int?
+  outputTokens                  Int?
+  estimatedProviderCostMicroUsd BigInt?
+  actualProviderCostMicroUsd    BigInt?
+  providerCostBasis             String?            @db.VarChar(32)
+  errorCode                     String?
   errorMessage      String?            @db.Text
   queuedAt          DateTime?
   processingAt      DateTime?
@@ -911,15 +916,17 @@ model ReasoningJob {
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
-  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  createdBy     User          @relation("ReasoningCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  providerModel ProviderModel @relation(fields: [providerModelId], references: [id], onDelete: Restrict)
+  organization  Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  createdBy     User               @relation("ReasoningCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  providerModel ProviderModel      @relation(fields: [providerModelId], references: [id], onDelete: Restrict)
+  priceVersion  ModelPriceVersion? @relation(fields: [priceVersionId], references: [id], onDelete: Restrict)
 
   @@index([organizationId, status, createdAt])
   @@index([createdById, organizationId, status, createdAt])
   @@index([createdById, organizationId, createdAt])
   @@index([status, updatedAt])
   @@index([providerRequestId])
+  @@index([priceVersionId])
 }
 
 enum MediaTaskStatus {

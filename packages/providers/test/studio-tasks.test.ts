@@ -99,3 +99,25 @@ describe("dynamic text Studio task assignments", () => {
     }
   });
 });
+
+describe("multi-provider prompt enhancement task assignments", () => {
+  it("allows verified reasoning models and the explicitly-capable Cloudflare text model", () => {
+    for (const id of [
+      "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+      "openai/gpt-oss-120b",
+      "gemini-3.8-flash",
+      "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    ]) {
+      expect(supportsStudioTask(model(id), "prompt-enhancement")).toBe(true);
+    }
+  });
+
+  it("does not treat generic text capability as prompt-enhancement permission", () => {
+    expect(
+      supportsStudioTask(model("openai/gpt-oss-20b"), "prompt-enhancement"),
+    ).toBe(false);
+    expect(
+      supportsStudioTask(model("gemini-3.5-flash-lite"), "prompt-enhancement"),
+    ).toBe(false);
+  });
+});

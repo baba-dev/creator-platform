@@ -7,7 +7,12 @@ export function adminTextEstimatorForProvider(
   provider: AdminModelProvider,
 ): "byteplus-text-v1" | "text-token-v1" {
   if (provider === "BYTEPLUS") return "byteplus-text-v1";
-  if (provider === "GROQ" || provider === "GEMINI" || provider === "CLOUDFLARE")
+  if (
+    provider === "NVIDIA" ||
+    provider === "GROQ" ||
+    provider === "GEMINI" ||
+    provider === "CLOUDFLARE"
+  )
     return "text-token-v1";
   throw new Error("This provider does not support token-priced text models.");
 }

@@ -90,6 +90,11 @@ describe("createCloudflareAiProvider", () => {
         JSON.stringify({
           result: {
             response: '{"enhancedPrompt":"Desert sunrise over dunes"}',
+            usage: {
+              prompt_tokens: 40,
+              completion_tokens: 20,
+              total_tokens: 60,
+            },
           },
           success: true,
           errors: [],
@@ -115,6 +120,8 @@ describe("createCloudflareAiProvider", () => {
     expect(result.content).toEqual({
       enhancedPrompt: "Desert sunrise over dunes",
     });
+    expect(result.inputTokens).toBe(40);
+    expect(result.outputTokens).toBe(20);
   });
 
   it("fetches embeddings with Cloudflare format", async () => {

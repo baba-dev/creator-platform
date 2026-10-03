@@ -2,6 +2,7 @@ import { hasOrganizationPermission } from "@aiwa/authz";
 import { db, Prisma } from "@aiwa/db";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+
 import { getRequestSession } from "@/lib/request-auth";
 import {
   admitReasoningJob,
@@ -9,6 +10,11 @@ import {
 } from "@/lib/reasoning-admission";
 import { rateLimit } from "@/lib/rate-limit";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
+import {
+  getAvailableStudioModels,
+  selectStudioModelBySelection,
+  StudioModelUnavailableError,
+} from "@/lib/studio-model-discovery";
 
 const reasoningLimiter = rateLimit({
   max: 20,
@@ -16,8 +22,6 @@ const reasoningLimiter = rateLimit({
   prefix: "reasoning",
 });
 
-const DEFAULT_NVIDIA_REASONING_MODEL =
-  "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning";
 function promptEnhancementSystemPrompt(targetMedia: "IMAGE" | "VIDEO") {
   return [
     `You are an expert creative director for AI ${targetMedia === "VIDEO" ? "video" : "image"} generation.`,
@@ -30,12 +34,30 @@ function promptEnhancementSystemPrompt(targetMedia: "IMAGE" | "VIDEO") {
   ].join(" ");
 }
 
-const requestSchema = z.object({
-  organizationId: z.string().min(1),
-  userPrompt: z.string().trim().min(1).max(2000),
-  targetMedia: z.enum(["IMAGE", "VIDEO"]),
-  idempotencyKey: z.uuid(),
-});
+const requestSchema = z
+  .object({
+    organizationId: z.string().min(1).max(191),
+    userPrompt: z.string().trim().min(1).max(2000),
+    targetMedia: z.enum(["IMAGE", "VIDEO"]),
+    idempotencyKey: z.uuid(),
+    modelId: z.string().min(1).max(191).optional(),
+  })
+  .strict();
+
+function publicModel(model: {
+  id: string;
+  provider: string;
+  providerModelId: string;
+  displayName?: string;
+  name?: string;
+}) {
+  return {
+    id: model.id,
+    provider: model.provider,
+    providerModelId: model.providerModelId,
+    name: model.displayName ?? model.name ?? model.providerModelId,
+  };
+}
 
 function failure(error: unknown) {
   const status =
@@ -51,22 +73,25 @@ function failure(error: unknown) {
   );
 }
 
-function supportsPromptEnhancement(capabilities: unknown): boolean {
-  if (!capabilities || typeof capabilities !== "object") return false;
-  return (
-    (capabilities as Record<string, unknown>)["task:prompt-enhancement"] ===
-    true
-  );
-}
-
 async function existingResponse(
   idempotencyKey: string,
   organizationId: string,
   userPrompt: string,
   targetMedia: "IMAGE" | "VIDEO",
+  requestedModelId?: string,
 ) {
   const existing = await db.reasoningJob.findUnique({
     where: { idempotencyKey },
+    include: {
+      providerModel: {
+        select: {
+          id: true,
+          provider: true,
+          providerModelId: true,
+          displayName: true,
+        },
+      },
+    },
   });
   if (!existing) return null;
 
@@ -75,11 +100,16 @@ async function existingResponse(
     userPrompt?: unknown;
     targetMedia?: unknown;
   };
+  const sameModel =
+    requestedModelId === undefined ||
+    requestedModelId === existing.providerModel.id ||
+    requestedModelId === existing.providerModel.providerModelId;
   if (
     existing.organizationId !== organizationId ||
     payload.task !== "prompt-enhancement" ||
     payload.userPrompt !== userPrompt ||
-    payload.targetMedia !== targetMedia
+    payload.targetMedia !== targetMedia ||
+    !sameModel
   )
     return NextResponse.json(
       { error: "Idempotency key was already used for different inputs." },
@@ -87,7 +117,11 @@ async function existingResponse(
     );
 
   return NextResponse.json(
-    { jobId: existing.id, status: existing.status },
+    {
+      jobId: existing.id,
+      status: existing.status,
+      model: publicModel(existing.providerModel),
+    },
     { status: 202 },
   );
 }
@@ -105,12 +139,6 @@ export async function POST(request: Request) {
 
   const rateLimited = await reasoningLimiter.check(session.user.id);
   if (rateLimited) return rateLimited;
-
-  if (!process.env.NVIDIA_API_KEY)
-    return NextResponse.json(
-      { error: "Prompt enhancement is not configured." },
-      { status: 503 },
-    );
 
   try {
     const text = await request.text();
@@ -141,42 +169,43 @@ export async function POST(request: Request) {
     )
       return NextResponse.json({ error: "Access denied." }, { status: 403 });
 
-    const configuredModel =
-      process.env.NVIDIA_REASONING_MODEL || DEFAULT_NVIDIA_REASONING_MODEL;
-    const providerModel = await db.providerModel.findUnique({
-      where: {
-        provider_providerModelId: {
-          provider: "NVIDIA",
-          providerModelId: configuredModel,
-        },
-      },
-    });
-
-    if (
-      !providerModel ||
-      providerModel.mediaKind !== "REASONING" ||
-      !providerModel.enabled ||
-      !supportsPromptEnhancement(providerModel.capabilities)
-    )
-      return NextResponse.json(
-        { error: "NVIDIA prompt enhancement model is not enabled." },
-        { status: 503 },
-      );
-
     const idempotencyKey = `reasoning:${session.user.id}:${parsed.idempotencyKey}`;
     const previous = await existingResponse(
       idempotencyKey,
       parsed.organizationId,
       parsed.userPrompt,
       parsed.targetMedia,
+      parsed.modelId,
     );
     if (previous) return previous;
+
+    const discovery = await getAvailableStudioModels("prompt-enhancement");
+    if (discovery.models.length === 0)
+      return NextResponse.json(
+        { error: "Prompt enhancement is not configured." },
+        { status: 503 },
+      );
+
+    let selected;
+    try {
+      selected = parsed.modelId
+        ? selectStudioModelBySelection(discovery, parsed.modelId)
+        : selectStudioModelBySelection(
+            discovery,
+            discovery.defaultModelId ?? discovery.models[0]!.id,
+          );
+    } catch (error) {
+      if (error instanceof StudioModelUnavailableError)
+        return NextResponse.json({ error: error.message }, { status: 409 });
+      throw error;
+    }
 
     try {
       const { job } = await admitReasoningJob({
         organizationId: parsed.organizationId,
         userId: session.user.id,
-        providerModelId: providerModel.id,
+        providerModelId: selected.id,
+        priceVersionId: selected.pricing.priceVersionId,
         idempotencyKey,
         userPrompt: parsed.userPrompt,
         targetMedia: parsed.targetMedia,
@@ -184,15 +213,21 @@ export async function POST(request: Request) {
       });
 
       return NextResponse.json(
-        { jobId: job.id, status: job.status },
+        {
+          jobId: job.id,
+          status: job.status,
+          model: publicModel({
+            ...selected,
+            displayName: selected.name,
+          }),
+        },
         { status: 202 },
       );
     } catch (error) {
       if (error instanceof ReasoningAdmissionError) {
         const headers: Record<string, string> = {};
-        if (error.retryAfterSeconds > 0) {
+        if (error.retryAfterSeconds > 0)
           headers["Retry-After"] = String(error.retryAfterSeconds);
-        }
         return NextResponse.json(
           { error: error.message },
           { status: error.status, headers },
@@ -207,6 +242,7 @@ export async function POST(request: Request) {
           parsed.organizationId,
           parsed.userPrompt,
           parsed.targetMedia,
+          parsed.modelId,
         );
         if (raced) return raced;
       }

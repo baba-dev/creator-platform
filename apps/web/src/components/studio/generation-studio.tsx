@@ -12,6 +12,10 @@ import { Eyebrow } from "@/components/ui/creative";
 import { StatusDot, Tape } from "@/components/ui/sketch";
 import { AudioWaveformPlayer } from "@/components/ui/audio-waveform-player";
 import { VoiceCastingBooth } from "@/components/ui/voice-casting-booth";
+import {
+  StudioModelSelect,
+  type StudioModelOption,
+} from "@/components/studio/studio-model-select";
 import { announceGenerationStarted } from "@/lib/generation-activity";
 import {
   capabilityValues,
@@ -112,6 +116,17 @@ type Studio = {
   projects: ProjectOption[];
   jobs: Job[];
 };
+function providerDisplayName(provider: string): string {
+  const labels: Record<string, string> = {
+    BYTEPLUS: "BytePlus",
+    NVIDIA: "NVIDIA",
+    GROQ: "Groq",
+    GEMINI: "Gemini",
+    CLOUDFLARE: "Cloudflare",
+  };
+  return labels[provider] ?? provider;
+}
+
 function statusLabel(status: string, mediaKind: MediaKind): string {
   const media =
     mediaKind === "VIDEO" ? "video" : mediaKind === "VOICE" ? "voice" : "image";
@@ -152,12 +167,16 @@ export function GenerationStudio({
   organizationSlug,
   variant = "advanced",
   initialMode = "IMAGE",
+  promptEnhancementModels = [],
+  promptEnhancementDefaultModelId = null,
 }: {
   canGenerate: boolean;
   organizationId: string;
   organizationSlug: string;
   variant?: "quick" | "advanced";
   initialMode?: MediaKind;
+  promptEnhancementModels?: StudioModelOption[];
+  promptEnhancementDefaultModelId?: string | null;
 }) {
   const [data, setData] = useState<Studio | null>(null);
   const [activeMode, setActiveMode] = useState<MediaKind>(initialMode);
@@ -223,6 +242,13 @@ export function GenerationStudio({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEnhancing, setIsEnhancing] = useState(false);
+  const [promptEnhancementModelId, setPromptEnhancementModelId] = useState(
+    promptEnhancementDefaultModelId ?? promptEnhancementModels[0]?.id ?? "",
+  );
+  const [enhancementAttribution, setEnhancementAttribution] = useState<{
+    name: string;
+    provider: string;
+  } | null>(null);
   const consumedTemplateHandoff = useRef<string | null>(null);
   const attempt = useRef<{ fingerprint: string; key: string } | null>(null);
   const enhancementAttempt = useRef<{
@@ -1242,12 +1268,21 @@ export function GenerationStudio({
 
   async function enhancePrompt() {
     const sourcePrompt = prompt.trim();
-    if (!sourcePrompt || !model || isEnhancing || busy || !canGenerate) return;
+    if (
+      !sourcePrompt ||
+      !model ||
+      !promptEnhancementModelId ||
+      isEnhancing ||
+      busy ||
+      !canGenerate
+    )
+      return;
 
     const fingerprint = JSON.stringify({
       organizationId,
       sourcePrompt,
       targetMedia: model.mediaKind,
+      promptEnhancementModelId,
     });
     if (enhancementAttempt.current?.fingerprint !== fingerprint)
       enhancementAttempt.current = {
@@ -1266,6 +1301,7 @@ export function GenerationStudio({
           userPrompt: sourcePrompt,
           targetMedia: model.mediaKind,
           idempotencyKey: enhancementAttempt.current.key,
+          modelId: promptEnhancementModelId,
         }),
       });
       const body = await response.json();
@@ -1290,7 +1326,17 @@ export function GenerationStudio({
           const enhancedPrompt = job.outputPayload?.enhancedPrompt;
           if (typeof enhancedPrompt !== "string" || !enhancedPrompt.trim())
             throw new Error("Prompt enhancement returned an invalid result.");
+          if (
+            !job.model ||
+            typeof job.model.name !== "string" ||
+            typeof job.model.provider !== "string"
+          )
+            throw new Error("Prompt enhancement provenance is unavailable.");
           setPrompt(enhancedPrompt);
+          setEnhancementAttribution({
+            name: job.model.name,
+            provider: job.model.provider,
+          });
           enhancementAttempt.current = null;
           return;
         }
@@ -1765,11 +1811,32 @@ export function GenerationStudio({
                   ? "Optional motion direction"
                   : `Describe your ${model?.mediaKind === "VIDEO" ? "video" : "image"}`}
               </label>
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <StudioModelSelect
+                  models={promptEnhancementModels}
+                  value={promptEnhancementModelId}
+                  onChange={(value) => {
+                    setPromptEnhancementModelId(value);
+                    setEnhancementAttribution(null);
+                    enhancementAttempt.current = null;
+                  }}
+                  disabled={busy || isEnhancing}
+                  ariaLabel="Prompt enhancement model"
+                  className="max-w-full"
+                />
+                <span className="text-[11px] text-muted-foreground">
+                  Prompt Enhance is assistive and does not charge workspace
+                  credits.
+                </span>
+              </div>
               <div className="relative">
                 <textarea
                   id="creation-prompt"
                   value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
+                  onChange={(e) => {
+                    setPrompt(e.target.value);
+                    setEnhancementAttribution(null);
+                  }}
                   maxLength={2000}
                   disabled={busy || isEnhancing}
                   placeholder={
@@ -1789,9 +1856,7 @@ export function GenerationStudio({
                     isEnhancing ||
                     !canGenerate ||
                     !model ||
-                    !activeQuote ||
-                    !activeQuote.canSpend ||
-                    !activeQuote.canAfford ||
+                    !promptEnhancementModelId ||
                     !prompt.trim()
                   }
                   aria-busy={isEnhancing}
@@ -1810,6 +1875,20 @@ export function GenerationStudio({
                   )}
                 </Button>
               </div>
+              {enhancementAttribution ? (
+                <p
+                  role="status"
+                  className="mt-2 text-xs font-medium text-muted-foreground"
+                >
+                  Enhanced with {enhancementAttribution.name} ·{" "}
+                  {providerDisplayName(enhancementAttribution.provider)}
+                </p>
+              ) : promptEnhancementModels.length === 0 ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Prompt Enhance is unavailable until an eligible model is
+                  enabled, priced, and configured.
+                </p>
+              ) : null}
 
               {variant === "advanced" &&
               activeMode === "IMAGE" &&

@@ -219,10 +219,10 @@ describe("generation pricing policies", () => {
 
   it("maps text pricing estimators to the provider family", () => {
     expect(textUsageEstimatorForProvider("BYTEPLUS")).toBe("byteplus-text-v1");
-    for (const provider of ["GROQ", "GEMINI", "CLOUDFLARE"]) {
+    for (const provider of ["NVIDIA", "GROQ", "GEMINI", "CLOUDFLARE"]) {
       expect(textUsageEstimatorForProvider(provider)).toBe("text-token-v1");
     }
-    expect(() => textUsageEstimatorForProvider("NVIDIA")).toThrow(
+    expect(() => textUsageEstimatorForProvider("UNKNOWN")).toThrow(
       "not registered",
     );
   });

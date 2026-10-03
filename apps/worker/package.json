@@ -18,6 +18,7 @@
     "@aiwa/assets": "workspace:*",
     "@aiwa/config": "workspace:*",
     "@aiwa/core": "workspace:*",
+    "@aiwa/credits": "workspace:*",
     "@aiwa/db": "workspace:*",
     "@aiwa/generation": "workspace:*",
     "@aiwa/mail": "workspace:*",

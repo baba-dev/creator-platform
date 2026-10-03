@@ -222,7 +222,7 @@ describe("generation pricing policies", () => {
     for (const provider of ["NVIDIA", "GROQ", "GEMINI", "CLOUDFLARE"]) {
       expect(textUsageEstimatorForProvider(provider)).toBe("text-token-v1");
     }
-    expect(() => textUsageEstimatorForProvider("NVIDIA")).toThrow(
+    expect(() => textUsageEstimatorForProvider("UNKNOWN")).toThrow(
       "not registered",
     );
   });

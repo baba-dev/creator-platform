@@ -1,3 +1,4 @@
+import { parseTextUsageRatesForProvider } from "@aiwa/credits";
 import { db } from "@aiwa/db";
 import {
   listStudioTasksForModel,
@@ -15,6 +16,7 @@ type ActivePrice = {
   id: string;
   pricingDimension: "TOKEN" | "REQUEST" | "CHARACTER" | "SECOND";
   unitQuantity: number;
+  usageRates: unknown;
 };
 
 export type StudioModelRow = {
@@ -73,6 +75,48 @@ const PROVIDER_ORDER = new Map(
   ),
 );
 
+const COMMERCIAL_TEXT_TASKS = new Set<StudioTask>([
+  "chat",
+  "character-chat",
+  "scriptwriting",
+  "creative-director",
+  "brand-strategy",
+  "story-planning",
+]);
+
+function hasValidTextTokenPricing(
+  price: ActivePrice,
+  provider: string,
+): boolean {
+  if (price.pricingDimension !== "TOKEN") return false;
+  try {
+    parseTextUsageRatesForProvider(price.usageRates, provider);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function priceSupportsStudioTask(
+  task: StudioTask,
+  row: StudioModelRow,
+  price: ActivePrice,
+): boolean {
+  if (COMMERCIAL_TEXT_TASKS.has(task)) {
+    return (
+      row.mediaKind === "TEXT" &&
+      hasValidTextTokenPricing(price, row.provider)
+    );
+  }
+  if (task === "prompt-enhancement") {
+    return (
+      price.pricingDimension === "REQUEST" ||
+      hasValidTextTokenPricing(price, row.provider)
+    );
+  }
+  return true;
+}
+
 export function selectDiscoverableStudioModels(
   rows: readonly StudioModelRow[],
   task: StudioTask,
@@ -95,6 +139,7 @@ export function selectDiscoverableStudioModels(
       !row.enabled ||
       !price ||
       !supportsStudioTask(descriptor, task) ||
+      !priceSupportsStudioTask(task, row, price) ||
       !getProviderRuntimeReadiness(
         {
           provider: row.provider,
@@ -193,6 +238,7 @@ export async function getAvailableStudioModels(
           id: true,
           pricingDimension: true,
           unitQuantity: true,
+          usageRates: true,
         },
       },
     },

@@ -15,9 +15,7 @@ function row(
   overrides: Partial<StudioModelRow> & Pick<StudioModelRow, "id" | "providerModelId">,
 ): StudioModelRow {
   return {
-    id: overrides.id,
     provider: "BYTEPLUS",
-    providerModelId: overrides.providerModelId,
     displayName: overrides.providerModelId,
     description: "Test model",
     mediaKind: "TEXT",
@@ -25,6 +23,8 @@ function row(
     capabilities: { chat: true },
     priceVersions: [price],
     ...overrides,
+    id: overrides.id,
+    providerModelId: overrides.providerModelId,
   };
 }
 

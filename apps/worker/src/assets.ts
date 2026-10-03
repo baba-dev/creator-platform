@@ -20,7 +20,6 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mediaCommand } from "./video-media";
-import { resolveLocalAssetPath } from "@aiwa/assets/storage";
 import { audioWaveform, videoStoryboard } from "./media-variants";
 
 const env = parseServerEnv();

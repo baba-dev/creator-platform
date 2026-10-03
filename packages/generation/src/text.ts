@@ -158,7 +158,9 @@ function requestFingerprint(input: {
         messages: input.messages,
         temperature: input.temperature,
         maxTokens: input.maxTokens,
-        responseFormat: input.responseFormat,
+        ...(input.responseFormat === "json_object"
+          ? { responseFormat: "json_object" }
+          : {}),
       }),
     )
     .digest("hex");
@@ -208,7 +210,9 @@ function sameIdempotentRequest(
       messages: input.messages,
       temperature: input.temperature,
       maxTokens: input.maxTokens,
-      responseFormat: input.responseFormat,
+      ...(input.responseFormat === "json_object"
+        ? { responseFormat: "json_object" }
+        : {}),
     })
   );
 }

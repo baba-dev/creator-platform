@@ -349,25 +349,19 @@ describe("dual-use reasoning commercialization", () => {
     });
 
     expect(
-      selectDiscoverableStudioModels(
-        [dualUse],
-        "prompt-enhancement",
-        { GROQ_API_KEY: "groq" },
-      ).models.map((model) => model.id),
+      selectDiscoverableStudioModels([dualUse], "prompt-enhancement", {
+        GROQ_API_KEY: "groq",
+      }).models.map((model) => model.id),
     ).toEqual(["groq-120b"]);
     expect(
-      selectDiscoverableStudioModels(
-        [dualUse],
-        "creative-director",
-        { GROQ_API_KEY: "groq" },
-      ).models,
+      selectDiscoverableStudioModels([dualUse], "creative-director", {
+        GROQ_API_KEY: "groq",
+      }).models,
     ).toEqual([]);
     expect(
-      selectDiscoverableStudioModels(
-        [dualUse],
-        "story-planning",
-        { GROQ_API_KEY: "groq" },
-      ).models,
+      selectDiscoverableStudioModels([dualUse], "story-planning", {
+        GROQ_API_KEY: "groq",
+      }).models,
     ).toEqual([]);
   });
 
@@ -411,11 +405,9 @@ describe("dual-use reasoning commercialization", () => {
     ).toEqual(new Set(["groq-120b", "gemini-38"]));
     expect(
       new Set(
-        selectDiscoverableStudioModels(
-          rows,
-          "story-planning",
-          env,
-        ).models.map((model) => model.id),
+        selectDiscoverableStudioModels(rows, "story-planning", env).models.map(
+          (model) => model.id,
+        ),
       ),
     ).toEqual(new Set(["groq-120b", "gemini-38"]));
     expect(
@@ -438,11 +430,9 @@ describe("dual-use reasoning commercialization", () => {
       priceVersions: [bytePlusPrice],
     });
     expect(
-      selectDiscoverableStudioModels(
-        [bad],
-        "creative-director",
-        { GROQ_API_KEY: "groq" },
-      ).models,
+      selectDiscoverableStudioModels([bad], "creative-director", {
+        GROQ_API_KEY: "groq",
+      }).models,
     ).toEqual([]);
   });
 });

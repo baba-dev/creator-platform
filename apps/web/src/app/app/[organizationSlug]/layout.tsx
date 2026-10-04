@@ -125,7 +125,7 @@ export default async function OrganizationLayout({
         initialFavoriteAssets: favoriteAssets,
       }}
       header={
-        <header className="hidden min-h-[64px] items-center justify-between border-b border-border bg-background/85 px-6 backdrop-blur-xl lg:flex">
+        <header className="relative z-40 hidden min-h-[64px] items-center justify-between overflow-visible border-b border-border bg-background/85 px-6 backdrop-blur-xl lg:flex">
           <PrimaryMenu slug={organizationSlug} />
 
           <div className="flex items-center gap-3">

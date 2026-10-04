@@ -9,8 +9,7 @@ import Image from "next/image";
 import { ProcessFeedback } from "@/components/process/process-feedback";
 import { Button } from "@/components/ui/button";
 import { Eyebrow } from "@/components/ui/creative";
-import { StatusDot, Tape } from "@/components/ui/sketch";
-import { AudioWaveformPlayer } from "@/components/ui/audio-waveform-player";
+import { Tape } from "@/components/ui/sketch";
 import { VoiceCastingBooth } from "@/components/ui/voice-casting-booth";
 import {
   StudioModelSelect,
@@ -125,26 +124,6 @@ function providerDisplayName(provider: string): string {
     CLOUDFLARE: "Cloudflare",
   };
   return labels[provider] ?? provider;
-}
-
-function statusLabel(status: string, mediaKind: MediaKind): string {
-  const media =
-    mediaKind === "VIDEO" ? "video" : mediaKind === "VOICE" ? "voice" : "image";
-  const statuses: Record<string, string> = {
-    QUEUED: "Queued",
-    SUBMITTED: `Submitting ${media}`,
-    PROCESSING:
-      mediaKind === "VIDEO"
-        ? "Rendering video"
-        : mediaKind === "VOICE"
-          ? "Synthesizing voice"
-          : "Saving image",
-    SUCCEEDED: "Ready",
-    FAILED: "Failed — credits released",
-    MANUAL_REVIEW: "Needs review — credits reserved",
-    CANCELLED: "Cancelled",
-  };
-  return statuses[status] ?? status;
 }
 
 interface StudioQuote {
@@ -1357,59 +1336,12 @@ export function GenerationStudio({
       setIsEnhancing(false);
     }
   }
-  function focusVideoWorkflow(
-    workflow: VideoWorkflow,
-    options?: {
-      sourceAssetId?: string;
-      firstFrameAssetId?: string;
-      draftJobId?: string;
-      providerModelId?: string;
-    },
-  ) {
-    setActiveMode("VIDEO");
-    const exactModel = data?.models.find(
-      (candidate) =>
-        candidate.mediaKind === "VIDEO" &&
-        candidate.providerModelId === options?.providerModelId,
-    );
-    const preferred =
-      workflow === "DRAFT_FINAL"
-        ? exactModel
-        : (exactModel ??
-          data?.models.find((candidate) => candidate.mediaKind === "VIDEO"));
-    if (!preferred) {
-      setError(
-        workflow === "DRAFT_FINAL"
-          ? "The original Draft model is not enabled with active pricing. Publish pricing for that model before rendering the final."
-          : "No enabled video model with active pricing is available.",
-      );
-      return;
-    }
-    setModelId(preferred.id);
-    setVideoWorkflow(workflow);
-    setSourceDraftJobId(options?.draftJobId ?? "");
-    setVideoSourceAssetId(options?.sourceAssetId ?? "");
-    setVideoFirstFrameId(options?.firstFrameAssetId ?? "");
-    setVideoLastFrameId("");
-    if (workflow === "DRAFT_FINAL") setResolution("1080p");
-    if (
-      workflow === "FRAME_TO_VIDEO" ||
-      workflow === "FIRST_LAST_FRAME" ||
-      workflow === "EDIT" ||
-      workflow === "EXTEND"
-    )
-      setRatio("adaptive");
-    requestAnimationFrame(() =>
-      document
-        .getElementById("create")
-        ?.scrollIntoView({ behavior: "smooth", block: "start" }),
-    );
-  }
+
 
   return (
     <section
       id="create"
-      className="paper-sheet relative rounded-[28px] border border-border p-5 sm:p-7"
+      className="paper-sheet relative w-full min-w-0 rounded-[28px] border border-border p-5 sm:p-7"
     >
       <Tape className="-top-1 right-16 hidden rotate-6 sm:block" />
       <Eyebrow>
@@ -1538,7 +1470,7 @@ export function GenerationStudio({
         id="media-creation-panel"
         role="tabpanel"
         aria-labelledby={`media-tab-${activeMode.toLowerCase()}`}
-        className={`mt-6 grid gap-6 ${variant === "quick" ? "" : "lg:grid-cols-2"}`}
+        className="mt-6"
       >
         <div className="space-y-4">
           <div className={variant === "quick" ? "hidden" : "space-y-4"}>
@@ -2807,227 +2739,7 @@ export function GenerationStudio({
             />
           ) : null}
         </div>
-        {variant === "advanced" ? (
-          <div>
-            <div className="flex items-center justify-between gap-3">
-              <h3 className="font-display text-lg font-semibold text-foreground">
-                Recent creations
-              </h3>
-              <Link
-                href={`/app/${organizationSlug}/history`}
-                className="text-sm font-semibold text-primary"
-              >
-                View full history →
-              </Link>
-            </div>
-            <div className="mt-4 space-y-4" aria-live="polite">
-              {data?.jobs.length === 0 ? (
-                <p className="rounded-2xl border border-border p-6 text-muted-foreground">
-                  Your first generated media will appear here.
-                </p>
-              ) : null}
-              {data?.jobs.map((job) => (
-                <article
-                  key={job.id}
-                  className="rounded-2xl border border-border bg-card p-4"
-                >
-                  <Link
-                    href={`/app/${organizationSlug}/history/${job.id}`}
-                    className="mb-2 inline-flex text-xs font-semibold text-primary"
-                  >
-                    Job details →
-                  </Link>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-semibold text-foreground">
-                        {job.providerModel.displayName}
-                      </span>
-                      {job.project ? (
-                        <a
-                          href={`/app/${organizationSlug}/projects/${job.project.id}`}
-                          className="mt-1 block truncate text-xs font-semibold text-primary"
-                        >
-                          {job.project.name}
-                        </a>
-                      ) : null}
-                    </span>
-                    <StatusDot
-                      tone={
-                        job.status === "SUCCEEDED"
-                          ? "success"
-                          : ["FAILED", "MANUAL_REVIEW"].includes(job.status)
-                            ? "warning"
-                            : "info"
-                      }
-                    >
-                      {statusLabel(job.status, job.providerModel.mediaKind)}
-                    </StatusDot>
-                  </div>
-                  {job.assets.map((asset) => (
-                    <div key={asset.id} className="mt-3">
-                      {asset.mimeType.startsWith("video/") ? (
-                        <video
-                          src={`/api/assets/${asset.id}`}
-                          controls
-                          playsInline
-                          preload="metadata"
-                          aria-label={`Generated video from ${job.providerModel.displayName}`}
-                          className="max-h-96 w-full rounded-xl bg-muted object-contain"
-                        />
-                      ) : asset.mimeType.startsWith("audio/") ? (
-                        <div className="mt-3">
-                          <AudioWaveformPlayer
-                            src={`/api/assets/${asset.id}`}
-                            voiceName={job.providerModel.displayName}
-                            title={`${job.providerModel.displayName} Speech`}
-                          />
-                        </div>
-                      ) : (
-                        /* eslint-disable-next-line @next/next/no-img-element */
-                        <img
-                          src={`/api/assets/${asset.id}`}
-                          alt={`Generated image from ${job.providerModel.displayName}`}
-                          className="max-h-96 w-full rounded-xl bg-muted object-contain"
-                        />
-                      )}
-                      <a
-                        href={`/api/assets/${asset.id}?download=1`}
-                        className="mt-2 inline-flex min-h-10 items-center text-sm font-semibold text-primary"
-                      >
-                        Download{" "}
-                        {asset.mimeType === "video/quicktime"
-                          ? "MOV"
-                          : asset.mimeType.startsWith("video/")
-                            ? "MP4"
-                            : asset.mimeType.startsWith("audio/")
-                              ? "MP3"
-                              : asset.mimeType === "image/jpeg"
-                                ? "JPEG"
-                                : "PNG"}
-                      </a>
-                      {asset.mimeType.startsWith("image/") ? (
-                        <Link
-                          href={
-                            `/app/${organizationSlug}/image?assetId=${encodeURIComponent(asset.id)}#image-editor` as Route
-                          }
-                          className="ml-4 inline-flex min-h-10 items-center text-sm font-semibold text-primary"
-                        >
-                          Edit image →
-                        </Link>
-                      ) : null}
-                      {asset.mimeType.startsWith("video/") ? (
-                        <Link
-                          href={
-                            `/app/${organizationSlug}/video?assetId=${encodeURIComponent(asset.id)}#video-editor` as Route
-                          }
-                          className="ml-4 inline-flex min-h-10 items-center text-sm font-semibold text-primary"
-                        >
-                          Edit video →
-                        </Link>
-                      ) : null}
-                      {asset.mimeType.startsWith("video/") &&
-                      job.status === "SUCCEEDED" ? (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              focusVideoWorkflow("EDIT", {
-                                sourceAssetId: asset.id,
-                                providerModelId:
-                                  job.providerModel.providerModelId,
-                              })
-                            }
-                            className="ml-4 inline-flex min-h-10 items-center text-sm font-semibold text-primary"
-                          >
-                            AI Edit →
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              focusVideoWorkflow("EXTEND", {
-                                sourceAssetId: asset.id,
-                                providerModelId:
-                                  job.providerModel.providerModelId,
-                              })
-                            }
-                            className="ml-4 inline-flex min-h-10 items-center text-sm font-semibold text-primary"
-                          >
-                            Extend →
-                          </button>
-                        </>
-                      ) : null}
-                      {job.providerModel.mediaKind === "VIDEO" &&
-                      asset.mimeType.startsWith("image/") &&
-                      asset.generationOutputIndex === 1 &&
-                      job.status === "SUCCEEDED" ? (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            focusVideoWorkflow("FRAME_TO_VIDEO", {
-                              firstFrameAssetId: asset.id,
-                              providerModelId:
-                                job.providerModel.providerModelId,
-                            })
-                          }
-                          className="ml-4 inline-flex min-h-10 items-center text-sm font-semibold text-primary"
-                        >
-                          Continue scene →
-                        </button>
-                      ) : null}
-                    </div>
-                  ))}
-                  {job.errorMessage ? (
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      {job.errorMessage}
-                    </p>
-                  ) : null}
-                  {job.status === "MANUAL_REVIEW" ? (
-                    <p className="mt-2 rounded-xl border border-warning/40 bg-warning/10 p-3 text-sm text-foreground">
-                      This creation needs an operator to check the provider
-                      result. Your credits remain reserved. Keep this job in
-                      your history and ask support to review it before starting
-                      another attempt.
-                    </p>
-                  ) : null}
-                  {job.status === "SUCCEEDED" &&
-                  job.videoWorkflow === "DRAFT" &&
-                  job.draftExpiresAt ? (
-                    <div className="mt-3 rounded-xl border border-primary/25 bg-primary/[0.06] p-3">
-                      <p className="text-xs font-semibold text-foreground">
-                        Draft approved?
-                      </p>
-                      <p className="mt-1 text-[11px] text-muted-foreground">
-                        Final rendering is a separately quoted 1080p generation.
-                        Draft expires{" "}
-                        {new Date(job.draftExpiresAt).toLocaleString()}.
-                      </p>
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="mt-2"
-                        onClick={() =>
-                          focusVideoWorkflow("DRAFT_FINAL", {
-                            draftJobId: job.id,
-                            providerModelId: job.providerModel.providerModelId,
-                          })
-                        }
-                      >
-                        Quote 1080p final
-                      </Button>
-                    </div>
-                  ) : null}
-                  <p className="mt-2 text-xs tabular-nums text-muted-foreground">
-                    {job.status === "SUCCEEDED"
-                      ? `${job.chargedCredits} credits charged`
-                      : job.status === "FAILED"
-                        ? "No charge"
-                        : `${job.reservedCredits} credits reserved`}
-                  </p>
-                </article>
-              ))}
-            </div>
-          </div>
-        ) : null}
+
       </div>
 
       {isVoiceBoothOpen ? (

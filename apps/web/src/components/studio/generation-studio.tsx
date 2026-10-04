@@ -1347,7 +1347,6 @@ export function GenerationStudio({
     }
   }
 
-
   return (
     <section
       id="create"
@@ -1753,7 +1752,7 @@ export function GenerationStudio({
                   ? "Optional motion direction"
                   : `Describe your ${model?.mediaKind === "VIDEO" ? "video" : "image"}`}
               </label>
-              {variant === "advanced" ? (
+              {variant === "advanced" && (
                 <div className="mb-2 flex flex-wrap items-center gap-2">
                   <StudioModelSelect
                     models={promptEnhancementModels}
@@ -1772,7 +1771,7 @@ export function GenerationStudio({
                     credits.
                   </span>
                 </div>
-              ) : null}
+              )}
               <div className="relative">
                 <textarea
                   id="creation-prompt"
@@ -1819,21 +1818,22 @@ export function GenerationStudio({
                   )}
                 </Button>
               </div>
-              {variant === "advanced" ? (
-                enhancementAttribution ? (
-                  <p
-                    role="status"
-                    className="mt-2 text-xs font-medium text-muted-foreground"
-                  >
-                    Enhanced with {enhancementAttribution.name} ·{" "}
-                    {providerDisplayName(enhancementAttribution.provider)}
-                  </p>
-                ) : promptEnhancementModels.length === 0 ? (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Prompt Enhance is unavailable until an eligible model is
-                    enabled, priced, and configured.
-                  </p>
-                ) : null
+              {variant === "advanced" && enhancementAttribution && (
+                <p
+                  role="status"
+                  className="mt-2 text-xs font-medium text-muted-foreground"
+                >
+                  Enhanced with {enhancementAttribution.name} ·{" "}
+                  {providerDisplayName(enhancementAttribution.provider)}
+                </p>
+              )}
+              {variant === "advanced" &&
+              !enhancementAttribution &&
+              promptEnhancementModels.length === 0 ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Prompt Enhance is unavailable until an eligible model is
+                  enabled, priced, and configured.
+                </p>
               ) : null}
 
               {variant === "advanced" &&
@@ -2753,7 +2753,6 @@ export function GenerationStudio({
             />
           ) : null}
         </div>
-
       </div>
 
       {isVoiceBoothOpen ? (

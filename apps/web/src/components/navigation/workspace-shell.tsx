@@ -59,10 +59,7 @@ export function WorkspaceShell({
     setCollapsed((prev) => {
       const next = !prev;
       try {
-        window.localStorage.setItem(
-          "aiwa_sidebar_collapsed",
-          String(next),
-        );
+        window.localStorage.setItem("aiwa_sidebar_collapsed", String(next));
       } catch {
         // Ignore localStorage errors.
       }

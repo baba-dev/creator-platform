@@ -61,7 +61,7 @@ export async function GenerationWorkspace({
   return (
     <main className="relative min-h-screen min-w-0 bg-background px-4 py-7 text-foreground sm:px-7 lg:px-9 lg:py-10">
       <div className="creative-glow pointer-events-none absolute inset-0" />
-      <div className="relative mx-auto max-w-[1500px] space-y-7">
+      <div className="relative w-full min-w-0 space-y-7">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="max-w-2xl">
             <Eyebrow>Creative tools / {kind}</Eyebrow>

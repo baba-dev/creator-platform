@@ -1347,7 +1347,6 @@ export function GenerationStudio({
     }
   }
 
-
   return (
     <section
       id="create"
@@ -2754,7 +2753,6 @@ export function GenerationStudio({
             />
           ) : null}
         </div>
-
       </div>
 
       {isVoiceBoothOpen ? (

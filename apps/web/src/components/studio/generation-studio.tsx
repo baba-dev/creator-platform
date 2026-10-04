@@ -1859,33 +1859,33 @@ export function GenerationStudio({
                   className="min-h-44 w-full rounded-2xl border border-input bg-card p-4 pb-14 text-foreground placeholder:text-muted-foreground"
                 />
                 <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => void enhancePrompt()}
-                    disabled={
-                      busy ||
-                      isEnhancing ||
-                      !canGenerate ||
-                      !model ||
-                      !promptEnhancementModelId ||
-                      !prompt.trim()
-                    }
-                    aria-busy={isEnhancing}
-                    className="absolute bottom-3 right-3"
-                  >
-                    {isEnhancing ? (
-                      <>
-                        <span
-                          aria-hidden="true"
-                          className="size-3 animate-spin rounded-full border-2 border-primary border-t-transparent"
-                        />
-                        Enhancing…
-                      </>
-                    ) : (
-                      <>✨ Enhance prompt</>
-                    )}
-                  </Button>
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => void enhancePrompt()}
+                  disabled={
+                    busy ||
+                    isEnhancing ||
+                    !canGenerate ||
+                    !model ||
+                    !promptEnhancementModelId ||
+                    !prompt.trim()
+                  }
+                  aria-busy={isEnhancing}
+                  className="absolute bottom-3 right-3"
+                >
+                  {isEnhancing ? (
+                    <>
+                      <span
+                        aria-hidden="true"
+                        className="size-3 animate-spin rounded-full border-2 border-primary border-t-transparent"
+                      />
+                      Enhancing…
+                    </>
+                  ) : (
+                    <>✨ Enhance prompt</>
+                  )}
+                </Button>
               </div>
               {variant === "advanced" ? (
                 enhancementAttribution ? (

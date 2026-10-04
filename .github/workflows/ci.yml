@@ -49,7 +49,15 @@ jobs:
           bash -n infra/deploy/package-release.sh
 
       - name: Check formatting
-        run: pnpm format:check
+        run: |
+          if ! pnpm format:check; then
+            echo "::group::Prettier formatting diff"
+            pnpm exec prettier --write . >/dev/null
+            git --no-pager diff --check || true
+            git --no-pager diff -- .
+            echo "::endgroup::"
+            exit 1
+          fi
 
       - name: Lint
         run: pnpm lint

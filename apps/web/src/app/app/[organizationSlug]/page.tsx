@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Annotation, Eyebrow } from "@/components/ui/creative";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { requireOrganizationPermission } from "@/lib/request-auth";
-import { getAvailableStudioModels } from "@/lib/studio-model-discovery";
 
 type MediaKind = "IMAGE" | "VIDEO" | "VOICE" | "TEXT";
 
@@ -43,7 +42,6 @@ export default async function OrganizationWorkspacePage({
     recentJobs,
     mixCounts,
     topTemplates,
-    promptEnhancement,
   ] = await Promise.all([
     db.generationJob.count({
       where: {
@@ -110,7 +108,6 @@ export default async function OrganizationWorkspacePage({
       take: 4,
       select: { slug: true, name: true, description: true, mediaKind: true },
     }),
-    getAvailableStudioModels("prompt-enhancement"),
   ]);
 
   const modelKinds = await db.providerModel.findMany({
@@ -203,8 +200,6 @@ export default async function OrganizationWorkspacePage({
             canGenerate={canGenerate}
             organizationId={membership.organizationId}
             organizationSlug={organizationSlug}
-            promptEnhancementModels={promptEnhancement.models}
-            promptEnhancementDefaultModelId={promptEnhancement.defaultModelId}
           />
         </div>
 

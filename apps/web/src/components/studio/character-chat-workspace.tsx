@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Annotation, CreativeSurface, Eyebrow } from "@/components/ui/creative";
+import { CreativeSurface, Eyebrow } from "@/components/ui/creative";
 import { Icon } from "@/components/ui/icon";
 import { StatusBadge } from "@/components/admin/primitives";
 import { AudioWaveformPlayer } from "@/components/ui/audio-waveform-player";
@@ -23,18 +23,6 @@ interface Persona {
   isPreset: boolean;
 }
 
-interface ChatThread {
-  id: string;
-  title: string;
-  modelId: string;
-  modelAvailable: boolean;
-  modelReference: "CANONICAL" | "LEGACY" | "UNAVAILABLE";
-  persona?: Persona | null;
-  createdAt: string;
-  updatedAt: string;
-  _count?: { messages: number };
-}
-
 interface StudioChatModel {
   id: string;
   providerModelId: string;
@@ -45,7 +33,6 @@ interface StudioChatModel {
     fast: boolean;
   };
 }
-
 interface ChatMessage {
   id: string;
   role: string;
@@ -140,21 +127,32 @@ function modelOptionLabel(model: StudioChatModel): string {
 }
 
 export function CharacterChatWorkspace({
+  organizationSlug,
   organizationId,
   canGenerate,
   defaultModelId,
+  initialThreadId,
   textModels,
 }: {
   organizationSlug: string;
   organizationId: string;
   canGenerate: boolean;
   defaultModelId: string | null;
+  initialThreadId?: string;
   textModels: StudioChatModel[];
 }) {
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [selectedPersona, setSelectedPersona] = useState<Persona | null>(null);
-  const [threads, setThreads] = useState<ChatThread[]>([]);
-  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+  const [prevInitialThreadId, setPrevInitialThreadId] =
+    useState(initialThreadId);
+
+  if (prevInitialThreadId !== initialThreadId) {
+    setPrevInitialThreadId(initialThreadId);
+    setSelectedThreadId(null);
+  }
+
+  const activeThreadId = selectedThreadId ?? initialThreadId ?? null;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const defaultTextModel = defaultModelId ?? textModels[0]?.id ?? "";
   const [selectedModel, setSelectedModel] = useState<string>(defaultTextModel);
@@ -284,43 +282,36 @@ export function CharacterChatWorkspace({
     }
   }
 
-  // Load personas and threads on mount
+  // Load personas on mount
   useEffect(() => {
+    let ignore = false;
     async function loadData() {
       try {
-        const [personasRes, threadsRes] = await Promise.all([
-          fetch(
-            `/api/personas?organizationId=${encodeURIComponent(organizationId)}`,
-          ),
-          fetch(
-            `/api/chat/threads?organizationId=${encodeURIComponent(organizationId)}`,
-          ),
-        ]);
+        const personasRes = await fetch(
+          `/api/personas?organizationId=${encodeURIComponent(organizationId)}`,
+        );
 
         if (personasRes.ok) {
           const data = await personasRes.json();
-          setPersonas(data.personas || []);
-          if (data.personas?.length) {
-            const firstPersona = data.personas[0] as Persona;
-            setSelectedPersona(firstPersona);
-            if (firstPersona.modelAvailable) {
-              setSelectedModel(firstPersona.modelId);
+          if (!ignore) {
+            setPersonas(data.personas || []);
+            if (data.personas?.length) {
+              const firstPersona = data.personas[0] as Persona;
+              setSelectedPersona(firstPersona);
+              if (firstPersona.modelAvailable) {
+                setSelectedModel(firstPersona.modelId);
+              }
             }
           }
         }
-
-        if (threadsRes.ok) {
-          const data = await threadsRes.json();
-          setThreads(data.threads || []);
-          if (data.threads?.length) {
-            setActiveThreadId(data.threads[0].id);
-          }
-        }
       } catch (err) {
-        console.error("Failed to load chat data", err);
+        console.error("Failed to load personas", err);
       }
     }
     loadData();
+    return () => {
+      ignore = true;
+    };
   }, [organizationId]);
 
   // Load thread messages when activeThreadId changes
@@ -413,8 +404,7 @@ export function CharacterChatWorkspace({
         return;
       }
 
-      setThreads((prev) => [data.thread, ...prev]);
-      setActiveThreadId(data.thread.id);
+      setSelectedThreadId(data.thread.id);
       setActiveThreadModelId(data.thread.modelId);
       setActiveThreadModelAvailable(true);
       if (targetPersona) setSelectedPersona(targetPersona);
@@ -478,8 +468,7 @@ export function CharacterChatWorkspace({
         return;
       }
       threadId = data.thread.id;
-      setThreads((prev) => [data.thread, ...prev]);
-      setActiveThreadId(threadId);
+      setSelectedThreadId(threadId);
       setActiveThreadModelId(data.thread.modelId);
       setActiveThreadModelAvailable(true);
     }
@@ -655,7 +644,7 @@ export function CharacterChatWorkspace({
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-4">
         <div>
           <div className="flex items-center gap-2">
-            <Eyebrow>Multi-provider Text Studio</Eyebrow>
+            <Eyebrow>Studio / {organizationSlug} / Chat</Eyebrow>
             <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-bold text-primary">
               {textModels.length} {textModels.length === 1 ? "model" : "models"}{" "}
               ready
@@ -733,114 +722,47 @@ export function CharacterChatWorkspace({
         </div>
       </div>
 
-      {/* Main Grid: Sidebar (Personas & Threads) + Chat Timeline */}
-      <div className="mt-4 grid min-h-0 flex-1 gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
-        {/* Left Sidebar */}
-        <div className="flex flex-col gap-4 overflow-hidden rounded-2xl border border-border bg-card/60 p-3">
-          {/* Personas Carousel / List */}
-          <div>
-            <div className="flex items-center justify-between px-1 pb-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Personas
-              </span>
-              <Annotation className="text-sm text-primary">
-                pick a voice
-              </Annotation>
-            </div>
-            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-              {personas.map((persona) => {
-                const isSelected = selectedPersona?.id === persona.id;
-                return (
-                  <button
-                    key={persona.id}
-                    onClick={() => {
-                      setSelectedPersona(persona);
-                      if (persona.modelAvailable) {
-                        setSelectedModel(persona.modelId);
-                      }
-                      void handleStartNewThread(persona, true);
-                    }}
-                    title={
-                      persona.modelAvailable
-                        ? `Start a new chat using ${persona.name}'s preferred model`
-                        : "Preferred model unavailable — choose a replacement model"
-                    }
-                    className={`flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-left transition ${
-                      isSelected
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border bg-surface-sunken text-foreground hover:border-border/80"
-                    }`}
-                  >
-                    <div className="grid size-7 place-items-center rounded-lg bg-primary/20 text-xs font-bold text-primary">
-                      {persona.name.charAt(0)}
-                    </div>
-                    <div>
-                      <div className="text-xs font-semibold">
-                        {persona.name}
-                      </div>
-                      {persona.tag && (
-                        <div className="text-[10px] text-muted-foreground">
-                          {persona.tag}
-                        </div>
-                      )}
-                      {!persona.modelAvailable && (
-                        <div className="text-[10px] font-semibold text-destructive">
-                          Model unavailable
-                        </div>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+      {/* Horizontal Personas Carousel */}
+      <div className="mt-3 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+        <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground shrink-0 pr-1">
+          Personas:
+        </span>
+        {personas.map((persona) => {
+          const isSelected = selectedPersona?.id === persona.id;
+          return (
+            <button
+              key={persona.id}
+              onClick={() => {
+                setSelectedPersona(persona);
+                handleStartNewThread(persona);
+              }}
+              className={`flex shrink-0 items-center gap-2 rounded-xl border px-3 py-1.5 text-left transition ${
+                isSelected
+                  ? "border-primary bg-primary/10 text-primary shadow-2xs"
+                  : "border-border bg-card text-foreground hover:border-border/80"
+              }`}
+            >
+              <div className="grid size-6 place-items-center rounded-lg bg-primary/20 text-xs font-bold text-primary">
+                {persona.name.charAt(0)}
+              </div>
+              <div className="text-xs font-semibold">{persona.name}</div>
+            </button>
+          );
+        })}
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => setIsCreatingPersona(true)}
+          className="h-8 gap-1 rounded-xl text-xs shrink-0"
+        >
+          <Icon name="plus" className="size-3" />
+          <span>New Persona</span>
+        </Button>
+      </div>
 
-          <div className="border-t border-border pt-3">
-            <span className="px-1 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-              Conversations
-            </span>
-          </div>
-
-          {/* Threads List */}
-          <div className="flex-1 space-y-1.5 overflow-y-auto pr-1">
-            {threads.length === 0 ? (
-              <p className="p-4 text-center text-xs text-muted-foreground">
-                No conversations yet. Say hello below!
-              </p>
-            ) : (
-              threads.map((thread) => {
-                const isActive = activeThreadId === thread.id;
-                return (
-                  <button
-                    key={thread.id}
-                    onClick={() => setActiveThreadId(thread.id)}
-                    className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs transition ${
-                      isActive
-                        ? "bg-primary/10 font-semibold text-primary"
-                        : "text-muted-foreground hover:bg-surface-sunken hover:text-foreground"
-                    }`}
-                  >
-                    <span className="truncate">{thread.title}</span>
-                    <span
-                      className={`text-[10px] ${
-                        thread.modelAvailable
-                          ? "opacity-70"
-                          : "font-semibold text-destructive"
-                      }`}
-                    >
-                      {thread.modelAvailable
-                        ? `${thread._count?.messages ?? 0} msgs`
-                        : "model unavailable"}
-                    </span>
-                  </button>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        {/* Right: Chat View */}
-        <CreativeSurface className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      {/* Main Spacious Chat Canvas */}
+      <div className="mt-2 flex min-h-0 flex-1 flex-col">
+        <CreativeSurface className="flex min-h-[620px] flex-1 flex-col overflow-hidden">
           {/* Active Persona Banner */}
           {selectedPersona && (
             <div className="flex items-center justify-between border-b border-border bg-surface-sunken/60 px-5 py-3">

@@ -1,11 +1,15 @@
 import type { ReactNode } from "react";
 import { hasOrganizationPermission } from "@aiwa/authz";
+import { getAssistantSettings } from "@aiwa/assistant";
+import { db } from "@aiwa/db";
 import { GenerationActivityCenter } from "@/components/process/generation-activity-center";
 import { AssistantWidget } from "@/components/assistant/assistant-widget";
-import { getAssistantSettings } from "@aiwa/assistant";
-import { Brand } from "@/components/ui/brand";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
-import { WorkspaceNavigation } from "@/components/studio/workspace-navigation";
+import { PrimaryMenu } from "@/components/navigation/primary-menu";
+import { UserHeaderMenu } from "@/components/navigation/user-header-menu";
+import { ChatGPTAppSidebar } from "@/components/navigation/chatgpt-sidebar";
+import { MobileHeader } from "@/components/navigation/mobile-header";
+import { WorkspaceShell } from "@/components/navigation/workspace-shell";
 import { requireOrganizationPermission } from "@/lib/request-auth";
 
 export default async function OrganizationLayout({
@@ -16,55 +20,130 @@ export default async function OrganizationLayout({
   params: Promise<{ organizationSlug: string }>;
 }) {
   const { organizationSlug } = await params;
-  const { membership } = await requireOrganizationPermission(
+  const { session, membership } = await requireOrganizationPermission(
     organizationSlug,
     "workspace:view",
   );
-  const assistantSettings = await getAssistantSettings();
+
+  const [assistantSettings, projects, rawThreads, rawFavorites] =
+    await Promise.all([
+      getAssistantSettings(),
+      db.project.findMany({
+        where: {
+          organizationId: membership.organizationId,
+          archivedAt: null,
+        },
+        select: { id: true, name: true },
+        orderBy: { updatedAt: "desc" },
+        take: 15,
+      }),
+      db.chatThread.findMany({
+        where: {
+          organizationId: membership.organizationId,
+          createdById: session.user.id,
+        },
+        select: { id: true, title: true, updatedAt: true },
+        orderBy: { updatedAt: "desc" },
+        take: 30,
+      }),
+      db.assetFavorite.findMany({
+        where: {
+          userId: session.user.id,
+          asset: {
+            organizationId: membership.organizationId,
+            status: "READY",
+            deletedAt: null,
+          },
+        },
+        include: {
+          asset: { select: { id: true, name: true, mimeType: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+      }),
+    ]);
+
   const canUseAssistant = hasOrganizationPermission(
     membership.role,
     "generation:create",
   );
 
+  const credits = membership.organization.wallet?.balanceCache ?? 0n;
+
+  const threads = rawThreads.map((t) => ({
+    id: t.id,
+    title: t.title,
+    updatedAt: t.updatedAt.toISOString(),
+  }));
+
+  const favoriteAssets = rawFavorites.map((f) => ({
+    id: f.asset.id,
+    title: f.asset.name,
+    mimeType: f.asset.mimeType,
+  }));
+
   return (
-    <div className="min-h-screen min-w-0 bg-background text-foreground lg:grid lg:grid-cols-[232px_minmax(0,1fr)]">
-      <aside className="hidden border-r border-border bg-sidebar/90 lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col">
-        <div className="px-5 py-3">
-          <Brand href={`/app/${organizationSlug}`} />
-        </div>
-        <WorkspaceNavigation slug={organizationSlug} />
-        <div className="mt-auto border-t border-border p-5 text-xs text-muted-foreground">
-          {membership.organization.name}
-        </div>
-      </aside>
-      <div className="min-w-0 overflow-x-clip">
-        <header className="hidden min-h-[64px] items-center justify-between border-b border-border bg-background/85 px-8 backdrop-blur-xl lg:flex">
-          <span className="truncate text-sm font-semibold text-foreground">
-            {membership.organization.name}
-          </span>
-          <ThemeToggle />
-        </header>
-        <div className="sticky top-0 z-40 lg:hidden">
-          <div className="flex min-h-[64px] items-center justify-between border-b border-border bg-background/95 px-4 backdrop-blur-xl">
-            <Brand compact href={`/app/${organizationSlug}`} />
+    <WorkspaceShell
+      sidebar={(collapsed, toggleCollapse) => (
+        <ChatGPTAppSidebar
+          slug={organizationSlug}
+          user={session.user}
+          organization={membership.organization}
+          credits={credits}
+          initialProjects={projects}
+          initialThreads={threads}
+          initialFavoriteAssets={favoriteAssets}
+          isCollapsed={collapsed}
+          onToggleCollapse={toggleCollapse}
+        />
+      )}
+      header={
+        <header className="hidden min-h-[64px] items-center justify-between border-b border-border bg-background/85 px-6 backdrop-blur-xl lg:flex">
+          {/* Menu Location 1: Primary Creation Menu */}
+          <PrimaryMenu slug={organizationSlug} />
+
+          {/* Menu Location 2: Right Side Username Menu + Theme Toggle */}
+          <div className="flex items-center gap-3">
+            <UserHeaderMenu
+              slug={organizationSlug}
+              user={session.user}
+              organization={membership.organization}
+              role={membership.role}
+            />
             <ThemeToggle />
           </div>
-          <WorkspaceNavigation slug={organizationSlug} />
-        </div>
-        <div className="min-w-0">{children}</div>
+        </header>
+      }
+      mobileHeader={
+        <MobileHeader
+          slug={organizationSlug}
+          user={session.user}
+          organization={membership.organization}
+          role={membership.role}
+          credits={credits}
+          initialProjects={projects}
+          initialThreads={threads}
+          initialFavoriteAssets={favoriteAssets}
+        />
+      }
+      activityCenter={
         <GenerationActivityCenter
           organizationId={membership.organizationId}
           organizationSlug={organizationSlug}
         />
-        {canUseAssistant &&
+      }
+      assistantWidget={
+        canUseAssistant &&
         assistantSettings.enabled &&
         assistantSettings.providerModel ? (
           <AssistantWidget
             organizationId={membership.organizationId}
             organizationSlug={organizationSlug}
           />
-        ) : null}
-      </div>
-    </div>
+        ) : null
+      }
+    >
+      {children}
+    </WorkspaceShell>
   );
 }

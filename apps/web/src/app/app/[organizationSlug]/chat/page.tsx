@@ -6,10 +6,13 @@ import { getAvailableStudioModels } from "@/lib/studio-model-discovery";
 
 export default async function ChatPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ organizationSlug: string }>;
+  searchParams: Promise<{ threadId?: string }>;
 }) {
   const { organizationSlug } = await params;
+  const { threadId } = await searchParams;
   const { membership } = await requireOrganizationPermission(
     organizationSlug,
     "workspace:view",
@@ -25,6 +28,7 @@ export default async function ChatPage({
       organizationSlug={organizationSlug}
       organizationId={membership.organizationId}
       canGenerate={canGenerate}
+      initialThreadId={threadId}
       defaultModelId={discovery.defaultModelId}
       textModels={discovery.models.map((model) => ({
         id: model.id,

@@ -113,6 +113,20 @@ function priceSupportsStudioTask(
       hasValidTextTokenPricing(price, row.provider)
     );
   }
+  if (task === "speech-synthesis") {
+    return (
+      row.mediaKind === "VOICE" &&
+      (price.pricingDimension === "CHARACTER" ||
+        price.pricingDimension === "REQUEST")
+    );
+  }
+  if (task === "transcription") {
+    return (
+      row.mediaKind === "VOICE" &&
+      (price.pricingDimension === "SECOND" ||
+        price.pricingDimension === "REQUEST")
+    );
+  }
   return true;
 }
 

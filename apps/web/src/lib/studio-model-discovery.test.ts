@@ -406,11 +406,9 @@ describe("VOICE task pricing discovery", () => {
       ).models.map((model) => model.id),
     ).toEqual(["tts"]);
     expect(
-      selectDiscoverableStudioModels(
-        [tts([secondPrice])],
-        "speech-synthesis",
-        { BYTEPLUS_SPEECH_API_KEY: "speech" },
-      ).models,
+      selectDiscoverableStudioModels([tts([secondPrice])], "speech-synthesis", {
+        BYTEPLUS_SPEECH_API_KEY: "speech",
+      }).models,
     ).toEqual([]);
   });
 });

@@ -16,6 +16,7 @@ import {
   type StudioModelOption,
 } from "@/components/studio/studio-model-select";
 import { announceGenerationStarted } from "@/lib/generation-activity";
+import { selectQuickCreateModel } from "@/lib/quick-create-model";
 import {
   capabilityValues,
   referenceCapabilityLabel,
@@ -240,7 +241,11 @@ export function GenerationStudio({
     [data?.models, activeMode],
   );
 
-  const model = modelsForMode.find((m) => m.id === modelId) ?? modelsForMode[0];
+  const model =
+    modelsForMode.find((m) => m.id === modelId) ??
+    (variant === "quick"
+      ? selectQuickCreateModel(modelsForMode, activeMode)
+      : modelsForMode[0]);
   const isTalkingAvatarModel =
     activeMode === "VIDEO" && model?.capabilities?.talkingAvatar === true;
   const validAvatarFrames = useMemo(
@@ -510,12 +515,17 @@ export function GenerationStudio({
       }
       setActiveMode(mode);
       setError(null);
-      const nextModel = data?.models.find((m) => m.mediaKind === mode);
+      const nextModels =
+        data?.models.filter((candidate) => candidate.mediaKind === mode) ?? [];
+      const nextModel =
+        variant === "quick"
+          ? selectQuickCreateModel(nextModels, mode)
+          : nextModels[0];
       if (nextModel) {
         setModelId(nextModel.id);
       }
     },
-    [activeMode, data?.models],
+    [activeMode, data?.models, variant],
   );
 
   const billableCharacters = countBillableCharacters(voiceText.trim());
@@ -1743,24 +1753,26 @@ export function GenerationStudio({
                   ? "Optional motion direction"
                   : `Describe your ${model?.mediaKind === "VIDEO" ? "video" : "image"}`}
               </label>
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <StudioModelSelect
-                  models={promptEnhancementModels}
-                  value={promptEnhancementModelId}
-                  onChange={(value) => {
-                    setPromptEnhancementModelId(value);
-                    setEnhancementAttribution(null);
-                    enhancementAttempt.current = null;
-                  }}
-                  disabled={busy || isEnhancing}
-                  ariaLabel="Prompt enhancement model"
-                  className="max-w-full"
-                />
-                <span className="text-[11px] text-muted-foreground">
-                  Prompt Enhance is assistive and does not charge workspace
-                  credits.
-                </span>
-              </div>
+              {variant === "advanced" ? (
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <StudioModelSelect
+                    models={promptEnhancementModels}
+                    value={promptEnhancementModelId}
+                    onChange={(value) => {
+                      setPromptEnhancementModelId(value);
+                      setEnhancementAttribution(null);
+                      enhancementAttempt.current = null;
+                    }}
+                    disabled={busy || isEnhancing}
+                    ariaLabel="Prompt enhancement model"
+                    className="max-w-full"
+                  />
+                  <span className="text-[11px] text-muted-foreground">
+                    Prompt Enhance is assistive and does not charge workspace
+                    credits.
+                  </span>
+                </div>
+              ) : null}
               <div className="relative">
                 <textarea
                   id="creation-prompt"
@@ -1807,19 +1819,21 @@ export function GenerationStudio({
                   )}
                 </Button>
               </div>
-              {enhancementAttribution ? (
-                <p
-                  role="status"
-                  className="mt-2 text-xs font-medium text-muted-foreground"
-                >
-                  Enhanced with {enhancementAttribution.name} ·{" "}
-                  {providerDisplayName(enhancementAttribution.provider)}
-                </p>
-              ) : promptEnhancementModels.length === 0 ? (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Prompt Enhance is unavailable until an eligible model is
-                  enabled, priced, and configured.
-                </p>
+              {variant === "advanced" ? (
+                enhancementAttribution ? (
+                  <p
+                    role="status"
+                    className="mt-2 text-xs font-medium text-muted-foreground"
+                  >
+                    Enhanced with {enhancementAttribution.name} ·{" "}
+                    {providerDisplayName(enhancementAttribution.provider)}
+                  </p>
+                ) : promptEnhancementModels.length === 0 ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Prompt Enhance is unavailable until an eligible model is
+                    enabled, priced, and configured.
+                  </p>
+                ) : null
               ) : null}
 
               {variant === "advanced" &&

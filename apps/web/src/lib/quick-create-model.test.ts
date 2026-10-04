@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { selectQuickCreateModel } from "./quick-create-model";
 
 describe("Quick Create model selection", () => {
-  it("prefers Seedream 5.0 Lite over alphabetical image ordering", () => {
+  it("prefers Seedream 5.0 Lite for images", () => {
     const selected = selectQuickCreateModel(
       [
         { providerModelId: "seedream-4-0-250828" },
@@ -15,7 +15,7 @@ describe("Quick Create model selection", () => {
     expect(selected?.providerModelId).toBe("seedream-5-0-260128");
   });
 
-  it("prefers the fast prompt-to-video model and skips talking-avatar models", () => {
+  it("prefers prompt-to-video and skips talking avatars", () => {
     const selected = selectQuickCreateModel(
       [
         {
@@ -33,7 +33,7 @@ describe("Quick Create model selection", () => {
     );
   });
 
-  it("falls back to the first compatible model when preferred models are absent", () => {
+  it("falls back to the first compatible model", () => {
     const selected = selectQuickCreateModel(
       [
         {
@@ -48,7 +48,7 @@ describe("Quick Create model selection", () => {
     expect(selected?.providerModelId).toBe("prompt-video");
   });
 
-  it("returns undefined when no compatible quick-create model is available", () => {
+  it("returns undefined without a compatible model", () => {
     const selected = selectQuickCreateModel(
       [
         {

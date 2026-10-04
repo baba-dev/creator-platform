@@ -265,7 +265,6 @@ jobs:
           test -n "$(find "$validation_dir/ops/db/node_modules" -path '*/@prisma/engines/schema-engine-debian-openssl-3.0.x' -print -quit)"
           test -n "$(find "$validation_dir/ops/db/node_modules" -path '*/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node' -print -quit)"
 
-
   quality:
     name: quality
     if: always()

@@ -160,4 +160,10 @@ else
   tar -tzf "$archive_path" >/dev/null
 fi
 
+# Keep the canonical archive at repository root for CI validation and stage an
+# identical copy under dist/ for deployment workflows that transfer the release
+# directly instead of using GitHub Actions artifact storage.
+mkdir -p "$repository_root/dist"
+cp -f -- "$archive_path" "$repository_root/dist/$(basename "$archive_path")"
+
 echo "Created $(basename "$archive_path") with isolated operations tooling"

@@ -58,7 +58,7 @@ export default async function OrganizationLayout({
             organizationId: membership.organizationId,
             createdById: session.user.id,
           },
-          select: { id: true, title: true, updatedAt: true },
+          select: { id: true, title: true, threadType: true, updatedAt: true },
           orderBy: { updatedAt: "desc" },
           take: 30,
         }),
@@ -104,6 +104,7 @@ export default async function OrganizationLayout({
   const threads = rawThreads.map((thread) => ({
     id: thread.id,
     title: thread.title,
+    threadType: thread.threadType,
     updatedAt: thread.updatedAt.toISOString(),
   }));
 

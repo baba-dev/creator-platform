@@ -18,6 +18,26 @@ interface ThreadItem {
   id: string;
   title: string;
   updatedAt: string;
+  threadType?: string;
+}
+
+function getThreadRoute(base: string, thread: ThreadItem): Route {
+  if (thread.threadType === "CREATIVE") {
+    return `${base}/conversations/${encodeURIComponent(thread.id)}` as Route;
+  }
+  return `${base}/chat?threadId=${encodeURIComponent(thread.id)}` as Route;
+}
+
+function isThreadActive(
+  pathname: string,
+  currentThreadId: string | null,
+  thread: ThreadItem,
+  base: string,
+): boolean {
+  if (thread.threadType === "CREATIVE") {
+    return pathname === `${base}/conversations/${thread.id}`;
+  }
+  return pathname === `${base}/chat` && currentThreadId === thread.id;
 }
 
 interface FavoriteAssetItem {
@@ -66,7 +86,6 @@ export function ChatGPTAppSidebar({
   const base = `/app/${encodeURIComponent(slug)}`;
 
   const currentThreadId = searchParams.get("threadId");
-  const isChatActive = pathname === `${base}/chat`;
 
   // Accordion open/close states
   const [pinnedOpen, setPinnedOpen] = useState(true);
@@ -88,6 +107,7 @@ export function ChatGPTAppSidebar({
     }
   });
 
+  const [createdThreads, setCreatedThreads] = useState<ThreadItem[]>([]);
   const [deletedThreadIds, setDeletedThreadIds] = useState<string[]>([]);
   const [renamedThreads, setRenamedThreads] = useState<Record<string, string>>(
     {},
@@ -96,11 +116,64 @@ export function ChatGPTAppSidebar({
     null,
   );
 
+  // Listen for client events from Quick Create and Conversation Workspace
+  useEffect(() => {
+    function handleConversationStarted(e: Event) {
+      const customEvent = e as CustomEvent<ThreadItem>;
+      if (customEvent.detail && customEvent.detail.id) {
+        setCreatedThreads((prev) => {
+          if (prev.some((t) => t.id === customEvent.detail.id)) return prev;
+          return [customEvent.detail, ...prev];
+        });
+      }
+    }
+
+    function handleTitleUpdated(e: Event) {
+      const customEvent = e as CustomEvent<{
+        id?: string;
+        conversationId?: string;
+        title: string;
+      }>;
+      const targetId =
+        customEvent.detail?.id ?? customEvent.detail?.conversationId;
+      if (targetId && customEvent.detail?.title) {
+        setRenamedThreads((prev) => ({
+          ...prev,
+          [targetId]: customEvent.detail.title,
+        }));
+      }
+    }
+
+    window.addEventListener(
+      "aiwa:conversation-started",
+      handleConversationStarted,
+    );
+    window.addEventListener(
+      "aiwa:conversation-title-updated",
+      handleTitleUpdated,
+    );
+    return () => {
+      window.removeEventListener(
+        "aiwa:conversation-started",
+        handleConversationStarted,
+      );
+      window.removeEventListener(
+        "aiwa:conversation-title-updated",
+        handleTitleUpdated,
+      );
+    };
+  }, []);
+
   // Inline renaming state
   const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
 
-  const threads = initialThreads
+  const threads = [
+    ...createdThreads.filter(
+      (ct) => !initialThreads.some((it) => it.id === ct.id),
+    ),
+    ...initialThreads,
+  ]
     .filter((t) => !deletedThreadIds.includes(t.id))
     .map((t) => ({
       ...t,
@@ -139,17 +212,21 @@ export function ChatGPTAppSidebar({
     setActiveMenuThreadId(null);
   }
 
-  async function handleDeleteThread(threadId: string, e: React.MouseEvent) {
+  async function handleDeleteThread(thread: ThreadItem, e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
     try {
-      await fetch(`/api/chat/threads/${encodeURIComponent(threadId)}`, {
+      const endpoint =
+        thread.threadType === "CREATIVE"
+          ? `/api/conversations/${encodeURIComponent(thread.id)}`
+          : `/api/chat/threads/${encodeURIComponent(thread.id)}`;
+      await fetch(endpoint, {
         method: "DELETE",
       });
-      setDeletedThreadIds((prev) => [...prev, threadId]);
-      setPinnedThreadIds((prev) => prev.filter((id) => id !== threadId));
-      if (currentThreadId === threadId) {
-        router.push(`${base}/chat` as Route);
+      setDeletedThreadIds((prev) => [...prev, thread.id]);
+      setPinnedThreadIds((prev) => prev.filter((id) => id !== thread.id));
+      if (isThreadActive(pathname, currentThreadId, thread, base)) {
+        router.push(base as Route);
       }
     } catch {
       // Ignore
@@ -165,7 +242,7 @@ export function ChatGPTAppSidebar({
     setActiveMenuThreadId(null);
   }
 
-  async function commitRename(threadId: string) {
+  async function commitRename(thread: ThreadItem) {
     const trimmed = editTitle.trim();
     if (!trimmed) {
       setEditingThreadId(null);
@@ -173,16 +250,17 @@ export function ChatGPTAppSidebar({
     }
 
     try {
-      const res = await fetch(
-        `/api/chat/threads/${encodeURIComponent(threadId)}`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title: trimmed }),
-        },
-      );
+      const endpoint =
+        thread.threadType === "CREATIVE"
+          ? `/api/conversations/${encodeURIComponent(thread.id)}`
+          : `/api/chat/threads/${encodeURIComponent(thread.id)}`;
+      const res = await fetch(endpoint, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: trimmed }),
+      });
       if (res.ok) {
-        setRenamedThreads((prev) => ({ ...prev, [threadId]: trimmed }));
+        setRenamedThreads((prev) => ({ ...prev, [thread.id]: trimmed }));
       }
     } catch {
       // Ignore
@@ -227,11 +305,11 @@ export function ChatGPTAppSidebar({
           {/* Quick Actions in Mini-Rail */}
           <div className="flex flex-col items-center gap-2">
             <Link
-              href={`${base}/chat` as Route}
+              href={base as Route}
               onClick={onItemClick}
               title="New Chat"
               className={`grid size-9 place-items-center rounded-xl transition ${
-                isChatActive && !currentThreadId
+                pathname === base
                   ? "bg-primary text-primary-foreground shadow-xs"
                   : "border border-border/80 bg-card text-muted-foreground hover:border-primary/40 hover:text-primary"
               }`}
@@ -354,10 +432,10 @@ export function ChatGPTAppSidebar({
         {/* Primary Action: New Chat (ChatGPT Style) */}
         <div className="p-2.5">
           <Link
-            href={`${base}/chat` as Route}
+            href={base as Route}
             onClick={onItemClick}
             className={`flex h-10 w-full items-center gap-3 rounded-xl px-3 text-xs font-bold transition focus-visible:outline-2 focus-visible:outline-ring ${
-              isChatActive && !currentThreadId
+              pathname === base
                 ? "bg-primary text-primary-foreground shadow-xs"
                 : "border border-border/80 bg-card/80 text-foreground hover:border-primary/40 hover:bg-primary/10 hover:text-primary shadow-2xs"
             }`}
@@ -433,14 +511,16 @@ export function ChatGPTAppSidebar({
                   <>
                     {/* Pinned Conversation Threads */}
                     {pinnedThreads.map((thread) => {
-                      const isActive =
-                        isChatActive && currentThreadId === thread.id;
+                      const isActive = isThreadActive(
+                        pathname,
+                        currentThreadId,
+                        thread,
+                        base,
+                      );
                       return (
                         <div key={thread.id} className="group relative">
                           <Link
-                            href={
-                              `${base}/chat?threadId=${encodeURIComponent(thread.id)}` as Route
-                            }
+                            href={getThreadRoute(base, thread)}
                             onClick={onItemClick}
                             className={`flex h-8 items-center gap-2 rounded-xl px-2.5 text-xs transition ${
                               isActive
@@ -449,7 +529,11 @@ export function ChatGPTAppSidebar({
                             }`}
                           >
                             <Icon
-                              name="chat"
+                              name={
+                                thread.threadType === "CREATIVE"
+                                  ? "sparkles"
+                                  : "chat"
+                              }
                               className="size-3 shrink-0 text-primary"
                             />
                             <span className="truncate flex-1">
@@ -568,8 +652,12 @@ export function ChatGPTAppSidebar({
                 </div>
               ) : (
                 recentThreads.map((thread) => {
-                  const isActive =
-                    isChatActive && currentThreadId === thread.id;
+                  const isActive = isThreadActive(
+                    pathname,
+                    currentThreadId,
+                    thread,
+                    base,
+                  );
                   const isMenuOpen = activeMenuThreadId === thread.id;
                   const isEditing = editingThreadId === thread.id;
 
@@ -583,18 +671,16 @@ export function ChatGPTAppSidebar({
                             autoFocus
                             onChange={(e) => setEditTitle(e.target.value)}
                             onKeyDown={(e) => {
-                              if (e.key === "Enter") commitRename(thread.id);
+                              if (e.key === "Enter") commitRename(thread);
                               if (e.key === "Escape") setEditingThreadId(null);
                             }}
-                            onBlur={() => commitRename(thread.id)}
+                            onBlur={() => commitRename(thread)}
                             className="w-full bg-transparent text-xs font-medium text-foreground outline-hidden"
                           />
                         </div>
                       ) : (
                         <Link
-                          href={
-                            `${base}/chat?threadId=${encodeURIComponent(thread.id)}` as Route
-                          }
+                          href={getThreadRoute(base, thread)}
                           onClick={onItemClick}
                           className={`flex h-9 items-center justify-between rounded-xl px-3 text-xs transition ${
                             isActive
@@ -602,9 +688,15 @@ export function ChatGPTAppSidebar({
                               : "text-foreground/85 hover:bg-card hover:text-foreground"
                           }`}
                         >
-                          <span className="truncate flex-1 pr-2">
-                            {thread.title}
-                          </span>
+                          <div className="flex items-center gap-2 truncate flex-1 pr-2">
+                            {thread.threadType === "CREATIVE" ? (
+                              <Icon
+                                name="sparkles"
+                                className="size-3 shrink-0 text-primary/70"
+                              />
+                            ) : null}
+                            <span className="truncate">{thread.title}</span>
+                          </div>
 
                           {/* Thread action button */}
                           <button
@@ -651,7 +743,7 @@ export function ChatGPTAppSidebar({
                           </button>
                           <button
                             type="button"
-                            onClick={(e) => handleDeleteThread(thread.id, e)}
+                            onClick={(e) => handleDeleteThread(thread, e)}
                             className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[11px] font-medium text-destructive hover:bg-destructive/10"
                           >
                             <Icon name="trash" className="size-3" />

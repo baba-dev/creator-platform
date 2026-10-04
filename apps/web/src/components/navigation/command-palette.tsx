@@ -20,7 +20,7 @@ interface CommandPaletteProps {
   isOpen: boolean;
   onClose: () => void;
   slug: string;
-  threads?: Array<{ id: string; title: string }>;
+  threads?: Array<{ id: string; title: string; threadType?: string }>;
   projects?: Array<{ id: string; name: string }>;
 }
 
@@ -120,7 +120,7 @@ export function CommandPalette({
       title: "New Chat",
       description: "Start a fresh creative conversation",
       icon: "edit",
-      href: `${base}/chat`,
+      href: `${base}`,
     },
     {
       id: "nav-assets",
@@ -161,9 +161,15 @@ export function CommandPalette({
     id: `thread-${t.id}`,
     category: "Conversations",
     title: t.title,
-    description: "Open chat thread",
-    icon: "chat",
-    href: `${base}/chat?threadId=${encodeURIComponent(t.id)}`,
+    description:
+      t.threadType === "CREATIVE"
+        ? "Creative conversation"
+        : "Open chat thread",
+    icon: t.threadType === "CREATIVE" ? "sparkles" : "chat",
+    href:
+      t.threadType === "CREATIVE"
+        ? `${base}/conversations/${encodeURIComponent(t.id)}`
+        : `${base}/chat?threadId=${encodeURIComponent(t.id)}`,
   }));
 
   // Dynamic projects

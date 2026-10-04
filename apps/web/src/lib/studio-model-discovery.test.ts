@@ -326,6 +326,93 @@ describe("dynamic text Studio discovery", () => {
   });
 });
 
+describe("VOICE task pricing discovery", () => {
+  const requestPrice = {
+    id: "voice-request-price",
+    pricingDimension: "REQUEST" as const,
+    unitQuantity: 1,
+    usageRates: null,
+  };
+  const characterPrice = {
+    id: "voice-character-price",
+    pricingDimension: "CHARACTER" as const,
+    unitQuantity: 1000,
+    usageRates: null,
+  };
+  const secondPrice = {
+    id: "voice-second-price",
+    pricingDimension: "SECOND" as const,
+    unitQuantity: 60,
+    usageRates: null,
+  };
+
+  it("shows transcription only with SECOND or REQUEST pricing", () => {
+    const whisper = (priceVersions: StudioModelRow["priceVersions"]) =>
+      row({
+        id: "whisper",
+        provider: "GROQ",
+        providerModelId: "whisper-large-v3-turbo",
+        mediaKind: "VOICE",
+        capabilities: { transcription: true },
+        priceVersions,
+      });
+
+    expect(
+      selectDiscoverableStudioModels(
+        [whisper([secondPrice])],
+        "transcription",
+        { GROQ_API_KEY: "groq" },
+      ).models.map((model) => model.id),
+    ).toEqual(["whisper"]);
+    expect(
+      selectDiscoverableStudioModels(
+        [whisper([requestPrice])],
+        "transcription",
+        { GROQ_API_KEY: "groq" },
+      ).models.map((model) => model.id),
+    ).toEqual(["whisper"]);
+    expect(
+      selectDiscoverableStudioModels(
+        [whisper([characterPrice])],
+        "transcription",
+        { GROQ_API_KEY: "groq" },
+      ).models,
+    ).toEqual([]);
+  });
+
+  it("shows speech synthesis only with CHARACTER or REQUEST pricing", () => {
+    const tts = (priceVersions: StudioModelRow["priceVersions"]) =>
+      row({
+        id: "tts",
+        provider: "BYTEPLUS",
+        providerModelId: "seed-tts-2.0",
+        mediaKind: "VOICE",
+        capabilities: { speechSynthesis: true },
+        priceVersions,
+      });
+
+    expect(
+      selectDiscoverableStudioModels(
+        [tts([characterPrice])],
+        "speech-synthesis",
+        { BYTEPLUS_SPEECH_API_KEY: "speech" },
+      ).models.map((model) => model.id),
+    ).toEqual(["tts"]);
+    expect(
+      selectDiscoverableStudioModels(
+        [tts([requestPrice])],
+        "speech-synthesis",
+        { BYTEPLUS_SPEECH_API_KEY: "speech" },
+      ).models.map((model) => model.id),
+    ).toEqual(["tts"]);
+    expect(
+      selectDiscoverableStudioModels([tts([secondPrice])], "speech-synthesis", {
+        BYTEPLUS_SPEECH_API_KEY: "speech",
+      }).models,
+    ).toEqual([]);
+  });
+});
+
 describe("dual-use reasoning commercialization", () => {
   it("keeps REQUEST-priced dual-use models in Prompt Enhance but out of paid TEXT Studios", () => {
     const requestPrice = {

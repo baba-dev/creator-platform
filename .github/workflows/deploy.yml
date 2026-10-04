@@ -6,7 +6,6 @@ on:
     types: [completed]
 
 permissions:
-  actions: write
   contents: read
 
 concurrency:
@@ -19,8 +18,8 @@ jobs:
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
     environment:
       name: staging
       url: https://creator.aiwamediagroup.com

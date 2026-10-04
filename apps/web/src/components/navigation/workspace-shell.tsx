@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { ChatGPTAppSidebar } from "@/components/navigation/chatgpt-sidebar";
 
 interface WorkspaceSidebarProps {
@@ -43,17 +43,15 @@ export function WorkspaceShell({
   assistantWidget,
   children,
 }: WorkspaceShellProps) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
 
-  useEffect(() => {
     try {
-      setCollapsed(
-        window.localStorage.getItem("aiwa_sidebar_collapsed") === "true",
-      );
+      return window.localStorage.getItem("aiwa_sidebar_collapsed") === "true";
     } catch {
-      // Ignore unavailable or blocked localStorage and keep the safe default.
+      return false;
     }
-  }, []);
+  });
 
   function toggleCollapse() {
     setCollapsed((prev) => {

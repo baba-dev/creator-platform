@@ -25,20 +25,63 @@ jobs:
       url: https://creator.aiwamediagroup.com
     env:
       RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+      AUTH_SECRET: staging-build-only-auth-secret-at-least-32-characters-long
+      DATABASE_URL: mysql://creator:staging-build-only@127.0.0.1:3306/creator_platform
+      APP_ENV: staging
+      APP_URL: https://creator.aiwamediagroup.com
+      APP_VERSION: ${{ github.event.workflow_run.head_sha }}
+      SIGNUPS_ENABLED: "true"
+      GENERATION_INTEGRATION_TEST: "false"
+      PRISMA_CLI_BINARY_TARGETS: debian-openssl-1.1.x,debian-openssl-3.0.x
     steps:
-      - name: Download tested release
-        uses: actions/download-artifact@v8
+      - name: Check out successful CI revision
+        uses: actions/checkout@v7
         with:
-          name: creator-platform-${{ github.event.workflow_run.head_sha }}
-          path: dist
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ github.event.workflow_run.id }}
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 1
 
-      - name: Validate release artifact
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.19.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Rebuild validated revision for staging
         run: |
-          test "$RELEASE_SHA" != ""
-          test -f "dist/creator-platform-${RELEASE_SHA}.tar.gz"
-          tar -tzf "dist/creator-platform-${RELEASE_SHA}.tar.gz" >/dev/null
+          set -Eeuo pipefail
+          test -n "$RELEASE_SHA"
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          pnpm install --frozen-lockfile --prefer-offline
+          pnpm db:generate
+          pnpm build
+          bash infra/deploy/package-release.sh "$RELEASE_SHA"
+
+      - name: Validate rebuilt release artifact
+        run: |
+          set -Eeuo pipefail
+          archive="creator-platform-${RELEASE_SHA}.tar.gz"
+          test -f "$archive"
+          tar -tzf "$archive" >/dev/null
+          validation_dir="$(mktemp -d)"
+          trap 'rm -rf "$validation_dir"' EXIT
+          if command -v pigz >/dev/null 2>&1; then
+            tar -I pigz -xf "$archive" -C "$validation_dir"
+          else
+            tar -xzf "$archive" -C "$validation_dir"
+          fi
+          test "$(cat "$validation_dir/RELEASE_LAYOUT")" = "3"
+          (
+            cd "$validation_dir"
+            sha256sum --check --strict ops/control-plane.sha256
+          )
+          grep -qx 'ProtectSystem=strict' "$validation_dir/ops/systemd/creator-web.service"
+          grep -qx 'ProtectSystem=strict' "$validation_dir/ops/systemd/creator-worker.service"
+          grep -qx 'ProtectSystem=strict' "$validation_dir/ops/systemd/creator-worker@.service"
 
       - name: Prepare verified staging SSH transport
         env:

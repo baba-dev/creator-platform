@@ -28,9 +28,7 @@ describe("Quick Create model selection", () => {
       "VIDEO",
     );
 
-    expect(selected?.providerModelId).toBe(
-      "dreamina-seedance-2-0-fast-260128",
-    );
+    expect(selected?.providerModelId).toBe("dreamina-seedance-2-0-fast-260128");
   });
 
   it("falls back to the first compatible model", () => {

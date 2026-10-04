@@ -1856,10 +1856,9 @@ export function GenerationStudio({
                       ? "Optional: subtle smile, natural gestures, steady eye contact…"
                       : "A cinematic product photograph in warm Omani desert light…"
                   }
-                  className={`min-h-44 w-full rounded-2xl border border-input bg-card p-4 text-foreground placeholder:text-muted-foreground ${variant === "advanced" ? "pb-14" : ""}`}
+                  className="min-h-44 w-full rounded-2xl border border-input bg-card p-4 pb-14 text-foreground placeholder:text-muted-foreground"
                 />
-                {variant === "advanced" ? (
-                  <Button
+                <Button
                     type="button"
                     variant="secondary"
                     size="sm"
@@ -1887,7 +1886,6 @@ export function GenerationStudio({
                       <>✨ Enhance prompt</>
                     )}
                   </Button>
-                ) : null}
               </div>
               {variant === "advanced" ? (
                 enhancementAttribution ? (

@@ -35,7 +35,8 @@ export async function renderSimpleVideoInBrowser({
     source: new BlobSource(source),
   });
   const videoTrack = await input.getPrimaryVideoTrack();
-  if (!videoTrack) throw new Error("The source does not contain a video track.");
+  if (!videoTrack)
+    throw new Error("The source does not contain a video track.");
 
   const sourceWidth = await videoTrack.getDisplayWidth();
   const sourceHeight = await videoTrack.getDisplayHeight();

@@ -206,7 +206,7 @@ export function VideoEditor({
     };
   }, [organizationId, renderId, loadAssets]);
   function selectClip(id: string | null) {
-    selectClip(id);
+    setSelectedClip(id);
     setVideoCrop({ x: 0, y: 0 });
     setVideoZoom(1);
     setShowReframe(false);

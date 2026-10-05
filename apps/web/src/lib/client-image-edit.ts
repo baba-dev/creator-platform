@@ -42,7 +42,8 @@ async function loadImage(url: string) {
     const image = new Image();
     image.decoding = "async";
     image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("Source image could not be decoded."));
+    image.onerror = () =>
+      reject(new Error("Source image could not be decoded."));
     image.src = url;
   });
 }
@@ -88,11 +89,7 @@ export async function renderImageEdit({
   const naturalHeight = image.naturalHeight;
   validateClientImageOutput(naturalWidth, naturalHeight);
 
-  const rotated = rotatedImageDimensions(
-    naturalWidth,
-    naturalHeight,
-    rotation,
-  );
+  const rotated = rotatedImageDimensions(naturalWidth, naturalHeight, rotation);
   const fullCanvas = document.createElement("canvas");
   fullCanvas.width = rotated.width;
   fullCanvas.height = rotated.height;

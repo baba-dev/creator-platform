@@ -280,7 +280,7 @@ describe("generation pricing policies", () => {
         { estimator: "legacy-text-v0", tiers },
         "GROQ",
       ),
-    ).toThrow(/requires the text-token-v1/i);
+    ).toThrow(/unsupported text usage estimator/i);
     expect(() =>
       normalizeLegacyTextUsageRatesForProvider(
         { estimator: "byteplus-text-v1", tiers: [] },

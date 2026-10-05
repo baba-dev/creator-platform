@@ -142,12 +142,6 @@ export function VideoEditor({
       .catch(() => undefined);
   }, [organizationId, loadAssets]);
   useEffect(() => {
-    setVideoCrop({ x: 0, y: 0 });
-    setVideoZoom(1);
-    setShowReframe(false);
-  }, [selectedClip]);
-
-  useEffect(() => {
     if (!renderId) return;
     let active = true;
     const check = async () => {
@@ -211,6 +205,13 @@ export function VideoEditor({
       clearInterval(timer);
     };
   }, [organizationId, renderId, loadAssets]);
+  function selectClip(id: string | null) {
+    selectClip(id);
+    setVideoCrop({ x: 0, y: 0 });
+    setVideoZoom(1);
+    setShowReframe(false);
+  }
+
   function updateClip(
     id: string,
     patch: Partial<VideoEditDocument["clips"][number]>,
@@ -240,7 +241,7 @@ export function VideoEditor({
         },
       ],
     }));
-    setSelectedClip(id);
+    selectClip(id);
   }
   function splitClip() {
     if (!clip) return;
@@ -265,7 +266,7 @@ export function VideoEditor({
         ),
       };
     });
-    setSelectedClip(second.id);
+    selectClip(second.id);
   }
   function startAiWorkflow(workflow: "EDIT" | "EXTEND") {
     if (!clip?.assetId) {
@@ -437,7 +438,7 @@ export function VideoEditor({
       setRevision(data.edit.revision);
       setTitle(data.edit.title);
       setDocument(data.edit.document);
-      setSelectedClip(data.edit.document.clips[0]?.id ?? null);
+      selectClip(data.edit.document.clips[0]?.id ?? null);
       setRenderResult(null);
       setMessage(null);
       setError(null);
@@ -480,7 +481,7 @@ export function VideoEditor({
             },
           ],
         }));
-        setSelectedClip(id);
+        selectClip(id);
       }
       setMessage("Uploaded to your library.");
     } catch (cause) {
@@ -521,7 +522,7 @@ export function VideoEditor({
           },
         ],
       }));
-      setSelectedClip(id);
+      selectClip(id);
       setLink("");
       setMessage("Approved video imported privately.");
     } catch (cause) {

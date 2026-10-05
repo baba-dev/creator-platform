@@ -332,8 +332,8 @@ export async function POST(
         // as a reference so reframing remains visually related to the asset.
         if (targetModality === "IMAGE") {
           const sourceAssetId =
-            currentState.activeAssetId ??
             plannerContext.selectedAssetId ??
+            currentState.activeAssetId ??
             undefined;
           if (sourceAssetId) {
             imageReferenceAssetIds = [sourceAssetId];

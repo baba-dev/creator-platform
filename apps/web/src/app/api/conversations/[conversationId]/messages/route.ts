@@ -586,11 +586,9 @@ export async function POST(
           );
           if (item) {
             currentState.activeAssetId = item.assetId;
-            firstFrameAssetId = item.assetId;
           }
         } else if (target.kind === "asset_id") {
           currentState.activeAssetId = target.assetId;
-          firstFrameAssetId = target.assetId;
         }
       } else if (action.type === "change_aspect_ratio") {
         targetRatio = action.aspectRatio;
@@ -599,8 +597,8 @@ export async function POST(
         // as a reference so reframing remains visually related to the asset.
         if (targetModality === "IMAGE") {
           const sourceAssetId =
-            plannerContext.selectedAssetId ??
             currentState.activeAssetId ??
+            plannerContext.selectedAssetId ??
             undefined;
           if (sourceAssetId) {
             imageReferenceAssetIds = [sourceAssetId];
@@ -648,7 +646,12 @@ export async function POST(
             currentState.activeAssetId ??
             plannerContext.selectedAssetId ??
             undefined;
-          if (sourceAssetId) {
+          const sourceIsImage = plannerContext.activeOutputGroup.some(
+            (output) =>
+              output.assetId === sourceAssetId &&
+              output.mimeType.startsWith("image/"),
+          );
+          if (sourceAssetId && sourceIsImage) {
             firstFrameAssetId = firstFrameAssetId ?? sourceAssetId;
           }
         }
@@ -657,8 +660,6 @@ export async function POST(
         if (action.prompt) targetPrompt = action.prompt;
         if (action.firstFrameAssetId) {
           firstFrameAssetId = action.firstFrameAssetId;
-        } else if (!firstFrameAssetId && currentState.activeAssetId) {
-          firstFrameAssetId = currentState.activeAssetId;
         }
         if (action.durationSeconds) targetDuration = action.durationSeconds;
         videoWorkflow =
@@ -719,6 +720,17 @@ export async function POST(
       } else if (action.type === "retry_generation") {
         if (!latestJob) {
           throw new GenerationError("There is no generation to retry.", 409);
+        }
+
+        if (
+          ["SUBMITTED", "PROCESSING", "MANUAL_REVIEW"].includes(
+            latestJob.status,
+          )
+        ) {
+          throw new GenerationError(
+            "This generation is still active or under review and cannot be retried safely.",
+            409,
+          );
         }
 
         if (targetModality === "IMAGE") {

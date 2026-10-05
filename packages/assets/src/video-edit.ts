@@ -12,7 +12,9 @@ export const videoClipTransformSchema = z
       })
       .strict()
       .refine(
-        (value) => value.x + value.width <= 1.000001 && value.y + value.height <= 1.000001,
+        (value) =>
+          value.x + value.width <= 1.000001 &&
+          value.y + value.height <= 1.000001,
         "Crop must stay inside the source frame.",
       ),
     rotation: z.union([

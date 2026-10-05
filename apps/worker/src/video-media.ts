@@ -5,7 +5,10 @@ import { spawn } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { VideoEditDocument } from "@aiwa/assets/video-edit";
+import {
+  defaultVideoClipTransform,
+  type VideoEditDocument,
+} from "@aiwa/assets/video-edit";
 
 export async function mediaCommand(
   binary: string,
@@ -150,12 +153,37 @@ export async function renderVideo(
         throw new Error("Video clip exceeds its source.");
       const duration = (clip.outMs - clip.inMs) / 1000;
       const begin = clip.inMs / 1000;
+      const transform = clip.transform ?? defaultVideoClipTransform;
+      const visualTransforms: string[] = [];
+      if (transform.rotation === 90) visualTransforms.push("transpose=clock");
+      else if (transform.rotation === 180)
+        visualTransforms.push("hflip", "vflip");
+      else if (transform.rotation === 270)
+        visualTransforms.push("transpose=cclock");
+      if (transform.flipX) visualTransforms.push("hflip");
+      if (
+        transform.crop.x > 0 ||
+        transform.crop.y > 0 ||
+        transform.crop.width < 1 ||
+        transform.crop.height < 1
+      ) {
+        const cropWidth = transform.crop.width.toFixed(6);
+        const cropHeight = transform.crop.height.toFixed(6);
+        const cropX = transform.crop.x.toFixed(6);
+        const cropY = transform.crop.y.toFixed(6);
+        visualTransforms.push(
+          `crop=max(2\\,trunc(iw*${cropWidth}/2)*2):max(2\\,trunc(ih*${cropHeight}/2)*2):trunc(iw*${cropX}/2)*2:trunc(ih*${cropY}/2)*2`,
+        );
+      }
+      const visualFilter = visualTransforms.length
+        ? `,${visualTransforms.join(",")}`
+        : "";
       const fade =
         clip.transition === "fade" && index > 0
           ? `,fade=t=in:st=0:d=${Math.min(0.25, duration / 3)}`
           : "";
       filters.push(
-        `[${input}:v]trim=start=${begin}:duration=${duration},setpts=PTS-STARTPTS,fps=24,scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1${fade}[v${index}]`,
+        `[${input}:v]trim=start=${begin}:duration=${duration},setpts=PTS-STARTPTS,fps=24${visualFilter},scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1${fade}[v${index}]`,
       );
       if (detail.hasAudio && !clip.muted)
         filters.push(

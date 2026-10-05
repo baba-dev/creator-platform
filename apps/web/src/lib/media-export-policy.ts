@@ -43,10 +43,10 @@ export function browserVideoExportBlockReason(
 export function canUseBrowserVideoRenderer() {
   if (typeof window === "undefined") return false;
   return (
-    typeof window.VideoEncoder !== "undefined" &&
-    typeof window.VideoDecoder !== "undefined" &&
-    typeof window.AudioEncoder !== "undefined" &&
-    typeof window.AudioDecoder !== "undefined"
+    typeof globalThis.VideoEncoder !== "undefined" &&
+    typeof globalThis.VideoDecoder !== "undefined" &&
+    typeof globalThis.AudioEncoder !== "undefined" &&
+    typeof globalThis.AudioDecoder !== "undefined"
   );
 }
 

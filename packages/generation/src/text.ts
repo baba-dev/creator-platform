@@ -343,7 +343,7 @@ export async function createTextJob(
             usageRates: normalizeLegacyTextUsageRatesForProvider(
               priceRow.usageRates,
               modelRow.provider,
-            ),
+            ) as unknown as typeof priceRow.usageRates,
           };
         } catch {
           throw new GenerationError(

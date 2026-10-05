@@ -100,7 +100,7 @@ export async function issueTextFeatureQuote(input: TextFeatureQuoteInput) {
         usageRates: normalizeLegacyTextUsageRatesForProvider(
           price.usageRates,
           model.provider,
-        ),
+        ) as unknown as typeof price.usageRates,
       };
     } catch {
       throw new GenerationError(

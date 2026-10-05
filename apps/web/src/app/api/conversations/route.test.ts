@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   trusted: vi.fn(),
   session: vi.fn(),
+  rateLimitCheck: vi.fn(),
   createImageJob: vi.fn(),
+  createVideoJob: vi.fn(),
   db: {
     membership: {
       findUnique: vi.fn(),
@@ -36,10 +38,22 @@ vi.mock("@/lib/request-auth", () => ({
   getRequestSession: mocks.session,
 }));
 
+vi.mock("@/lib/rate-limit", () => ({
+  rateLimit: () => ({ check: mocks.rateLimitCheck }),
+}));
+
 vi.mock("@aiwa/generation", () => ({
   createImageJob: mocks.createImageJob,
-  createVideoJob: vi.fn(),
+  createVideoJob: mocks.createVideoJob,
   createVoiceJob: vi.fn(),
+  GenerationError: class GenerationError extends Error {
+    constructor(
+      message: string,
+      public status = 400,
+    ) {
+      super(message);
+    }
+  },
 }));
 
 vi.mock("@/lib/conversations/title-generator", () => ({
@@ -71,6 +85,7 @@ describe("POST /api/conversations", () => {
     vi.clearAllMocks();
     mocks.trusted.mockReturnValue(true);
     mocks.session.mockResolvedValue({ user: fakeUser });
+    mocks.rateLimitCheck.mockResolvedValue(null);
     mocks.db.membership.findUnique.mockResolvedValue(fakeMembership);
     mocks.db.chatThread.create.mockResolvedValue({
       id: "conv_100",
@@ -80,6 +95,10 @@ describe("POST /api/conversations", () => {
     mocks.db.chatMessage.upsert.mockResolvedValue({ id: "msg_100" });
     mocks.createImageJob.mockResolvedValue({
       id: "job_img_100",
+      status: "QUEUED",
+    });
+    mocks.createVideoJob.mockResolvedValue({
+      id: "job_video_100",
       status: "QUEUED",
     });
     mocks.db.generationJob.findUnique.mockResolvedValue({ chatThreadId: null });
@@ -135,6 +154,81 @@ describe("POST /api/conversations", () => {
       where: { id: "job_img_100", chatThreadId: null },
       data: { chatThreadId: "conv_100" },
     });
+  });
+
+  it("submits Quick Create video with the same quoted video options", async () => {
+    mocks.db.chatThread.create.mockResolvedValue({
+      id: "conv_video_100",
+      title: "New creation",
+    });
+
+    const req = new Request("https://example.com/api/conversations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        organizationId: "org_1",
+        prompt: "A cinematic desert flyover",
+        modality: "VIDEO",
+        modelId: "seedance-2-0",
+        priceVersionId: "pv_video_1",
+        quoteToken: "token_video",
+        idempotencyKey: "22222222-2222-4222-8222-222222222222",
+        aspectRatio: "16:9",
+        resolution: "1080p",
+        durationSeconds: 10,
+        generateAudio: true,
+        outputFormat: "mov",
+        returnLastFrame: true,
+      }),
+    });
+
+    const res = await POST(req);
+
+    expect(res.status).toBe(201);
+    expect(mocks.createVideoJob).toHaveBeenCalledWith(
+      "user_1",
+      expect.objectContaining({
+        organizationId: "org_1",
+        modelId: "seedance-2-0",
+        priceVersionId: "pv_video_1",
+        quoteToken: "token_video",
+        prompt: "A cinematic desert flyover",
+        aspectRatio: "16:9",
+        resolution: "1080p",
+        durationSeconds: 10,
+        generateAudio: true,
+        outputFormat: "mov",
+        returnLastFrame: true,
+        schemaVersion: 2,
+        workflow: "GENERATE",
+        sources: [],
+      }),
+    );
+  });
+
+  it("shares the Studio generation throttle for initial Quick Create", async () => {
+    mocks.rateLimitCheck.mockResolvedValue(
+      new Response(JSON.stringify({ error: "Too many requests." }), {
+        status: 429,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const req = new Request("https://example.com/api/conversations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        organizationId: "org_1",
+        prompt: "A test prompt",
+      }),
+    });
+
+    const res = await POST(req);
+
+    expect(res.status).toBe(429);
+    expect(mocks.rateLimitCheck).toHaveBeenCalledWith("user_1");
+    expect(mocks.createImageJob).not.toHaveBeenCalled();
+    expect(mocks.createVideoJob).not.toHaveBeenCalled();
   });
 
   it("rejects unauthenticated requests with 401", async () => {

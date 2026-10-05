@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   estimateGeneration,
   estimateVideoTokens,
+  normalizeLegacyTextUsageRatesForProvider,
   parseTextUsageRates,
   parseTextUsageRatesForProvider,
   parseUsageRates,
@@ -252,6 +253,40 @@ describe("generation pricing policies", () => {
     expect(() => parseTextUsageRatesForProvider(byteplus, "GEMINI")).toThrow(
       "text-token-v1",
     );
+  });
+
+  it("normalizes only the registered cross-provider legacy estimator label", () => {
+    const tiers = [
+      {
+        maxPromptTokens: 131072,
+        inputMicroUsdPerMillionTokens: "1000000",
+        outputMicroUsdPerMillionTokens: "2000000",
+      },
+    ];
+    expect(
+      normalizeLegacyTextUsageRatesForProvider(
+        { estimator: "byteplus-text-v1", tiers },
+        "GROQ",
+      ).estimator,
+    ).toBe("text-token-v1");
+    expect(
+      normalizeLegacyTextUsageRatesForProvider(
+        { estimator: "text-token-v1", tiers },
+        "BYTEPLUS",
+      ).estimator,
+    ).toBe("byteplus-text-v1");
+    expect(() =>
+      normalizeLegacyTextUsageRatesForProvider(
+        { estimator: "legacy-text-v0", tiers },
+        "GROQ",
+      ),
+    ).toThrow(/requires the text-token-v1/i);
+    expect(() =>
+      normalizeLegacyTextUsageRatesForProvider(
+        { estimator: "byteplus-text-v1", tiers: [] },
+        "GROQ",
+      ),
+    ).toThrow(/rate table/i);
   });
 
   it.each([

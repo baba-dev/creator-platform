@@ -1255,6 +1255,25 @@ export function GenerationStudio({
               model.mediaKind === "VIDEO"
                 ? Number.parseInt(selectedDuration, 10)
                 : undefined,
+            generateAudio:
+              model.mediaKind === "VIDEO"
+                ? videoWorkflow === "TALKING_AVATAR"
+                  ? false
+                  : generateAudio
+                : undefined,
+            outputFormat:
+              model.mediaKind === "VIDEO"
+                ? videoWorkflow === "TALKING_AVATAR"
+                  ? "mp4"
+                  : videoOutputFormat
+                : undefined,
+            returnLastFrame:
+              model.mediaKind === "VIDEO"
+                ? videoWorkflow === "TALKING_AVATAR" ||
+                  model.capabilities?.returnLastFrame !== true
+                  ? false
+                  : returnLastFrame
+                : undefined,
             voiceKey:
               model.mediaKind === "VOICE" ? selectedVoiceKey : undefined,
             speechRate: model.mediaKind === "VOICE" ? speechRate : undefined,

@@ -113,6 +113,7 @@ export function CreativeConversationWorkspace({
     key: string;
     prompt: string;
     assetId?: string;
+    resumePendingOperation: boolean;
   } | null>(null);
 
   // Poll for job status updates for any visible active jobs
@@ -121,36 +122,49 @@ export function CreativeConversationWorkspace({
     const timer = setInterval(async () => {
       try {
         let anyFinished = false;
+        let pollFailed = false;
         await Promise.all(
           pendingJobs.map(async (pendingJob) => {
-            const res = await fetch(
-              `/api/generation-jobs/${encodeURIComponent(pendingJob.id)}?organizationId=${encodeURIComponent(organizationId)}`,
-              { cache: "no-store" },
-            );
-            if (!res.ok) return;
-            const data = await res.json();
-            if (data.job) {
-              setJobs((prev) =>
-                prev.map((j) =>
-                  j.id === pendingJob.id ? { ...j, ...data.job } : j,
-                ),
+            try {
+              const res = await fetch(
+                `/api/generation-jobs/${encodeURIComponent(pendingJob.id)}?organizationId=${encodeURIComponent(organizationId)}`,
+                { cache: "no-store" },
               );
-              if (
-                data.job.status === "SUCCEEDED" ||
-                data.job.status === "FAILED" ||
-                data.job.status === "CANCELLED" ||
-                data.job.status === "MANUAL_REVIEW"
-              ) {
-                anyFinished = true;
+              if (!res.ok) {
+                pollFailed = true;
+                return;
               }
+              const data = await res.json();
+              if (data.job) {
+                setJobs((prev) =>
+                  prev.map((j) =>
+                    j.id === pendingJob.id ? { ...j, ...data.job } : j,
+                  ),
+                );
+                if (
+                  data.job.status === "SUCCEEDED" ||
+                  data.job.status === "FAILED" ||
+                  data.job.status === "CANCELLED" ||
+                  data.job.status === "MANUAL_REVIEW"
+                ) {
+                  anyFinished = true;
+                }
+              }
+            } catch {
+              pollFailed = true;
             }
           }),
         );
+        if (pollFailed) {
+          setRefreshError(true);
+        } else if (!anyFinished) {
+          setRefreshError(false);
+        }
         if (anyFinished) {
           void refreshConversation();
         }
       } catch {
-        // Non-fatal polling error
+        setRefreshError(true);
       }
     }, 3000);
     return () => clearInterval(timer);
@@ -201,8 +215,12 @@ export function CreativeConversationWorkspace({
     }
   }
 
-  // Listen for background title updates and poll once after background titling completes
+  // Listen for background title updates and poll for the bounded AI title task.
   useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let attempts = 0;
+
     function handleTitleEvent(e: Event) {
       const customEvent = e as CustomEvent<{ id: string; title: string }>;
       if (
@@ -219,27 +237,46 @@ export function CreativeConversationWorkspace({
       handleTitleEvent,
     );
 
-    const timer = setTimeout(async () => {
+    const pollTitle = async () => {
+      let titleChanged = false;
       try {
         const res = await fetch(`/api/conversations/${conversationId}`, {
           cache: "no-store",
         });
+        if (!res.ok) return;
         const data = await res.json();
         if (
           data.conversation?.title &&
           data.conversation.title !== title &&
           !isEditingTitle
         ) {
+          titleChanged = true;
           setTitle(data.conversation.title);
           setTitleDraft(data.conversation.title);
+          window.dispatchEvent(
+            new CustomEvent("aiwa:conversation-title-updated", {
+              detail: {
+                id: conversationId,
+                title: data.conversation.title,
+              },
+            }),
+          );
         }
       } catch {
-        // Non-fatal
+        // Title refinement is optional and must never block the conversation.
+      } finally {
+        attempts += 1;
+        if (!cancelled && !titleChanged && attempts < 4) {
+          timer = setTimeout(() => void pollTitle(), 3000);
+        }
       }
-    }, 3000);
+    };
+
+    timer = setTimeout(() => void pollTitle(), 3000);
 
     return () => {
-      clearTimeout(timer);
+      cancelled = true;
+      if (timer) clearTimeout(timer);
       window.removeEventListener(
         "aiwa:conversation-title-updated",
         handleTitleEvent,
@@ -274,17 +311,20 @@ export function CreativeConversationWorkspace({
   async function selectAsset(assetId: string) {
     setActiveAssetId(assetId);
     try {
-      await fetch(`/api/conversations/${conversationId}/messages`, {
+      const res = await fetch(`/api/conversations/${conversationId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          content: `Select asset`,
+          content: "Select asset",
           selectedAssetId: assetId,
           idempotencyKey: crypto.randomUUID(),
         }),
       });
+      if (!res.ok) {
+        setRefreshError(true);
+      }
     } catch {
-      // Ignore background selection sync failure
+      setRefreshError(true);
     }
   }
 
@@ -292,6 +332,7 @@ export function CreativeConversationWorkspace({
   async function handleSend(
     textToSend?: string,
     selectedAssetOverride?: string,
+    resumePendingOperation = false,
   ) {
     const prompt = (textToSend ?? inputPrompt).trim();
     if (!prompt || isSubmitting) return;
@@ -317,7 +358,8 @@ export function CreativeConversationWorkspace({
       const idempotencyKey =
         pendingTurnRef.current &&
         pendingTurnRef.current.prompt === prompt &&
-        pendingTurnRef.current.assetId === focusedAssetId
+        pendingTurnRef.current.assetId === focusedAssetId &&
+        pendingTurnRef.current.resumePendingOperation === resumePendingOperation
           ? pendingTurnRef.current.key
           : crypto.randomUUID();
 
@@ -325,6 +367,7 @@ export function CreativeConversationWorkspace({
         key: idempotencyKey,
         prompt,
         assetId: focusedAssetId,
+        resumePendingOperation,
       };
 
       const res = await fetch(`/api/conversations/${conversationId}/messages`, {
@@ -333,6 +376,7 @@ export function CreativeConversationWorkspace({
         body: JSON.stringify({
           content: prompt,
           selectedAssetId: focusedAssetId,
+          resumePendingOperation,
           idempotencyKey,
         }),
       });
@@ -855,7 +899,7 @@ export function CreativeConversationWorkspace({
                             key={opt.value}
                             type="button"
                             onClick={() =>
-                              void handleSend("Select asset", opt.assetId)
+                              void handleSend("Select asset", opt.assetId, true)
                             }
                             className="inline-flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition"
                           >
@@ -882,8 +926,8 @@ export function CreativeConversationWorkspace({
       {refreshError ? (
         <div className="mb-2 rounded-xl border border-warning/40 bg-warning/10 px-4 py-2.5 text-xs font-medium text-warning-foreground flex items-center justify-between gap-2">
           <span>
-            Status temporarily unavailable — your creative generation is running
-            safely in the background.
+            We couldn’t refresh the latest status. Any accepted generation
+            continues safely in the background.
           </span>
           <button
             type="button"
@@ -986,7 +1030,13 @@ export function CreativeConversationWorkspace({
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Media Preview Lightbox"
+          aria-label="Media preview"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              setLightboxAssetId(null);
+            }
+          }}
           onClick={() => setLightboxAssetId(null)}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4"
         >
@@ -997,6 +1047,8 @@ export function CreativeConversationWorkspace({
             {/* Close button */}
             <button
               type="button"
+              autoFocus
+              aria-label="Close media preview"
               onClick={() => setLightboxAssetId(null)}
               className="absolute top-4 right-4 z-10 grid size-8 place-items-center rounded-full bg-black/60 text-white hover:bg-black/80 transition"
               title="Close (Esc)"

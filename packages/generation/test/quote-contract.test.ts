@@ -112,6 +112,31 @@ describe("accepted generation quotes", () => {
     ).toThrow();
   });
 
+  it("keeps omitted last-frame defaults consistent between legacy and V2 video quotes", () => {
+    expect(
+      quoteParameters("VIDEO", {
+        schemaVersion: 2,
+        workflow: "GENERATE",
+        sources: [],
+      }).returnLastFrame,
+    ).toBe(false);
+    expect(
+      quoteParameters("VIDEO", {
+        durationSeconds: 5,
+        resolution: "720p",
+        aspectRatio: "16:9",
+      }).returnLastFrame,
+    ).toBe(true);
+    expect(
+      quoteParameters("VIDEO", {
+        schemaVersion: 2,
+        workflow: "GENERATE",
+        sources: [],
+        returnLastFrame: true,
+      }).returnLastFrame,
+    ).toBe(true);
+  });
+
   it("canonicalizes voice text and matches quote image units to generation outputCount", () => {
     expect(quoteParameters("VOICE", { text: "  Hello world  " })).toEqual(
       quoteParameters("VOICE", { text: "Hello world" }),

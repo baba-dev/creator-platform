@@ -2,9 +2,23 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { VideoEditDocument } from "@aiwa/assets/video-edit";
+import {
+  DEFAULT_VIDEO_CLIP_TRANSFORM,
+  resolveVideoClipTransform,
+  videoAspectRatio,
+  type VideoClipTransform,
+  type VideoEditDocument,
+} from "@aiwa/assets/video-edit";
 import { Button } from "@/components/ui/button";
 import { Eyebrow } from "@/components/ui/creative";
+import {
+  MediaCropper,
+  type QuarterTurn,
+} from "@/components/studio/media-cropper";
+import {
+  browserVideoExportBlockReason,
+  canUseBrowserVideoRenderer,
+} from "@/lib/media-export-policy";
 
 type MediaAsset = {
   id: string;
@@ -13,6 +27,7 @@ type MediaAsset = {
   durationMs: number | null;
   width: number | null;
   height: number | null;
+  byteSize?: string;
   variants?: { kind: string }[];
 };
 type EditListItem = { id: string; title: string; revision: number };
@@ -27,6 +42,11 @@ const emptyDocument: VideoEditDocument = {
   burnCaptions: false,
 };
 const formatTime = (ms: number) => (ms / 1000).toFixed(1) + "s";
+const freshTransform = (): VideoClipTransform => ({
+  ...DEFAULT_VIDEO_CLIP_TRANSFORM,
+  crop: { ...DEFAULT_VIDEO_CLIP_TRANSFORM.crop },
+});
+const clampUnit = (value: number) => Math.min(1, Math.max(0, value));
 
 export function VideoEditor({
   organizationId,
@@ -62,6 +82,10 @@ export function VideoEditor({
   const [selectedClip, setSelectedClip] = useState<string | null>(null);
   const [renderId, setRenderId] = useState<string | null>(null);
   const [renderResult, setRenderResult] = useState<string | null>(null);
+  const [framingClipId, setFramingClipId] = useState<string | null>(null);
+  const [frameCrop, setFrameCrop] = useState({ x: 0, y: 0 });
+  const [frameZoom, setFrameZoom] = useState(1);
+  const [clientProgress, setClientProgress] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [link, setLink] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -75,6 +99,10 @@ export function VideoEditor({
     document.clips.find((item) => item.id === selectedClip) ??
     document.clips[0];
   const source = assets.find((asset) => asset.id === clip?.assetId);
+  const clipTransform = clip
+    ? resolveVideoClipTransform(clip.transform)
+    : freshTransform();
+  const browserExportReason = browserVideoExportBlockReason(document, source);
   const duration = useMemo(
     () => document.clips.reduce((sum, item) => sum + item.outMs - item.inMs, 0),
     [document.clips],
@@ -177,6 +205,22 @@ export function VideoEditor({
       ),
     }));
   }
+  function updateClipTransform(id: string, patch: Partial<VideoClipTransform>) {
+    const currentClip = document.clips.find((item) => item.id === id);
+    const current = resolveVideoClipTransform(currentClip?.transform);
+    updateClip(id, {
+      transform: {
+        ...current,
+        ...patch,
+        crop: patch.crop ? { ...patch.crop } : { ...current.crop },
+      },
+    });
+  }
+  function resetClipFraming(id: string) {
+    updateClip(id, { transform: freshTransform() });
+    setFrameCrop({ x: 0, y: 0 });
+    setFrameZoom(1);
+  }
   function addClip(assetId: string) {
     const asset = assets.find((item) => item.id === assetId);
     if (!asset) return;
@@ -192,6 +236,7 @@ export function VideoEditor({
           outMs: asset.durationMs ?? 5000,
           muted: false,
           transition: "cut",
+          transform: freshTransform(),
         },
       ],
     }));
@@ -276,13 +321,14 @@ export function VideoEditor({
       setBusy(false);
     }
   }
-  async function render() {
-    const saved = await save();
-    if (!saved) return;
+  async function queueServerRender(saved: { id: string; revision: number }) {
     setBusy(true);
+    setClientProgress(null);
     setError(null);
     setReviewState(null);
-    setMessage("Render queued. You can leave this page after it starts.");
+    setMessage(
+      "Compatibility render queued. You can leave this page after it starts.",
+    );
     try {
       const response = await fetch(`/api/video-edits/${saved.id}/render`, {
         method: "POST",
@@ -306,6 +352,87 @@ export function VideoEditor({
         cause instanceof Error ? cause.message : "Could not start render.",
       );
     }
+  }
+
+  async function render() {
+    const saved = await save();
+    if (!saved) return;
+    setBusy(true);
+    setError(null);
+    setReviewState(null);
+    setRenderResult(null);
+
+    const simpleSource =
+      document.clips.length === 1
+        ? assets.find((asset) => asset.id === document.clips[0]?.assetId)
+        : undefined;
+    const blockReason = browserVideoExportBlockReason(document, simpleSource);
+    if (!blockReason && simpleSource && canUseBrowserVideoRenderer()) {
+      setClientProgress(0);
+      setMessage("Rendering on this device to keep server load low…");
+      try {
+        const sourceResponse = await fetch(
+          `/api/assets/${encodeURIComponent(simpleSource.id)}`,
+          { cache: "no-store" },
+        );
+        if (!sourceResponse.ok)
+          throw new Error(
+            "Source video could not be loaded for device rendering.",
+          );
+        const sourceBlob = await sourceResponse.blob();
+        const { renderSimpleVideoInBrowser } =
+          await import("@/lib/browser-video-renderer");
+        const output = await renderSimpleVideoInBrowser({
+          source: sourceBlob,
+          document,
+          onProgress: setClientProgress,
+        });
+        const safeTitle =
+          title
+            .trim()
+            .replace(/[^a-zA-Z0-9._-]+/g, "-")
+            .replace(/^-+|-+$/g, "")
+            .slice(0, 120) || "edited-video";
+        const uploadResponse = await fetch("/api/assets/media-upload", {
+          method: "POST",
+          headers: {
+            "x-organization-id": organizationId,
+            "x-file-name": `${safeTitle}-edited.mp4`,
+            "Content-Type": "video/mp4",
+          },
+          body: output,
+        });
+        const uploadData = (await uploadResponse.json()) as {
+          asset?: MediaAsset;
+          error?: string;
+        };
+        if (!uploadResponse.ok || !uploadData.asset)
+          throw new Error(
+            uploadData.error ?? "Rendered video could not be saved.",
+          );
+        setRenderResult(uploadData.asset.id);
+        setClientProgress(null);
+        setBusy(false);
+        setMessage(
+          "Video ready — rendered on this device. The original is unchanged.",
+        );
+        await loadAssets().catch(() => undefined);
+        return;
+      } catch {
+        setClientProgress(null);
+        setMessage(
+          "Device render is unavailable for this media. Switching to the compatibility renderer…",
+        );
+      }
+    } else {
+      setMessage(
+        blockReason
+          ? `Using the compatibility renderer: ${blockReason}.`
+          : "This browser does not expose the required media codecs. Using the compatibility renderer…",
+      );
+    }
+
+    await queueServerRender(saved);
   }
   async function loadEdit(id: string) {
     if (!id) {
@@ -335,6 +462,9 @@ export function VideoEditor({
       setTitle(data.edit.title);
       setDocument(data.edit.document);
       setSelectedClip(data.edit.document.clips[0]?.id ?? null);
+      setFramingClipId(null);
+      setFrameCrop({ x: 0, y: 0 });
+      setFrameZoom(1);
       setRenderResult(null);
       setMessage(null);
       setError(null);
@@ -459,7 +589,11 @@ export function VideoEditor({
             onClick={() => void render()}
             disabled={!canSave}
           >
-            Render MP4
+            {clientProgress !== null
+              ? `Exporting ${Math.round(clientProgress * 100)}%`
+              : busy
+                ? "Exporting…"
+                : "Export MP4"}
           </Button>
           <Button
             type="button"
@@ -564,7 +698,40 @@ export function VideoEditor({
         </aside>
         <div className="min-w-0 space-y-4">
           <div className="grid min-h-64 place-items-center overflow-hidden rounded-2xl border border-border bg-surface-sunken p-3">
-            {clip ? (
+            {clip && framingClipId === clip.id ? (
+              <MediaCropper
+                key={`${clip.id}:${clipTransform.rotation}:${document.ratio}`}
+                kind="video"
+                src={`/api/assets/${clip.assetId}`}
+                crop={frameCrop}
+                zoom={frameZoom}
+                rotation={clipTransform.rotation}
+                flipX={clipTransform.flipX}
+                aspect={videoAspectRatio(document.ratio)}
+                initialCroppedAreaPercentages={{
+                  x: clipTransform.crop.x * 100,
+                  y: clipTransform.crop.y * 100,
+                  width: clipTransform.crop.width * 100,
+                  height: clipTransform.crop.height * 100,
+                }}
+                onCropChange={setFrameCrop}
+                onZoomChange={setFrameZoom}
+                onCropComplete={(area) => {
+                  const x = clampUnit(area.x / 100);
+                  const y = clampUnit(area.y / 100);
+                  const width = Math.min(clampUnit(area.width / 100), 1 - x);
+                  const height = Math.min(clampUnit(area.height / 100), 1 - y);
+                  updateClipTransform(clip.id, {
+                    crop: {
+                      x,
+                      y,
+                      width: Math.max(0.000001, width),
+                      height: Math.max(0.000001, height),
+                    },
+                  });
+                }}
+              />
+            ) : clip ? (
               <video
                 key={clip.id}
                 ref={videoRef}
@@ -576,6 +743,9 @@ export function VideoEditor({
                   const real = Math.floor(event.currentTarget.duration * 1000);
                   if (Number.isFinite(real) && real > 0 && clip.outMs > real)
                     updateClip(clip.id, { outMs: real });
+                }}
+                style={{
+                  transform: `scaleX(${clipTransform.flipX ? -1 : 1}) rotate(${clipTransform.rotation}deg)`,
                 }}
                 className="max-h-[440px] w-full rounded-xl object-contain"
                 aria-label={source?.name ?? "Selected video clip"}
@@ -698,7 +868,14 @@ export function VideoEditor({
           className="min-w-0 space-y-4 rounded-2xl border border-border bg-card p-4"
           aria-label="Video settings"
         >
-          <h3 className="font-display text-lg font-semibold">Edit settings</h3>
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="font-display text-lg font-semibold">
+              Edit settings
+            </h3>
+            <span className="rounded-full border border-border bg-surface-sunken px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+              {browserExportReason ? "Hybrid export" : "Device-first export"}
+            </span>
+          </div>
           {clip ? (
             <div className="space-y-3 border-b border-border pb-4">
               <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
@@ -724,6 +901,103 @@ export function VideoEditor({
                   </label>
                 ))}
               </div>
+              <div className="rounded-xl border border-border bg-surface-sunken p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-semibold">Frame & transform</p>
+                    <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                      Crop, zoom, rotate and flip without changing the source.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (framingClipId === clip.id) {
+                        setFramingClipId(null);
+                      } else {
+                        setFramingClipId(clip.id);
+                        setFrameCrop({ x: 0, y: 0 });
+                        setFrameZoom(1);
+                      }
+                    }}
+                    className="min-h-10 rounded-lg border border-border bg-background px-3 text-xs font-semibold"
+                  >
+                    {framingClipId === clip.id
+                      ? "Done framing"
+                      : "Frame visually"}
+                  </button>
+                </div>
+                {framingClipId === clip.id ? (
+                  <label className="mt-3 grid gap-1 text-xs font-semibold">
+                    Zoom · {frameZoom.toFixed(2)}×
+                    <input
+                      type="range"
+                      min={1}
+                      max={3}
+                      step={0.01}
+                      value={frameZoom}
+                      onChange={(event) =>
+                        setFrameZoom(Number(event.target.value))
+                      }
+                      className="min-h-10 accent-current"
+                    />
+                  </label>
+                ) : null}
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const rotation = ((clipTransform.rotation + 270) %
+                        360) as QuarterTurn;
+                      updateClipTransform(clip.id, {
+                        rotation,
+                        crop: { ...DEFAULT_VIDEO_CLIP_TRANSFORM.crop },
+                      });
+                      setFrameCrop({ x: 0, y: 0 });
+                      setFrameZoom(1);
+                    }}
+                    className="min-h-10 rounded-lg border border-border bg-background px-2 text-xs font-semibold"
+                  >
+                    Rotate left
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const rotation = ((clipTransform.rotation + 90) %
+                        360) as QuarterTurn;
+                      updateClipTransform(clip.id, {
+                        rotation,
+                        crop: { ...DEFAULT_VIDEO_CLIP_TRANSFORM.crop },
+                      });
+                      setFrameCrop({ x: 0, y: 0 });
+                      setFrameZoom(1);
+                    }}
+                    className="min-h-10 rounded-lg border border-border bg-background px-2 text-xs font-semibold"
+                  >
+                    Rotate right
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={clipTransform.flipX}
+                    onClick={() =>
+                      updateClipTransform(clip.id, {
+                        flipX: !clipTransform.flipX,
+                      })
+                    }
+                    className="min-h-10 rounded-lg border border-border bg-background px-2 text-xs font-semibold"
+                  >
+                    {clipTransform.flipX ? "Unflip" : "Flip horizontal"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => resetClipFraming(clip.id)}
+                    className="min-h-10 rounded-lg border border-border bg-background px-2 text-xs font-semibold"
+                  >
+                    Reset framing
+                  </button>
+                </div>
+              </div>
+
               <label className="flex items-center gap-2 text-xs">
                 <input
                   type="checkbox"

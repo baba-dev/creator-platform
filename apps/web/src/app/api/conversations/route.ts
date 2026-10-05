@@ -4,10 +4,12 @@ import {
   createImageJob,
   createVideoJob,
   createVoiceJob,
+  GenerationError,
 } from "@aiwa/generation";
 import { NextResponse, after } from "next/server";
 import { z } from "zod";
 
+import { rateLimit } from "@/lib/rate-limit";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
 import {
@@ -15,6 +17,12 @@ import {
   generateConversationTitle,
 } from "@/lib/conversations/title-generator";
 import type { ConversationState } from "@/lib/conversations/types";
+
+const generationLimiter = rateLimit({
+  max: 10,
+  windowMs: 60_000,
+  prefix: "generation",
+});
 
 const conversationCreateSchema = z.object({
   organizationId: z.string().min(1).max(100),
@@ -31,6 +39,9 @@ const conversationCreateSchema = z.object({
   outputCount: z.number().int().min(1).max(15).default(1),
   referenceAssetIds: z.array(z.string().min(1).max(100)).max(14).optional(),
   durationSeconds: z.number().int().min(1).max(30).optional(),
+  generateAudio: z.boolean().optional(),
+  outputFormat: z.enum(["mp4", "mov"]).optional(),
+  returnLastFrame: z.boolean().optional(),
   voiceKey: z.string().optional(),
   speechRate: z.number().min(0.5).max(2.0).optional(),
 });
@@ -104,6 +115,9 @@ export async function POST(request: Request) {
     );
   }
 
+  const rateLimited = await generationLimiter.check(session.user.id);
+  if (rateLimited) return rateLimited;
+
   try {
     const json = await request.json();
     const input = conversationCreateSchema.parse(json);
@@ -172,7 +186,9 @@ export async function POST(request: Request) {
         durationSeconds: input.durationSeconds ?? 5,
         aspectRatio: input.aspectRatio,
         resolution: input.resolution,
-        outputFormat: "mp4",
+        generateAudio: input.generateAudio ?? false,
+        outputFormat: input.outputFormat ?? "mp4",
+        returnLastFrame: input.returnLastFrame ?? false,
         schemaVersion: 2,
         workflow: "GENERATE",
         sources: [],
@@ -340,6 +356,7 @@ export async function POST(request: Request) {
     }
     const message =
       error instanceof Error ? error.message : "Failed to create conversation.";
-    return NextResponse.json({ error: message }, { status: 400 });
+    const status = error instanceof GenerationError ? error.status : 400;
+    return NextResponse.json({ error: message }, { status });
   }
 }

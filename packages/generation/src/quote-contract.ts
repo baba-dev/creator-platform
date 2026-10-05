@@ -115,15 +115,17 @@ export function quoteParameters(
           .sort((a, b) => a.position - b.position)
           .map(({ assetId, role, position }) => ({ assetId, role, position }))
       : undefined;
+    const schemaVersion = input.schemaVersion ?? (sources ? 2 : 1);
     return {
-      schemaVersion: input.schemaVersion ?? (sources ? 2 : 1),
+      schemaVersion,
       workflow: input.workflow ?? null,
       durationSeconds: input.durationSeconds ?? 5,
       resolution: input.resolution ?? "720p",
       aspectRatio: input.aspectRatio ?? "16:9",
       generateAudio: input.generateAudio ?? false,
       outputFormat: input.outputFormat ?? "mp4",
-      returnLastFrame: input.returnLastFrame ?? true,
+      returnLastFrame:
+        input.returnLastFrame ?? (schemaVersion === 2 ? false : true),
       seed: input.seed ?? null,
       sourceDraftJobId: input.sourceDraftJobId ?? null,
       extensionDirection: input.extensionDirection ?? null,

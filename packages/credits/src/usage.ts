@@ -173,6 +173,35 @@ export function parseTextUsageRatesForProvider(
   return table;
 }
 
+/**
+ * Compatibility for price snapshots published before provider-specific text
+ * estimator validation existed. Only the other registered estimator label is
+ * repaired; missing tables, unknown labels and malformed tiers still fail.
+ */
+export function normalizeLegacyTextUsageRatesForProvider(
+  value: unknown,
+  provider: string,
+): TextUsageRates {
+  try {
+    return parseTextUsageRatesForProvider(value, provider);
+  } catch (originalError) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw originalError;
+    }
+    const config = value as Record<string, unknown>;
+    const expected = textUsageEstimatorForProvider(provider);
+    const legacyEstimator: TextUsageEstimator =
+      expected === "byteplus-text-v1" ? "text-token-v1" : "byteplus-text-v1";
+    if (config.estimator !== legacyEstimator) {
+      throw originalError;
+    }
+    return parseTextUsageRatesForProvider(
+      { ...config, estimator: expected },
+      provider,
+    );
+  }
+}
+
 function divideRoundUpBigInt(numerator: bigint, denominator: bigint): bigint {
   return (numerator + denominator - 1n) / denominator;
 }

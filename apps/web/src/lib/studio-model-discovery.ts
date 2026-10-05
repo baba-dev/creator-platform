@@ -89,6 +89,10 @@ function hasValidTextTokenPricing(
   provider: string,
 ): boolean {
   if (price.pricingDimension !== "TOKEN") return false;
+  // Price publications now require provider-specific usage rates. A null table
+  // can therefore only be a legacy snapshot; preserve its original fixed-unit
+  // TOKEN economics instead of fabricating historical per-token rates.
+  if (price.usageRates == null) return true;
   try {
     parseTextUsageRatesForProvider(price.usageRates, provider);
     return true;

@@ -3,7 +3,7 @@ import {
   calculateBillableUnits,
   estimateGeneration,
   textProviderCostMicroUsd,
-  parseTextUsageRatesForProvider,
+  normalizeLegacyTextUsageRatesForProvider,
   reserveCreditsForJob,
   captureCreditsForJob,
   releaseOrRefundCredits,
@@ -336,39 +336,16 @@ export async function createTextJob(
         );
       }
       let effectivePriceRow = priceRow;
-      try {
-        parseTextUsageRatesForProvider(priceRow.usageRates, modelRow.provider);
-      } catch {
-        if (
-          priceRow.usageRates &&
-          typeof priceRow.usageRates === "object" &&
-          !Array.isArray(priceRow.usageRates)
-        ) {
-          const raw = priceRow.usageRates as Record<string, unknown>;
-          if (Array.isArray(raw.tiers)) {
-            try {
-              const fallbackRates = {
-                ...raw,
-                estimator:
-                  modelRow.provider.trim().toUpperCase() === "BYTEPLUS"
-                    ? "byteplus-text-v1"
-                    : "text-token-v1",
-              };
-              parseTextUsageRatesForProvider(fallbackRates, modelRow.provider);
-              effectivePriceRow = { ...priceRow, usageRates: fallbackRates };
-            } catch {
-              throw new GenerationError(
-                "The selected text model does not have valid provider token rates.",
-                409,
-              );
-            }
-          } else {
-            throw new GenerationError(
-              "The selected text model does not have valid provider token rates.",
-              409,
-            );
-          }
-        } else {
+      if (priceRow.usageRates != null) {
+        try {
+          effectivePriceRow = {
+            ...priceRow,
+            usageRates: normalizeLegacyTextUsageRatesForProvider(
+              priceRow.usageRates,
+              modelRow.provider,
+            ),
+          };
+        } catch {
           throw new GenerationError(
             "The selected text model does not have valid provider token rates.",
             409,

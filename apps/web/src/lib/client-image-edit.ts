@@ -17,7 +17,8 @@ function radians(degrees: number) {
 function rotatedSize(width: number, height: number, rotation: number) {
   const angle = radians(rotation);
   return {
-    width: Math.abs(Math.cos(angle) * width) + Math.abs(Math.sin(angle) * height),
+    width:
+      Math.abs(Math.cos(angle) * width) + Math.abs(Math.sin(angle) * height),
     height:
       Math.abs(Math.sin(angle) * width) + Math.abs(Math.cos(angle) * height),
   };
@@ -163,7 +164,10 @@ export async function uploadClientImage(input: {
 }) {
   const form = new FormData();
   form.set("organizationId", input.organizationId);
-  form.set("file", new File([input.blob], input.filename, { type: input.blob.type }));
+  form.set(
+    "file",
+    new File([input.blob], input.filename, { type: input.blob.type }),
+  );
 
   const response = await fetch("/api/assets/upload", {
     method: "POST",

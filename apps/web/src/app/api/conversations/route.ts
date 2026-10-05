@@ -4,6 +4,7 @@ import {
   createImageJob,
   createVideoJob,
   createVoiceJob,
+  GenerationError,
 } from "@aiwa/generation";
 import { NextResponse, after } from "next/server";
 import { z } from "zod";
@@ -345,6 +346,7 @@ export async function POST(request: Request) {
     }
     const message =
       error instanceof Error ? error.message : "Failed to create conversation.";
-    return NextResponse.json({ error: message }, { status: 400 });
+    const status = error instanceof GenerationError ? error.status : 400;
+    return NextResponse.json({ error: message }, { status });
   }
 }

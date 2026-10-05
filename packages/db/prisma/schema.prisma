@@ -511,6 +511,11 @@ model GenerationJob {
   createdBy                  User                   @relation("GenerationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   providerModel              ProviderModel          @relation(fields: [providerModelId], references: [id], onDelete: Restrict)
   priceVersion               ModelPriceVersion      @relation(fields: [priceVersionId], references: [id], onDelete: Restrict)
+  parentGenerationId         String?
+  chatThreadId               String?
+  parentGeneration           GenerationJob?         @relation("GenerationDerivation", fields: [parentGenerationId], references: [id], onDelete: SetNull)
+  derivedGenerations         GenerationJob[]        @relation("GenerationDerivation")
+  chatThread                 ChatThread?            @relation(fields: [chatThreadId], references: [id], onDelete: SetNull)
   assets                     Asset[]
   inputAssets                GenerationInputAsset[]
 
@@ -521,6 +526,8 @@ model GenerationJob {
   @@index([projectId, createdAt])
   @@index([templateId, createdAt])
   @@index([status, updatedAt])
+  @@index([parentGenerationId])
+  @@index([chatThreadId])
 }
 
 model GenerationTemplate {
@@ -1020,9 +1027,11 @@ model ChatThread {
   createdById    String
   personaId      String?
   title                 String
+  threadType            String        @default("CHARACTER") @db.VarChar(32)
   modelId               String        @default("doubao-seed-character-260628")
   providerModelRecordId String?
   systemPrompt          String?       @db.Text
+  state                 Json?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
@@ -1034,8 +1043,10 @@ model ChatThread {
   messages       ChatMessage[]
   assistantReminders AssistantReminder[]
   supportRequests    SupportRequest[]
+  generationJobs     GenerationJob[]
 
   @@index([organizationId, createdById, updatedAt])
+  @@index([organizationId, threadType, updatedAt])
   @@index([projectId])
   @@index([providerModelRecordId])
 }

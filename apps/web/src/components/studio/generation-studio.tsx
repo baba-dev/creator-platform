@@ -5,6 +5,7 @@ import { countBillableCharacters } from "@aiwa/credits/pricing";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { ProcessFeedback } from "@/components/process/process-feedback";
 import { Button } from "@/components/ui/button";
@@ -158,6 +159,7 @@ export function GenerationStudio({
   promptEnhancementModels?: StudioModelOption[];
   promptEnhancementDefaultModelId?: string | null;
 }) {
+  const router = useRouter();
   const [data, setData] = useState<Studio | null>(null);
   const [activeMode, setActiveMode] = useState<MediaKind>(initialMode);
   const [modelId, setModelId] = useState("");
@@ -1214,6 +1216,84 @@ export function GenerationStudio({
     const fingerprint = JSON.stringify(input);
     if (attempt.current?.fingerprint !== fingerprint)
       attempt.current = { fingerprint, key: crypto.randomUUID() };
+
+    if (variant === "quick") {
+      try {
+        const conversationRes = await fetch("/api/conversations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            organizationId,
+            projectId: selectedProjectId || undefined,
+            prompt: model.mediaKind === "VOICE" ? voiceText.trim() : prompt,
+            modality: model.mediaKind,
+            modelId: model.id,
+            priceVersionId: model.priceVersionId,
+            quoteToken: activeQuote.quote.quoteToken,
+            idempotencyKey: attempt.current.key,
+            aspectRatio: selectedRatio,
+            resolution: selectedResolution,
+            outputCount: model.mediaKind === "IMAGE" ? selectedOutputCount : 1,
+            durationSeconds:
+              model.mediaKind === "VIDEO"
+                ? Number.parseInt(selectedDuration, 10)
+                : undefined,
+            voiceKey:
+              model.mediaKind === "VOICE" ? selectedVoiceKey : undefined,
+            speechRate: model.mediaKind === "VOICE" ? speechRate : undefined,
+          }),
+        });
+
+        const body = (await conversationRes.json()) as {
+          conversationId?: string;
+          jobId?: string;
+          title?: string;
+          error?: string;
+        };
+
+        if (!conversationRes.ok) {
+          throw new Error(
+            body.error ?? "Creative conversation could not be initiated.",
+          );
+        }
+
+        if (body.jobId) {
+          announceGenerationStarted(organizationId, body.jobId);
+        }
+
+        if (body.conversationId) {
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("aiwa:conversation-started", {
+                detail: {
+                  id: body.conversationId,
+                  title: body.title || "New creation",
+                  threadType: "CREATIVE",
+                  updatedAt: new Date().toISOString(),
+                },
+              }),
+            );
+          }
+
+          router.push(
+            `/app/${encodeURIComponent(organizationSlug)}/conversations/${body.conversationId}` as Route,
+          );
+        }
+
+        attempt.current = null;
+        return;
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Connection interrupted. Retry to check the same request.",
+        );
+        return;
+      } finally {
+        setBusy(false);
+      }
+    }
+
     try {
       const response = await fetch("/api/generations", {
         method: "POST",

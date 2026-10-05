@@ -248,6 +248,8 @@ export async function getCustomerJob(
     kind: job.providerModel.mediaKind,
     project: job.project,
     creator: job.createdBy,
+    chatThreadId: job.chatThreadId,
+    parentGenerationId: job.parentGenerationId,
     request: job.requestPayload,
     errorCode: job.errorCode,
     errorMessage: job.errorMessage,

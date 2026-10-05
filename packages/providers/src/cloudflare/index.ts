@@ -30,7 +30,16 @@ const MAX_JSON_RESPONSE_BYTES = 2 * 1024 * 1024;
 const cloudflareAiResponseSchema = z.object({
   result: z.union([
     z.object({
-      response: z.string().optional(),
+      response: z
+        .union([z.string(), z.record(z.string(), z.unknown())])
+        .nullish(),
+      choices: z
+        .array(
+          z.object({
+            message: z.object({ content: z.string().nullish() }),
+          }),
+        )
+        .optional(),
       usage: z
         .object({
           prompt_tokens: z.number().int().nonnegative().optional(),
@@ -51,6 +60,16 @@ const cloudflareAiResponseSchema = z.object({
     )
     .optional(),
 });
+
+function responseContent(
+  result: z.infer<typeof cloudflareAiResponseSchema>["result"],
+): string {
+  if (typeof result === "string") return result;
+  const message = result.choices?.[0]?.message.content;
+  if (message) return message;
+  if (typeof result.response === "string") return result.response;
+  return result.response ? JSON.stringify(result.response) : "";
+}
 
 const cloudflareErrorSchema = z.object({
   success: z.boolean(),
@@ -221,7 +240,8 @@ export function createCloudflareAiProvider(
   }
 
   const baseUrl = normalizedBaseUrl(config.baseUrl ?? DEFAULT_BASE_URL);
-  const defaultModel = config.defaultModel ?? "@cf/meta/llama-3.3-70b-instruct";
+  const defaultModel =
+    config.defaultModel ?? "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
   const timeoutMs = config.requestTimeoutMs ?? DEFAULT_TIMEOUT_MS;
   const idleTimeoutMs = config.idleTimeoutMs;
   const logger = createLogger({
@@ -295,10 +315,7 @@ export function createCloudflareAiProvider(
         );
       }
 
-      const rawContent =
-        typeof parsed.data.result === "string"
-          ? parsed.data.result
-          : (parsed.data.result.response ?? "");
+      const rawContent = responseContent(parsed.data.result);
 
       if (!rawContent) {
         throw new ProviderRequestError(
@@ -379,10 +396,15 @@ export function createCloudflareAiProvider(
         );
       }
 
-      const content =
-        typeof parsed.data.result === "string"
-          ? parsed.data.result
-          : (parsed.data.result.response ?? "");
+      const content = responseContent(parsed.data.result);
+
+      if (!content) {
+        throw new ProviderRequestError(
+          "Cloudflare text chat returned empty content",
+          false,
+          { code: "INVALID_PROVIDER_RESPONSE", stage: "parsing" },
+        );
+      }
 
       logger.info("Cloudflare text chat request succeeded", { modelId });
 

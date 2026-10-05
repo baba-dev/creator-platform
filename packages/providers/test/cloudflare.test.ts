@@ -150,4 +150,98 @@ describe("createCloudflareAiProvider", () => {
     );
     expect(embeddings).toEqual([[0.5, 0.6, 0.7]]);
   });
+
+  it("uses the advertised default model and OpenAI choices with a structured response", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      Response.json({
+        success: true,
+        result: {
+          response: { ok: true },
+          choices: [{ message: { content: '{"ok":true}' } }],
+          usage: { prompt_tokens: 12, completion_tokens: 4, total_tokens: 16 },
+        },
+      }),
+    );
+    const provider = createCloudflareAiProvider({
+      apiToken: validConfig.apiToken,
+      accountId: validConfig.accountId,
+      fetch: fetchMock,
+    });
+    const result = await provider.complete({
+      idempotencyKey: "structured-response",
+      modelId: "",
+      systemPrompt: "Return JSON",
+      userPrompt: "Test",
+      responseSchemaName: "test",
+    });
+    expect(result.content).toEqual({ ok: true });
+    expect(result.inputTokens).toBe(12);
+    expect(result.outputTokens).toBe(4);
+    expect(fetchMock.mock.calls[0]?.[0]).toContain(
+      "/ai/run/@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    );
+  });
+
+  it.each([null, undefined])(
+    "reads chat content from choices when response is %s",
+    async (response) => {
+      const provider = createCloudflareAiProvider({
+        ...validConfig,
+        fetch: vi.fn().mockResolvedValue(
+          Response.json({
+            success: true,
+            result: {
+              response,
+              choices: [{ message: { content: "Hello" } }],
+            },
+          }),
+        ),
+      });
+      const result = await provider.chat({
+        idempotencyKey: "choices-chat",
+        modelId: "",
+        messages: [{ role: "user", content: "Test" }],
+      });
+      expect(result.content).toBe("Hello");
+      expect(result.usage).toBeUndefined();
+    },
+  );
+
+  it("reads a structured response without choices", async () => {
+    const provider = createCloudflareAiProvider({
+      ...validConfig,
+      fetch: vi
+        .fn()
+        .mockResolvedValue(
+          Response.json({ success: true, result: { response: { ok: true } } }),
+        ),
+    });
+    const result = await provider.complete({
+      idempotencyKey: "structured-only",
+      modelId: "",
+      systemPrompt: "Return JSON",
+      userPrompt: "Test",
+      responseSchemaName: "test",
+    });
+    expect(result.content).toEqual({ ok: true });
+  });
+
+  it.each([{ response: null }, { choices: [{ message: { content: 7 } }] }])(
+    "rejects empty or malformed chat output: %j",
+    async (result) => {
+      const provider = createCloudflareAiProvider({
+        ...validConfig,
+        fetch: vi
+          .fn()
+          .mockResolvedValue(Response.json({ success: true, result })),
+      });
+      await expect(
+        provider.chat({
+          idempotencyKey: "invalid-chat",
+          modelId: "",
+          messages: [{ role: "user", content: "Test" }],
+        }),
+      ).rejects.toMatchObject({ code: "INVALID_PROVIDER_RESPONSE" });
+    },
+  );
 });

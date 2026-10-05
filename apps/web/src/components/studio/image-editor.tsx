@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import Cropper from "react-easy-crop";
 import { Button } from "@/components/ui/button";
 import { Eyebrow } from "@/components/ui/creative";
 import { Icon } from "@/components/ui/icon";
@@ -11,6 +12,11 @@ import {
   validatePsdExportLayout,
   type PsdLayerInput,
 } from "@/lib/psd-export";
+import {
+  renderClientImageEdit,
+  uploadClientImage,
+  type CropPixels,
+} from "@/lib/client-image-edit";
 
 type Asset = {
   id: string;
@@ -116,6 +122,19 @@ export function ImageEditor({
   const [height, setHeight] = useState(1024);
   const [factor, setFactor] = useState<0.25 | 0.5 | 0.75 | 2 | 4>(2);
   const [fit, setFit] = useState<"contain" | "cover" | "fill">("contain");
+  const [pixelEngine, setPixelEngine] = useState<"browser" | "server">(
+    "browser",
+  );
+  const [browserCrop, setBrowserCrop] = useState({ x: 0, y: 0 });
+  const [browserZoom, setBrowserZoom] = useState(1);
+  const [browserRotation, setBrowserRotation] = useState(0);
+  const [browserCropPixels, setBrowserCropPixels] =
+    useState<CropPixels | null>(null);
+  const [browserAspect, setBrowserAspect] = useState<
+    "original" | "1:1" | "16:9" | "9:16" | "4:3" | "3:4"
+  >("original");
+  const [browserOutputWidth, setBrowserOutputWidth] = useState(1024);
+  const [browserOutputHeight, setBrowserOutputHeight] = useState(1024);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ id: string; status: string } | null>(
@@ -128,6 +147,18 @@ export function ImageEditor({
   } | null>(null);
 
   const selected = assets.find((asset) => asset.id === selectedId);
+  const browserAspectValue =
+    browserAspect === "original"
+      ? (selected?.width ?? 1) / (selected?.height ?? 1)
+      : browserAspect === "1:1"
+        ? 1
+        : browserAspect === "16:9"
+          ? 16 / 9
+          : browserAspect === "9:16"
+            ? 9 / 16
+            : browserAspect === "4:3"
+              ? 4 / 3
+              : 3 / 4;
   const aiCreditsLabel = aiQuote?.estimatedCredits
     ? `${aiQuote.estimatedCredits} credits`
     : "Live quote";
@@ -140,6 +171,13 @@ export function ImageEditor({
     setAiRatio(nearestAiRatio(w, h));
     setWidth(w);
     setHeight(h);
+    setBrowserOutputWidth(w);
+    setBrowserOutputHeight(h);
+    setBrowserCrop({ x: 0, y: 0 });
+    setBrowserZoom(1);
+    setBrowserRotation(0);
+    setBrowserCropPixels(null);
+    setBrowserAspect("original");
     setLayers([
       {
         id: `layer-${asset.id}`,
@@ -632,6 +670,41 @@ export function ImageEditor({
     }
   }
 
+  async function saveBrowserImage() {
+    if (!selected || !browserCropPixels || busy || !canEdit) return;
+    setBusy(true);
+    setError(null);
+    setResult(null);
+    setOperationId(null);
+    try {
+      const blob = await renderClientImageEdit({
+        sourceUrl: `/api/assets/${selected.id}`,
+        crop: browserCropPixels,
+        rotation: browserRotation,
+        outputWidth: browserOutputWidth,
+        outputHeight: browserOutputHeight,
+        format,
+      });
+      const extension = format === "jpeg" ? "jpg" : format;
+      const baseName = (selected.name ?? "image")
+        .replace(/\.[^.]+$/, "")
+        .slice(0, 150);
+      const assetId = await uploadClientImage({
+        organizationId,
+        blob,
+        filename: `${baseName}-edited.${extension}`,
+      });
+      setResult({ id: assetId, status: "Ready" });
+      setAttempt(null);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Browser image edit failed.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   // Submit Sharp pixel transform
   async function submitPixelEdit() {
     if (!selected || busy || !canEdit) return;
@@ -810,6 +883,29 @@ export function ImageEditor({
                 width={canvasWidth}
                 height={canvasHeight}
                 className="max-h-[480px] w-auto max-w-full rounded-lg object-contain shadow-md"
+              />
+            </div>
+          ) : selected && workspaceMode === "pixel" && pixelEngine === "browser" ? (
+            <div className="relative h-[500px] min-h-80 overflow-hidden rounded-xl bg-card/60">
+              <Cropper
+                image={`/api/assets/${selected.id}`}
+                crop={browserCrop}
+                zoom={browserZoom}
+                rotation={browserRotation}
+                aspect={browserAspectValue}
+                minZoom={1}
+                maxZoom={4}
+                zoomWithScroll
+                showGrid
+                roundCropAreaPixels
+                onCropChange={setBrowserCrop}
+                onZoomChange={setBrowserZoom}
+                onRotationChange={setBrowserRotation}
+                onCropComplete={(_, pixels) => setBrowserCropPixels(pixels)}
+                classes={{
+                  containerClassName: "rounded-xl bg-surface-sunken",
+                  cropAreaClassName: "!border-primary",
+                }}
               />
             </div>
           ) : selected ? (
@@ -1448,146 +1544,347 @@ export function ImageEditor({
           ) : null}
 
           {/* ============================================================ */}
-          {/* TAB 3: PIXEL TRANSFORM (Crop, Resize, Scale Sharp)           */}
+          {/* TAB 3: QUICK PIXEL EDITOR + SHARP FALLBACK                   */}
           {/* ============================================================ */}
           {workspaceMode === "pixel" ? (
-            <div className="space-y-4">
-              <div
-                className="flex flex-wrap gap-2"
-                role="group"
-                aria-label="Edit action"
-              >
-                {(["crop", "resize", "scale"] as const).map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => {
-                      setKind(option);
-                      setAttempt(null);
-                    }}
-                    aria-pressed={kind === option}
-                    className={`min-h-10 rounded-xl border px-4 text-sm font-semibold capitalize ${
-                      kind === option
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border bg-card text-muted-foreground"
-                    }`}
-                  >
-                    {option === "scale" ? "Upscale / downscale" : option}
-                  </button>
-                ))}
-              </div>
-
-              {kind === "crop" ? (
-                <div className="grid grid-cols-2 gap-3">
-                  {(
-                    [
-                      ["Left", x, setX],
-                      ["Top", y, setY],
-                      ["Width", width, setWidth],
-                      ["Height", height, setHeight],
-                    ] as const
-                  ).map(([label, val, setter]) => (
-                    <label
-                      key={label}
-                      className="grid gap-1 text-xs font-semibold"
+            <div className="space-y-4 rounded-2xl border border-border bg-card p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-primary">
+                    Low-resource quick editor
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Browser mode edits on this device and uploads only the finished image.
+                  </p>
+                </div>
+                <div className="flex rounded-xl border border-border bg-surface-sunken p-1">
+                  {(["browser", "server"] as const).map((engine) => (
+                    <button
+                      key={engine}
+                      type="button"
+                      onClick={() => {
+                        setPixelEngine(engine);
+                        setError(null);
+                        setAttempt(null);
+                      }}
+                      aria-pressed={pixelEngine === engine}
+                      className={`min-h-9 rounded-lg px-3 text-xs font-semibold transition ${
+                        pixelEngine === engine
+                          ? "bg-card text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
                     >
-                      {label} (px)
-                      <input
-                        type="number"
-                        min={label === "Left" || label === "Top" ? 0 : 1}
-                        max={8192}
-                        value={val}
-                        onChange={(e) => setter(Number(e.target.value))}
-                        className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
-                      />
-                    </label>
+                      {engine === "browser" ? "Browser" : "Server fallback"}
+                    </button>
                   ))}
                 </div>
-              ) : null}
+              </div>
 
-              {kind === "resize" ? (
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="grid gap-1 text-xs font-semibold">
-                    Width (px)
+              {pixelEngine === "browser" ? (
+                <>
+                  <div className="space-y-2">
+                    <span className="text-xs font-semibold">Aspect ratio</span>
+                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+                      {(["original", "1:1", "16:9", "9:16", "4:3", "3:4"] as const).map(
+                        (value) => (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => {
+                              setBrowserAspect(value);
+                              setBrowserCrop({ x: 0, y: 0 });
+                              setBrowserZoom(1);
+                            }}
+                            aria-pressed={browserAspect === value}
+                            className={`min-h-10 rounded-xl border px-2 text-xs font-semibold ${
+                              browserAspect === value
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-border text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            {value === "original" ? "Original" : value}
+                          </button>
+                        ),
+                      )}
+                    </div>
+                  </div>
+
+                  <label className="grid gap-2 text-xs font-semibold">
+                    Zoom · {browserZoom.toFixed(2)}×
                     <input
-                      type="number"
+                      type="range"
                       min={1}
-                      max={8192}
-                      value={width}
-                      onChange={(e) => setWidth(Number(e.target.value))}
-                      className="min-h-11 rounded-xl border border-input bg-card px-3"
+                      max={4}
+                      step={0.01}
+                      value={browserZoom}
+                      onChange={(event) => setBrowserZoom(Number(event.target.value))}
+                      className="accent-primary"
                     />
                   </label>
-                  <label className="grid gap-1 text-xs font-semibold">
-                    Height (px)
-                    <input
-                      type="number"
-                      min={1}
-                      max={8192}
-                      value={height}
-                      onChange={(e) => setHeight(Number(e.target.value))}
-                      className="min-h-11 rounded-xl border border-input bg-card px-3"
-                    />
-                  </label>
-                  <label className="col-span-2 grid gap-1 text-xs font-semibold">
-                    Fit
-                    <select
-                      value={fit}
-                      onChange={(e) => setFit(e.target.value as typeof fit)}
-                      className="min-h-11 rounded-xl border border-input bg-card px-3"
+
+                  <div className="grid grid-cols-[1fr_auto_auto] gap-2">
+                    <label className="grid gap-1 text-xs font-semibold">
+                      Rotation
+                      <input
+                        type="range"
+                        min={-180}
+                        max={180}
+                        step={1}
+                        value={browserRotation}
+                        onChange={(event) =>
+                          setBrowserRotation(Number(event.target.value))
+                        }
+                        className="accent-primary"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setBrowserRotation((value) => {
+                          const next = value - 90;
+                          return next < -180 ? 90 : next;
+                        })
+                      }
+                      className="min-h-11 self-end rounded-xl border border-border px-3 text-xs font-semibold"
                     >
-                      <option value="contain">Contain</option>
-                      <option value="cover">Cover</option>
-                      <option value="fill">Stretch</option>
+                      ↺ 90°
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setBrowserRotation((value) => {
+                          const next = value + 90;
+                          return next > 180 ? -90 : next;
+                        })
+                      }
+                      className="min-h-11 self-end rounded-xl border border-border px-3 text-xs font-semibold"
+                    >
+                      ↻ 90°
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="grid gap-1 text-xs font-semibold">
+                      Output width
+                      <input
+                        type="number"
+                        min={1}
+                        max={8192}
+                        value={browserOutputWidth}
+                        onChange={(event) =>
+                          setBrowserOutputWidth(Number(event.target.value))
+                        }
+                        className="min-h-11 rounded-xl border border-input bg-background px-3"
+                      />
+                    </label>
+                    <label className="grid gap-1 text-xs font-semibold">
+                      Output height
+                      <input
+                        type="number"
+                        min={1}
+                        max={8192}
+                        value={browserOutputHeight}
+                        onChange={(event) =>
+                          setBrowserOutputHeight(Number(event.target.value))
+                        }
+                        className="min-h-11 rounded-xl border border-input bg-background px-3"
+                      />
+                    </label>
+                  </div>
+
+                  <label className="grid gap-2 text-sm font-semibold">
+                    Output format
+                    <select
+                      value={format}
+                      onChange={(event) =>
+                        setFormat(event.target.value as typeof format)
+                      }
+                      className="min-h-11 rounded-xl border border-input bg-background px-3"
+                    >
+                      <option value="png">PNG</option>
+                      <option value="jpeg">JPEG</option>
+                      <option value="webp">WebP</option>
                     </select>
                   </label>
-                </div>
-              ) : null}
 
-              {kind === "scale" ? (
-                <label className="grid gap-2 text-sm font-semibold">
-                  Scale
-                  <select
-                    value={factor}
-                    onChange={(e) =>
-                      setFactor(Number(e.target.value) as typeof factor)
-                    }
-                    className="min-h-11 rounded-xl border border-input bg-card px-3"
+                  <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                    <Button
+                      type="button"
+                      disabled={
+                        !selected ||
+                        !browserCropPixels ||
+                        busy ||
+                        !canEdit ||
+                        browserOutputWidth < 1 ||
+                        browserOutputHeight < 1
+                      }
+                      onClick={() => void saveBrowserImage()}
+                    >
+                      {busy ? "Saving on this device…" : "Save new image"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={busy}
+                      onClick={() => {
+                        setBrowserCrop({ x: 0, y: 0 });
+                        setBrowserZoom(1);
+                        setBrowserRotation(0);
+                        setBrowserAspect("original");
+                        setBrowserOutputWidth(selected?.width ?? 1024);
+                        setBrowserOutputHeight(selected?.height ?? 1024);
+                        setError(null);
+                      }}
+                    >
+                      Reset
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="rounded-xl border border-warning/30 bg-warning/10 p-3 text-xs text-muted-foreground">
+                    Server fallback uses the existing queued Sharp pipeline. Use it when
+                    browser canvas export is unavailable or you need deterministic server processing.
+                  </p>
+                  <div
+                    className="flex flex-wrap gap-2"
+                    role="group"
+                    aria-label="Server edit action"
                   >
-                    {[0.25, 0.5, 0.75, 2, 4].map((val) => (
-                      <option key={val} value={val}>
-                        {val}× {val > 1 ? "upscale" : "downscale"}
-                      </option>
+                    {(["crop", "resize", "scale"] as const).map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => {
+                          setKind(option);
+                          setAttempt(null);
+                        }}
+                        aria-pressed={kind === option}
+                        className={`min-h-10 rounded-xl border px-4 text-sm font-semibold capitalize ${
+                          kind === option
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border bg-card text-muted-foreground"
+                        }`}
+                      >
+                        {option === "scale" ? "Upscale / downscale" : option}
+                      </button>
                     ))}
-                  </select>
-                </label>
-              ) : null}
+                  </div>
 
-              <label className="grid gap-2 text-sm font-semibold">
-                Output format
-                <select
-                  value={format}
-                  onChange={(e) => setFormat(e.target.value as typeof format)}
-                  className="min-h-11 rounded-xl border border-input bg-card px-3"
-                >
-                  <option value="png">PNG</option>
-                  <option value="jpeg">JPEG</option>
-                  <option value="webp">WebP</option>
-                </select>
-              </label>
+                  {kind === "crop" ? (
+                    <div className="grid grid-cols-2 gap-3">
+                      {(
+                        [
+                          ["Left", x, setX],
+                          ["Top", y, setY],
+                          ["Width", width, setWidth],
+                          ["Height", height, setHeight],
+                        ] as const
+                      ).map(([label, val, setter]) => (
+                        <label key={label} className="grid gap-1 text-xs font-semibold">
+                          {label} (px)
+                          <input
+                            type="number"
+                            min={label === "Left" || label === "Top" ? 0 : 1}
+                            max={8192}
+                            value={val}
+                            onChange={(event) => setter(Number(event.target.value))}
+                            className="min-h-11 rounded-xl border border-input bg-background px-3"
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  ) : null}
 
-              <Button
-                type="button"
-                className="w-full"
-                disabled={!selected || busy || !canEdit}
-                onClick={() => void submitPixelEdit()}
-              >
-                {busy ? "Making your edit…" : "Save new image"}
-              </Button>
+                  {kind === "resize" ? (
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className="grid gap-1 text-xs font-semibold">
+                        Width (px)
+                        <input
+                          type="number"
+                          min={1}
+                          max={8192}
+                          value={width}
+                          onChange={(event) => setWidth(Number(event.target.value))}
+                          className="min-h-11 rounded-xl border border-input bg-background px-3"
+                        />
+                      </label>
+                      <label className="grid gap-1 text-xs font-semibold">
+                        Height (px)
+                        <input
+                          type="number"
+                          min={1}
+                          max={8192}
+                          value={height}
+                          onChange={(event) => setHeight(Number(event.target.value))}
+                          className="min-h-11 rounded-xl border border-input bg-background px-3"
+                        />
+                      </label>
+                      <label className="col-span-2 grid gap-1 text-xs font-semibold">
+                        Fit
+                        <select
+                          value={fit}
+                          onChange={(event) =>
+                            setFit(event.target.value as typeof fit)
+                          }
+                          className="min-h-11 rounded-xl border border-input bg-background px-3"
+                        >
+                          <option value="contain">Contain</option>
+                          <option value="cover">Cover</option>
+                          <option value="fill">Stretch</option>
+                        </select>
+                      </label>
+                    </div>
+                  ) : null}
+
+                  {kind === "scale" ? (
+                    <label className="grid gap-2 text-sm font-semibold">
+                      Scale
+                      <select
+                        value={factor}
+                        onChange={(event) =>
+                          setFactor(Number(event.target.value) as typeof factor)
+                        }
+                        className="min-h-11 rounded-xl border border-input bg-background px-3"
+                      >
+                        {[0.25, 0.5, 0.75, 2, 4].map((value) => (
+                          <option key={value} value={value}>
+                            {value}× {value > 1 ? "upscale" : "downscale"}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+
+                  <label className="grid gap-2 text-sm font-semibold">
+                    Output format
+                    <select
+                      value={format}
+                      onChange={(event) =>
+                        setFormat(event.target.value as typeof format)
+                      }
+                      className="min-h-11 rounded-xl border border-input bg-background px-3"
+                    >
+                      <option value="png">PNG</option>
+                      <option value="jpeg">JPEG</option>
+                      <option value="webp">WebP</option>
+                    </select>
+                  </label>
+
+                  <Button
+                    type="button"
+                    className="w-full"
+                    disabled={!selected || busy || !canEdit}
+                    onClick={() => void submitPixelEdit()}
+                  >
+                    {busy ? "Making your edit…" : "Save with server fallback"}
+                  </Button>
+                </>
+              )}
 
               {operationId ? (
                 <p role="status" className="text-sm text-muted-foreground">
-                  Edit queued. This page will show the saved asset when ready.
+                  Server edit queued. This page will show the saved asset when ready.
                 </p>
               ) : null}
 

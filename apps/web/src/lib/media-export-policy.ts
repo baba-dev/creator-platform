@@ -43,11 +43,8 @@ export function browserVideoExportBlockReason(
 
 export function canUseBrowserVideoRenderer() {
   if (typeof window === "undefined") return false;
-  return (
-    typeof globalThis.VideoEncoder !== "undefined" &&
-    typeof globalThis.VideoDecoder !== "undefined" &&
-    typeof globalThis.AudioEncoder !== "undefined" &&
-    typeof globalThis.AudioDecoder !== "undefined"
+  return ["VideoEncoder", "VideoDecoder", "AudioEncoder", "AudioDecoder"].every(
+    (name) => name in globalThis,
   );
 }
 

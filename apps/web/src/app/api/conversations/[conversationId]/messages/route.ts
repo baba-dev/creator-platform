@@ -11,6 +11,7 @@ import {
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { rateLimit } from "@/lib/rate-limit";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
 import { buildPlannerContext } from "../../../../../lib/conversations/context-builder";
@@ -20,6 +21,12 @@ import type {
   ConversationState,
   CreativeModality,
 } from "../../../../../lib/conversations/types";
+
+const generationLimiter = rateLimit({
+  max: 10,
+  windowMs: 60_000,
+  prefix: "generation",
+});
 
 const messageInputSchema = z.object({
   content: z.string().trim().min(1, "Message cannot be empty.").max(4000),
@@ -540,6 +547,11 @@ export async function POST(
     // =========================================================
     // Case 3: Media Generation Action
     // =========================================================
+    // Share the same billable-generation throttle as the Studio endpoint.
+    // Clarification and state-only actions above remain free of this limit.
+    const rateLimited = await generationLimiter.check(session.user.id);
+    if (rateLimited) return rateLimited;
+
     // Extract base effective generation spec from latest job
     const basePayload =
       (latestJob?.requestPayload as Record<string, unknown>) ?? {};

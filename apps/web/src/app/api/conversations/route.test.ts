@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   trusted: vi.fn(),
   session: vi.fn(),
+  rateLimitCheck: vi.fn(),
   createImageJob: vi.fn(),
   createVideoJob: vi.fn(),
   db: {
@@ -35,6 +36,10 @@ vi.mock("@/lib/request-security", () => ({
 
 vi.mock("@/lib/request-auth", () => ({
   getRequestSession: mocks.session,
+}));
+
+vi.mock("@/lib/rate-limit", () => ({
+  rateLimit: () => ({ check: mocks.rateLimitCheck }),
 }));
 
 vi.mock("@aiwa/generation", () => ({
@@ -80,6 +85,7 @@ describe("POST /api/conversations", () => {
     vi.clearAllMocks();
     mocks.trusted.mockReturnValue(true);
     mocks.session.mockResolvedValue({ user: fakeUser });
+    mocks.rateLimitCheck.mockResolvedValue(null);
     mocks.db.membership.findUnique.mockResolvedValue(fakeMembership);
     mocks.db.chatThread.create.mockResolvedValue({
       id: "conv_100",
@@ -198,6 +204,31 @@ describe("POST /api/conversations", () => {
         sources: [],
       }),
     );
+  });
+
+  it("shares the Studio generation throttle for initial Quick Create", async () => {
+    mocks.rateLimitCheck.mockResolvedValue(
+      new Response(JSON.stringify({ error: "Too many requests." }), {
+        status: 429,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const req = new Request("https://example.com/api/conversations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        organizationId: "org_1",
+        prompt: "A test prompt",
+      }),
+    });
+
+    const res = await POST(req);
+
+    expect(res.status).toBe(429);
+    expect(mocks.rateLimitCheck).toHaveBeenCalledWith("user_1");
+    expect(mocks.createImageJob).not.toHaveBeenCalled();
+    expect(mocks.createVideoJob).not.toHaveBeenCalled();
   });
 
   it("rejects unauthenticated requests with 401", async () => {

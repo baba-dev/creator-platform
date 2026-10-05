@@ -69,6 +69,11 @@ describe("video render", () => {
             outMs: 900,
             muted: false,
             transition: "cut",
+            transform: {
+              crop: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 },
+              rotation: 90,
+              flipX: true,
+            },
           },
           {
             id: crypto.randomUUID(),

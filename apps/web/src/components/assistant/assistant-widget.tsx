@@ -305,6 +305,7 @@ export function AssistantWidget({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [showInvite, setShowInvite] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
   const [thread, setThread] = useState<AssistantThread | null>(null);
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
@@ -373,14 +374,27 @@ export function AssistantWidget({
     void init();
   }, [organizationId]);
 
-  // 2. Scroll to bottom on new messages
+  // 2. Collapse the invitation pill after a short discovery window. The
+  // mascot remains available, but the text no longer sits on top of workspace
+  // controls such as the creative conversation Send button.
+  useEffect(() => {
+    if (open) {
+      setShowInvite(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => setShowInvite(false), 2500);
+    return () => window.clearTimeout(timer);
+  }, [open]);
+
+  // 3. Scroll to bottom on new messages
   useEffect(() => {
     if (open) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages, open]);
 
-  // 3. Focus compose input when panel opens
+  // 4. Focus compose input when panel opens
   useEffect(() => {
     if (open) {
       const t = setTimeout(() => inputRef.current?.focus(), 120);
@@ -388,7 +402,7 @@ export function AssistantWidget({
     }
   }, [open]);
 
-  // 4. Poll due reminders periodically
+  // 5. Poll due reminders periodically
   useEffect(() => {
     async function fetchReminders() {
       try {
@@ -429,7 +443,7 @@ export function AssistantWidget({
     setUnreadCount(0);
   }, []);
 
-  // 5. Send message
+  // 6. Send message
   const handleSend = useCallback(
     async (messageText?: string) => {
       const text = (messageText ?? input).trim();
@@ -768,15 +782,28 @@ export function AssistantWidget({
       )}
 
       {/* Floating Mascot Trigger Button */}
-      <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3">
-        {/* Floating invitation pill when closed */}
+      <div
+        className={`fixed bottom-6 right-6 z-50 flex items-center transition-[gap] duration-300 ${
+          !open && showInvite ? "gap-3" : "gap-0"
+        }`}
+      >
+        {/* Floating invitation pill when closed. It rolls back into the mascot
+            after 2.5s so it never permanently obscures nearby controls. */}
         {!open && (
-          <div
+          <button
+            type="button"
             onClick={handleOpen}
-            className="hidden sm:flex items-center gap-2 rounded-full border border-border bg-card/95 px-3.5 py-1.5 text-xs font-semibold text-foreground shadow-lg hover:shadow-xl cursor-pointer hover:border-primary/50 transition-all backdrop-blur-md animate-in fade-in"
+            tabIndex={showInvite ? 0 : -1}
+            aria-hidden={!showInvite}
+            className={`hidden sm:flex items-center overflow-hidden whitespace-nowrap rounded-full border bg-card/95 py-1.5 text-xs font-semibold text-foreground backdrop-blur-md transition-[max-width,opacity,transform,padding,border-color,box-shadow] duration-300 ease-out ${
+              showInvite
+                ? "max-w-32 translate-x-0 border-border px-3.5 opacity-100 shadow-lg hover:border-primary/50 hover:shadow-xl"
+                : "pointer-events-none max-w-0 translate-x-2 border-transparent px-0 opacity-0 shadow-none"
+            }`}
+            aria-label="Open Pixel assistant"
           >
             <span className="font-hand text-sm text-primary">✨ Ask Pixel</span>
-          </div>
+          </button>
         )}
 
         <button

@@ -23,15 +23,15 @@
     "@aiwa/generation": "workspace:*",
     "@aiwa/mail": "workspace:*",
     "@aiwa/providers": "workspace:*",
-    "@prisma/client": "6.19.3",
-    "bullmq": "6.3.5",
-    "ioredis": "^5.8.1",
-    "sharp": "0.35.4",
-    "zod": "^4.6.4"
+    "@prisma/client": "7.10.0",
+    "bullmq": "6.3.11",
+    "ioredis": "^6.0.0",
+    "sharp": "0.35.5",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "tsup": "^8.5.0",
-    "tsx": "^4.20.6",
-    "vitest": "^4.1.11"
+    "tsx": "^4.23.15",
+    "vitest": "^5.0.3"
   }
 }

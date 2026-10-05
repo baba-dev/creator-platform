@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   trusted: vi.fn(),
   session: vi.fn(),
+  rateLimitCheck: vi.fn(),
   createImageJob: vi.fn(),
   createVideoJob: vi.fn(),
   db: {
@@ -44,6 +45,10 @@ vi.mock("@/lib/request-security", () => ({
 
 vi.mock("@/lib/request-auth", () => ({
   getRequestSession: mocks.session,
+}));
+
+vi.mock("@/lib/rate-limit", () => ({
+  rateLimit: () => ({ check: mocks.rateLimitCheck }),
 }));
 
 vi.mock("@aiwa/generation", () => ({
@@ -119,6 +124,7 @@ describe("POST /api/conversations/[conversationId]/messages", () => {
     vi.clearAllMocks();
     mocks.trusted.mockReturnValue(true);
     mocks.session.mockResolvedValue({ user: fakeUser });
+    mocks.rateLimitCheck.mockResolvedValue(null);
     mocks.db.$transaction.mockImplementation(async (fn) => fn(mocks.db));
     mocks.db.$queryRaw.mockResolvedValue([{ id: "conv_1" }]);
     mocks.db.membership.findUnique.mockResolvedValue(fakeMembership);
@@ -819,6 +825,55 @@ describe("POST /api/conversations/[conversationId]/messages", () => {
     expect(mocks.createImageJob).not.toHaveBeenCalled();
     expect(mocks.createVideoJob).not.toHaveBeenCalled();
     expect(mocks.db.providerModel.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("shares the billable generation throttle without limiting state-only selection", async () => {
+    const selectionReq = new Request(
+      "https://example.com/api/conversations/conv_1/messages",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: "Select asset",
+          selectedAssetId: "asset_1",
+          idempotencyKey: "abababab-abab-4bab-8bab-abababababab",
+        }),
+      },
+    );
+
+    const selectionRes = await POST(selectionReq, {
+      params: Promise.resolve({ conversationId: "conv_1" }),
+    });
+    expect(selectionRes.status).toBe(200);
+    expect(mocks.rateLimitCheck).not.toHaveBeenCalled();
+
+    mocks.rateLimitCheck.mockResolvedValue(
+      new Response(JSON.stringify({ error: "Too many requests." }), {
+        status: 429,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const generationReq = new Request(
+      "https://example.com/api/conversations/conv_1/messages",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: "A futuristic hovercraft over Muscat",
+          idempotencyKey: "cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd",
+        }),
+      },
+    );
+
+    const generationRes = await POST(generationReq, {
+      params: Promise.resolve({ conversationId: "conv_1" }),
+    });
+
+    expect(generationRes.status).toBe(429);
+    expect(mocks.rateLimitCheck).toHaveBeenCalledWith("user_1");
+    expect(mocks.createImageJob).not.toHaveBeenCalled();
+    expect(mocks.createVideoJob).not.toHaveBeenCalled();
   });
 
   it("increments revision in thread state on state updates", async () => {

@@ -283,12 +283,10 @@ export async function planConversationTurn(params: {
   // =========================================================
   // 8. Video extension ("Extend this video by 5 seconds")
   // =========================================================
-  if (
-    /\bextend\b/i.test(lower) &&
-    /\b(?:video|this|it)\b/i.test(lower)
-  ) {
-    const durationMatch =
-      /\b(\d{1,2})\s*(?:s|sec|secs|second|seconds)\b/i.exec(lower);
+  if (/\bextend\b/i.test(lower) && /\b(?:video|this|it)\b/i.test(lower)) {
+    const durationMatch = /\b(\d{1,2})\s*(?:s|sec|secs|second|seconds)\b/i.exec(
+      lower,
+    );
     const durationSeconds = durationMatch?.[1]
       ? Math.min(30, Math.max(1, Number.parseInt(durationMatch[1], 10)))
       : 5;
@@ -302,7 +300,8 @@ export async function planConversationTurn(params: {
     return {
       version: ACTION_PROTOCOL_VERSION,
       actions,
-      reasoning: "Extend the selected video using the canonical EXTEND workflow.",
+      reasoning:
+        "Extend the selected video using the canonical EXTEND workflow.",
     };
   }
 

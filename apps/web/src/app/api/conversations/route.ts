@@ -13,8 +13,8 @@ import { hasTrustedMutationOrigin } from "@/lib/request-security";
 import {
   deriveDeterministicTitle,
   generateConversationTitle,
-} from "../../../lib/conversations/title-generator";
-import type { ConversationState } from "../../../lib/conversations/types";
+} from "@/lib/conversations/title-generator";
+import type { ConversationState } from "@/lib/conversations/types";
 
 const conversationCreateSchema = z.object({
   organizationId: z.string().min(1).max(100),
@@ -278,7 +278,9 @@ export async function POST(request: Request) {
           })
         : null;
       if (!winnerThread) {
-        throw new Error("Generation was queued but conversation linking failed.");
+        throw new Error(
+          "Generation was queued but conversation linking failed.",
+        );
       }
       await ensureInitialMessage(winnerThread.id);
       return NextResponse.json(

@@ -80,6 +80,7 @@ describe("Capability-Aware Model Router", () => {
     const result = await findCompatibleAlternativeModel({
       modality: "IMAGE",
       currentModelId: "model_image_2",
+      excludeCurrentModel: true,
       requiredAspectRatio: "9:16",
       requireReferenceImages: true,
     });

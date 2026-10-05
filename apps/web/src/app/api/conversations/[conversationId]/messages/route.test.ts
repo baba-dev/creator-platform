@@ -19,7 +19,9 @@ const mocks = vi.hoisted(() => ({
       findMany: vi.fn(),
     },
     generationJob: {
+      findUnique: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
     providerModel: {
       findFirst: vi.fn(),
@@ -121,7 +123,12 @@ describe("POST /api/conversations/[conversationId]/messages", () => {
       Promise.resolve({ id: `msg_${Math.random()}`, ...create }),
     );
     mocks.db.chatThread.update.mockResolvedValue({});
+    mocks.db.generationJob.findUnique.mockResolvedValue({
+      chatThreadId: null,
+      parentGenerationId: null,
+    });
     mocks.db.generationJob.update.mockResolvedValue({});
+    mocks.db.generationJob.updateMany.mockResolvedValue({ count: 1 });
     mocks.createImageJob.mockResolvedValue({ id: "job_new", status: "QUEUED" });
     mocks.createVideoJob.mockResolvedValue({
       id: "job_vid_new",
@@ -226,14 +233,40 @@ describe("POST /api/conversations/[conversationId]/messages", () => {
       }),
     );
 
-    // Verify parentGenerationId linked to job_prev
-    expect(mocks.db.generationJob.update).toHaveBeenCalledWith({
-      where: { id: "job_new" },
+    // Verify provenance is claimed exactly once.
+    expect(mocks.db.generationJob.updateMany).toHaveBeenCalledWith({
+      where: { id: "job_new", chatThreadId: null },
       data: {
         parentGenerationId: "job_prev",
         chatThreadId: "conv_1",
       },
     });
+  });
+
+  it("does not rewrite provenance when an idempotent job is already linked", async () => {
+    mocks.db.generationJob.findUnique.mockResolvedValue({
+      chatThreadId: "conv_1",
+      parentGenerationId: "job_prev",
+    });
+
+    const req = new Request(
+      "https://example.com/api/conversations/conv_1/messages",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: "Make it 9:16.",
+          idempotencyKey: "66666666-6666-4666-8666-666666666666",
+        }),
+      },
+    );
+
+    const res = await POST(req, {
+      params: Promise.resolve({ conversationId: "conv_1" }),
+    });
+
+    expect(res.status).toBe(202);
+    expect(mocks.db.generationJob.updateMany).not.toHaveBeenCalled();
   });
 
   it("handles ambiguity with clarify response: 'Use the tenth image.'", async () => {

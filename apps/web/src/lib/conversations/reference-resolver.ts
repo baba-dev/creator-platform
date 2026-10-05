@@ -20,24 +20,30 @@ export interface ReferenceResolutionResult {
 export function parseOutputIndex(phrase: string): number | null {
   const normalized = phrase.toLowerCase().trim();
 
-  // Explicit number patterns
-  const matchNum =
-    /(?:image|picture|output|version|result|frame)\s*#?\s*([1-9]\d?)\b/i.exec(
-      normalized,
-    );
-  if (matchNum?.[1]) {
-    return Number.parseInt(matchNum[1], 10);
-  }
+  type Candidate = { index: number; offset: number };
+  const candidates: Candidate[] = [];
+  const addCandidate = (match: RegExpExecArray | null, group = 1) => {
+    const raw = match?.[group];
+    if (!match || !raw) return;
+    candidates.push({
+      index: Number.parseInt(raw, 10),
+      offset: match.index,
+    });
+  };
 
-  const matchLeadingNum =
-    /\b([1-9]\d?)(?:st|nd|rd|th)?\s+(?:image|picture|output|one|version|result|frame)\b/i.exec(
+  // Explicit numeric references are unambiguous, including "frame 2".
+  addCandidate(
+    /\b(?:image|picture|output|version|result|frame)\s*#?\s*([1-9]\d?)\b/i.exec(
       normalized,
-    );
-  if (matchLeadingNum?.[1]) {
-    return Number.parseInt(matchLeadingNum[1], 10);
-  }
+    ),
+  );
+  addCandidate(
+    /\b([1-9]\d?)(?:st|nd|rd|th)?\s+(?:image|picture|output|one|version|result)\b/i.exec(
+      normalized,
+    ),
+  );
+  addCandidate(/#([1-9]\d?)\b/i.exec(normalized));
 
-  // Word ordinal patterns
   const ordinals: Record<string, number> = {
     first: 1,
     "1st": 1,
@@ -62,16 +68,44 @@ export function parseOutputIndex(phrase: string): number | null {
   };
 
   for (const [word, index] of Object.entries(ordinals)) {
-    const regex = new RegExp(
-      `\\b(?:the\\s+)?${word}(?:\\s+(?:one|image|picture|output|result|version|frame))?\\b`,
+    // Bind word ordinals to an actual output noun. Do not treat "first frame"
+    // as output #1 in a sentence such as "use the second image as first frame".
+    const beforeNoun = new RegExp(
+      `\\b(?:the\\s+)?${word}\\s+(?:image|picture|output|version|result)\\b`,
       "i",
-    );
-    if (regex.test(normalized)) {
-      return index;
+    ).exec(normalized);
+    if (beforeNoun) {
+      candidates.push({ index, offset: beforeNoun.index });
+    }
+
+    const afterNoun = new RegExp(
+      `\\b(?:image|picture|output|version|result)\\s+(?:#\\s*)?${word}\\b`,
+      "i",
+    ).exec(normalized);
+    if (afterNoun) {
+      candidates.push({ index, offset: afterNoun.index });
+    }
+
+    const oneForm = new RegExp(
+      `\\b(?:the\\s+)?${word}\\s+one\\b`,
+      "i",
+    ).exec(normalized);
+    if (oneForm) {
+      candidates.push({ index, offset: oneForm.index });
+    }
+
+    if (
+      normalized === word ||
+      normalized === `the ${word}` ||
+      normalized === `${word}.`
+    ) {
+      candidates.push({ index, offset: 0 });
     }
   }
 
-  return null;
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => a.offset - b.offset);
+  return candidates[0]!.index;
 }
 
 export function isRelativeLatestReference(phrase: string): boolean {

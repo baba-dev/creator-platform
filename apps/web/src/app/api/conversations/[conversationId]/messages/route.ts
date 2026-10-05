@@ -1,5 +1,5 @@
 import { hasOrganizationPermission } from "@aiwa/authz";
-import { db } from "@aiwa/db";
+import { db, type Prisma } from "@aiwa/db";
 import {
   createImageJob,
   createVideoJob,
@@ -110,7 +110,7 @@ export async function POST(
       role: "user" | "assistant",
       clientRequestId: string,
       content: string,
-      metadata?: Record<string, unknown>,
+      metadata?: Prisma.InputJsonValue,
     ) =>
       db.chatMessage.upsert({
         where: {
@@ -375,8 +375,7 @@ export async function POST(
           firstFrameAssetId = undefined;
         }
         needsCapabilityRouting =
-          needsCapabilityRouting ||
-          plannerContext.activeModality !== "VIDEO";
+          needsCapabilityRouting || plannerContext.activeModality !== "VIDEO";
       } else if (action.type === "extend_video") {
         targetModality = "VIDEO";
         videoWorkflow = "EXTEND";
@@ -403,8 +402,7 @@ export async function POST(
         if (action.voiceKey) targetVoiceKey = action.voiceKey;
         if (action.speechRate) targetSpeechRate = action.speechRate;
         needsCapabilityRouting =
-          needsCapabilityRouting ||
-          plannerContext.activeModality !== "VOICE";
+          needsCapabilityRouting || plannerContext.activeModality !== "VOICE";
       } else if (action.type === "change_voice") {
         targetVoiceKey = action.voiceKey;
       } else if (action.type === "change_speaking_rate") {
@@ -583,14 +581,51 @@ export async function POST(
       });
     }
 
-    // Set provenance: link parent generation job and conversation thread
-    await db.generationJob.update({
+    // Set provenance exactly once. Replaying an idempotent turn must never
+    // rewrite lineage (especially not into a self-parent cycle), and a key
+    // already claimed by another conversation must not move the job.
+    const durableJob = await db.generationJob.findUnique({
       where: { id: job.id },
-      data: {
-        parentGenerationId: latestJob?.id ?? null,
-        chatThreadId: conversationId,
-      },
+      select: { chatThreadId: true, parentGenerationId: true },
     });
+    if (
+      durableJob?.chatThreadId &&
+      durableJob.chatThreadId !== conversationId
+    ) {
+      throw new GenerationError(
+        "This idempotency key is already linked to another conversation.",
+        409,
+      );
+    }
+
+    const parentGenerationId =
+      durableJob?.chatThreadId === conversationId
+        ? durableJob.parentGenerationId
+        : latestJob?.id === job.id
+          ? null
+          : (latestJob?.id ?? null);
+
+    if (!durableJob?.chatThreadId) {
+      const claim = await db.generationJob.updateMany({
+        where: { id: job.id, chatThreadId: null },
+        data: {
+          parentGenerationId,
+          chatThreadId: conversationId,
+        },
+      });
+      if (claim.count === 0) {
+        const winner = await db.generationJob.findUnique({
+          where: { id: job.id },
+          select: { chatThreadId: true },
+        });
+        if (winner?.chatThreadId !== conversationId) {
+          throw new GenerationError(
+            "Generation job provenance could not be claimed safely.",
+            409,
+          );
+        }
+      }
+    }
 
     // Update conversation working state
     currentState.activeGenerationId = job.id;
@@ -623,7 +658,7 @@ export async function POST(
       {
         turnStatus: "EXECUTING",
         generationJobId: job.id,
-        parentGenerationId: latestJob?.id ?? null,
+        parentGenerationId,
         effectiveSpec: {
           modality: targetModality,
           modelId: model.id,

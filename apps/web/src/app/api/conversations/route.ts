@@ -309,14 +309,6 @@ export async function POST(request: Request) {
         status: job.status,
       },
       { status: 201 },
-    );    return NextResponse.json(
-      {
-        conversationId: thread.id,
-        jobId: job.id,
-        title: "New creation",
-        status: job.status,
-      },
-      { status: 201 },
     );
   } catch (error) {
     if (error instanceof z.ZodError) {

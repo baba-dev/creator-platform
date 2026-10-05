@@ -507,7 +507,6 @@ export async function POST(
     }
 
     const priceVersion = model.priceVersions[0];
-    const priceVersion = model.priceVersions[0];
 
     // Create user message
     const userMessage = await upsertMessage(

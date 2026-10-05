@@ -128,8 +128,9 @@ export function ImageEditor({
   const [browserCrop, setBrowserCrop] = useState({ x: 0, y: 0 });
   const [browserZoom, setBrowserZoom] = useState(1);
   const [browserRotation, setBrowserRotation] = useState(0);
-  const [browserCropPixels, setBrowserCropPixels] =
-    useState<CropPixels | null>(null);
+  const [browserCropPixels, setBrowserCropPixels] = useState<CropPixels | null>(
+    null,
+  );
   const [browserAspect, setBrowserAspect] = useState<
     "original" | "1:1" | "16:9" | "9:16" | "4:3" | "3:4"
   >("original");
@@ -885,7 +886,9 @@ export function ImageEditor({
                 className="max-h-[480px] w-auto max-w-full rounded-lg object-contain shadow-md"
               />
             </div>
-          ) : selected && workspaceMode === "pixel" && pixelEngine === "browser" ? (
+          ) : selected &&
+            workspaceMode === "pixel" &&
+            pixelEngine === "browser" ? (
             <div className="relative h-[500px] min-h-80 overflow-hidden rounded-xl bg-card/60">
               <Cropper
                 image={`/api/assets/${selected.id}`}
@@ -1554,7 +1557,8 @@ export function ImageEditor({
                     Low-resource quick editor
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Browser mode edits on this device and uploads only the finished image.
+                    Browser mode edits on this device and uploads only the
+                    finished image.
                   </p>
                 </div>
                 <div className="flex rounded-xl border border-border bg-surface-sunken p-1">
@@ -1585,27 +1589,34 @@ export function ImageEditor({
                   <div className="space-y-2">
                     <span className="text-xs font-semibold">Aspect ratio</span>
                     <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-                      {(["original", "1:1", "16:9", "9:16", "4:3", "3:4"] as const).map(
-                        (value) => (
-                          <button
-                            key={value}
-                            type="button"
-                            onClick={() => {
-                              setBrowserAspect(value);
-                              setBrowserCrop({ x: 0, y: 0 });
-                              setBrowserZoom(1);
-                            }}
-                            aria-pressed={browserAspect === value}
-                            className={`min-h-10 rounded-xl border px-2 text-xs font-semibold ${
-                              browserAspect === value
-                                ? "border-primary bg-primary/10 text-primary"
-                                : "border-border text-muted-foreground hover:text-foreground"
-                            }`}
-                          >
-                            {value === "original" ? "Original" : value}
-                          </button>
-                        ),
-                      )}
+                      {(
+                        [
+                          "original",
+                          "1:1",
+                          "16:9",
+                          "9:16",
+                          "4:3",
+                          "3:4",
+                        ] as const
+                      ).map((value) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => {
+                            setBrowserAspect(value);
+                            setBrowserCrop({ x: 0, y: 0 });
+                            setBrowserZoom(1);
+                          }}
+                          aria-pressed={browserAspect === value}
+                          className={`min-h-10 rounded-xl border px-2 text-xs font-semibold ${
+                            browserAspect === value
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-border text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          {value === "original" ? "Original" : value}
+                        </button>
+                      ))}
                     </div>
                   </div>
 
@@ -1617,7 +1628,9 @@ export function ImageEditor({
                       max={4}
                       step={0.01}
                       value={browserZoom}
-                      onChange={(event) => setBrowserZoom(Number(event.target.value))}
+                      onChange={(event) =>
+                        setBrowserZoom(Number(event.target.value))
+                      }
                       className="accent-primary"
                     />
                   </label>
@@ -1743,8 +1756,9 @@ export function ImageEditor({
               ) : (
                 <>
                   <p className="rounded-xl border border-warning/30 bg-warning/10 p-3 text-xs text-muted-foreground">
-                    Server fallback uses the existing queued Sharp pipeline. Use it when
-                    browser canvas export is unavailable or you need deterministic server processing.
+                    Server fallback uses the existing queued Sharp pipeline. Use
+                    it when browser canvas export is unavailable or you need
+                    deterministic server processing.
                   </p>
                   <div
                     className="flex flex-wrap gap-2"
@@ -1781,14 +1795,19 @@ export function ImageEditor({
                           ["Height", height, setHeight],
                         ] as const
                       ).map(([label, val, setter]) => (
-                        <label key={label} className="grid gap-1 text-xs font-semibold">
+                        <label
+                          key={label}
+                          className="grid gap-1 text-xs font-semibold"
+                        >
                           {label} (px)
                           <input
                             type="number"
                             min={label === "Left" || label === "Top" ? 0 : 1}
                             max={8192}
                             value={val}
-                            onChange={(event) => setter(Number(event.target.value))}
+                            onChange={(event) =>
+                              setter(Number(event.target.value))
+                            }
                             className="min-h-11 rounded-xl border border-input bg-background px-3"
                           />
                         </label>
@@ -1805,7 +1824,9 @@ export function ImageEditor({
                           min={1}
                           max={8192}
                           value={width}
-                          onChange={(event) => setWidth(Number(event.target.value))}
+                          onChange={(event) =>
+                            setWidth(Number(event.target.value))
+                          }
                           className="min-h-11 rounded-xl border border-input bg-background px-3"
                         />
                       </label>
@@ -1816,7 +1837,9 @@ export function ImageEditor({
                           min={1}
                           max={8192}
                           value={height}
-                          onChange={(event) => setHeight(Number(event.target.value))}
+                          onChange={(event) =>
+                            setHeight(Number(event.target.value))
+                          }
                           className="min-h-11 rounded-xl border border-input bg-background px-3"
                         />
                       </label>
@@ -1884,7 +1907,8 @@ export function ImageEditor({
 
               {operationId ? (
                 <p role="status" className="text-sm text-muted-foreground">
-                  Server edit queued. This page will show the saved asset when ready.
+                  Server edit queued. This page will show the saved asset when
+                  ready.
                 </p>
               ) : null}
 

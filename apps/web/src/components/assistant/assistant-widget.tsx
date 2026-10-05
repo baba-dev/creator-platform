@@ -378,14 +378,11 @@ export function AssistantWidget({
   // mascot remains available, but the text no longer sits on top of workspace
   // controls such as the creative conversation Send button.
   useEffect(() => {
-    if (open) {
-      setShowInvite(false);
-      return;
-    }
+    if (open || !showInvite) return;
 
     const timer = window.setTimeout(() => setShowInvite(false), 2500);
     return () => window.clearTimeout(timer);
-  }, [open]);
+  }, [open, showInvite]);
 
   // 3. Scroll to bottom on new messages
   useEffect(() => {
@@ -439,6 +436,7 @@ export function AssistantWidget({
   }, [organizationId]);
 
   const handleOpen = useCallback(() => {
+    setShowInvite(false);
     setOpen(true);
     setUnreadCount(0);
   }, []);

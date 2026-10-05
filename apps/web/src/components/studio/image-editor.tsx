@@ -7,6 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Eyebrow } from "@/components/ui/creative";
 import { Icon } from "@/components/ui/icon";
 import {
+  MediaCropper,
+  type MediaCropArea,
+  type QuarterTurn,
+} from "@/components/studio/media-cropper";
+import { renderImageEdit } from "@/lib/client-image-edit";
+import {
   downloadPsdFile,
   validatePsdExportLayout,
   type PsdLayerInput,
@@ -23,6 +29,14 @@ type WorkspaceMode = "ai" | "layers" | "pixel";
 type AiTool = "inpaint" | "outpaint" | "replace";
 type AiRatio = "1:1" | "16:9" | "9:16" | "21:9" | "4:3" | "3:4" | "3:2" | "2:3";
 type PixelEditKind = "crop" | "resize" | "scale";
+type PixelAspect = "original" | "1:1" | "4:3" | "16:9" | "9:16";
+
+const PIXEL_ASPECTS: Record<Exclude<PixelAspect, "original">, number> = {
+  "1:1": 1,
+  "4:3": 4 / 3,
+  "16:9": 16 / 9,
+  "9:16": 9 / 16,
+};
 
 const AI_RATIOS: readonly [AiRatio, number][] = [
   ["1:1", 1],
@@ -116,6 +130,17 @@ export function ImageEditor({
   const [height, setHeight] = useState(1024);
   const [factor, setFactor] = useState<0.25 | 0.5 | 0.75 | 2 | 4>(2);
   const [fit, setFit] = useState<"contain" | "cover" | "fill">("contain");
+  const [pixelCrop, setPixelCrop] = useState({ x: 0, y: 0 });
+  const [pixelZoom, setPixelZoom] = useState(1);
+  const [pixelRotation, setPixelRotation] = useState<QuarterTurn>(0);
+  const [pixelFlipX, setPixelFlipX] = useState(false);
+  const [pixelAspect, setPixelAspect] = useState<PixelAspect>("original");
+  const [pixelArea, setPixelArea] = useState<MediaCropArea | null>(null);
+  const [outputWidth, setOutputWidth] = useState(1024);
+  const [outputHeight, setOutputHeight] = useState(1024);
+  const [outputSizeDirty, setOutputSizeDirty] = useState(false);
+  const [clientBusy, setClientBusy] = useState(false);
+  const [clientMessage, setClientMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ id: string; status: string } | null>(
@@ -128,6 +153,12 @@ export function ImageEditor({
   } | null>(null);
 
   const selected = assets.find((asset) => asset.id === selectedId);
+  const originalPixelAspect =
+    (pixelRotation === 90 || pixelRotation === 270
+      ? (selected?.height ?? 1) / (selected?.width ?? 1)
+      : (selected?.width ?? 1) / (selected?.height ?? 1)) || 1;
+  const pixelAspectValue =
+    pixelAspect === "original" ? originalPixelAspect : PIXEL_ASPECTS[pixelAspect];
   const aiCreditsLabel = aiQuote?.estimatedCredits
     ? `${aiQuote.estimatedCredits} credits`
     : "Live quote";
@@ -140,6 +171,9 @@ export function ImageEditor({
     setAiRatio(nearestAiRatio(w, h));
     setWidth(w);
     setHeight(h);
+    setOutputWidth(w);
+    setOutputHeight(h);
+    setOutputSizeDirty(false);
     setLayers([
       {
         id: `layer-${asset.id}`,
@@ -402,6 +436,16 @@ export function ImageEditor({
     setY(0);
     setWidth(asset?.width ?? 1024);
     setHeight(asset?.height ?? 1024);
+    setOutputWidth(asset?.width ?? 1024);
+    setOutputHeight(asset?.height ?? 1024);
+    setOutputSizeDirty(false);
+    setPixelCrop({ x: 0, y: 0 });
+    setPixelZoom(1);
+    setPixelRotation(0);
+    setPixelFlipX(false);
+    setPixelAspect("original");
+    setPixelArea(null);
+    setClientMessage(null);
     setResult(null);
     setError(null);
     setAttempt(null);
@@ -632,6 +676,75 @@ export function ImageEditor({
     }
   }
 
+  function resetBrowserPixelEdit() {
+    if (!selected) return;
+    const w = selected.width ?? 1024;
+    const h = selected.height ?? 1024;
+    setPixelCrop({ x: 0, y: 0 });
+    setPixelZoom(1);
+    setPixelRotation(0);
+    setPixelFlipX(false);
+    setPixelAspect("original");
+    setPixelArea(null);
+    setOutputWidth(w);
+    setOutputHeight(h);
+    setOutputSizeDirty(false);
+    setClientMessage(null);
+    setError(null);
+  }
+
+  async function saveBrowserPixelEdit() {
+    if (!selected || !pixelArea || clientBusy || !canEdit) return;
+    setClientBusy(true);
+    setClientMessage("Rendering on this device…");
+    setError(null);
+    setResult(null);
+    try {
+      const blob = await renderImageEdit({
+        sourceUrl: `/api/assets/${selected.id}`,
+        crop: pixelArea,
+        rotation: pixelRotation,
+        flipX: pixelFlipX,
+        outputWidth,
+        outputHeight,
+        format,
+      });
+      const extension = format === "jpeg" ? "jpg" : format;
+      const baseName = (selected.name ?? "edited-image")
+        .replace(/\.[^.]+$/, "")
+        .slice(0, 140);
+      const file = new File([blob], `${baseName}-edited.${extension}`, {
+        type: blob.type,
+      });
+      const form = new FormData();
+      form.set("organizationId", organizationId);
+      form.set("file", file);
+      const response = await fetch("/api/assets/upload", {
+        method: "POST",
+        body: form,
+      });
+      const body = (await response.json()) as {
+        asset?: { id: string };
+        error?: string;
+      };
+      if (!response.ok || !body.asset)
+        throw new Error(body.error ?? "Edited image could not be saved.");
+      setResult({ id: body.asset.id, status: "Ready" });
+      setClientMessage("Saved as a new asset. The original is unchanged.");
+    } catch (cause) {
+      setClientMessage(
+        "Browser export was unavailable. The compatibility server tools below remain available.",
+      );
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Edited image could not be saved.",
+      );
+    } finally {
+      setClientBusy(false);
+    }
+  }
+
   // Submit Sharp pixel transform
   async function submitPixelEdit() {
     if (!selected || busy || !canEdit) return;
@@ -803,7 +916,31 @@ export function ImageEditor({
       <div className="mt-6 grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.9fr)]">
         {/* Left Column: Visual Canvas / Interactive Preview */}
         <div className="relative min-w-0 rounded-2xl border border-border bg-surface-sunken p-4">
-          {workspaceMode === "layers" ? (
+          {workspaceMode === "pixel" && selected ? (
+            <MediaCropper
+              key={`${selected.id}:${pixelAspect}`}
+              kind="image"
+              src={`/api/assets/${selected.id}`}
+              crop={pixelCrop}
+              zoom={pixelZoom}
+              rotation={pixelRotation}
+              flipX={pixelFlipX}
+              aspect={pixelAspectValue}
+              onCropChange={setPixelCrop}
+              onZoomChange={setPixelZoom}
+              onCropComplete={(_area, pixels) => {
+                setPixelArea(pixels);
+                setX(Math.max(0, Math.round(pixels.x)));
+                setY(Math.max(0, Math.round(pixels.y)));
+                setWidth(Math.max(1, Math.round(pixels.width)));
+                setHeight(Math.max(1, Math.round(pixels.height)));
+                if (!outputSizeDirty) {
+                  setOutputWidth(Math.max(1, Math.round(pixels.width)));
+                  setOutputHeight(Math.max(1, Math.round(pixels.height)));
+                }
+              }}
+            />
+          ) : workspaceMode === "layers" ? (
             <div className="relative mx-auto flex min-h-[480px] items-center justify-center overflow-hidden rounded-xl bg-card/60 p-2">
               <canvas
                 ref={canvasRef}
@@ -1448,146 +1585,319 @@ export function ImageEditor({
           ) : null}
 
           {/* ============================================================ */}
-          {/* TAB 3: PIXEL TRANSFORM (Crop, Resize, Scale Sharp)           */}
+          {/* TAB 3: BROWSER-FIRST PIXEL EDITOR + SHARP FALLBACK          */}
           {/* ============================================================ */}
           {workspaceMode === "pixel" ? (
             <div className="space-y-4">
-              <div
-                className="flex flex-wrap gap-2"
-                role="group"
-                aria-label="Edit action"
-              >
-                {(["crop", "resize", "scale"] as const).map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => {
-                      setKind(option);
-                      setAttempt(null);
-                    }}
-                    aria-pressed={kind === option}
-                    className={`min-h-10 rounded-xl border px-4 text-sm font-semibold capitalize ${
-                      kind === option
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border bg-card text-muted-foreground"
-                    }`}
-                  >
-                    {option === "scale" ? "Upscale / downscale" : option}
-                  </button>
-                ))}
-              </div>
-
-              {kind === "crop" ? (
-                <div className="grid grid-cols-2 gap-3">
-                  {(
-                    [
-                      ["Left", x, setX],
-                      ["Top", y, setY],
-                      ["Width", width, setWidth],
-                      ["Height", height, setHeight],
-                    ] as const
-                  ).map(([label, val, setter]) => (
-                    <label
-                      key={label}
-                      className="grid gap-1 text-xs font-semibold"
-                    >
-                      {label} (px)
-                      <input
-                        type="number"
-                        min={label === "Left" || label === "Top" ? 0 : 1}
-                        max={8192}
-                        value={val}
-                        onChange={(e) => setter(Number(e.target.value))}
-                        className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
-                      />
-                    </label>
-                  ))}
+              <div className="rounded-2xl border border-border bg-card p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-display text-lg font-semibold">
+                      Quick image edit
+                    </h3>
+                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                      Crop, zoom, rotate, flip and resize in your browser. Saving
+                      creates a new asset and leaves the original untouched.
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-success/30 bg-success/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-success">
+                    Device render
+                  </span>
                 </div>
-              ) : null}
 
-              {kind === "resize" ? (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <label className="grid gap-1 text-xs font-semibold">
-                    Width (px)
-                    <input
-                      type="number"
-                      min={1}
-                      max={8192}
-                      value={width}
-                      onChange={(e) => setWidth(Number(e.target.value))}
-                      className="min-h-11 rounded-xl border border-input bg-card px-3"
-                    />
-                  </label>
-                  <label className="grid gap-1 text-xs font-semibold">
-                    Height (px)
-                    <input
-                      type="number"
-                      min={1}
-                      max={8192}
-                      value={height}
-                      onChange={(e) => setHeight(Number(e.target.value))}
-                      className="min-h-11 rounded-xl border border-input bg-card px-3"
-                    />
-                  </label>
-                  <label className="col-span-2 grid gap-1 text-xs font-semibold">
-                    Fit
+                    Crop ratio
                     <select
-                      value={fit}
-                      onChange={(e) => setFit(e.target.value as typeof fit)}
-                      className="min-h-11 rounded-xl border border-input bg-card px-3"
+                      value={pixelAspect}
+                      onChange={(event) => {
+                        setPixelAspect(event.target.value as PixelAspect);
+                        setPixelCrop({ x: 0, y: 0 });
+                        setPixelZoom(1);
+                        setOutputSizeDirty(false);
+                      }}
+                      className="min-h-11 rounded-xl border border-input bg-background px-3"
                     >
-                      <option value="contain">Contain</option>
-                      <option value="cover">Cover</option>
-                      <option value="fill">Stretch</option>
+                      <option value="original">Original</option>
+                      <option value="1:1">1:1 square</option>
+                      <option value="4:3">4:3 landscape</option>
+                      <option value="16:9">16:9 widescreen</option>
+                      <option value="9:16">9:16 vertical</option>
                     </select>
                   </label>
+                  <label className="grid gap-1 text-xs font-semibold">
+                    Zoom · {pixelZoom.toFixed(2)}×
+                    <input
+                      type="range"
+                      min={1}
+                      max={3}
+                      step={0.01}
+                      value={pixelZoom}
+                      onChange={(event) =>
+                        setPixelZoom(Number(event.target.value))
+                      }
+                      className="min-h-11 accent-current"
+                    />
+                  </label>
                 </div>
-              ) : null}
 
-              {kind === "scale" ? (
-                <label className="grid gap-2 text-sm font-semibold">
-                  Scale
-                  <select
-                    value={factor}
-                    onChange={(e) =>
-                      setFactor(Number(e.target.value) as typeof factor)
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() =>
+                      setPixelRotation(
+                        ((pixelRotation + 270) % 360) as QuarterTurn,
+                      )
                     }
-                    className="min-h-11 rounded-xl border border-input bg-card px-3"
                   >
-                    {[0.25, 0.5, 0.75, 2, 4].map((val) => (
-                      <option key={val} value={val}>
-                        {val}× {val > 1 ? "upscale" : "downscale"}
-                      </option>
-                    ))}
+                    Rotate left
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() =>
+                      setPixelRotation(
+                        ((pixelRotation + 90) % 360) as QuarterTurn,
+                      )
+                    }
+                  >
+                    Rotate right
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    aria-pressed={pixelFlipX}
+                    onClick={() => setPixelFlipX((current) => !current)}
+                  >
+                    {pixelFlipX ? "Unflip" : "Flip horizontal"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={resetBrowserPixelEdit}
+                  >
+                    Reset
+                  </Button>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  <label className="grid gap-1 text-xs font-semibold">
+                    Output width (px)
+                    <input
+                      type="number"
+                      min={1}
+                      max={8192}
+                      value={outputWidth}
+                      onChange={(event) => {
+                        setOutputSizeDirty(true);
+                        setOutputWidth(Number(event.target.value));
+                      }}
+                      className="min-h-11 rounded-xl border border-input bg-background px-3"
+                    />
+                  </label>
+                  <label className="grid gap-1 text-xs font-semibold">
+                    Output height (px)
+                    <input
+                      type="number"
+                      min={1}
+                      max={8192}
+                      value={outputHeight}
+                      onChange={(event) => {
+                        setOutputSizeDirty(true);
+                        setOutputHeight(Number(event.target.value));
+                      }}
+                      className="min-h-11 rounded-xl border border-input bg-background px-3"
+                    />
+                  </label>
+                </div>
+
+                <label className="mt-3 grid gap-1 text-xs font-semibold">
+                  Output format
+                  <select
+                    value={format}
+                    onChange={(event) =>
+                      setFormat(event.target.value as typeof format)
+                    }
+                    className="min-h-11 rounded-xl border border-input bg-background px-3"
+                  >
+                    <option value="png">PNG</option>
+                    <option value="jpeg">JPEG</option>
+                    <option value="webp">WebP</option>
                   </select>
                 </label>
-              ) : null}
 
-              <label className="grid gap-2 text-sm font-semibold">
-                Output format
-                <select
-                  value={format}
-                  onChange={(e) => setFormat(e.target.value as typeof format)}
-                  className="min-h-11 rounded-xl border border-input bg-card px-3"
+                <Button
+                  type="button"
+                  className="mt-4 w-full"
+                  disabled={
+                    !selected ||
+                    !pixelArea ||
+                    clientBusy ||
+                    !canEdit ||
+                    outputWidth < 1 ||
+                    outputHeight < 1
+                  }
+                  onClick={() => void saveBrowserPixelEdit()}
                 >
-                  <option value="png">PNG</option>
-                  <option value="jpeg">JPEG</option>
-                  <option value="webp">WebP</option>
-                </select>
-              </label>
+                  {clientBusy ? "Rendering on this device…" : "Save new image"}
+                </Button>
 
-              <Button
-                type="button"
-                className="w-full"
-                disabled={!selected || busy || !canEdit}
-                onClick={() => void submitPixelEdit()}
-              >
-                {busy ? "Making your edit…" : "Save new image"}
-              </Button>
+                {clientMessage ? (
+                  <p
+                    role="status"
+                    className="mt-3 text-xs leading-relaxed text-muted-foreground"
+                  >
+                    {clientMessage}
+                  </p>
+                ) : null}
+              </div>
+
+              <details className="rounded-2xl border border-border bg-card">
+                <summary className="cursor-pointer px-4 py-3 text-sm font-semibold">
+                  Compatibility server tools
+                </summary>
+                <div className="space-y-4 border-t border-border p-4">
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    These existing Sharp operations stay available as a fallback.
+                    They use the media worker and are intentionally separate from
+                    browser editing.
+                  </p>
+                  <div
+                    className="flex flex-wrap gap-2"
+                    role="group"
+                    aria-label="Compatibility edit action"
+                  >
+                    {(["crop", "resize", "scale"] as const).map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => {
+                          setKind(option);
+                          setAttempt(null);
+                        }}
+                        aria-pressed={kind === option}
+                        className={`min-h-10 rounded-xl border px-4 text-sm font-semibold capitalize ${
+                          kind === option
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border bg-background text-muted-foreground"
+                        }`}
+                      >
+                        {option === "scale" ? "Upscale / downscale" : option}
+                      </button>
+                    ))}
+                  </div>
+
+                  {kind === "crop" ? (
+                    <div className="grid grid-cols-2 gap-3">
+                      {(
+                        [
+                          ["Left", x, setX],
+                          ["Top", y, setY],
+                          ["Width", width, setWidth],
+                          ["Height", height, setHeight],
+                        ] as const
+                      ).map(([label, val, setter]) => (
+                        <label
+                          key={label}
+                          className="grid gap-1 text-xs font-semibold"
+                        >
+                          {label} (px)
+                          <input
+                            type="number"
+                            min={label === "Left" || label === "Top" ? 0 : 1}
+                            max={8192}
+                            value={val}
+                            onChange={(event) =>
+                              setter(Number(event.target.value))
+                            }
+                            className="min-h-11 rounded-xl border border-input bg-background px-3"
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {kind === "resize" ? (
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className="grid gap-1 text-xs font-semibold">
+                        Width (px)
+                        <input
+                          type="number"
+                          min={1}
+                          max={8192}
+                          value={width}
+                          onChange={(event) =>
+                            setWidth(Number(event.target.value))
+                          }
+                          className="min-h-11 rounded-xl border border-input bg-background px-3"
+                        />
+                      </label>
+                      <label className="grid gap-1 text-xs font-semibold">
+                        Height (px)
+                        <input
+                          type="number"
+                          min={1}
+                          max={8192}
+                          value={height}
+                          onChange={(event) =>
+                            setHeight(Number(event.target.value))
+                          }
+                          className="min-h-11 rounded-xl border border-input bg-background px-3"
+                        />
+                      </label>
+                      <label className="col-span-2 grid gap-1 text-xs font-semibold">
+                        Fit
+                        <select
+                          value={fit}
+                          onChange={(event) =>
+                            setFit(event.target.value as typeof fit)
+                          }
+                          className="min-h-11 rounded-xl border border-input bg-background px-3"
+                        >
+                          <option value="contain">Contain</option>
+                          <option value="cover">Cover</option>
+                          <option value="fill">Stretch</option>
+                        </select>
+                      </label>
+                    </div>
+                  ) : null}
+
+                  {kind === "scale" ? (
+                    <label className="grid gap-2 text-sm font-semibold">
+                      Scale
+                      <select
+                        value={factor}
+                        onChange={(event) =>
+                          setFactor(Number(event.target.value) as typeof factor)
+                        }
+                        className="min-h-11 rounded-xl border border-input bg-background px-3"
+                      >
+                        {[0.25, 0.5, 0.75, 2, 4].map((value) => (
+                          <option key={value} value={value}>
+                            {value}× {value > 1 ? "upscale" : "downscale"}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="w-full"
+                    disabled={!selected || busy || !canEdit}
+                    onClick={() => void submitPixelEdit()}
+                  >
+                    {busy ? "Running compatibility edit…" : "Run server transform"}
+                  </Button>
+                </div>
+              </details>
 
               {operationId ? (
                 <p role="status" className="text-sm text-muted-foreground">
-                  Edit queued. This page will show the saved asset when ready.
+                  Compatibility edit queued. This page will show the saved asset
+                  when ready.
                 </p>
               ) : null}
 

@@ -2,9 +2,16 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Cropper from "react-easy-crop";
 import type { VideoEditDocument } from "@aiwa/assets/video-edit";
 import { Button } from "@/components/ui/button";
 import { Eyebrow } from "@/components/ui/creative";
+import {
+  browserVideoCapabilities,
+  clientVideoFallbackReason,
+  renderClientVideo,
+  uploadClientVideo,
+} from "@/lib/client-video-render";
 
 type MediaAsset = {
   id: string;
@@ -13,6 +20,7 @@ type MediaAsset = {
   durationMs: number | null;
   width: number | null;
   height: number | null;
+  byteSize?: string | null;
   variants?: { kind: string }[];
 };
 type EditListItem = { id: string; title: string; revision: number };
@@ -60,6 +68,13 @@ export function VideoEditor({
       : emptyDocument,
   );
   const [selectedClip, setSelectedClip] = useState<string | null>(null);
+  const [showReframe, setShowReframe] = useState(false);
+  const [videoCrop, setVideoCrop] = useState({ x: 0, y: 0 });
+  const [videoZoom, setVideoZoom] = useState(1);
+  const [renderProgress, setRenderProgress] = useState<number | null>(null);
+  const [renderMode, setRenderMode] = useState<"browser" | "server" | null>(
+    null,
+  );
   const [renderId, setRenderId] = useState<string | null>(null);
   const [renderResult, setRenderResult] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -75,6 +90,24 @@ export function VideoEditor({
     document.clips.find((item) => item.id === selectedClip) ??
     document.clips[0];
   const source = assets.find((asset) => asset.id === clip?.assetId);
+  const frameAspect =
+    document.ratio === "16:9"
+      ? 16 / 9
+      : document.ratio === "9:16"
+        ? 9 / 16
+        : document.ratio === "1:1"
+          ? 1
+          : document.ratio === "4:3"
+            ? 4 / 3
+            : 3 / 4;
+  const initialCropPercentages = clip?.transform?.crop
+    ? {
+        x: clip.transform.crop.x * 100,
+        y: clip.transform.crop.y * 100,
+        width: clip.transform.crop.width * 100,
+        height: clip.transform.crop.height * 100,
+      }
+    : undefined;
   const duration = useMemo(
     () => document.clips.reduce((sum, item) => sum + item.outMs - item.inMs, 0),
     [document.clips],
@@ -109,6 +142,12 @@ export function VideoEditor({
       .catch(() => undefined);
   }, [organizationId, loadAssets]);
   useEffect(() => {
+    setVideoCrop({ x: 0, y: 0 });
+    setVideoZoom(1);
+    setShowReframe(false);
+  }, [selectedClip]);
+
+  useEffect(() => {
     if (!renderId) return;
     let active = true;
     const check = async () => {
@@ -130,11 +169,15 @@ export function VideoEditor({
           setRenderResult(data.outputAssetId);
           setRenderId(null);
           setBusy(false);
+          setRenderMode(null);
+          setRenderProgress(null);
           setMessage("Your video is ready.");
           void loadAssets().catch(() => undefined);
         } else if (data.processingState === "REVIEW") {
           setRenderId(null);
           setBusy(false);
+          setRenderMode(null);
+          setRenderProgress(null);
           setReviewState({
             renderId,
             message:
@@ -148,6 +191,8 @@ export function VideoEditor({
         ) {
           setRenderId(null);
           setBusy(false);
+          setRenderMode(null);
+          setRenderProgress(null);
           setError(data.errorMessage ?? "Render failed.");
         }
       } catch (cause) {
@@ -279,10 +324,66 @@ export function VideoEditor({
   async function render() {
     const saved = await save();
     if (!saved) return;
+
     setBusy(true);
     setError(null);
     setReviewState(null);
-    setMessage("Render queued. You can leave this page after it starts.");
+    setRenderProgress(null);
+
+    const activeClip = document.clips[0];
+    const activeSource = assets.find(
+      (asset) => asset.id === activeClip?.assetId && asset.mediaKind === "VIDEO",
+    );
+    const clientReason = clientVideoFallbackReason(
+      document,
+      activeSource,
+      browserVideoCapabilities(),
+    );
+
+    if (!clientReason && activeSource) {
+      setRenderMode("browser");
+      setMessage("Rendering on this device to keep server load low…");
+      try {
+        const blob = await renderClientVideo({
+          document,
+          source: activeSource,
+          sourceUrl: `/api/assets/${activeSource.id}`,
+          onProgress: (progress) => setRenderProgress(progress),
+        });
+        const baseName = title
+          .trim()
+          .replace(/[^a-z0-9._-]+/gi, "-")
+          .replace(/^-+|-+$/g, "")
+          .slice(0, 150);
+        const outputAssetId = await uploadClientVideo({
+          organizationId,
+          blob,
+          filename: `${baseName || "edited-video"}-edited.mp4`,
+        });
+        setRenderResult(outputAssetId);
+        setBusy(false);
+        setRenderMode(null);
+        setRenderProgress(null);
+        setMessage("Your video is ready. It was rendered on this device.");
+        await loadAssets().catch(() => undefined);
+        return;
+      } catch (cause) {
+        setRenderProgress(null);
+        setMessage(
+          `Browser export unavailable (${
+            cause instanceof Error ? cause.message : "unsupported media path"
+          }). Using the server renderer instead.`,
+        );
+      }
+    } else {
+      setMessage(
+        clientReason
+          ? `${clientReason} Using the server renderer.`
+          : "Using the server renderer.",
+      );
+    }
+
+    setRenderMode("server");
     try {
       const response = await fetch(`/api/video-edits/${saved.id}/render`, {
         method: "POST",
@@ -302,6 +403,7 @@ export function VideoEditor({
       setRenderId(data.renderId);
     } catch (cause) {
       setBusy(false);
+      setRenderMode(null);
       setError(
         cause instanceof Error ? cause.message : "Could not start render.",
       );
@@ -563,25 +665,113 @@ export function VideoEditor({
           </label>
         </aside>
         <div className="min-w-0 space-y-4">
-          <div className="grid min-h-64 place-items-center overflow-hidden rounded-2xl border border-border bg-surface-sunken p-3">
+          <div className="overflow-hidden rounded-2xl border border-border bg-surface-sunken p-3">
             {clip ? (
-              <video
-                key={clip.id}
-                ref={videoRef}
-                src={`/api/assets/${clip.assetId}`}
-                controls
-                playsInline
-                preload="metadata"
-                onLoadedMetadata={(event) => {
-                  const real = Math.floor(event.currentTarget.duration * 1000);
-                  if (Number.isFinite(real) && real > 0 && clip.outMs > real)
-                    updateClip(clip.id, { outMs: real });
-                }}
-                className="max-h-[440px] w-full rounded-xl object-contain"
-                aria-label={source?.name ?? "Selected video clip"}
-              />
+              <>
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs font-semibold text-muted-foreground">
+                    {showReframe
+                      ? "Drag to crop · scroll or pinch to zoom"
+                      : "Playback preview"}
+                  </p>
+                  <div className="flex rounded-xl border border-border bg-card p-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowReframe(false)}
+                      aria-pressed={!showReframe}
+                      className={`min-h-9 rounded-lg px-3 text-xs font-semibold ${
+                        !showReframe
+                          ? "bg-primary/10 text-primary"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      Playback
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowReframe(true)}
+                      aria-pressed={showReframe}
+                      className={`min-h-9 rounded-lg px-3 text-xs font-semibold ${
+                        showReframe
+                          ? "bg-primary/10 text-primary"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      Reframe
+                    </button>
+                  </div>
+                </div>
+                {showReframe ? (
+                  <div className="relative h-[420px] min-h-72 overflow-hidden rounded-xl bg-card/60">
+                    <Cropper
+                      key={`${clip.id}:${document.ratio}`}
+                      video={`/api/assets/${clip.assetId}`}
+                      crop={videoCrop}
+                      zoom={videoZoom}
+                      rotation={clip.transform?.rotation ?? 0}
+                      aspect={frameAspect}
+                      minZoom={1}
+                      maxZoom={4}
+                      zoomWithScroll
+                      showGrid
+                      initialCroppedAreaPercentages={initialCropPercentages}
+                      onCropChange={setVideoCrop}
+                      onZoomChange={setVideoZoom}
+                      onCropComplete={(area) =>
+                        updateClip(clip.id, {
+                          transform: {
+                            crop: {
+                              x: Number((area.x / 100).toFixed(6)),
+                              y: Number((area.y / 100).toFixed(6)),
+                              width: Number((area.width / 100).toFixed(6)),
+                              height: Number((area.height / 100).toFixed(6)),
+                            },
+                            rotation: clip.transform?.rotation ?? 0,
+                            flipX: clip.transform?.flipX ?? false,
+                          },
+                        })
+                      }
+                      mediaProps={{
+                        muted: true,
+                        loop: true,
+                        autoPlay: true,
+                        playsInline: true,
+                        preload: "metadata",
+                      }}
+                      classes={{
+                        containerClassName: "rounded-xl bg-surface-sunken",
+                        cropAreaClassName: "!border-primary",
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div className="grid min-h-64 place-items-center">
+                    <video
+                      key={clip.id}
+                      ref={videoRef}
+                      src={`/api/assets/${clip.assetId}`}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      onLoadedMetadata={(event) => {
+                        const real = Math.floor(
+                          event.currentTarget.duration * 1000,
+                        );
+                        if (
+                          Number.isFinite(real) &&
+                          real > 0 &&
+                          clip.outMs > real
+                        )
+                          updateClip(clip.id, { outMs: real });
+                      }}
+                      className="max-h-[440px] w-full rounded-xl object-contain"
+                      aria-label={source?.name ?? "Selected video clip"}
+                    />
+                  </div>
+                )}
+              </>
             ) : (
-              <p className="text-center text-sm text-muted-foreground">
+              <p className="grid min-h-64 place-items-center text-center text-sm text-muted-foreground">
                 Add a video from your library to start editing.
               </p>
             )}
@@ -680,6 +870,25 @@ export function VideoEditor({
               </div>
             </div>
           ) : null}
+          {renderMode === "browser" && renderProgress !== null ? (
+            <div
+              role="status"
+              className="rounded-xl border border-info/30 bg-info/10 p-3 text-xs text-muted-foreground"
+            >
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <span>Rendering locally with hardware acceleration</span>
+                <span className="tabular-nums text-foreground">
+                  {Math.round(renderProgress * 100)}%
+                </span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-surface-sunken">
+                <div
+                  className="h-full bg-info transition-[width]"
+                  style={{ width: `${Math.max(0, Math.min(100, renderProgress * 100))}%` }}
+                />
+              </div>
+            </div>
+          ) : null}
           {message ? (
             <p role="status" className="text-sm text-primary">
               {message}
@@ -749,6 +958,87 @@ export function VideoEditor({
                   <option value="fade">Fade in</option>
                 </select>
               </label>
+              <div className="space-y-2 rounded-xl border border-border bg-surface-sunken p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold">Frame transform</span>
+                  <span className="text-[11px] text-muted-foreground">
+                    Non-destructive
+                  </span>
+                </div>
+                <label className="grid gap-1 text-xs font-semibold">
+                  Reframe zoom · {videoZoom.toFixed(2)}×
+                  <input
+                    type="range"
+                    min={1}
+                    max={4}
+                    step={0.01}
+                    value={videoZoom}
+                    onChange={(event) => {
+                      setVideoZoom(Number(event.target.value));
+                      setShowReframe(true);
+                    }}
+                    className="accent-primary"
+                  />
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const current = clip.transform?.rotation ?? 0;
+                      const next = ((current + 270) % 360) as 0 | 90 | 180 | 270;
+                      updateClip(clip.id, {
+                        transform: {
+                          crop:
+                            clip.transform?.crop ??
+                            { x: 0, y: 0, width: 1, height: 1 },
+                          rotation: next,
+                          flipX: clip.transform?.flipX ?? false,
+                        },
+                      });
+                      setShowReframe(true);
+                    }}
+                    className="min-h-10 rounded-lg border border-border px-2 text-xs font-semibold"
+                  >
+                    ↺ 90°
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const current = clip.transform?.rotation ?? 0;
+                      const next = ((current + 90) % 360) as 0 | 90 | 180 | 270;
+                      updateClip(clip.id, {
+                        transform: {
+                          crop:
+                            clip.transform?.crop ??
+                            { x: 0, y: 0, width: 1, height: 1 },
+                          rotation: next,
+                          flipX: clip.transform?.flipX ?? false,
+                        },
+                      });
+                      setShowReframe(true);
+                    }}
+                    className="min-h-10 rounded-lg border border-border px-2 text-xs font-semibold"
+                  >
+                    ↻ 90°
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      updateClip(clip.id, { transform: undefined });
+                      setVideoCrop({ x: 0, y: 0 });
+                      setVideoZoom(1);
+                      setShowReframe(true);
+                    }}
+                    className="min-h-10 rounded-lg border border-border px-2 text-xs font-semibold"
+                  >
+                    Reset
+                  </button>
+                </div>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  Crop, zoom, and rotation are stored as edit instructions. The
+                  original asset is never rewritten.
+                </p>
+              </div>
               <div className="flex flex-wrap gap-2 text-xs">
                 <button
                   type="button"

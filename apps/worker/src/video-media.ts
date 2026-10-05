@@ -5,7 +5,11 @@ import { spawn } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { VideoEditDocument } from "@aiwa/assets/video-edit";
+import {
+  resolveVideoClipTransform,
+  videoOutputDimensions,
+  type VideoEditDocument,
+} from "@aiwa/assets/video-edit";
 
 export async function mediaCommand(
   binary: string,
@@ -132,14 +136,10 @@ export async function renderVideo(
     const media = await Promise.all(
       ids.map((id) => probeMedia(paths.get(id)!)),
     );
-    const dimensions: Record<VideoEditDocument["ratio"], [number, number]> = {
-      "16:9": document.resolution === "1080p" ? [1920, 1080] : [1280, 720],
-      "9:16": document.resolution === "1080p" ? [1080, 1920] : [720, 1280],
-      "1:1": document.resolution === "1080p" ? [1080, 1080] : [720, 720],
-      "4:3": document.resolution === "1080p" ? [1440, 1080] : [960, 720],
-      "3:4": document.resolution === "1080p" ? [1080, 1440] : [720, 960],
-    };
-    const [width, height] = dimensions[document.ratio];
+    const [width, height] = videoOutputDimensions(
+      document.ratio,
+      document.resolution,
+    );
     const args = ids.flatMap((id) => ["-i", paths.get(id)!]);
     const filters: string[] = [];
     const segments: string[] = [];
@@ -154,8 +154,35 @@ export async function renderVideo(
         clip.transition === "fade" && index > 0
           ? `,fade=t=in:st=0:d=${Math.min(0.25, duration / 3)}`
           : "";
+      const transform = resolveVideoClipTransform(clip.transform);
+      const visualFilters = [
+        `trim=start=${begin}:duration=${duration}`,
+        "setpts=PTS-STARTPTS",
+        "fps=24",
+      ];
+      if (transform.rotation === 90) visualFilters.push("transpose=1");
+      else if (transform.rotation === 180)
+        visualFilters.push("hflip", "vflip");
+      else if (transform.rotation === 270) visualFilters.push("transpose=2");
+      if (transform.flipX) visualFilters.push("hflip");
+      const { crop } = transform;
+      if (
+        crop.x !== 0 ||
+        crop.y !== 0 ||
+        crop.width !== 1 ||
+        crop.height !== 1
+      ) {
+        visualFilters.push(
+          `crop=iw*${crop.width.toFixed(6)}:ih*${crop.height.toFixed(6)}:iw*${crop.x.toFixed(6)}:ih*${crop.y.toFixed(6)}`,
+        );
+      }
+      visualFilters.push(
+        `scale=${width}:${height}:force_original_aspect_ratio=decrease`,
+        `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2`,
+        "setsar=1",
+      );
       filters.push(
-        `[${input}:v]trim=start=${begin}:duration=${duration},setpts=PTS-STARTPTS,fps=24,scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1${fade}[v${index}]`,
+        `[${input}:v]${visualFilters.join(",")}${fade}[v${index}]`,
       );
       if (detail.hasAudio && !clip.muted)
         filters.push(

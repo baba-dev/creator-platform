@@ -82,6 +82,21 @@ describe("Conversational Creative Action Planner", () => {
     });
   });
 
+  it("does not ask which asset when changing ratio across a multi-output set", async () => {
+    const plan = await planConversationTurn({
+      userMessage: "Make it 9:16.",
+      organizationId: "org_1",
+      context: baseContext,
+    });
+
+    expect(plan.actions).toEqual([
+      {
+        type: "change_aspect_ratio",
+        aspectRatio: "9:16",
+      },
+    ]);
+  });
+
   it("plans aspect ratio patch from natural language synonyms: 'Make it vertical.'", async () => {
     const plan = await planConversationTurn({
       userMessage: "Make it vertical.",

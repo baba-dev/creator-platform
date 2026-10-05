@@ -77,12 +77,23 @@ export async function planConversationTurn(params: {
   const text = userMessage.trim();
   const lower = text.toLowerCase();
   const actions: ConversationAction[] = [];
+  const ratio = normalizeAspectRatioPhrase(text);
+  const isAspectRatioIntent =
+    ratio !== null &&
+    (lower.includes("make it") ||
+      lower.includes("change") ||
+      lower.includes("ratio") ||
+      lower.includes("aspect") ||
+      /^(?:9:16|16:9|1:1|4:3|3:4|3:2|2:3|21:9|vertical|portrait|horizontal|landscape|square|widescreen)\.?$/i.test(
+        text,
+      ));
 
   // =========================================================
   // 1. Check for Ambiguity / Clarification from Reference Resolver
   // =========================================================
   // If user says "the second image" or "animate that" without a clear single asset
   const hasReferenceWord =
+    !isAspectRatioIntent &&
     /\b(?:image|picture|output|this|that|it|animate|variation|variations|first\s+frame|last\s+frame|video|extend)\b/i.test(
       lower,
     );
@@ -190,17 +201,7 @@ export async function planConversationTurn(params: {
   // =========================================================
   // 4. Aspect Ratio Change ("Make it 9:16", "Change to vertical")
   // =========================================================
-  const ratio = normalizeAspectRatioPhrase(text);
-  if (
-    ratio !== null &&
-    (lower.includes("make it") ||
-      lower.includes("change") ||
-      lower.includes("ratio") ||
-      lower.includes("aspect") ||
-      /^(?:9:16|16:9|1:1|4:3|3:4|3:2|2:3|21:9|vertical|portrait|horizontal|landscape|square|widescreen)\.?$/i.test(
-        text,
-      ))
-  ) {
+  if (isAspectRatioIntent && ratio !== null) {
     actions.push({
       type: "change_aspect_ratio",
       aspectRatio: ratio,

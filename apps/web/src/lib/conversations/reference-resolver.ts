@@ -41,34 +41,24 @@ export function parseOutputIndex(phrase: string): number | null {
   const ordinals: Record<string, number> = {
     first: 1,
     "1st": 1,
-    one: 1,
     second: 2,
     "2nd": 2,
-    two: 2,
     third: 3,
     "3rd": 3,
-    three: 3,
     fourth: 4,
     "4th": 4,
-    four: 4,
     fifth: 5,
     "5th": 5,
-    five: 5,
     sixth: 6,
     "6th": 6,
-    six: 6,
     seventh: 7,
     "7th": 7,
-    seven: 7,
     eighth: 8,
     "8th": 8,
-    eight: 8,
     ninth: 9,
     "9th": 9,
-    nine: 9,
     tenth: 10,
     "10th": 10,
-    ten: 10,
   };
 
   for (const [word, index] of Object.entries(ordinals)) {
@@ -86,15 +76,8 @@ export function parseOutputIndex(phrase: string): number | null {
 
 export function isRelativeLatestReference(phrase: string): boolean {
   const normalized = phrase.toLowerCase();
-  return (
-    normalized.includes("the last") ||
-    normalized.includes("the previous") ||
-    normalized.includes("the latest") ||
-    normalized.includes("that one") ||
-    normalized.includes("this one") ||
-    normalized.includes("this") ||
-    normalized.includes("that") ||
-    normalized.includes("it")
+  return /\b(?:the\s+(?:last|previous|latest)|that\s+one|this\s+one|this|that|it)\b/i.test(
+    normalized,
   );
 }
 

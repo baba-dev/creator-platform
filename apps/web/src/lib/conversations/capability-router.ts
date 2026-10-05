@@ -8,6 +8,9 @@ export interface CapabilityRoutingInput {
   requiredAspectRatio?: string;
   requiredResolution?: string;
   requireReferenceImages?: boolean;
+  requiredOutputCount?: number;
+  requireExtendVideo?: boolean;
+  excludeCurrentModel?: boolean;
 }
 
 export interface ModelRoutingResult {
@@ -28,6 +31,7 @@ export async function findCompatibleAlternativeModel(
   const candidateModels = await db.providerModel.findMany({
     where: {
       mediaKind,
+      provider: "BYTEPLUS",
       enabled: true,
       priceVersions: {
         some: {
@@ -51,6 +55,7 @@ export async function findCompatibleAlternativeModel(
   const matchingCandidates = candidateModels.filter((model) => {
     // Exclude current model if specified
     if (
+      input.excludeCurrentModel === true &&
       input.currentModelId &&
       (model.id === input.currentModelId ||
         model.providerModelId === input.currentModelId)
@@ -89,10 +94,31 @@ export async function findCompatibleAlternativeModel(
     }
 
     // Check reference image support
-    if (input.requireReferenceImages) {
-      if (caps.referenceImages !== true) {
+    if (input.requireReferenceImages && caps.referenceImages !== true) {
+      return false;
+    }
+
+    if (input.requiredOutputCount && input.requiredOutputCount > 1) {
+      const maxGeneratedImages =
+        typeof caps.maxGeneratedImages === "number"
+          ? caps.maxGeneratedImages
+          : 1;
+      const maxTotalImages =
+        typeof caps.maxTotalInputOutputImages === "number"
+          ? caps.maxTotalInputOutputImages
+          : maxGeneratedImages;
+      if (
+        caps.sequentialImages !== true ||
+        input.requiredOutputCount > maxGeneratedImages ||
+        input.requiredOutputCount + (input.requireReferenceImages ? 1 : 0) >
+          maxTotalImages
+      ) {
         return false;
       }
+    }
+
+    if (input.requireExtendVideo && caps.extendVideo !== true) {
+      return false;
     }
 
     return true;
@@ -102,7 +128,20 @@ export async function findCompatibleAlternativeModel(
     return null;
   }
 
-  // Pick the first suitable alternate
+  // Preserve the current model whenever it already satisfies the requested
+  // capabilities; only move away when the user explicitly asks to switch.
+  if (input.currentModelId && input.excludeCurrentModel !== true) {
+    matchingCandidates.sort((a, b) => {
+      const aCurrent =
+        a.id === input.currentModelId ||
+        a.providerModelId === input.currentModelId;
+      const bCurrent =
+        b.id === input.currentModelId ||
+        b.providerModelId === input.currentModelId;
+      return Number(bCurrent) - Number(aCurrent);
+    });
+  }
+
   const selected = matchingCandidates[0]!;
   const price = selected.priceVersions[0]!;
 

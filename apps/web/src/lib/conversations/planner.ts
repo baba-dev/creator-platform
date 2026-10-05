@@ -83,13 +83,9 @@ export async function planConversationTurn(params: {
   // =========================================================
   // If user says "the second image" or "animate that" without a clear single asset
   const hasReferenceWord =
-    lower.includes("image") ||
-    lower.includes("this") ||
-    lower.includes("that") ||
-    lower.includes("it") ||
-    lower.includes("animate") ||
-    lower.includes("variation") ||
-    lower.includes("first frame");
+    /\b(?:image|picture|output|this|that|it|animate|variation|variations|first\s+frame|last\s+frame|video|extend)\b/i.test(
+      lower,
+    );
 
   let resolvedRef: ReferenceResolutionResult | null = null;
   if (hasReferenceWord || explicitAssetId) {
@@ -118,6 +114,21 @@ export async function planConversationTurn(params: {
         reasoning: "Ambiguous asset reference requires clarification.",
       };
     }
+  }
+
+  // Trusted UI output clicks are state-only. Never turn "Select asset" into
+  // a paid generation just because a concrete selectedAssetId is present.
+  if (lower === "select asset" && explicitAssetId && resolvedRef?.resolved) {
+    return {
+      version: ACTION_PROTOCOL_VERSION,
+      actions: [
+        {
+          type: "select_asset",
+          target: { kind: "asset_id", assetId: resolvedRef.assetId! },
+        },
+      ],
+      reasoning: "State-only explicit UI asset selection.",
+    };
   }
 
   // =========================================================
@@ -184,9 +195,9 @@ export async function planConversationTurn(params: {
       lower.includes("change") ||
       lower.includes("ratio") ||
       lower.includes("aspect") ||
-      lower.includes("version") ||
-      lower.includes("please") ||
-      text.split(/\s+/).length <= 4)
+      /^(?:9:16|16:9|1:1|4:3|3:4|3:2|2:3|21:9|vertical|portrait|horizontal|landscape|square|widescreen)\.?$/i.test(
+        text,
+      ))
   ) {
     actions.push({
       type: "change_aspect_ratio",
@@ -268,7 +279,33 @@ export async function planConversationTurn(params: {
   }
 
   // =========================================================
-  // 8. First / Last Frame Mapping
+  // 8. Video extension ("Extend this video by 5 seconds")
+  // =========================================================
+  if (
+    /\bextend\b/i.test(lower) &&
+    /\b(?:video|this|it)\b/i.test(lower)
+  ) {
+    const durationMatch =
+      /\b(\d{1,2})\s*(?:s|sec|secs|second|seconds)\b/i.exec(lower);
+    const durationSeconds = durationMatch?.[1]
+      ? Math.min(30, Math.max(1, Number.parseInt(durationMatch[1], 10)))
+      : 5;
+    actions.push({
+      type: "extend_video",
+      sourceAssetId:
+        resolvedRef?.assetId ?? context.selectedAssetId ?? undefined,
+      direction: lower.includes("before") ? "BEFORE" : "AFTER",
+      durationSeconds,
+    });
+    return {
+      version: ACTION_PROTOCOL_VERSION,
+      actions,
+      reasoning: "Extend the selected video using the canonical EXTEND workflow.",
+    };
+  }
+
+  // =========================================================
+  // 9. First / Last Frame Mapping
   // =========================================================
   if (lower.includes("first frame")) {
     actions.push({

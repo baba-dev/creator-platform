@@ -10,7 +10,10 @@ import { z } from "zod";
 
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
-import { generateConversationTitle } from "../../../lib/conversations/title-generator";
+import {
+  deriveDeterministicTitle,
+  generateConversationTitle,
+} from "../../../lib/conversations/title-generator";
 import type { ConversationState } from "../../../lib/conversations/types";
 
 const conversationCreateSchema = z.object({
@@ -123,7 +126,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Initial working state projection
+    // Build the working state, but queue the canonical generation first.
+    // Quote/model/balance rejection must not leave an orphan conversation.
     const initialState: ConversationState = {
       activeModality: input.modality,
       currentModelId: input.modelId,
@@ -138,30 +142,6 @@ export async function POST(request: Request) {
       activeOutputs: [],
     };
 
-    // Create durable ChatThread with threadType: "CREATIVE"
-    const thread = await db.chatThread.create({
-      data: {
-        organizationId: input.organizationId,
-        projectId: input.projectId ?? null,
-        createdById: session.user.id,
-        title: "New creation",
-        threadType: "CREATIVE",
-        modelId: input.modelId,
-        state: initialState as unknown as object,
-      },
-    });
-
-    // Create initial user message
-    const userMessage = await db.chatMessage.create({
-      data: {
-        threadId: thread.id,
-        clientRequestId: input.idempotencyKey,
-        role: "user",
-        content: input.prompt,
-      },
-    });
-
-    // Execute first generation job through canonical pipeline
     let job: { id: string; status: string };
     if (input.modality === "VOICE") {
       job = await createVoiceJob(session.user.id, {
@@ -186,6 +166,8 @@ export async function POST(request: Request) {
         idempotencyKey: input.idempotencyKey,
         prompt: input.prompt,
         durationSeconds: input.durationSeconds ?? 5,
+        aspectRatio: input.aspectRatio,
+        resolution: input.resolution,
         outputFormat: "mp4",
         schemaVersion: 2,
         workflow: "GENERATE",
@@ -206,32 +188,128 @@ export async function POST(request: Request) {
       });
     }
 
-    // Link generation job to the thread
-    await db.generationJob.update({
+    const durableJob = await db.generationJob.findUnique({
       where: { id: job.id },
+      select: { chatThreadId: true },
+    });
+
+    const ensureInitialMessage = (threadId: string) =>
+      db.chatMessage.upsert({
+        where: {
+          threadId_clientRequestId_role: {
+            threadId,
+            clientRequestId: input.idempotencyKey,
+            role: "user",
+          },
+        },
+        update: {
+          content: input.prompt,
+          metadata: { generationJobId: job.id },
+        },
+        create: {
+          threadId,
+          clientRequestId: input.idempotencyKey,
+          role: "user",
+          content: input.prompt,
+          metadata: { generationJobId: job.id },
+        },
+      });
+
+    // A retried HTTP request returns the already-linked creative conversation.
+    if (durableJob?.chatThreadId) {
+      const existingThread = await db.chatThread.findFirst({
+        where: {
+          id: durableJob.chatThreadId,
+          organizationId: input.organizationId,
+          createdById: session.user.id,
+          threadType: "CREATIVE",
+        },
+        select: { id: true, title: true },
+      });
+      if (existingThread) {
+        await ensureInitialMessage(existingThread.id);
+        return NextResponse.json(
+          {
+            conversationId: existingThread.id,
+            jobId: job.id,
+            title: existingThread.title,
+            status: job.status,
+          },
+          { status: 200 },
+        );
+      }
+    }
+
+    const initialTitle = deriveDeterministicTitle(input.prompt);
+    initialState.activeGenerationId = job.id;
+    const thread = await db.chatThread.create({
+      data: {
+        organizationId: input.organizationId,
+        projectId: input.projectId ?? null,
+        createdById: session.user.id,
+        title: initialTitle,
+        threadType: "CREATIVE",
+        modelId: input.modelId,
+        state: initialState as unknown as object,
+      },
+    });
+
+    // Exactly one concurrent replay may claim the durable job.
+    const claim = await db.generationJob.updateMany({
+      where: { id: job.id, chatThreadId: null },
       data: { chatThreadId: thread.id },
     });
 
-    // Update thread state with active generation ID
-    initialState.activeGenerationId = job.id;
-    await db.chatThread.update({
-      where: { id: thread.id },
-      data: { state: initialState as unknown as object },
-    });
+    if (claim.count === 0) {
+      await db.chatThread.delete({ where: { id: thread.id } });
+      const winnerJob = await db.generationJob.findUnique({
+        where: { id: job.id },
+        select: { chatThreadId: true },
+      });
+      const winnerThread = winnerJob?.chatThreadId
+        ? await db.chatThread.findFirst({
+            where: {
+              id: winnerJob.chatThreadId,
+              organizationId: input.organizationId,
+              createdById: session.user.id,
+              threadType: "CREATIVE",
+            },
+            select: { id: true, title: true },
+          })
+        : null;
+      if (!winnerThread) {
+        throw new Error("Generation was queued but conversation linking failed.");
+      }
+      await ensureInitialMessage(winnerThread.id);
+      return NextResponse.json(
+        {
+          conversationId: winnerThread.id,
+          jobId: job.id,
+          title: winnerThread.title,
+          status: job.status,
+        },
+        { status: 200 },
+      );
+    }
 
-    // Update user message metadata with generationJobId
-    await db.chatMessage.update({
-      where: { id: userMessage.id },
-      data: { metadata: { generationJobId: job.id } },
-    });
+    await ensureInitialMessage(thread.id);
 
-    // Parallel asynchronous title generation (non-blocking)
+    // Refine the immediately useful deterministic title without blocking the
+    // durable generation/thread handoff.
     void generateConversationTitle({
       conversationId: thread.id,
       initialPrompt: input.prompt,
     });
 
     return NextResponse.json(
+      {
+        conversationId: thread.id,
+        jobId: job.id,
+        title: initialTitle,
+        status: job.status,
+      },
+      { status: 201 },
+    );    return NextResponse.json(
       {
         conversationId: thread.id,
         jobId: job.id,

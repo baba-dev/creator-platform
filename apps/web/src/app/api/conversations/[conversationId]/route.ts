@@ -51,7 +51,11 @@ export async function GET(
     },
   });
 
-  if (!thread || thread.createdById !== session.user.id) {
+  if (
+    !thread ||
+    thread.threadType !== "CREATIVE" ||
+    thread.createdById !== session.user.id
+  ) {
     return NextResponse.json(
       { error: "Conversation not found." },
       { status: 404 },
@@ -71,11 +75,12 @@ export async function GET(
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
   }
 
-  const rawMessages = await db.chatMessage.findMany({
+  const rawMessagesDesc = await db.chatMessage.findMany({
     where: { threadId: conversationId },
-    orderBy: { createdAt: "asc" },
+    orderBy: { createdAt: "desc" },
     take: 100,
   });
+  const rawMessages = rawMessagesDesc.reverse();
 
   return NextResponse.json(
     {
@@ -100,9 +105,7 @@ const updateSchema = z.object({
     .string()
     .trim()
     .min(1, "Title cannot be empty.")
-    .max(100, "Title is too long.")
-    .optional(),
-  state: z.record(z.string(), z.unknown()).optional(),
+    .max(100, "Title is too long."),
 });
 
 export async function PATCH(
@@ -127,7 +130,11 @@ export async function PATCH(
     select: { id: true, organizationId: true, createdById: true },
   });
 
-  if (!thread || thread.createdById !== session.user.id) {
+  if (
+    !thread ||
+    thread.threadType !== "CREATIVE" ||
+    thread.createdById !== session.user.id
+  ) {
     return NextResponse.json(
       { error: "Conversation not found." },
       { status: 404 },
@@ -157,10 +164,7 @@ export async function PATCH(
 
     const updated = await db.chatThread.update({
       where: { id: conversationId },
-      data: {
-        ...(input.title ? { title: input.title } : {}),
-        ...(input.state ? { state: input.state as unknown as object } : {}),
-      },
+      data: { title: input.title },
       select: { id: true, title: true, state: true, updatedAt: true },
     });
 
@@ -201,7 +205,11 @@ export async function DELETE(
     select: { id: true, organizationId: true, createdById: true },
   });
 
-  if (!thread || thread.createdById !== session.user.id) {
+  if (
+    !thread ||
+    thread.threadType !== "CREATIVE" ||
+    thread.createdById !== session.user.id
+  ) {
     return NextResponse.json(
       { error: "Conversation not found." },
       { status: 404 },

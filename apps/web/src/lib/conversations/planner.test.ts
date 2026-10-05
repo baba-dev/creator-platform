@@ -108,6 +108,60 @@ describe("Conversational Creative Action Planner", () => {
     }
   });
 
+  it("does not parse a variation count as an output ordinal", async () => {
+    const singleOutputContext: ConversationPlannerContext = {
+      ...baseContext,
+      selectedAssetId: "asset_901",
+      activeOutputGroup: [
+        { index: 1, assetId: "asset_901", mimeType: "image/png" },
+      ],
+    };
+    const plan = await planConversationTurn({
+      userMessage: "Give me four variations.",
+      organizationId: "org_1",
+      context: singleOutputContext,
+    });
+
+    expect(plan.actions[0]).toEqual(
+      expect.objectContaining({
+        type: "create_variations",
+        outputCount: 4,
+        sourceAssetId: "asset_901",
+      }),
+    );
+  });
+
+  it("treats explicit UI 'Select asset' as a zero-credit state action", async () => {
+    const plan = await planConversationTurn({
+      userMessage: "Select asset",
+      organizationId: "org_1",
+      context: baseContext,
+      explicitAssetId: "asset_901",
+    });
+
+    expect(plan.actions).toEqual([
+      {
+        type: "select_asset",
+        target: { kind: "asset_id", assetId: "asset_901" },
+      },
+    ]);
+  });
+
+  it("does not treat the 'it' inside another word as a relative reference", async () => {
+    const emptyContext: ConversationPlannerContext = {
+      ...baseContext,
+      selectedAssetId: null,
+      activeOutputGroup: [],
+    };
+    const plan = await planConversationTurn({
+      userMessage: "A bottle with dramatic golden lighting",
+      organizationId: "org_1",
+      context: emptyContext,
+    });
+
+    expect(plan.actions[0]?.type).toBe("generate_image");
+  });
+
   it("plans model switch: 'Try another model.'", async () => {
     const plan = await planConversationTurn({
       userMessage: "Try another model.",

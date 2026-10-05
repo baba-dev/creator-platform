@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
     },
     chatMessage: {
       create: vi.fn(),
+      upsert: vi.fn(),
       findMany: vi.fn(),
     },
     generationJob: {
@@ -116,6 +117,9 @@ describe("POST /api/conversations/[conversationId]/messages", () => {
     mocks.db.chatMessage.create.mockImplementation(({ data }) =>
       Promise.resolve({ id: `msg_${Math.random()}`, ...data }),
     );
+    mocks.db.chatMessage.upsert.mockImplementation(({ create }) =>
+      Promise.resolve({ id: `msg_${Math.random()}`, ...create }),
+    );
     mocks.db.chatThread.update.mockResolvedValue({});
     mocks.db.generationJob.update.mockResolvedValue({});
     mocks.createImageJob.mockResolvedValue({ id: "job_new", status: "QUEUED" });
@@ -165,6 +169,31 @@ describe("POST /api/conversations/[conversationId]/messages", () => {
         }),
       }),
     );
+  });
+
+  it("handles explicit UI asset selection with 0 credits", async () => {
+    const req = new Request(
+      "https://example.com/api/conversations/conv_1/messages",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: "Select asset",
+          selectedAssetId: "asset_1",
+          idempotencyKey: "55555555-5555-4555-8555-555555555555",
+        }),
+      },
+    );
+
+    const res = await POST(req, {
+      params: Promise.resolve({ conversationId: "conv_1" }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.selectedAssetId).toBe("asset_1");
+    expect(mocks.createImageJob).not.toHaveBeenCalled();
+    expect(mocks.createVideoJob).not.toHaveBeenCalled();
   });
 
   it("handles aspect ratio patch: 'Make it 9:16.' and links parentGenerationId", async () => {

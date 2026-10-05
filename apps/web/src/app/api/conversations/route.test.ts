@@ -11,14 +11,19 @@ const mocks = vi.hoisted(() => ({
     chatThread: {
       create: vi.fn(),
       update: vi.fn(),
+      delete: vi.fn(),
+      findFirst: vi.fn(),
       findMany: vi.fn(),
     },
     chatMessage: {
       create: vi.fn(),
       update: vi.fn(),
+      upsert: vi.fn(),
     },
     generationJob: {
+      findUnique: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
   },
 }));
@@ -38,6 +43,9 @@ vi.mock("@aiwa/generation", () => ({
 }));
 
 vi.mock("@/lib/conversations/title-generator", () => ({
+  deriveDeterministicTitle: vi
+    .fn()
+    .mockReturnValue("Luxury Perfume Desert Shoot"),
   generateConversationTitle: vi.fn().mockResolvedValue("Omani Perfume Shoot"),
 }));
 
@@ -69,12 +77,17 @@ describe("POST /api/conversations", () => {
       title: "New creation",
     });
     mocks.db.chatMessage.create.mockResolvedValue({ id: "msg_100" });
+    mocks.db.chatMessage.upsert.mockResolvedValue({ id: "msg_100" });
     mocks.createImageJob.mockResolvedValue({
       id: "job_img_100",
       status: "QUEUED",
     });
+    mocks.db.generationJob.findUnique.mockResolvedValue({ chatThreadId: null });
     mocks.db.generationJob.update.mockResolvedValue({});
+    mocks.db.generationJob.updateMany.mockResolvedValue({ count: 1 });
     mocks.db.chatThread.update.mockResolvedValue({});
+    mocks.db.chatThread.delete.mockResolvedValue({});
+    mocks.db.chatThread.findFirst.mockResolvedValue(null);
   });
 
   it("creates a creative conversation and submits first generation job", async () => {
@@ -103,7 +116,7 @@ describe("POST /api/conversations", () => {
     expect(res.status).toBe(201);
     expect(body.conversationId).toBe("conv_100");
     expect(body.jobId).toBe("job_img_100");
-    expect(body.title).toBe("New creation");
+    expect(body.title).toBe("Luxury Perfume Desert Shoot");
 
     // Verify ChatThread created with threadType CREATIVE
     expect(mocks.db.chatThread.create).toHaveBeenCalledWith(
@@ -112,14 +125,14 @@ describe("POST /api/conversations", () => {
           organizationId: "org_1",
           createdById: "user_1",
           threadType: "CREATIVE",
-          title: "New creation",
+          title: "Luxury Perfume Desert Shoot",
         }),
       }),
     );
 
-    // Verify generation job linked to the thread
-    expect(mocks.db.generationJob.update).toHaveBeenCalledWith({
-      where: { id: "job_img_100" },
+    // Verify generation job claimed by exactly one conversation.
+    expect(mocks.db.generationJob.updateMany).toHaveBeenCalledWith({
+      where: { id: "job_img_100", chatThreadId: null },
       data: { chatThreadId: "conv_100" },
     });
   });

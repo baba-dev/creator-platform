@@ -147,8 +147,14 @@ export function CreativeConversationWorkspace({
         }
         setMessages(data.conversation.messages);
         setJobs(data.conversation.generationJobs ?? []);
-        if (data.conversation.state?.activeAssetId) {
-          setActiveAssetId(data.conversation.state.activeAssetId);
+        if (
+          data.conversation.state &&
+          Object.prototype.hasOwnProperty.call(
+            data.conversation.state,
+            "activeAssetId",
+          )
+        ) {
+          setActiveAssetId(data.conversation.state.activeAssetId ?? null);
         }
         if (data.conversation.state?.activeModality) {
           setActiveModality(data.conversation.state.activeModality);
@@ -231,7 +237,10 @@ export function CreativeConversationWorkspace({
   }
 
   // Send follow-up prompt
-  async function handleSend(textToSend?: string) {
+  async function handleSend(
+    textToSend?: string,
+    selectedAssetOverride?: string,
+  ) {
     const prompt = (textToSend ?? inputPrompt).trim();
     if (!prompt || isSubmitting) return;
 
@@ -240,12 +249,22 @@ export function CreativeConversationWorkspace({
     setInputPrompt("");
 
     try {
+      const focusedJob =
+        jobs.find((job) => job.id === selectedJobId) ?? jobs[0] ?? null;
+      const focusedAssetId =
+        selectedAssetOverride ??
+        (activeAssetId &&
+        focusedJob?.assets.some((asset) => asset.id === activeAssetId)
+          ? activeAssetId
+          : focusedJob?.assets[0]?.id) ??
+        undefined;
+
       const res = await fetch(`/api/conversations/${conversationId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           content: prompt,
-          selectedAssetId: activeAssetId ?? undefined,
+          selectedAssetId: focusedAssetId,
           idempotencyKey: crypto.randomUUID(),
         }),
       });
@@ -296,8 +315,6 @@ export function CreativeConversationWorkspace({
     if (activeModality === "VIDEO") {
       return [
         { label: "Extend by 5s", prompt: "Extend this video by 5 seconds" },
-        { label: "Use first frame", prompt: "Use first frame" },
-        { label: "Use last frame", prompt: "Use last frame" },
         { label: "Try another video model", prompt: "Try another model" },
       ];
     }
@@ -693,7 +710,9 @@ export function CreativeConversationWorkspace({
                           <button
                             key={opt.value}
                             type="button"
-                            onClick={() => void handleSend(`Use ${opt.label}`)}
+                            onClick={() =>
+                              void handleSend("Select asset", opt.assetId)
+                            }
                             className="inline-flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition"
                           >
                             <span>{opt.label}</span>

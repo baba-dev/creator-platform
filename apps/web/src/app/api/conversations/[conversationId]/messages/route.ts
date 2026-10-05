@@ -74,7 +74,11 @@ export async function POST(
     },
   });
 
-  if (!thread || thread.createdById !== session.user.id) {
+  if (
+    !thread ||
+    thread.threadType !== "CREATIVE" ||
+    thread.createdById !== session.user.id
+  ) {
     return NextResponse.json(
       { error: "Conversation not found." },
       { status: 404 },
@@ -101,6 +105,33 @@ export async function POST(
   try {
     const json = await request.json();
     const input = messageInputSchema.parse(json);
+
+    const upsertMessage = (
+      role: "user" | "assistant",
+      clientRequestId: string,
+      content: string,
+      metadata?: Record<string, unknown>,
+    ) =>
+      db.chatMessage.upsert({
+        where: {
+          threadId_clientRequestId_role: {
+            threadId: conversationId,
+            clientRequestId,
+            role,
+          },
+        },
+        update: {
+          content,
+          ...(metadata ? { metadata } : {}),
+        },
+        create: {
+          threadId: conversationId,
+          clientRequestId,
+          role,
+          content,
+          ...(metadata ? { metadata } : {}),
+        },
+      });
 
     const latestJob = thread.generationJobs[0] ?? null;
     const currentState = (thread.state as unknown as ConversationState) ?? {
@@ -141,30 +172,24 @@ export async function POST(
     // Case 1: Clarification needed (Ambiguity)
     // =========================================================
     if (firstAction.type === "clarify") {
-      const userMessage = await db.chatMessage.create({
-        data: {
-          threadId: conversationId,
-          clientRequestId: input.idempotencyKey,
-          role: "user",
-          content: input.content,
-        },
-      });
+      const userMessage = await upsertMessage(
+        "user",
+        input.idempotencyKey,
+        input.content,
+      );
 
-      const assistantMessage = await db.chatMessage.create({
-        data: {
-          threadId: conversationId,
-          clientRequestId: `${input.idempotencyKey}-clarify`,
-          role: "assistant",
-          content: firstAction.question,
-          metadata: {
-            turnStatus: "REQUIRES_CLARIFICATION",
-            clarification: {
-              question: firstAction.question,
-              options: firstAction.options,
-            },
+      const assistantMessage = await upsertMessage(
+        "assistant",
+        `${input.idempotencyKey}-clarify`,
+        firstAction.question,
+        {
+          turnStatus: "REQUIRES_CLARIFICATION",
+          clarification: {
+            question: firstAction.question,
+            options: firstAction.options,
           },
         },
-      });
+      );
 
       return NextResponse.json(
         {
@@ -212,27 +237,21 @@ export async function POST(
         });
       }
 
-      const userMessage = await db.chatMessage.create({
-        data: {
-          threadId: conversationId,
-          clientRequestId: input.idempotencyKey,
-          role: "user",
-          content: input.content,
-        },
-      });
+      const userMessage = await upsertMessage(
+        "user",
+        input.idempotencyKey,
+        input.content,
+      );
 
-      const assistantMessage = await db.chatMessage.create({
-        data: {
-          threadId: conversationId,
-          clientRequestId: `${input.idempotencyKey}-ack`,
-          role: "assistant",
-          content: `✓ ${label}. Ready for your next creative direction.`,
-          metadata: {
-            turnStatus: "COMPLETED",
-            selectedAssetId,
-          },
+      const assistantMessage = await upsertMessage(
+        "assistant",
+        `${input.idempotencyKey}-ack`,
+        `✓ ${label}. Ready for your next creative direction.`,
+        {
+          turnStatus: "COMPLETED",
+          selectedAssetId,
         },
-      });
+      );
 
       return NextResponse.json(
         {
@@ -283,6 +302,12 @@ export async function POST(
       plannerContext.currentSettings.speechRate ||
       1.0;
     let firstFrameAssetId: string | undefined;
+    let imageReferenceAssetIds: string[] = [];
+    let videoSourceAssetId: string | undefined;
+    let videoWorkflow: "GENERATE" | "FRAME_TO_VIDEO" | "EXTEND" = "GENERATE";
+    let extensionDirection: "BEFORE" | "AFTER" | undefined;
+    let requestedModelSwitch = false;
+    let needsCapabilityRouting = false;
 
     // Apply action patches
     for (const action of plan.actions) {
@@ -293,30 +318,43 @@ export async function POST(
             (o) => o.index === target.index,
           );
           if (item) {
-            firstFrameAssetId = item.assetId;
             currentState.activeAssetId = item.assetId;
+            firstFrameAssetId = item.assetId;
           }
         } else if (target.kind === "asset_id") {
-          firstFrameAssetId = target.assetId;
           currentState.activeAssetId = target.assetId;
+          firstFrameAssetId = target.assetId;
         }
       } else if (action.type === "change_aspect_ratio") {
         targetRatio = action.aspectRatio;
       } else if (action.type === "change_resolution") {
         targetResolution = action.resolution;
       } else if (action.type === "create_variations") {
+        targetModality = "IMAGE";
         targetOutputCount = action.outputCount ?? 4;
         if (action.prompt) targetPrompt = action.prompt;
+        const sourceAssetId =
+          action.sourceAssetId ??
+          currentState.activeAssetId ??
+          plannerContext.selectedAssetId ??
+          undefined;
+        imageReferenceAssetIds = sourceAssetId ? [sourceAssetId] : [];
+        needsCapabilityRouting = true;
+      } else if (action.type === "edit_image") {
+        targetModality = "IMAGE";
+        if (action.prompt) targetPrompt = action.prompt;
+        if (action.aspectRatio) targetRatio = action.aspectRatio;
+        const sourceAssetId =
+          action.sourceAssetId ??
+          currentState.activeAssetId ??
+          plannerContext.selectedAssetId ??
+          undefined;
+        imageReferenceAssetIds = sourceAssetId ? [sourceAssetId] : [];
+        needsCapabilityRouting = true;
       } else if (action.type === "switch_model") {
-        const altModel = await findCompatibleAlternativeModel({
-          modality: action.targetMediaKind ?? targetModality,
-          currentModelId: targetModelId,
-          requiredAspectRatio: targetRatio,
-          requiredResolution: targetResolution,
-        });
-        if (altModel) {
-          targetModelId = altModel.modelId;
-        }
+        targetModality = action.targetMediaKind ?? targetModality;
+        requestedModelSwitch = true;
+        needsCapabilityRouting = true;
       } else if (action.type === "generate_video") {
         targetModality = "VIDEO";
         if (action.prompt) targetPrompt = action.prompt;
@@ -326,17 +364,47 @@ export async function POST(
           firstFrameAssetId = currentState.activeAssetId;
         }
         if (action.durationSeconds) targetDuration = action.durationSeconds;
+        videoWorkflow =
+          action.workflow === "EXTEND"
+            ? "EXTEND"
+            : firstFrameAssetId
+              ? "FRAME_TO_VIDEO"
+              : "GENERATE";
+        if (videoWorkflow === "EXTEND") {
+          videoSourceAssetId = firstFrameAssetId;
+          firstFrameAssetId = undefined;
+        }
+        needsCapabilityRouting =
+          needsCapabilityRouting ||
+          plannerContext.activeModality !== "VIDEO";
+      } else if (action.type === "extend_video") {
+        targetModality = "VIDEO";
+        videoWorkflow = "EXTEND";
+        videoSourceAssetId =
+          action.sourceAssetId ??
+          currentState.activeAssetId ??
+          plannerContext.selectedAssetId ??
+          undefined;
+        targetDuration = action.durationSeconds ?? 5;
+        extensionDirection = action.direction ?? "AFTER";
+        needsCapabilityRouting = true;
       } else if (action.type === "use_first_frame") {
+        targetModality = "VIDEO";
         if (action.assetId) {
           firstFrameAssetId = action.assetId;
         } else if (currentState.activeAssetId) {
           firstFrameAssetId = currentState.activeAssetId;
         }
+        videoWorkflow = "FRAME_TO_VIDEO";
+        needsCapabilityRouting = true;
       } else if (action.type === "generate_speech") {
         targetModality = "VOICE";
         if (action.text) targetPrompt = action.text;
         if (action.voiceKey) targetVoiceKey = action.voiceKey;
         if (action.speechRate) targetSpeechRate = action.speechRate;
+        needsCapabilityRouting =
+          needsCapabilityRouting ||
+          plannerContext.activeModality !== "VOICE";
       } else if (action.type === "change_voice") {
         targetVoiceKey = action.voiceKey;
       } else if (action.type === "change_speaking_rate") {
@@ -347,14 +415,75 @@ export async function POST(
         if (action.aspectRatio) targetRatio = action.aspectRatio;
         if (action.resolution) targetResolution = action.resolution;
         if (action.outputCount) targetOutputCount = action.outputCount;
+        if (action.referenceAssetIds?.length) {
+          imageReferenceAssetIds = action.referenceAssetIds;
+          needsCapabilityRouting = true;
+        }
       }
     }
 
+    if (targetModality === "VIDEO") {
+      if (!["480p", "720p", "1080p", "4K"].includes(targetResolution)) {
+        targetResolution = "720p";
+      }
+      if (videoWorkflow === "FRAME_TO_VIDEO" || videoWorkflow === "EXTEND") {
+        targetRatio = "adaptive";
+      } else if (
+        !["16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "adaptive"].includes(
+          targetRatio,
+        )
+      ) {
+        targetRatio = "16:9";
+      }
+      targetOutputCount = 1;
+    } else if (targetModality === "IMAGE") {
+      if (!["1K", "1.5K", "2K", "3K", "4K"].includes(targetResolution)) {
+        targetResolution = "2K";
+      }
+      if (
+        !["1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "21:9"].includes(
+          targetRatio,
+        )
+      ) {
+        targetRatio = "1:1";
+      }
+    }
+
+    if (targetModality !== plannerContext.activeModality) {
+      needsCapabilityRouting = true;
+    }
+
     // Resolve target model and price version
+    if (needsCapabilityRouting) {
+      const routed = await findCompatibleAlternativeModel({
+        modality: targetModality,
+        currentModelId: targetModelId,
+        requiredAspectRatio:
+          targetModality === "VOICE" ? undefined : targetRatio,
+        requiredResolution:
+          targetModality === "VOICE" ? undefined : targetResolution,
+        requireReferenceImages:
+          targetModality === "IMAGE" && imageReferenceAssetIds.length > 0,
+        requiredOutputCount:
+          targetModality === "IMAGE" ? targetOutputCount : undefined,
+        requireExtendVideo:
+          targetModality === "VIDEO" && videoWorkflow === "EXTEND",
+        excludeCurrentModel: requestedModelSwitch,
+      });
+      if (!routed) {
+        throw new GenerationError(
+          "No enabled model can satisfy this creative action with the current settings.",
+          409,
+        );
+      }
+      targetModelId = routed.modelId;
+    }
+
     const now = new Date();
     const model = await db.providerModel.findFirst({
       where: {
         OR: [{ id: targetModelId }, { providerModelId: targetModelId }],
+        provider: "BYTEPLUS",
         mediaKind: targetModality,
         enabled: true,
       },
@@ -378,16 +507,14 @@ export async function POST(
     }
 
     const priceVersion = model.priceVersions[0];
+    const priceVersion = model.priceVersions[0];
 
     // Create user message
-    const userMessage = await db.chatMessage.create({
-      data: {
-        threadId: conversationId,
-        clientRequestId: input.idempotencyKey,
-        role: "user",
-        content: input.content,
-      },
-    });
+    const userMessage = await upsertMessage(
+      "user",
+      input.idempotencyKey,
+      input.content,
+    );
 
     // Execute generation job with parent derivation tracking
     let job: { id: string; status: string };
@@ -404,6 +531,24 @@ export async function POST(
         format: "mp3",
       });
     } else if (targetModality === "VIDEO") {
+      const sources =
+        videoWorkflow === "EXTEND" && videoSourceAssetId
+          ? [
+              {
+                assetId: videoSourceAssetId,
+                role: "SOURCE_VIDEO" as const,
+                position: 0,
+              },
+            ]
+          : firstFrameAssetId
+            ? [
+                {
+                  assetId: firstFrameAssetId,
+                  role: "FIRST_FRAME" as const,
+                  position: 0,
+                },
+              ]
+            : [];
       job = await createVideoJob(session.user.id, {
         organizationId: thread.organizationId,
         projectId: thread.projectId,
@@ -412,12 +557,17 @@ export async function POST(
         idempotencyKey: input.idempotencyKey,
         prompt: targetPrompt,
         durationSeconds: targetDuration,
+        aspectRatio: targetRatio,
+        resolution: targetResolution,
+        generateAudio: false,
         outputFormat: "mp4",
+        returnLastFrame: true,
         schemaVersion: 2,
-        workflow: firstFrameAssetId ? "FRAME_TO_VIDEO" : "GENERATE",
-        sources: firstFrameAssetId
-          ? [{ assetId: firstFrameAssetId, role: "FIRST_FRAME" }]
-          : [],
+        workflow: videoWorkflow,
+        sources,
+        ...(videoWorkflow === "EXTEND" && extensionDirection
+          ? { extensionDirection }
+          : {}),
       });
     } else {
       job = await createImageJob(session.user.id, {
@@ -430,6 +580,7 @@ export async function POST(
         aspectRatio: targetRatio,
         resolution: targetResolution,
         outputCount: targetOutputCount,
+        referenceAssetIds: imageReferenceAssetIds,
       });
     }
 
@@ -444,6 +595,8 @@ export async function POST(
 
     // Update conversation working state
     currentState.activeGenerationId = job.id;
+    currentState.activeAssetId = null;
+    currentState.activeOutputs = [];
     currentState.activeModality = targetModality;
     currentState.currentModelId = model.id;
     currentState.currentProvider = model.provider;
@@ -464,27 +617,26 @@ export async function POST(
       },
     });
 
-    const assistantMessage = await db.chatMessage.create({
-      data: {
-        threadId: conversationId,
-        clientRequestId: `${input.idempotencyKey}-assistant`,
-        role: "assistant",
-        content: `Generating ${targetModality.toLowerCase()} with ${model.displayName}...`,
-        metadata: {
-          turnStatus: "EXECUTING",
-          generationJobId: job.id,
-          parentGenerationId: latestJob?.id ?? null,
-          effectiveSpec: {
-            modality: targetModality,
-            modelId: model.id,
-            prompt: targetPrompt,
-            aspectRatio: targetRatio,
-            resolution: targetResolution,
-            outputCount: targetOutputCount,
-          },
+    const assistantMessage = await upsertMessage(
+      "assistant",
+      `${input.idempotencyKey}-assistant`,
+      `Generating ${targetModality.toLowerCase()} with ${model.displayName}...`,
+      {
+        turnStatus: "EXECUTING",
+        generationJobId: job.id,
+        parentGenerationId: latestJob?.id ?? null,
+        effectiveSpec: {
+          modality: targetModality,
+          modelId: model.id,
+          prompt: targetPrompt,
+          aspectRatio: targetRatio,
+          resolution: targetResolution,
+          outputCount: targetOutputCount,
+          referenceAssetIds: imageReferenceAssetIds,
+          videoWorkflow: targetModality === "VIDEO" ? videoWorkflow : undefined,
         },
       },
-    });
+    );
 
     return NextResponse.json(
       {
@@ -504,6 +656,7 @@ export async function POST(
     }
     const message =
       error instanceof Error ? error.message : "Message turn execution failed.";
-    return NextResponse.json({ error: message }, { status: 400 });
+    const status = error instanceof GenerationError ? error.status : 400;
+    return NextResponse.json({ error: message }, { status });
   }
 }

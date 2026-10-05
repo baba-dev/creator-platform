@@ -1,5 +1,5 @@
 import { db } from "@aiwa/db";
-import { selectQuickCreateModel } from "../quick-create-model";
+import { QUICK_CREATE_PREFERRED_PROVIDER_MODEL_IDS } from "../quick-create-model";
 import { capabilityValues } from "../studio-model-capabilities";
 import type { CreativeModality } from "./types";
 
@@ -96,6 +96,12 @@ export async function findCompatibleAlternativeModel(
       }
     }
 
+    // Normal creative video turns must not implicitly route to a
+    // talking-avatar-only model. Those require their dedicated source workflow.
+    if (input.modality === "VIDEO" && caps.talkingAvatar === true) {
+      return false;
+    }
+
     // Check reference image support
     if (input.requireReferenceImages && caps.referenceImages !== true) {
       return false;
@@ -140,16 +146,14 @@ export async function findCompatibleAlternativeModel(
   }
 
   // Preserve the current model whenever it already satisfies the requested
-  // capabilities and is a general-purpose candidate for this modality.
-  // In particular, source-only talking-avatar models must never become an
-  // implicit conversational video target.
+  // capabilities; only move away when the user explicitly asks to switch.
   if (input.currentModelId && input.excludeCurrentModel !== true) {
     const current = matchingCandidates.find(
       (model) =>
         model.id === input.currentModelId ||
         model.providerModelId === input.currentModelId,
     );
-    if (current && selectQuickCreateModel([current], input.modality)) {
+    if (current) {
       const price = current.priceVersions[0]!;
       return {
         modelId: current.id,
@@ -165,8 +169,16 @@ export async function findCompatibleAlternativeModel(
   // on database row order. This prevents regressions such as choosing
   // OmniHuman for normal video generation or an older image model before the
   // known-good defaults.
-  const selected = selectQuickCreateModel(matchingCandidates, input.modality);
-  if (!selected) return null;
+  const preferredIds: readonly string[] =
+    QUICK_CREATE_PREFERRED_PROVIDER_MODEL_IDS[input.modality];
+  const preference = new Map(
+    preferredIds.map((providerModelId, index) => [providerModelId, index]),
+  );
+  const selected = [...matchingCandidates].sort(
+    (a, b) =>
+      (preference.get(a.providerModelId) ?? Number.MAX_SAFE_INTEGER) -
+      (preference.get(b.providerModelId) ?? Number.MAX_SAFE_INTEGER),
+  )[0]!;
   const price = selected.priceVersions[0]!;
 
   return {

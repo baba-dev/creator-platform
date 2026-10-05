@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { hasOrganizationPermission } from "@aiwa/authz";
 import { db, type Prisma } from "@aiwa/db";
 import {
@@ -9,6 +11,7 @@ import {
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { rateLimit } from "@/lib/rate-limit";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
 import { buildPlannerContext } from "../../../../../lib/conversations/context-builder";
@@ -19,11 +22,50 @@ import type {
   CreativeModality,
 } from "../../../../../lib/conversations/types";
 
+const generationLimiter = rateLimit({
+  max: 10,
+  windowMs: 60_000,
+  prefix: "generation",
+});
+
 const messageInputSchema = z.object({
   content: z.string().trim().min(1, "Message cannot be empty.").max(4000),
   selectedAssetId: z.string().min(1).max(100).optional(),
+  resumePendingOperation: z.boolean().optional().default(false),
   idempotencyKey: z.string().uuid(),
 });
+
+async function mutateConversationState(
+  conversationId: string,
+  fallbackState: ConversationState,
+  mutate: (state: ConversationState) => void,
+): Promise<ConversationState> {
+  return db.$transaction(
+    async (tx) => {
+      await tx.$queryRaw`SELECT id FROM ChatThread WHERE id = ${conversationId} FOR UPDATE`;
+      const row = await tx.chatThread.findUnique({
+        where: { id: conversationId },
+        select: { state: true },
+      });
+      const sourceState =
+        (row?.state as unknown as ConversationState | null) ?? fallbackState;
+      const nextState = structuredClone(sourceState);
+      mutate(nextState);
+      nextState.revision = Number(nextState.revision ?? 0) + 1;
+
+      await tx.chatThread.update({
+        where: { id: conversationId },
+        data: {
+          state: nextState as unknown as object,
+          updatedAt: new Date(),
+        },
+      });
+
+      return nextState;
+    },
+    { isolationLevel: "ReadCommitted", timeout: 5000 },
+  );
+}
 
 export async function POST(
   request: Request,
@@ -105,6 +147,46 @@ export async function POST(
   try {
     const json = await request.json();
     const input = messageInputSchema.parse(json);
+    const requestFingerprint = createHash("sha256")
+      .update(
+        JSON.stringify({
+          content: input.content,
+          selectedAssetId: input.selectedAssetId ?? null,
+          resumePendingOperation: input.resumePendingOperation,
+        }),
+      )
+      .digest("hex");
+
+    const existingUserMessage = await db.chatMessage.findUnique({
+      where: {
+        threadId_clientRequestId_role: {
+          threadId: conversationId,
+          clientRequestId: input.idempotencyKey,
+          role: "user",
+        },
+      },
+    });
+    if (existingUserMessage) {
+      const existingMetadata =
+        existingUserMessage.metadata &&
+        typeof existingUserMessage.metadata === "object" &&
+        !Array.isArray(existingUserMessage.metadata)
+          ? (existingUserMessage.metadata as Record<string, unknown>)
+          : null;
+      const existingFingerprint =
+        typeof existingMetadata?.transportFingerprint === "string"
+          ? existingMetadata.transportFingerprint
+          : null;
+      if (
+        existingUserMessage.content !== input.content ||
+        (existingFingerprint && existingFingerprint !== requestFingerprint)
+      ) {
+        return NextResponse.json(
+          { error: "Request key was already used for a different turn." },
+          { status: 409 },
+        );
+      }
+    }
 
     const upsertMessage = (
       role: "user" | "assistant",
@@ -120,10 +202,7 @@ export async function POST(
             role,
           },
         },
-        update: {
-          content,
-          ...(metadata ? { metadata } : {}),
-        },
+        update: {},
         create: {
           threadId: conversationId,
           clientRequestId,
@@ -133,12 +212,185 @@ export async function POST(
         },
       });
 
+    const upsertUserMessage = () =>
+      upsertMessage("user", input.idempotencyKey, input.content, {
+        transportFingerprint: requestFingerprint,
+      });
+
     const latestJob = thread.generationJobs[0] ?? null;
     const currentState = (thread.state as unknown as ConversationState) ?? {
       activeModality: "IMAGE",
       settings: {},
       activeOutputs: [],
     };
+
+    // Recover an already-accepted billable turn before replanning against newer
+    // conversation state. This keeps transport retries stable even if the first
+    // HTTP response was lost after the generation job was committed.
+    const generationTransportKey = createHash("sha256")
+      .update(
+        `${thread.organizationId}:${session.user.id}:${input.idempotencyKey}`,
+      )
+      .digest("hex");
+    const replayJob = await db.generationJob.findFirst({
+      where: { idempotencyKey: generationTransportKey },
+      include: {
+        providerModel: {
+          select: {
+            id: true,
+            provider: true,
+            displayName: true,
+            mediaKind: true,
+          },
+        },
+      },
+    });
+
+    if (replayJob) {
+      if (replayJob.chatThreadId && replayJob.chatThreadId !== conversationId) {
+        return NextResponse.json(
+          { error: "Request key is already linked to another conversation." },
+          { status: 409 },
+        );
+      }
+
+      const parentGenerationId =
+        replayJob.parentGenerationId ??
+        (latestJob?.id && latestJob.id !== replayJob.id ? latestJob.id : null);
+
+      if (!replayJob.chatThreadId) {
+        const claim = await db.generationJob.updateMany({
+          where: { id: replayJob.id, chatThreadId: null },
+          data: {
+            chatThreadId: conversationId,
+            parentGenerationId,
+          },
+        });
+        if (claim.count === 0) {
+          const winner = await db.generationJob.findUnique({
+            where: { id: replayJob.id },
+            select: { chatThreadId: true },
+          });
+          if (winner?.chatThreadId !== conversationId) {
+            return NextResponse.json(
+              { error: "Generation replay could not be linked safely." },
+              { status: 409 },
+            );
+          }
+        }
+      }
+
+      const userMessage = await upsertUserMessage();
+      const assistantMessage = await upsertMessage(
+        "assistant",
+        `${input.idempotencyKey}-assistant`,
+        `Generating ${replayJob.providerModel.mediaKind.toLowerCase()} with ${replayJob.providerModel.displayName}...`,
+        {
+          turnStatus: "EXECUTING",
+          generationJobId: replayJob.id,
+          parentGenerationId,
+          effectiveSpec: replayJob.requestPayload as Prisma.InputJsonValue,
+        },
+      );
+
+      const replayIsCurrent =
+        !latestJob ||
+        latestJob.id === replayJob.id ||
+        replayJob.chatThreadId === null;
+      if (replayIsCurrent && currentState.activeGenerationId !== replayJob.id) {
+        const payload =
+          replayJob.requestPayload &&
+          typeof replayJob.requestPayload === "object" &&
+          !Array.isArray(replayJob.requestPayload)
+            ? (replayJob.requestPayload as Record<string, unknown>)
+            : {};
+        await mutateConversationState(conversationId, currentState, (state) => {
+          state.activeGenerationId = replayJob.id;
+          state.activeAssetId = null;
+          state.activeOutputs = [];
+          state.activeModality =
+            replayJob.providerModel.mediaKind === "VIDEO"
+              ? "VIDEO"
+              : replayJob.providerModel.mediaKind === "VOICE"
+                ? "VOICE"
+                : "IMAGE";
+          state.currentModelId = replayJob.providerModel.id;
+          state.currentProvider = replayJob.providerModel.provider;
+          state.settings = {
+            ...state.settings,
+            ...(typeof payload.aspectRatio === "string"
+              ? { aspectRatio: payload.aspectRatio }
+              : {}),
+            ...(typeof payload.resolution === "string"
+              ? { resolution: payload.resolution }
+              : {}),
+            ...(typeof payload.outputCount === "number"
+              ? { outputCount: payload.outputCount }
+              : {}),
+            ...(typeof payload.durationSeconds === "number"
+              ? { durationSeconds: payload.durationSeconds }
+              : {}),
+            ...(typeof payload.voiceKey === "string"
+              ? { voiceKey: payload.voiceKey }
+              : {}),
+            ...(typeof payload.speechRate === "number"
+              ? { speechRate: payload.speechRate }
+              : {}),
+          };
+          state.pendingOperation = null;
+        });
+      }
+
+      return NextResponse.json(
+        {
+          userMessage,
+          assistantMessage,
+          jobId: replayJob.id,
+          status: replayJob.status,
+          replayed: true,
+        },
+        { status: 202 },
+      );
+    }
+
+    // Completed zero-credit and clarification turns are also replay-safe.
+    if (existingUserMessage) {
+      const priorAssistant = await db.chatMessage.findFirst({
+        where: {
+          threadId: conversationId,
+          role: "assistant",
+          clientRequestId: {
+            in: [
+              `${input.idempotencyKey}-ack`,
+              `${input.idempotencyKey}-clarify`,
+            ],
+          },
+        },
+      });
+      if (priorAssistant) {
+        const metadata =
+          priorAssistant.metadata &&
+          typeof priorAssistant.metadata === "object" &&
+          !Array.isArray(priorAssistant.metadata)
+            ? (priorAssistant.metadata as Record<string, unknown>)
+            : {};
+        return NextResponse.json(
+          {
+            userMessage: existingUserMessage,
+            assistantMessage: priorAssistant,
+            ...(metadata.clarification
+              ? { clarification: metadata.clarification }
+              : {}),
+            ...(typeof metadata.selectedAssetId === "string"
+              ? { selectedAssetId: metadata.selectedAssetId }
+              : {}),
+            status: 200,
+            replayed: true,
+          },
+          { status: 200 },
+        );
+      }
+    }
 
     // Load recent messages for context
     const recentMessages = await db.chatMessage.findMany({
@@ -158,12 +410,25 @@ export async function POST(
       clientSelectedAssetId: input.selectedAssetId ?? null,
     });
 
+    let planPrompt = input.content;
+    const explicitAssetToUse = input.selectedAssetId ?? null;
+    let isResumedClarification = false;
+
+    if (
+      input.resumePendingOperation &&
+      explicitAssetToUse &&
+      currentState.pendingOperation?.originalPrompt
+    ) {
+      planPrompt = currentState.pendingOperation.originalPrompt;
+      isResumedClarification = true;
+    }
+
     // Plan conversational turn
     const plan = await planConversationTurn({
-      userMessage: input.content,
+      userMessage: planPrompt,
       organizationId: thread.organizationId,
       context: plannerContext,
-      explicitAssetId: input.selectedAssetId ?? null,
+      explicitAssetId: explicitAssetToUse,
     });
 
     const firstAction = plan.actions[0]!;
@@ -172,11 +437,14 @@ export async function POST(
     // Case 1: Clarification needed (Ambiguity)
     // =========================================================
     if (firstAction.type === "clarify") {
-      const userMessage = await upsertMessage(
-        "user",
-        input.idempotencyKey,
-        input.content,
-      );
+      await mutateConversationState(conversationId, currentState, (state) => {
+        state.pendingOperation = {
+          originalPrompt: input.content,
+          createdAt: new Date().toISOString(),
+        };
+      });
+
+      const userMessage = await upsertUserMessage();
 
       const assistantMessage = await upsertMessage(
         "assistant",
@@ -227,21 +495,15 @@ export async function POST(
       }
 
       if (selectedAssetId) {
-        currentState.activeAssetId = selectedAssetId;
-        await db.chatThread.update({
-          where: { id: conversationId },
-          data: {
-            state: currentState as unknown as object,
-            updatedAt: new Date(),
-          },
+        await mutateConversationState(conversationId, currentState, (state) => {
+          state.activeAssetId = selectedAssetId;
+          if (isResumedClarification) {
+            state.pendingOperation = null;
+          }
         });
       }
 
-      const userMessage = await upsertMessage(
-        "user",
-        input.idempotencyKey,
-        input.content,
-      );
+      const userMessage = await upsertUserMessage();
 
       const assistantMessage = await upsertMessage(
         "assistant",
@@ -267,6 +529,11 @@ export async function POST(
     // =========================================================
     // Case 3: Media Generation Action
     // =========================================================
+    // Share the same billable-generation throttle as the Studio endpoint.
+    // Clarification and state-only actions above remain free of this limit.
+    const rateLimited = await generationLimiter.check(session.user.id);
+    if (rateLimited) return rateLimited;
+
     // Extract base effective generation spec from latest job
     const basePayload =
       (latestJob?.requestPayload as Record<string, unknown>) ?? {};
@@ -368,6 +635,23 @@ export async function POST(
         targetModality = action.targetMediaKind ?? targetModality;
         requestedModelSwitch = true;
         needsCapabilityRouting = true;
+        if (targetModality === "IMAGE") {
+          const sourceAssetId =
+            currentState.activeAssetId ??
+            plannerContext.selectedAssetId ??
+            undefined;
+          if (sourceAssetId) {
+            imageReferenceAssetIds = [sourceAssetId];
+          }
+        } else if (targetModality === "VIDEO") {
+          const sourceAssetId =
+            currentState.activeAssetId ??
+            plannerContext.selectedAssetId ??
+            undefined;
+          if (sourceAssetId) {
+            firstFrameAssetId = firstFrameAssetId ?? sourceAssetId;
+          }
+        }
       } else if (action.type === "generate_video") {
         targetModality = "VIDEO";
         if (action.prompt) targetPrompt = action.prompt;
@@ -418,8 +702,20 @@ export async function POST(
           needsCapabilityRouting || plannerContext.activeModality !== "VOICE";
       } else if (action.type === "change_voice") {
         targetVoiceKey = action.voiceKey;
+        if (
+          targetModality === "VOICE" &&
+          (basePayload.text || basePayload.prompt)
+        ) {
+          targetPrompt = (basePayload.text || basePayload.prompt) as string;
+        }
       } else if (action.type === "change_speaking_rate") {
         targetSpeechRate = action.speechRate;
+        if (
+          targetModality === "VOICE" &&
+          (basePayload.text || basePayload.prompt)
+        ) {
+          targetPrompt = (basePayload.text || basePayload.prompt) as string;
+        }
       } else if (action.type === "retry_generation") {
         if (!latestJob) {
           throw new GenerationError("There is no generation to retry.", 409);
@@ -560,10 +856,9 @@ export async function POST(
           targetModality === "VIDEO" && videoWorkflow === "FRAME_TO_VIDEO",
         requireExtendVideo:
           targetModality === "VIDEO" && videoWorkflow === "EXTEND",
-        // Conversational video jobs currently request a durable last-frame
-        // asset for lineage/continuation. Route only to models that can honor
-        // that contract instead of selecting one and failing during admission.
-        requireReturnLastFrame: targetModality === "VIDEO",
+        // Conversational video jobs request a durable last-frame asset only
+        // if supported by the model, rather than forcing and failing admission.
+        requireReturnLastFrame: false,
         excludeCurrentModel: requestedModelSwitch,
       });
       if (!routed) {
@@ -605,11 +900,7 @@ export async function POST(
     const priceVersion = model.priceVersions[0];
 
     // Create user message
-    const userMessage = await upsertMessage(
-      "user",
-      input.idempotencyKey,
-      input.content,
-    );
+    const userMessage = await upsertUserMessage();
 
     // Execute generation job with parent derivation tracking
     let job: { id: string; status: string };
@@ -644,6 +935,9 @@ export async function POST(
                 },
               ]
             : [];
+      const modelCaps = (model.capabilities as Record<string, unknown>) ?? {};
+      const returnLastFrame =
+        targetModality === "VIDEO" && modelCaps.returnLastFrame === true;
       job = await createVideoJob(session.user.id, {
         organizationId: thread.organizationId,
         projectId: thread.projectId,
@@ -656,7 +950,7 @@ export async function POST(
         resolution: targetResolution,
         generateAudio: false,
         outputFormat: "mp4",
-        returnLastFrame: true,
+        returnLastFrame,
         schemaVersion: 2,
         workflow: videoWorkflow,
         sources,
@@ -725,28 +1019,24 @@ export async function POST(
       }
     }
 
-    // Update conversation working state
-    currentState.activeGenerationId = job.id;
-    currentState.activeAssetId = null;
-    currentState.activeOutputs = [];
-    currentState.activeModality = targetModality;
-    currentState.currentModelId = model.id;
-    currentState.currentProvider = model.provider;
-    currentState.settings = {
-      aspectRatio: targetRatio,
-      resolution: targetResolution,
-      outputCount: targetOutputCount,
-      durationSeconds: targetDuration,
-      voiceKey: targetVoiceKey,
-      speechRate: targetSpeechRate,
-    };
-
-    await db.chatThread.update({
-      where: { id: conversationId },
-      data: {
-        state: currentState as unknown as object,
-        updatedAt: new Date(),
-      },
+    // Serialize conversation-state mutation under a row lock so concurrent
+    // turns cannot overwrite each other's working state.
+    await mutateConversationState(conversationId, currentState, (state) => {
+      state.activeGenerationId = job.id;
+      state.activeAssetId = null;
+      state.activeOutputs = [];
+      state.activeModality = targetModality;
+      state.currentModelId = model.id;
+      state.currentProvider = model.provider;
+      state.settings = {
+        aspectRatio: targetRatio,
+        resolution: targetResolution,
+        outputCount: targetOutputCount,
+        durationSeconds: targetDuration,
+        voiceKey: targetVoiceKey,
+        speechRate: targetSpeechRate,
+      };
+      state.pendingOperation = null;
     });
 
     const assistantMessage = await upsertMessage(

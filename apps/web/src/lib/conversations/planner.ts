@@ -357,7 +357,13 @@ export async function planConversationTurn(params: {
   // =========================================================
   // 11. Speech Speed / Voice Adjustments
   // =========================================================
-  if (lower.includes("voice slower") || lower.includes("speak slower")) {
+  if (
+    lower.includes("voice slower") ||
+    lower.includes("speak slower") ||
+    lower.includes("make it slower") ||
+    lower === "slower" ||
+    lower.includes("slower voice")
+  ) {
     actions.push({
       type: "change_speaking_rate",
       speechRate: 0.8,
@@ -368,22 +374,33 @@ export async function planConversationTurn(params: {
       reasoning: "Adjust speech rate to 0.8.",
     };
   }
-  if (lower.includes("voice faster") || lower.includes("speak faster")) {
+  if (
+    lower.includes("voice faster") ||
+    lower.includes("speak faster") ||
+    lower.includes("make it faster") ||
+    lower === "faster" ||
+    lower.includes("faster voice")
+  ) {
     actions.push({
       type: "change_speaking_rate",
-      speechRate: 1.25,
+      speechRate: 1.2,
     });
     return {
       version: ACTION_PROTOCOL_VERSION,
       actions,
-      reasoning: "Adjust speech rate to 1.25.",
+      reasoning: "Adjust speech rate to 1.2.",
     };
   }
 
   // =========================================================
   // 12. Retry
   // =========================================================
-  if (lower === "retry" || lower === "try again" || lower === "regenerate") {
+  if (
+    lower === "retry" ||
+    lower === "try again" ||
+    lower === "regenerate" ||
+    lower === "retry generation"
+  ) {
     actions.push({
       type: "retry_generation",
       targetGenerationId: context.activeModality ? undefined : undefined,

@@ -3,6 +3,10 @@ import { hasOrganizationPermission } from "@aiwa/authz";
 import { db } from "@aiwa/db";
 import { requireOrganizationPermission } from "@/lib/request-auth";
 import { CreativeConversationWorkspace } from "@/components/conversations/creative-conversation-workspace";
+import {
+  serializeChatMessage,
+  serializeGenerationJob,
+} from "../../../../../lib/conversations/serialization";
 import type { ConversationState } from "@/lib/conversations/types";
 
 export default async function ConversationPage({
@@ -62,43 +66,15 @@ export default async function ConversationPage({
     notFound();
   }
 
-  const rawMessages = await db.chatMessage.findMany({
+  const rawMessagesDesc = await db.chatMessage.findMany({
     where: { threadId: conversationId },
-    orderBy: { createdAt: "asc" },
+    orderBy: { createdAt: "desc" },
     take: 100,
   });
+  const rawMessages = rawMessagesDesc.reverse();
 
-  const formattedMessages = rawMessages.map((msg) => ({
-    id: msg.id,
-    role: msg.role,
-    content: msg.content,
-    createdAt: msg.createdAt.toISOString(),
-    metadata: msg.metadata as unknown as {
-      turnStatus?: string;
-      generationJobId?: string;
-      parentGenerationId?: string | null;
-      selectedAssetId?: string;
-      clarification?: {
-        question: string;
-        options: Array<{
-          label: string;
-          value: string;
-          assetId?: string;
-          thumbnailUrl?: string;
-        }>;
-      };
-      effectiveSpec?: Record<string, unknown>;
-    } | null,
-  }));
-
-  const formattedJobs = thread.generationJobs.map((job) => ({
-    id: job.id,
-    status: job.status,
-    errorCode: job.errorCode,
-    errorMessage: job.errorMessage,
-    providerModel: job.providerModel,
-    assets: job.assets,
-  }));
+  const formattedMessages = rawMessages.map(serializeChatMessage);
+  const formattedJobs = thread.generationJobs.map(serializeGenerationJob);
 
   return (
     <CreativeConversationWorkspace

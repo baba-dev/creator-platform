@@ -6,6 +6,8 @@ import { z } from "zod";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
 
+import { serializeConversationDTO } from "../../../../lib/conversations/serialization";
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ conversationId: string }> },
@@ -25,7 +27,15 @@ export async function GET(
       generationJobs: {
         orderBy: { createdAt: "desc" },
         take: 10,
-        include: {
+        select: {
+          id: true,
+          status: true,
+          errorCode: true,
+          errorMessage: true,
+          createdAt: true,
+          reservedCredits: true,
+          chargedCredits: true,
+          actualProviderCostMicroUsd: true,
           assets: {
             where: { status: "READY", deletedAt: null },
             orderBy: { generationOutputIndex: "asc" },
@@ -82,20 +92,20 @@ export async function GET(
   });
   const rawMessages = rawMessagesDesc.reverse();
 
+  const conversationDTO = serializeConversationDTO({
+    id: thread.id,
+    organizationId: thread.organizationId,
+    title: thread.title,
+    threadType: thread.threadType,
+    state: thread.state,
+    createdAt: thread.createdAt,
+    updatedAt: thread.updatedAt,
+    messages: rawMessages,
+    generationJobs: thread.generationJobs,
+  });
+
   return NextResponse.json(
-    {
-      conversation: {
-        id: thread.id,
-        organizationId: thread.organizationId,
-        title: thread.title,
-        threadType: thread.threadType,
-        state: thread.state,
-        createdAt: thread.createdAt,
-        updatedAt: thread.updatedAt,
-        messages: rawMessages,
-        generationJobs: thread.generationJobs,
-      },
-    },
+    { conversation: conversationDTO },
     { headers: { "Cache-Control": "no-store" } },
   );
 }

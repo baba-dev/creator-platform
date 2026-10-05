@@ -233,7 +233,11 @@ export async function renderVideo(
         .join("\n");
       await writeFile(join(work, "captions.srt"), subtitle);
       // Restrict temporary paths to generated ASCII names; libass handles multilingual glyphs.
-      filters.push(`[basev]subtitles=${join(work, "captions.srt")}[captioned]`);
+      // Escape backslashes and colons for ffmpeg filtergraph syntax.
+      const srtPath = join(work, "captions.srt")
+        .replace(/\\/g, "/")
+        .replace(/:/g, "\\:");
+      filters.push(`[basev]subtitles='${srtPath}'[captioned]`);
       videoLabel = "captioned";
     }
     const output = join(work, "output.mp4");

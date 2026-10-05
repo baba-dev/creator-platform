@@ -707,6 +707,17 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
     customerCredits: 1n,
     pricingDimension: "TOKEN",
     unitQuantity: 1000,
+    usageRates: {
+      estimator: "byteplus-text-v1",
+      tiers: [
+        {
+          maxPromptTokens: 131072,
+          inputMicroUsdPerMillionTokens: "1500000",
+          outputMicroUsdPerMillionTokens: "1500000",
+          cachedInputMicroUsdPerMillionTokens: "300000",
+        },
+      ],
+    },
     providerCostBasisNote:
       "Provisional blended rate: $1.50/M total tokens; verify against the active BytePlus contract before changing margin.",
   },

@@ -92,13 +92,45 @@ export async function issueTextFeatureQuote(input: TextFeatureQuoteInput) {
       409,
     );
   }
+  let effectivePrice = price;
   try {
     parseTextUsageRatesForProvider(price.usageRates, model.provider);
   } catch {
-    throw new GenerationError(
-      "The selected text model does not have valid provider token rates.",
-      409,
-    );
+    if (
+      price.usageRates &&
+      typeof price.usageRates === "object" &&
+      !Array.isArray(price.usageRates)
+    ) {
+      const raw = price.usageRates as Record<string, unknown>;
+      if (Array.isArray(raw.tiers)) {
+        try {
+          const fallbackRates = {
+            ...raw,
+            estimator:
+              model.provider.trim().toUpperCase() === "BYTEPLUS"
+                ? "byteplus-text-v1"
+                : "text-token-v1",
+          };
+          parseTextUsageRatesForProvider(fallbackRates, model.provider);
+          effectivePrice = { ...price, usageRates: fallbackRates };
+        } catch {
+          throw new GenerationError(
+            "The selected text model does not have valid provider token rates.",
+            409,
+          );
+        }
+      } else {
+        throw new GenerationError(
+          "The selected text model does not have valid provider token rates.",
+          409,
+        );
+      }
+    } else {
+      throw new GenerationError(
+        "The selected text model does not have valid provider token rates.",
+        409,
+      );
+    }
   }
 
   const messages = normalizeTextMessagesForModel(
@@ -110,7 +142,7 @@ export async function issueTextFeatureQuote(input: TextFeatureQuoteInput) {
     .map((message) => `${message.role}: ${message.content}`)
     .join("\n");
   const estimate = estimateGeneration({
-    price,
+    price: effectivePrice,
     mediaKind: "TEXT",
     providerModelId: model.providerModelId,
     text: promptText,

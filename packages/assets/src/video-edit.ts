@@ -1,6 +1,36 @@
 import { z } from "zod";
 
 const id = z.string().min(1).max(100);
+export const videoClipTransformSchema = z
+  .object({
+    crop: z
+      .object({
+        x: z.number().min(0).max(1),
+        y: z.number().min(0).max(1),
+        width: z.number().positive().max(1),
+        height: z.number().positive().max(1),
+      })
+      .strict()
+      .refine(
+        (value) => value.x + value.width <= 1.000001 && value.y + value.height <= 1.000001,
+        "Crop must stay inside the source frame.",
+      ),
+    rotation: z.union([
+      z.literal(0),
+      z.literal(90),
+      z.literal(180),
+      z.literal(270),
+    ]),
+    flipX: z.boolean(),
+  })
+  .strict();
+
+export const defaultVideoClipTransform = {
+  crop: { x: 0, y: 0, width: 1, height: 1 },
+  rotation: 0 as const,
+  flipX: false,
+};
+
 const clip = z
   .object({
     id: z.uuid(),
@@ -9,6 +39,7 @@ const clip = z
     outMs: z.number().int().positive(),
     muted: z.boolean().default(false),
     transition: z.enum(["cut", "fade"]).default("cut"),
+    transform: videoClipTransformSchema.optional(),
   })
   .strict();
 const audio = z

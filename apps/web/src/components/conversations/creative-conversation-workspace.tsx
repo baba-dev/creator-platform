@@ -113,6 +113,7 @@ export function CreativeConversationWorkspace({
     key: string;
     prompt: string;
     assetId?: string;
+    resumePendingOperation: boolean;
   } | null>(null);
 
   // Poll for job status updates for any visible active jobs
@@ -357,7 +358,8 @@ export function CreativeConversationWorkspace({
       const idempotencyKey =
         pendingTurnRef.current &&
         pendingTurnRef.current.prompt === prompt &&
-        pendingTurnRef.current.assetId === focusedAssetId
+        pendingTurnRef.current.assetId === focusedAssetId &&
+        pendingTurnRef.current.resumePendingOperation === resumePendingOperation
           ? pendingTurnRef.current.key
           : crypto.randomUUID();
 
@@ -365,6 +367,7 @@ export function CreativeConversationWorkspace({
         key: idempotencyKey,
         prompt,
         assetId: focusedAssetId,
+        resumePendingOperation,
       };
 
       const res = await fetch(`/api/conversations/${conversationId}/messages`, {

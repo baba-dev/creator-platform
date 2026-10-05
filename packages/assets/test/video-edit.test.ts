@@ -39,6 +39,47 @@ describe("video edit document", () => {
     });
     expect(videoEditAssetIds(edit)).toEqual(["video", "voice"]);
   });
+
+  it("accepts bounded non-destructive crop, rotation, and flip transforms", () => {
+    const parsed = videoEditDocumentSchema.parse({
+      version: 1,
+      ratio: "9:16",
+      resolution: "1080p",
+      clips: [
+        {
+          ...clip,
+          transform: {
+            crop: { x: 0.1, y: 0.05, width: 0.8, height: 0.9 },
+            rotation: 90,
+            flipX: true,
+          },
+        },
+      ],
+    });
+    expect(parsed.clips[0]?.transform).toEqual({
+      crop: { x: 0.1, y: 0.05, width: 0.8, height: 0.9 },
+      rotation: 90,
+      flipX: true,
+    });
+
+    expect(
+      videoEditDocumentSchema.safeParse({
+        version: 1,
+        ratio: "16:9",
+        resolution: "720p",
+        clips: [
+          {
+            ...clip,
+            transform: {
+              crop: { x: 0.4, y: 0, width: 0.7, height: 1 },
+              rotation: 0,
+              flipX: false,
+            },
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
   it("rejects invalid cut, caption, and excessive duration", () => {
     const base = {
       version: 1,

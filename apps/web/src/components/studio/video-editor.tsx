@@ -205,10 +205,7 @@ export function VideoEditor({
       ),
     }));
   }
-  function updateClipTransform(
-    id: string,
-    patch: Partial<VideoClipTransform>,
-  ) {
+  function updateClipTransform(id: string, patch: Partial<VideoClipTransform>) {
     const currentClip = document.clips.find((item) => item.id === id);
     const current = resolveVideoClipTransform(currentClip?.transform);
     updateClip(id, {
@@ -324,15 +321,14 @@ export function VideoEditor({
       setBusy(false);
     }
   }
-  async function queueServerRender(saved: {
-    id: string;
-    revision: number;
-  }) {
+  async function queueServerRender(saved: { id: string; revision: number }) {
     setBusy(true);
     setClientProgress(null);
     setError(null);
     setReviewState(null);
-    setMessage("Compatibility render queued. You can leave this page after it starts.");
+    setMessage(
+      "Compatibility render queued. You can leave this page after it starts.",
+    );
     try {
       const response = await fetch(`/api/video-edits/${saved.id}/render`, {
         method: "POST",
@@ -380,11 +376,12 @@ export function VideoEditor({
           { cache: "no-store" },
         );
         if (!sourceResponse.ok)
-          throw new Error("Source video could not be loaded for device rendering.");
+          throw new Error(
+            "Source video could not be loaded for device rendering.",
+          );
         const sourceBlob = await sourceResponse.blob();
-        const { renderSimpleVideoInBrowser } = await import(
-          "@/lib/browser-video-renderer"
-        );
+        const { renderSimpleVideoInBrowser } =
+          await import("@/lib/browser-video-renderer");
         const output = await renderSimpleVideoInBrowser({
           source: sourceBlob,
           document,
@@ -410,11 +407,15 @@ export function VideoEditor({
           error?: string;
         };
         if (!uploadResponse.ok || !uploadData.asset)
-          throw new Error(uploadData.error ?? "Rendered video could not be saved.");
+          throw new Error(
+            uploadData.error ?? "Rendered video could not be saved.",
+          );
         setRenderResult(uploadData.asset.id);
         setClientProgress(null);
         setBusy(false);
-        setMessage("Video ready — rendered on this device. The original is unchanged.");
+        setMessage(
+          "Video ready — rendered on this device. The original is unchanged.",
+        );
         await loadAssets().catch(() => undefined);
         return;
       } catch {
@@ -718,14 +719,8 @@ export function VideoEditor({
                 onCropComplete={(area) => {
                   const x = clampUnit(area.x / 100);
                   const y = clampUnit(area.y / 100);
-                  const width = Math.min(
-                    clampUnit(area.width / 100),
-                    1 - x,
-                  );
-                  const height = Math.min(
-                    clampUnit(area.height / 100),
-                    1 - y,
-                  );
+                  const width = Math.min(clampUnit(area.width / 100), 1 - x);
+                  const height = Math.min(clampUnit(area.height / 100), 1 - y);
                   updateClipTransform(clip.id, {
                     crop: {
                       x,
@@ -874,7 +869,9 @@ export function VideoEditor({
           aria-label="Video settings"
         >
           <div className="flex items-center justify-between gap-2">
-            <h3 className="font-display text-lg font-semibold">Edit settings</h3>
+            <h3 className="font-display text-lg font-semibold">
+              Edit settings
+            </h3>
             <span className="rounded-full border border-border bg-surface-sunken px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
               {browserExportReason ? "Hybrid export" : "Device-first export"}
             </span>
@@ -925,7 +922,9 @@ export function VideoEditor({
                     }}
                     className="min-h-10 rounded-lg border border-border bg-background px-3 text-xs font-semibold"
                   >
-                    {framingClipId === clip.id ? "Done framing" : "Frame visually"}
+                    {framingClipId === clip.id
+                      ? "Done framing"
+                      : "Frame visually"}
                   </button>
                 </div>
                 {framingClipId === clip.id ? (

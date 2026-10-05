@@ -274,6 +274,10 @@ export function CreativeConversationWorkspace({
         throw new Error(data.error ?? "Failed to process request.");
       }
 
+      if (typeof data.jobId === "string" && data.jobId) {
+        setSelectedJobId(data.jobId);
+        setActiveAssetId(null);
+      }
       await refreshConversation();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Turn failed.");

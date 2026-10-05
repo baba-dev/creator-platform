@@ -172,7 +172,9 @@ export async function planConversationTurn(params: {
       lower === `image #${outputIdx}`) &&
     !isAnimate &&
     !lower.includes("variation") &&
-    !lower.includes("aspect ratio")
+    !lower.includes("aspect ratio") &&
+    !lower.includes("first frame") &&
+    !lower.includes("video")
   ) {
     actions.push({
       type: "select_asset",

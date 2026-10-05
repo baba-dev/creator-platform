@@ -176,6 +176,20 @@ describe("Conversational Creative Action Planner", () => {
     });
   });
 
+  it("maps a numbered output to video first frame instead of selection-only", async () => {
+    const plan = await planConversationTurn({
+      userMessage: "Use the second image as the first frame for video.",
+      organizationId: "org_1",
+      context: baseContext,
+    });
+
+    expect(plan.actions[0]).toEqual({
+      type: "use_first_frame",
+      assetId: "asset_902",
+      target: { kind: "selected_asset" },
+    });
+  });
+
   it("plans cross-modal animation: 'Animate this.'", async () => {
     const plan = await planConversationTurn({
       userMessage: "Animate this.",

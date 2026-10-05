@@ -332,7 +332,8 @@ export function VideoEditor({
 
     const activeClip = document.clips[0];
     const activeSource = assets.find(
-      (asset) => asset.id === activeClip?.assetId && asset.mediaKind === "VIDEO",
+      (asset) =>
+        asset.id === activeClip?.assetId && asset.mediaKind === "VIDEO",
     );
     const clientReason = clientVideoFallbackReason(
       document,
@@ -884,7 +885,9 @@ export function VideoEditor({
               <div className="h-1.5 overflow-hidden rounded-full bg-surface-sunken">
                 <div
                   className="h-full bg-info transition-[width]"
-                  style={{ width: `${Math.max(0, Math.min(100, renderProgress * 100))}%` }}
+                  style={{
+                    width: `${Math.max(0, Math.min(100, renderProgress * 100))}%`,
+                  }}
                 />
               </div>
             </div>
@@ -985,12 +988,16 @@ export function VideoEditor({
                     type="button"
                     onClick={() => {
                       const current = clip.transform?.rotation ?? 0;
-                      const next = ((current + 270) % 360) as 0 | 90 | 180 | 270;
+                      const next = ((current + 270) % 360) as
+                        0 | 90 | 180 | 270;
                       updateClip(clip.id, {
                         transform: {
-                          crop:
-                            clip.transform?.crop ??
-                            { x: 0, y: 0, width: 1, height: 1 },
+                          crop: clip.transform?.crop ?? {
+                            x: 0,
+                            y: 0,
+                            width: 1,
+                            height: 1,
+                          },
                           rotation: next,
                           flipX: clip.transform?.flipX ?? false,
                         },
@@ -1008,9 +1015,12 @@ export function VideoEditor({
                       const next = ((current + 90) % 360) as 0 | 90 | 180 | 270;
                       updateClip(clip.id, {
                         transform: {
-                          crop:
-                            clip.transform?.crop ??
-                            { x: 0, y: 0, width: 1, height: 1 },
+                          crop: clip.transform?.crop ?? {
+                            x: 0,
+                            y: 0,
+                            width: 1,
+                            height: 1,
+                          },
                           rotation: next,
                           flipX: clip.transform?.flipX ?? false,
                         },

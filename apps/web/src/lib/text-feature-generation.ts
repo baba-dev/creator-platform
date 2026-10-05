@@ -1,6 +1,6 @@
 import {
   estimateGeneration,
-  parseTextUsageRatesForProvider,
+  normalizeLegacyTextUsageRatesForProvider,
 } from "@aiwa/credits";
 import { db } from "@aiwa/db";
 import {
@@ -92,13 +92,22 @@ export async function issueTextFeatureQuote(input: TextFeatureQuoteInput) {
       409,
     );
   }
-  try {
-    parseTextUsageRatesForProvider(price.usageRates, model.provider);
-  } catch {
-    throw new GenerationError(
-      "The selected text model does not have valid provider token rates.",
-      409,
-    );
+  let effectivePrice = price;
+  if (price.usageRates != null) {
+    try {
+      effectivePrice = {
+        ...price,
+        usageRates: normalizeLegacyTextUsageRatesForProvider(
+          price.usageRates,
+          model.provider,
+        ) as unknown as typeof price.usageRates,
+      };
+    } catch {
+      throw new GenerationError(
+        "The selected text model does not have valid provider token rates.",
+        409,
+      );
+    }
   }
 
   const messages = normalizeTextMessagesForModel(
@@ -110,7 +119,7 @@ export async function issueTextFeatureQuote(input: TextFeatureQuoteInput) {
     .map((message) => `${message.role}: ${message.content}`)
     .join("\n");
   const estimate = estimateGeneration({
-    price,
+    price: effectivePrice,
     mediaKind: "TEXT",
     providerModelId: model.providerModelId,
     text: promptText,

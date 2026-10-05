@@ -96,6 +96,30 @@ describe("Studio model discovery", () => {
     expect(result.models.map((model) => model.id)).toEqual(["good"]);
   });
 
+  it("keeps legacy TOKEN snapshots without usageRates discoverable", () => {
+    const result = selectDiscoverableStudioModels(
+      [
+        row({
+          id: "legacy-groq",
+          provider: "GROQ",
+          providerModelId: "openai/gpt-oss-20b",
+          capabilities: { characterChat: true },
+          priceVersions: [
+            {
+              id: "legacy-price",
+              pricingDimension: "TOKEN",
+              unitQuantity: 1000,
+              usageRates: null,
+            },
+          ],
+        }),
+      ],
+      "character-chat",
+      { GROQ_API_KEY: "groq" },
+    );
+    expect(result.models.map((model) => model.id)).toEqual(["legacy-groq"]);
+  });
+
   it("hides otherwise valid models when provider credentials are absent", () => {
     const result = selectDiscoverableStudioModels(
       [

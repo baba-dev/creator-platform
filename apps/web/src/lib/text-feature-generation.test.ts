@@ -9,12 +9,15 @@ const mocks = vi.hoisted(() => ({
   },
   estimateGeneration: vi.fn(),
   issueGenerationQuote: vi.fn(),
+  normalizeLegacyTextUsageRatesForProvider: vi.fn(),
   parseTextUsageRatesForProvider: vi.fn(),
 }));
 
 vi.mock("@aiwa/db", () => ({ db: mocks.db }));
 vi.mock("@aiwa/credits", () => ({
   estimateGeneration: mocks.estimateGeneration,
+  normalizeLegacyTextUsageRatesForProvider:
+    mocks.normalizeLegacyTextUsageRatesForProvider,
   parseTextUsageRatesForProvider: mocks.parseTextUsageRatesForProvider,
 }));
 vi.mock("@aiwa/generation", () => ({
@@ -59,6 +62,9 @@ const model = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.normalizeLegacyTextUsageRatesForProvider.mockImplementation(
+    (value) => value,
+  );
   mocks.parseTextUsageRatesForProvider.mockReturnValue({
     estimator: "text-token-v1",
     tiers: [],

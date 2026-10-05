@@ -6,10 +6,23 @@ import { AssistantSettingsPanel } from "@/components/admin/assistant-settings-pa
 
 export default async function AdminAssistantPage() {
   const session = await requirePlatformPermission("models:read");
-  const [settings, discovery] = await Promise.all([
+  const [settings, characterChatDiscovery, chatDiscovery] = await Promise.all([
     getAssistantSettings(),
     getAvailableStudioModels("character-chat"),
+    getAvailableStudioModels("chat"),
   ]);
+
+  const seenModelIds = new Set<string>();
+  const combinedModels = [];
+  for (const model of [
+    ...characterChatDiscovery.models,
+    ...chatDiscovery.models,
+  ]) {
+    if (!seenModelIds.has(model.id)) {
+      seenModelIds.add(model.id);
+      combinedModels.push(model);
+    }
+  }
 
   return (
     <AssistantSettingsPanel
@@ -21,7 +34,7 @@ export default async function AdminAssistantPage() {
         systemPromptOverride: settings.systemPromptOverride,
         enabled: settings.enabled,
       }}
-      availableModels={discovery.models}
+      availableModels={combinedModels}
       canManage={hasPlatformPermission(
         session.user.platformRole,
         "models:manage",

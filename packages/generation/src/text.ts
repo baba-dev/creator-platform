@@ -3,7 +3,7 @@ import {
   calculateBillableUnits,
   estimateGeneration,
   textProviderCostMicroUsd,
-  parseTextUsageRatesForProvider,
+  normalizeLegacyTextUsageRatesForProvider,
   reserveCreditsForJob,
   captureCreditsForJob,
   releaseOrRefundCredits,
@@ -335,13 +335,22 @@ export async function createTextJob(
           409,
         );
       }
-      try {
-        parseTextUsageRatesForProvider(priceRow.usageRates, modelRow.provider);
-      } catch {
-        throw new GenerationError(
-          "The selected text model does not have valid provider token rates.",
-          409,
-        );
+      let effectivePriceRow = priceRow;
+      if (priceRow.usageRates != null) {
+        try {
+          effectivePriceRow = {
+            ...priceRow,
+            usageRates: normalizeLegacyTextUsageRatesForProvider(
+              priceRow.usageRates,
+              modelRow.provider,
+            ) as unknown as typeof priceRow.usageRates,
+          };
+        } catch {
+          throw new GenerationError(
+            "The selected text model does not have valid provider token rates.",
+            409,
+          );
+        }
       }
 
       const messages = normalizeTextMessagesForModel(
@@ -353,7 +362,7 @@ export async function createTextJob(
         .map((message) => `${message.role}: ${message.content}`)
         .join("\n");
       const pricing = estimateGeneration({
-        price: priceRow,
+        price: effectivePriceRow,
         mediaKind: "TEXT",
         providerModelId: modelRow.providerModelId,
         text: promptText,

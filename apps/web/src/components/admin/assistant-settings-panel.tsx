@@ -144,8 +144,8 @@ export function AssistantSettingsPanel({
             Active assistant model
           </label>
           <p className="mt-1 text-xs text-muted-foreground">
-            Only enabled, configured TEXT models admitted for Character Chat are
-            available here.
+            Only enabled, configured TEXT models admitted for Chat or Character
+            Chat are available here.
           </p>
           <StudioModelSelect
             models={availableModels}

@@ -9,7 +9,10 @@ import { listStudioTasksForModel, STUDIO_TASK_LABELS } from "@aiwa/providers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { ModelActions } from "@/components/admin/model-actions";
+import {
+  ModelCatalogTable,
+  type ModelCatalogRow,
+} from "@/components/admin/model-catalog-table";
 import {
   DataTable,
   EmptyState,
@@ -131,6 +134,7 @@ function AdminFilters({
   section: string;
   filters: AdminListFilters;
 }) {
+  if (section === "models") return null;
   const statuses: Record<string, readonly string[]> = {
     organizations: ["ACTIVE", "SUSPENDED", "CLOSED"],
     users: ["ACTIVE", "DISABLED"],
@@ -407,43 +411,13 @@ async function renderSection(
   }
   if (section === "models") {
     const now = new Date();
-    const enabled =
-      filters.status === "ENABLED"
-        ? true
-        : filters.status === "DISABLED"
-          ? false
-          : undefined;
-    const missingPrice = filters.status === "MISSING_PRICE";
-    const where = {
-      ...(filters.search
-        ? {
-            OR: [
-              { displayName: { contains: filters.search } },
-              { providerModelId: { contains: filters.search } },
-            ],
-          }
-        : {}),
-      ...(enabled !== undefined ? { enabled } : {}),
-      ...(missingPrice
-        ? {
-            enabled: true,
-            priceVersions: {
-              none: {
-                effectiveFrom: { lte: now },
-                OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
-              },
-            },
-          }
-        : {}),
-    };
     const priceWhere = {
       effectiveFrom: { lte: now },
       OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
     };
     const canManage = hasPlatformPermission(role, "models:manage");
-    const [rows, total, trialUsage] = await Promise.all([
+    const [rows, trialUsage] = await Promise.all([
       db.providerModel.findMany({
-        where,
         select: {
           id: true,
           displayName: true,
@@ -473,233 +447,111 @@ async function renderSection(
           },
         },
         orderBy: { displayName: "asc" },
-        skip,
-        take: PAGE_SIZE,
       }),
-      db.providerModel.count({ where }),
       calculateSpeechTrialUsage(db),
     ]);
+
+    const serializedModels: ModelCatalogRow[] = rows.map((row) => {
+      const price = row.priceVersions[0];
+      const taskDescriptor = {
+        id: row.providerModelId,
+        provider: row.provider,
+        mediaKind: row.mediaKind,
+        capabilities:
+          row.capabilities &&
+          typeof row.capabilities === "object" &&
+          !Array.isArray(row.capabilities)
+            ? (row.capabilities as Record<string, boolean | number | string>)
+            : {},
+      };
+      const availableTasks = listStudioTasksForModel(taskDescriptor);
+      const runtime = getProviderRuntimeReadiness({
+        provider: row.provider,
+        mediaKind: row.mediaKind,
+        providerModelId: row.providerModelId,
+      });
+
+      const customerCreditsLabel =
+        row.mediaKind === "REASONING"
+          ? "Uncharged"
+          : price?.pricingDimension === "TOKEN"
+            ? "Usage-based"
+            : price
+              ? formatBigInt(price.customerCredits)
+              : "—";
+
+      const customerCreditsValue =
+        row.mediaKind === "REASONING"
+          ? 0
+          : price?.pricingDimension === "TOKEN"
+            ? -1
+            : price
+              ? Number(price.customerCredits)
+              : null;
+
+      const providerCostMicroUsdLabel = price
+        ? formatBigInt(price.providerCostMicroUsd)
+        : "—";
+
+      const providerCostMicroUsdValue = price
+        ? Number(price.providerCostMicroUsd)
+        : null;
+
+      const status = !row.enabled
+        ? "DISABLED"
+        : price
+          ? "PRICED"
+          : "MISSING_PRICE";
+
+      return {
+        id: row.id,
+        displayName: row.displayName,
+        providerModelId: row.providerModelId,
+        description: row.description,
+        provider: row.provider,
+        mediaKind: row.mediaKind,
+        enabled: row.enabled,
+        capabilities: taskDescriptor.capabilities,
+        availableTasks,
+        availableTaskLabels: availableTasks.map(
+          (task) => STUDIO_TASK_LABELS[task] ?? task,
+        ),
+        runtimeConfigured: runtime.configured,
+        customerCreditsLabel,
+        customerCreditsValue,
+        providerCostMicroUsdLabel,
+        providerCostMicroUsdValue,
+        status,
+        isSeedSpeech: row.providerModelId === "seed-tts-2.0",
+        price: price
+          ? {
+              usageRates: price.usageRates,
+              providerCostBasisNote: price.providerCostBasisNote,
+              fxBaisaNumerator: price.fxBaisaNumerator.toString(),
+              fxBaisaDenominator: price.fxBaisaDenominator.toString(),
+              providerCostMicroUsd: price.providerCostMicroUsd.toString(),
+              videoInputRate720p: price.videoInputRate720p?.toString() ?? null,
+              videoInputRate1080p:
+                price.videoInputRate1080p?.toString() ?? null,
+              customerCredits: price.customerCredits.toString(),
+              targetMarginBps: price.targetMarginBps,
+              pricingDimension: price.pricingDimension,
+              unitQuantity: price.unitQuantity,
+            }
+          : null,
+      };
+    });
     return (
-      <ListResult
-        section={section}
-        icon="sparkles"
-        page={filters.page}
-        total={total}
-        query={query}
-      >
-        <div className="mb-6 rounded-2xl border border-border bg-card/60 p-4 sm:p-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-semibold text-foreground">
-                  BytePlus Seed Speech TTS 2.0 Trial Quota
-                </h2>
-                <StatusBadge
-                  tone={
-                    trialUsage.isExhausted
-                      ? "danger"
-                      : trialUsage.isWarning
-                        ? "warning"
-                        : "success"
-                  }
-                >
-                  {trialUsage.isExhausted
-                    ? "Trial Cap Exhausted"
-                    : trialUsage.isWarning
-                      ? "Quota Warning (>80%)"
-                      : "Active Trial Quota"}
-                </StatusBadge>
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Internal provider subsidy tracking (19,968 characters initial
-                pool). Customer billing remains standard (16 credits per 1,000
-                characters).
-              </p>
-            </div>
-            <div className="flex items-center gap-4 text-xs font-mono">
-              <div>
-                <span className="text-muted-foreground">Used: </span>
-                <strong className="text-foreground">
-                  {trialUsage.consumedCharacters.toLocaleString()}
-                </strong>
-                <span className="text-muted-foreground">
-                  {" "}
-                  / {trialUsage.initialQuota.toLocaleString()} chars
-                </span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Remaining: </span>
-                <strong className="text-foreground">
-                  {trialUsage.remainingCharacters.toLocaleString()}
-                </strong>
-              </div>
-            </div>
-          </div>
-          <div className="mt-3">
-            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-              <div
-                className={`h-full transition-all duration-300 ${
-                  trialUsage.isExhausted
-                    ? "bg-destructive"
-                    : trialUsage.isWarning
-                      ? "bg-warning"
-                      : "bg-primary"
-                }`}
-                style={{
-                  width: `${Math.min(100, trialUsage.consumedPercent)}%`,
-                }}
-              />
-            </div>
-            <div className="mt-1.5 flex justify-between text-[11px] text-muted-foreground">
-              <span>
-                {trialUsage.consumedPercent}% consumed (
-                {trialUsage.succeededJobsCount} succeeded jobs)
-              </span>
-              <span>
-                Provider cost saved: $
-                {trialUsage.estimatedCostSavedUsd.toFixed(4)} USD
-              </span>
-            </div>
-          </div>
-        </div>
-        <DataTable label="Model catalog">
-          <TableHead
-            labels={[
-              "Model",
-              "Provider",
-              "Kind",
-              "Available in",
-              "Runtime",
-              "Customer credits",
-              "Provider micro-USD",
-              "Status",
-              ...(canManage ? ["Actions"] : []),
-            ]}
-          />
-          <tbody className="divide-y divide-border">
-            {rows.map((row) => {
-              const price = row.priceVersions[0];
-              const isSeedSpeech = row.providerModelId === "seed-tts-2.0";
-              const taskDescriptor = {
-                id: row.providerModelId,
-                provider: row.provider,
-                mediaKind: row.mediaKind,
-                capabilities:
-                  row.capabilities &&
-                  typeof row.capabilities === "object" &&
-                  !Array.isArray(row.capabilities)
-                    ? (row.capabilities as Record<
-                        string,
-                        boolean | number | string
-                      >)
-                    : {},
-              };
-              const availableTasks = listStudioTasksForModel(taskDescriptor);
-              const runtime = getProviderRuntimeReadiness({
-                provider: row.provider,
-                mediaKind: row.mediaKind,
-                providerModelId: row.providerModelId,
-              });
-              return (
-                <tr key={row.id}>
-                  <Cell>
-                    <strong>{row.displayName}</strong>
-                    <Meta>{row.providerModelId}</Meta>
-                    <p
-                      className="mt-1 max-w-[200px] truncate text-[10px] text-muted-foreground"
-                      title={row.description}
-                    >
-                      {row.description}
-                    </p>
-                    {isSeedSpeech ? (
-                      <div className="mt-1.5">
-                        <span className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/60 px-2 py-0.5 text-[10px] font-mono text-muted-foreground">
-                          Trial pool:{" "}
-                          {trialUsage.consumedCharacters.toLocaleString()} /{" "}
-                          {trialUsage.initialQuota.toLocaleString()} chars (
-                          {trialUsage.consumedPercent}%)
-                        </span>
-                      </div>
-                    ) : null}
-                  </Cell>
-                  <Cell>{titleCase(row.provider)}</Cell>
-                  <Cell>{titleCase(row.mediaKind)}</Cell>
-                  <Cell>
-                    {availableTasks.length
-                      ? availableTasks
-                          .map((task) => STUDIO_TASK_LABELS[task])
-                          .join(", ")
-                      : "No frontend surface"}
-                  </Cell>
-                  <Cell>
-                    <StatusBadge
-                      tone={runtime.configured ? "success" : "warning"}
-                    >
-                      {runtime.configured ? "Ready" : "Credentials missing"}
-                    </StatusBadge>
-                  </Cell>
-                  <NumericCell>
-                    {row.mediaKind === "REASONING"
-                      ? "Uncharged"
-                      : price?.pricingDimension === "TOKEN"
-                        ? "Usage-based"
-                        : price
-                          ? formatBigInt(price.customerCredits)
-                          : "—"}
-                  </NumericCell>
-                  <NumericCell>
-                    {price ? formatBigInt(price.providerCostMicroUsd) : "—"}
-                  </NumericCell>
-                  <Cell>
-                    <StatusBadge
-                      tone={
-                        !row.enabled ? "neutral" : price ? "success" : "warning"
-                      }
-                    >
-                      {!row.enabled
-                        ? "Disabled"
-                        : price
-                          ? "Priced"
-                          : "Missing price"}
-                    </StatusBadge>
-                  </Cell>
-                  {canManage ? (
-                    <Cell>
-                      <ModelActions
-                        modelId={row.id}
-                        providerModelId={row.providerModelId}
-                        displayName={row.displayName}
-                        provider={row.provider}
-                        enabled={row.enabled}
-                        currentUsageRates={price?.usageRates}
-                        currentProviderCostBasisNote={
-                          price?.providerCostBasisNote
-                        }
-                        currentFxBaisaNumerator={price?.fxBaisaNumerator.toString()}
-                        currentFxBaisaDenominator={price?.fxBaisaDenominator.toString()}
-                        currentProviderCostMicroUsd={price?.providerCostMicroUsd.toString()}
-                        currentVideoInputRate720p={price?.videoInputRate720p?.toString()}
-                        currentVideoInputRate1080p={price?.videoInputRate1080p?.toString()}
-                        currentCustomerCredits={price?.customerCredits.toString()}
-                        currentTargetMarginBps={price?.targetMarginBps}
-                        currentPricingDimension={price?.pricingDimension}
-                        currentUnitQuantity={price?.unitQuantity}
-                        canManage={canManage}
-                        mediaKind={row.mediaKind}
-                        transcription={
-                          taskDescriptor.capabilities.transcription === true
-                        }
-                      />
-                    </Cell>
-                  ) : null}
-                </tr>
-              );
-            })}
-          </tbody>
-        </DataTable>
-      </ListResult>
+      <ModelCatalogTable
+        models={serializedModels}
+        trialUsage={trialUsage}
+        canManage={canManage}
+        initialSearch={filters.search}
+        initialStatus={filters.status}
+      />
     );
   }
+
   if (section === "jobs") {
     const allowed = [
       "QUEUED",

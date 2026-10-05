@@ -899,11 +899,7 @@ export function CreativeConversationWorkspace({
                             key={opt.value}
                             type="button"
                             onClick={() =>
-                              void handleSend(
-                                "Select asset",
-                                opt.assetId,
-                                true,
-                              )
+                              void handleSend("Select asset", opt.assetId, true)
                             }
                             className="inline-flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition"
                           >

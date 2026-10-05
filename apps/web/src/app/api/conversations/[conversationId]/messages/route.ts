@@ -247,10 +247,7 @@ export async function POST(
     });
 
     if (replayJob) {
-      if (
-        replayJob.chatThreadId &&
-        replayJob.chatThreadId !== conversationId
-      ) {
+      if (replayJob.chatThreadId && replayJob.chatThreadId !== conversationId) {
         return NextResponse.json(
           { error: "Request key is already linked to another conversation." },
           { status: 409 },
@@ -300,55 +297,48 @@ export async function POST(
         !latestJob ||
         latestJob.id === replayJob.id ||
         replayJob.chatThreadId === null;
-      if (
-        replayIsCurrent &&
-        currentState.activeGenerationId !== replayJob.id
-      ) {
+      if (replayIsCurrent && currentState.activeGenerationId !== replayJob.id) {
         const payload =
           replayJob.requestPayload &&
           typeof replayJob.requestPayload === "object" &&
           !Array.isArray(replayJob.requestPayload)
             ? (replayJob.requestPayload as Record<string, unknown>)
             : {};
-        await mutateConversationState(
-          conversationId,
-          currentState,
-          (state) => {
-            state.activeGenerationId = replayJob.id;
-            state.activeAssetId = null;
-            state.activeOutputs = [];
-            state.activeModality =
-              replayJob.providerModel.mediaKind === "VIDEO"
-                ? "VIDEO"
-                : replayJob.providerModel.mediaKind === "VOICE"
-                  ? "VOICE"
-                  : "IMAGE";
-            state.currentModelId = replayJob.providerModel.id;
-            state.currentProvider = replayJob.providerModel.provider;
-            state.settings = {
-              ...state.settings,
-              ...(typeof payload.aspectRatio === "string"
-                ? { aspectRatio: payload.aspectRatio }
-                : {}),
-              ...(typeof payload.resolution === "string"
-                ? { resolution: payload.resolution }
-                : {}),
-              ...(typeof payload.outputCount === "number"
-                ? { outputCount: payload.outputCount }
-                : {}),
-              ...(typeof payload.durationSeconds === "number"
-                ? { durationSeconds: payload.durationSeconds }
-                : {}),
-              ...(typeof payload.voiceKey === "string"
-                ? { voiceKey: payload.voiceKey }
-                : {}),
-              ...(typeof payload.speechRate === "number"
-                ? { speechRate: payload.speechRate }
-                : {}),
-            };
-            state.pendingOperation = null;
-          },
-        );
+        await mutateConversationState(conversationId, currentState, (state) => {
+          state.activeGenerationId = replayJob.id;
+          state.activeAssetId = null;
+          state.activeOutputs = [];
+          state.activeModality =
+            replayJob.providerModel.mediaKind === "VIDEO"
+              ? "VIDEO"
+              : replayJob.providerModel.mediaKind === "VOICE"
+                ? "VOICE"
+                : "IMAGE";
+          state.currentModelId = replayJob.providerModel.id;
+          state.currentProvider = replayJob.providerModel.provider;
+          state.settings = {
+            ...state.settings,
+            ...(typeof payload.aspectRatio === "string"
+              ? { aspectRatio: payload.aspectRatio }
+              : {}),
+            ...(typeof payload.resolution === "string"
+              ? { resolution: payload.resolution }
+              : {}),
+            ...(typeof payload.outputCount === "number"
+              ? { outputCount: payload.outputCount }
+              : {}),
+            ...(typeof payload.durationSeconds === "number"
+              ? { durationSeconds: payload.durationSeconds }
+              : {}),
+            ...(typeof payload.voiceKey === "string"
+              ? { voiceKey: payload.voiceKey }
+              : {}),
+            ...(typeof payload.speechRate === "number"
+              ? { speechRate: payload.speechRate }
+              : {}),
+          };
+          state.pendingOperation = null;
+        });
       }
 
       return NextResponse.json(
@@ -447,16 +437,12 @@ export async function POST(
     // Case 1: Clarification needed (Ambiguity)
     // =========================================================
     if (firstAction.type === "clarify") {
-      await mutateConversationState(
-        conversationId,
-        currentState,
-        (state) => {
-          state.pendingOperation = {
-            originalPrompt: input.content,
-            createdAt: new Date().toISOString(),
-          };
-        },
-      );
+      await mutateConversationState(conversationId, currentState, (state) => {
+        state.pendingOperation = {
+          originalPrompt: input.content,
+          createdAt: new Date().toISOString(),
+        };
+      });
 
       const userMessage = await upsertUserMessage();
 
@@ -509,16 +495,12 @@ export async function POST(
       }
 
       if (selectedAssetId) {
-        await mutateConversationState(
-          conversationId,
-          currentState,
-          (state) => {
-            state.activeAssetId = selectedAssetId;
-            if (isResumedClarification) {
-              state.pendingOperation = null;
-            }
-          },
-        );
+        await mutateConversationState(conversationId, currentState, (state) => {
+          state.activeAssetId = selectedAssetId;
+          if (isResumedClarification) {
+            state.pendingOperation = null;
+          }
+        });
       }
 
       const userMessage = await upsertUserMessage();
@@ -1039,27 +1021,23 @@ export async function POST(
 
     // Serialize conversation-state mutation under a row lock so concurrent
     // turns cannot overwrite each other's working state.
-    await mutateConversationState(
-      conversationId,
-      currentState,
-      (state) => {
-        state.activeGenerationId = job.id;
-        state.activeAssetId = null;
-        state.activeOutputs = [];
-        state.activeModality = targetModality;
-        state.currentModelId = model.id;
-        state.currentProvider = model.provider;
-        state.settings = {
-          aspectRatio: targetRatio,
-          resolution: targetResolution,
-          outputCount: targetOutputCount,
-          durationSeconds: targetDuration,
-          voiceKey: targetVoiceKey,
-          speechRate: targetSpeechRate,
-        };
-        state.pendingOperation = null;
-      },
-    );
+    await mutateConversationState(conversationId, currentState, (state) => {
+      state.activeGenerationId = job.id;
+      state.activeAssetId = null;
+      state.activeOutputs = [];
+      state.activeModality = targetModality;
+      state.currentModelId = model.id;
+      state.currentProvider = model.provider;
+      state.settings = {
+        aspectRatio: targetRatio,
+        resolution: targetResolution,
+        outputCount: targetOutputCount,
+        durationSeconds: targetDuration,
+        voiceKey: targetVoiceKey,
+        speechRate: targetSpeechRate,
+      };
+      state.pendingOperation = null;
+    });
 
     const assistantMessage = await upsertMessage(
       "assistant",

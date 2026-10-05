@@ -158,7 +158,9 @@ export function ImageEditor({
       ? (selected?.height ?? 1) / (selected?.width ?? 1)
       : (selected?.width ?? 1) / (selected?.height ?? 1)) || 1;
   const pixelAspectValue =
-    pixelAspect === "original" ? originalPixelAspect : PIXEL_ASPECTS[pixelAspect];
+    pixelAspect === "original"
+      ? originalPixelAspect
+      : PIXEL_ASPECTS[pixelAspect];
   const aiCreditsLabel = aiQuote?.estimatedCredits
     ? `${aiQuote.estimatedCredits} credits`
     : "Live quote";
@@ -1596,8 +1598,9 @@ export function ImageEditor({
                       Quick image edit
                     </h3>
                     <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                      Crop, zoom, rotate, flip and resize in your browser. Saving
-                      creates a new asset and leaves the original untouched.
+                      Crop, zoom, rotate, flip and resize in your browser.
+                      Saving creates a new asset and leaves the original
+                      untouched.
                     </p>
                   </div>
                   <span className="rounded-full border border-success/30 bg-success/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-success">
@@ -1759,9 +1762,9 @@ export function ImageEditor({
                 </summary>
                 <div className="space-y-4 border-t border-border p-4">
                   <p className="text-xs leading-relaxed text-muted-foreground">
-                    These existing Sharp operations stay available as a fallback.
-                    They use the media worker and are intentionally separate from
-                    browser editing.
+                    These existing Sharp operations stay available as a
+                    fallback. They use the media worker and are intentionally
+                    separate from browser editing.
                   </p>
                   <div
                     className="flex flex-wrap gap-2"
@@ -1889,7 +1892,9 @@ export function ImageEditor({
                     disabled={!selected || busy || !canEdit}
                     onClick={() => void submitPixelEdit()}
                   >
-                    {busy ? "Running compatibility edit…" : "Run server transform"}
+                    {busy
+                      ? "Running compatibility edit…"
+                      : "Run server transform"}
                   </Button>
                 </div>
               </details>

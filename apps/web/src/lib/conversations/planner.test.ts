@@ -309,6 +309,89 @@ describe("Conversational Creative Action Planner", () => {
       target: { kind: "output_index", index: 3 },
     });
     expect(plan.actions[1]?.type).toBe("generate_video");
+    expect(plan.actions[1]).toEqual(
+      expect.objectContaining({ firstFrameAssetId: "asset_903" }),
+    );
+  });
+
+  it("prefers a numbered reference over passive UI focus", async () => {
+    const plan = await planConversationTurn({
+      userMessage: "Give me four variations of the second image",
+      organizationId: "org_1",
+      context: { ...baseContext, selectedAssetId: "asset_901" },
+      explicitAssetId: "asset_901",
+    });
+
+    expect(plan.actions[0]).toEqual({
+      type: "create_variations",
+      sourceAssetId: "asset_902",
+      outputCount: 4,
+    });
+  });
+
+  it("composes numbered selection with an aspect-ratio change", async () => {
+    const plan = await planConversationTurn({
+      userMessage: "Use the second image and make it 9:16",
+      organizationId: "org_1",
+      context: { ...baseContext, selectedAssetId: "asset_901" },
+      explicitAssetId: "asset_901",
+    });
+
+    expect(plan.actions).toEqual([
+      { type: "select_asset", target: { kind: "output_index", index: 2 } },
+      { type: "change_aspect_ratio", aspectRatio: "9:16" },
+    ]);
+  });
+
+  it("treats ordinary background direction as an edit", async () => {
+    const plan = await planConversationTurn({
+      userMessage: "Make the background blue",
+      organizationId: "org_1",
+      context: baseContext,
+    });
+
+    expect(plan.actions[0]).toEqual({
+      type: "edit_image",
+      prompt: "Make the background blue",
+      sourceAssetId: "asset_902",
+    });
+  });
+
+  it("allows an explicit fresh image request without active assets", async () => {
+    const plan = await planConversationTurn({
+      userMessage: "Generate an image of a cat",
+      organizationId: "org_1",
+      context: { ...baseContext, selectedAssetId: null, activeOutputGroup: [] },
+    });
+
+    expect(plan.actions[0]).toEqual(
+      expect.objectContaining({
+        type: "generate_image",
+        prompt: "Generate an image of a cat",
+      }),
+    );
+  });
+
+  it("does not use an active video as a first-frame image", async () => {
+    const plan = await planConversationTurn({
+      userMessage: "Make the camera move slowly",
+      organizationId: "org_1",
+      context: {
+        ...baseContext,
+        activeModality: "VIDEO",
+        selectedAssetId: "video_1",
+        activeOutputGroup: [
+          { index: 1, assetId: "video_1", mimeType: "video/mp4" },
+        ],
+      },
+      explicitAssetId: "video_1",
+    });
+
+    expect(plan.actions[0]).toEqual({
+      type: "generate_video",
+      prompt: "Make the camera move slowly",
+      outputFormat: "mp4",
+    });
   });
 
   it("triggers clarify action on out-of-range output index", async () => {

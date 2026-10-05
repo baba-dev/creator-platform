@@ -92,8 +92,13 @@ export async function planConversationTurn(params: {
   // 1. Check for Ambiguity / Clarification from Reference Resolver
   // =========================================================
   // If user says "the second image" or "animate that" without a clear single asset
+  const isFreshCreationIntent =
+    /^(?:please\s+)?(?:create|generate|draw|make)\s+(?:me\s+)?(?:an?\s+)?(?:image|picture|illustration|photo)\s+(?:of|showing|with)\b/i.test(
+      text,
+    );
   const hasReferenceWord =
     !isAspectRatioIntent &&
+    !isFreshCreationIntent &&
     /\b(?:image|picture|output|this|that|it|animate|variation|variations|first\s+frame|last\s+frame|video|extend)\b/i.test(
       lower,
     );
@@ -170,6 +175,22 @@ export async function planConversationTurn(params: {
     };
   }
 
+  // A numbered selection can be composed with a settings change. Keep both
+  // actions tied to the same turn instead of returning after selection.
+  if (outputIdx !== null && isAspectRatioIntent && ratio !== null) {
+    return {
+      version: ACTION_PROTOCOL_VERSION,
+      actions: [
+        {
+          type: "select_asset",
+          target: { kind: "output_index", index: outputIdx },
+        },
+        { type: "change_aspect_ratio", aspectRatio: ratio },
+      ],
+      reasoning: `Select output #${outputIdx} and change aspect ratio to ${ratio}.`,
+    };
+  }
+
   // =========================================================
   // 3. State-Only Asset Selection ("Use the second image", "Select image 3")
   // =========================================================
@@ -229,6 +250,10 @@ export async function planConversationTurn(params: {
       lower.startsWith("edit this ") ||
       lower.startsWith("retouch this ") ||
       lower.startsWith("adjust the ") ||
+      /^make\s+(?:the|this|that|its)\s+\S+/.test(lower) ||
+      /^(?:change|replace|remove|add)\s+(?:the|this|that|its|a)\s+/.test(
+        lower,
+      ) ||
       lower.startsWith("change the lighting") ||
       lower.startsWith("make the lighting"));
 
@@ -419,7 +444,6 @@ export async function planConversationTurn(params: {
     actions.push({
       type: "generate_video",
       prompt: text,
-      firstFrameAssetId: context.selectedAssetId ?? undefined,
       outputFormat: "mp4",
     });
   } else if (context.activeModality === "VOICE") {

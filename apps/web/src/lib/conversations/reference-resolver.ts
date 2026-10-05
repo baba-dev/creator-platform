@@ -125,23 +125,9 @@ export async function resolveAssetReference(params: {
 }): Promise<ReferenceResolutionResult> {
   const { text, organizationId, context, explicitAssetId } = params;
 
-  // Priority 1: Explicit concrete object supplied by trusted UI selection / parameter
-  if (explicitAssetId) {
-    const verified = await db.asset.findFirst({
-      where: {
-        id: explicitAssetId,
-        organizationId,
-        status: "READY",
-        deletedAt: null,
-      },
-      select: { id: true },
-    });
-    if (verified) {
-      return { resolved: true, assetId: verified.id, confidence: "HIGH" };
-    }
-  }
-
-  // Priority 2: Explicitly numbered output inside active group
+  // A reference written by the user is the action target. The client also sends
+  // the currently focused asset as a convenience, but that passive focus must
+  // never override an explicit reference such as "image 2".
   const parsedIndex = parseOutputIndex(text);
   if (parsedIndex !== null) {
     const matchedItem = context.activeOutputGroup.find(
@@ -182,7 +168,24 @@ export async function resolveAssetReference(params: {
     }
   }
 
-  // Priority 3: Currently UI-selected asset in context
+  // A concrete object supplied by the UI is authoritative only when the turn
+  // itself did not identify an output.
+  if (explicitAssetId) {
+    const verified = await db.asset.findFirst({
+      where: {
+        id: explicitAssetId,
+        organizationId,
+        status: "READY",
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+    if (verified) {
+      return { resolved: true, assetId: verified.id, confidence: "HIGH" };
+    }
+  }
+
+  // Currently UI-selected asset in context
   if (context.selectedAssetId) {
     const verified = await db.asset.findFirst({
       where: {

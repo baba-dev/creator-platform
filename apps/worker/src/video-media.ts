@@ -161,8 +161,7 @@ export async function renderVideo(
         "fps=24",
       ];
       if (transform.rotation === 90) visualFilters.push("transpose=1");
-      else if (transform.rotation === 180)
-        visualFilters.push("hflip", "vflip");
+      else if (transform.rotation === 180) visualFilters.push("hflip", "vflip");
       else if (transform.rotation === 270) visualFilters.push("transpose=2");
       if (transform.flipX) visualFilters.push("hflip");
       const { crop } = transform;
@@ -181,9 +180,7 @@ export async function renderVideo(
         `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2`,
         "setsar=1",
       );
-      filters.push(
-        `[${input}:v]${visualFilters.join(",")}${fade}[v${index}]`,
-      );
+      filters.push(`[${input}:v]${visualFilters.join(",")}${fade}[v${index}]`);
       if (detail.hasAudio && !clip.muted)
         filters.push(
           `[${input}:a]atrim=start=${begin}:duration=${duration},asetpts=PTS-STARTPTS,aresample=48000,aformat=channel_layouts=stereo,apad=whole_dur=${duration},atrim=duration=${duration}[a${index}]`,

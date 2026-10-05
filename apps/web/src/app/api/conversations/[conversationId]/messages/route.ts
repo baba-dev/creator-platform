@@ -451,13 +451,13 @@ export async function POST(
                 } =>
                   Boolean(
                     source &&
-                      typeof source === "object" &&
-                      "assetId" in source &&
-                      typeof source.assetId === "string" &&
-                      "role" in source &&
-                      typeof source.role === "string" &&
-                      "position" in source &&
-                      typeof source.position === "number",
+                    typeof source === "object" &&
+                    "assetId" in source &&
+                    typeof source.assetId === "string" &&
+                    "role" in source &&
+                    typeof source.role === "string" &&
+                    "position" in source &&
+                    typeof source.position === "number",
                   ),
               )
             : [];

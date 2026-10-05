@@ -1027,7 +1027,7 @@ model ChatThread {
   createdById    String
   personaId      String?
   title                 String
-  threadType            String        @default("CHARACTER")
+  threadType            String        @default("CHARACTER") @db.VarChar(32)
   modelId               String        @default("doubao-seed-character-260628")
   providerModelRecordId String?
   systemPrompt          String?       @db.Text

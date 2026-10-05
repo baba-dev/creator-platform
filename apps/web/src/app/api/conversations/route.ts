@@ -9,6 +9,7 @@ import {
 import { NextResponse, after } from "next/server";
 import { z } from "zod";
 
+import { rateLimit } from "@/lib/rate-limit";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
 import {
@@ -16,6 +17,12 @@ import {
   generateConversationTitle,
 } from "@/lib/conversations/title-generator";
 import type { ConversationState } from "@/lib/conversations/types";
+
+const generationLimiter = rateLimit({
+  max: 10,
+  windowMs: 60_000,
+  prefix: "generation",
+});
 
 const conversationCreateSchema = z.object({
   organizationId: z.string().min(1).max(100),
@@ -107,6 +114,9 @@ export async function POST(request: Request) {
       { status: 401 },
     );
   }
+
+  const rateLimited = await generationLimiter.check(session.user.id);
+  if (rateLimited) return rateLimited;
 
   try {
     const json = await request.json();

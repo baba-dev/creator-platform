@@ -63,7 +63,7 @@ export const videoRequestV2Schema = z
     durationSeconds: z.number().int().min(-1).max(30).default(5),
     generateAudio: z.boolean().default(false),
     outputFormat: z.enum(["mp4", "mov"]).default("mp4"),
-    returnLastFrame: z.boolean().default(true),
+    returnLastFrame: z.boolean().default(false),
     seed: z.number().int().min(-1).max(2_147_483_647).optional(),
     sourceDraftJobId: z.string().min(1).max(100).optional(),
     extensionDirection: z.enum(["BEFORE", "AFTER"]).optional(),

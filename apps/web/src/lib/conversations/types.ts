@@ -19,6 +19,11 @@ export interface ActiveOutputItem {
   durationMs?: number | null;
 }
 
+export interface ConversationPendingOperation {
+  originalPrompt: string;
+  createdAt: string;
+}
+
 export interface ConversationState {
   activeAssetId?: string | null;
   activeGenerationId?: string | null;
@@ -28,6 +33,8 @@ export interface ConversationState {
   currentProvider?: string | null;
   settings: ConversationEffectiveSettings;
   activeOutputs: ActiveOutputItem[];
+  pendingOperation?: ConversationPendingOperation | null;
+  revision?: number;
 }
 
 export interface ClarificationOption {

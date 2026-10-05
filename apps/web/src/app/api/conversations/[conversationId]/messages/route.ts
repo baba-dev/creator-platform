@@ -158,12 +158,27 @@ export async function POST(
       clientSelectedAssetId: input.selectedAssetId ?? null,
     });
 
+    let planPrompt = input.content;
+    const explicitAssetToUse = input.selectedAssetId ?? null;
+    let isResumedClarification = false;
+
+    if (
+      (input.content.toLowerCase() === "select asset" ||
+        input.content.toLowerCase().startsWith("select image") ||
+        input.content.toLowerCase().startsWith("use image")) &&
+      explicitAssetToUse &&
+      currentState.pendingOperation?.originalPrompt
+    ) {
+      planPrompt = currentState.pendingOperation.originalPrompt;
+      isResumedClarification = true;
+    }
+
     // Plan conversational turn
     const plan = await planConversationTurn({
-      userMessage: input.content,
+      userMessage: planPrompt,
       organizationId: thread.organizationId,
       context: plannerContext,
-      explicitAssetId: input.selectedAssetId ?? null,
+      explicitAssetId: explicitAssetToUse,
     });
 
     const firstAction = plan.actions[0]!;
@@ -172,6 +187,26 @@ export async function POST(
     // Case 1: Clarification needed (Ambiguity)
     // =========================================================
     if (firstAction.type === "clarify") {
+      const fresh = await db.chatThread.findUnique({
+        where: { id: conversationId },
+        select: { state: true },
+      });
+      const freshState =
+        (fresh?.state as unknown as ConversationState) ?? currentState;
+      freshState.pendingOperation = {
+        originalPrompt: input.content,
+        createdAt: new Date().toISOString(),
+      };
+      freshState.revision = Number(freshState.revision ?? 0) + 1;
+
+      await db.chatThread.update({
+        where: { id: conversationId },
+        data: {
+          state: freshState as unknown as object,
+          updatedAt: new Date(),
+        },
+      });
+
       const userMessage = await upsertMessage(
         "user",
         input.idempotencyKey,
@@ -227,11 +262,22 @@ export async function POST(
       }
 
       if (selectedAssetId) {
-        currentState.activeAssetId = selectedAssetId;
+        const fresh = await db.chatThread.findUnique({
+          where: { id: conversationId },
+          select: { state: true },
+        });
+        const freshState =
+          (fresh?.state as unknown as ConversationState) ?? currentState;
+        freshState.activeAssetId = selectedAssetId;
+        freshState.revision = Number(freshState.revision ?? 0) + 1;
+        if (isResumedClarification) {
+          freshState.pendingOperation = null;
+        }
+
         await db.chatThread.update({
           where: { id: conversationId },
           data: {
-            state: currentState as unknown as object,
+            state: freshState as unknown as object,
             updatedAt: new Date(),
           },
         });
@@ -368,6 +414,17 @@ export async function POST(
         targetModality = action.targetMediaKind ?? targetModality;
         requestedModelSwitch = true;
         needsCapabilityRouting = true;
+        if (targetModality === "IMAGE") {
+          const sourceAssetId =
+            currentState.activeAssetId ??
+            plannerContext.selectedAssetId ??
+            undefined;
+          if (sourceAssetId) {
+            imageReferenceAssetIds = [sourceAssetId];
+          }
+        } else if (targetModality === "VIDEO" && currentState.activeAssetId) {
+          firstFrameAssetId = firstFrameAssetId ?? currentState.activeAssetId;
+        }
       } else if (action.type === "generate_video") {
         targetModality = "VIDEO";
         if (action.prompt) targetPrompt = action.prompt;
@@ -418,8 +475,20 @@ export async function POST(
           needsCapabilityRouting || plannerContext.activeModality !== "VOICE";
       } else if (action.type === "change_voice") {
         targetVoiceKey = action.voiceKey;
+        if (
+          targetModality === "VOICE" &&
+          (basePayload.text || basePayload.prompt)
+        ) {
+          targetPrompt = (basePayload.text || basePayload.prompt) as string;
+        }
       } else if (action.type === "change_speaking_rate") {
         targetSpeechRate = action.speechRate;
+        if (
+          targetModality === "VOICE" &&
+          (basePayload.text || basePayload.prompt)
+        ) {
+          targetPrompt = (basePayload.text || basePayload.prompt) as string;
+        }
       } else if (action.type === "retry_generation") {
         if (!latestJob) {
           throw new GenerationError("There is no generation to retry.", 409);
@@ -560,10 +629,9 @@ export async function POST(
           targetModality === "VIDEO" && videoWorkflow === "FRAME_TO_VIDEO",
         requireExtendVideo:
           targetModality === "VIDEO" && videoWorkflow === "EXTEND",
-        // Conversational video jobs currently request a durable last-frame
-        // asset for lineage/continuation. Route only to models that can honor
-        // that contract instead of selecting one and failing during admission.
-        requireReturnLastFrame: targetModality === "VIDEO",
+        // Conversational video jobs request a durable last-frame asset only
+        // if supported by the model, rather than forcing and failing admission.
+        requireReturnLastFrame: false,
         excludeCurrentModel: requestedModelSwitch,
       });
       if (!routed) {
@@ -644,6 +712,9 @@ export async function POST(
                 },
               ]
             : [];
+      const modelCaps = (model.capabilities as Record<string, unknown>) ?? {};
+      const returnLastFrame =
+        targetModality === "VIDEO" && modelCaps.returnLastFrame === true;
       job = await createVideoJob(session.user.id, {
         organizationId: thread.organizationId,
         projectId: thread.projectId,
@@ -656,7 +727,7 @@ export async function POST(
         resolution: targetResolution,
         generateAudio: false,
         outputFormat: "mp4",
-        returnLastFrame: true,
+        returnLastFrame,
         schemaVersion: 2,
         workflow: videoWorkflow,
         sources,
@@ -726,13 +797,19 @@ export async function POST(
     }
 
     // Update conversation working state
-    currentState.activeGenerationId = job.id;
-    currentState.activeAssetId = null;
-    currentState.activeOutputs = [];
-    currentState.activeModality = targetModality;
-    currentState.currentModelId = model.id;
-    currentState.currentProvider = model.provider;
-    currentState.settings = {
+    const fresh = await db.chatThread.findUnique({
+      where: { id: conversationId },
+      select: { state: true },
+    });
+    const freshState =
+      (fresh?.state as unknown as ConversationState) ?? currentState;
+    freshState.activeGenerationId = job.id;
+    freshState.activeAssetId = null;
+    freshState.activeOutputs = [];
+    freshState.activeModality = targetModality;
+    freshState.currentModelId = model.id;
+    freshState.currentProvider = model.provider;
+    freshState.settings = {
       aspectRatio: targetRatio,
       resolution: targetResolution,
       outputCount: targetOutputCount,
@@ -740,11 +817,13 @@ export async function POST(
       voiceKey: targetVoiceKey,
       speechRate: targetSpeechRate,
     };
+    freshState.pendingOperation = null;
+    freshState.revision = Number(freshState.revision ?? 0) + 1;
 
     await db.chatThread.update({
       where: { id: conversationId },
       data: {
-        state: currentState as unknown as object,
+        state: freshState as unknown as object,
         updatedAt: new Date(),
       },
     });

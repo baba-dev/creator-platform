@@ -556,7 +556,10 @@ export function GenerationStudio({
           outputFormat:
             videoWorkflow === "TALKING_AVATAR" ? "mp4" : videoOutputFormat,
           returnLastFrame:
-            videoWorkflow === "TALKING_AVATAR" ? false : returnLastFrame,
+            videoWorkflow === "TALKING_AVATAR" ||
+            model?.capabilities?.returnLastFrame !== true
+              ? false
+              : returnLastFrame,
           ...(videoWorkflow === "DRAFT_FINAL" && sourceDraftJobId
             ? { sourceDraftJobId }
             : {}),
@@ -656,10 +659,15 @@ export function GenerationStudio({
         if (generateAudio) setGenerateAudio(false);
         if (videoOutputFormat !== "mp4") setVideoOutputFormat("mp4");
         if (returnLastFrame) setReturnLastFrame(false);
-      } else if (videoWorkflow === "TALKING_AVATAR") {
-        setVideoWorkflow("GENERATE");
-        setAvatarImageId("");
-        setDrivingAudioId("");
+      } else {
+        if (model?.capabilities?.returnLastFrame !== true && returnLastFrame) {
+          setReturnLastFrame(false);
+        }
+        if (videoWorkflow === "TALKING_AVATAR") {
+          setVideoWorkflow("GENERATE");
+          setAvatarImageId("");
+          setDrivingAudioId("");
+        }
       }
     });
     return () => {
@@ -669,6 +677,7 @@ export function GenerationStudio({
     activeMode,
     generateAudio,
     isTalkingAvatarModel,
+    model?.capabilities?.returnLastFrame,
     ratio,
     returnLastFrame,
     videoOutputFormat,
@@ -1205,7 +1214,10 @@ export function GenerationStudio({
           outputFormat:
             videoWorkflow === "TALKING_AVATAR" ? "mp4" : videoOutputFormat,
           returnLastFrame:
-            videoWorkflow === "TALKING_AVATAR" ? false : returnLastFrame,
+            videoWorkflow === "TALKING_AVATAR" ||
+            model?.capabilities?.returnLastFrame !== true
+              ? false
+              : returnLastFrame,
           ...(videoWorkflow === "DRAFT_FINAL" && sourceDraftJobId
             ? { sourceDraftJobId }
             : {}),
@@ -1225,6 +1237,7 @@ export function GenerationStudio({
           body: JSON.stringify({
             organizationId,
             projectId: selectedProjectId || undefined,
+            templateId: templateContext?.id || undefined,
             prompt: model.mediaKind === "VOICE" ? voiceText.trim() : prompt,
             modality: model.mediaKind,
             modelId: model.id,
@@ -1234,6 +1247,10 @@ export function GenerationStudio({
             aspectRatio: selectedRatio,
             resolution: selectedResolution,
             outputCount: model.mediaKind === "IMAGE" ? selectedOutputCount : 1,
+            referenceAssetIds:
+              model.mediaKind === "IMAGE" && referenceAssetIds.length > 0
+                ? referenceAssetIds
+                : undefined,
             durationSeconds:
               model.mediaKind === "VIDEO"
                 ? Number.parseInt(selectedDuration, 10)

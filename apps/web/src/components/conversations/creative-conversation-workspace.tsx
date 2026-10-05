@@ -87,6 +87,7 @@ export function CreativeConversationWorkspace({
   const [inputPrompt, setInputPrompt] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshError, setRefreshError] = useState(false);
 
   const activeJob = jobs.find((j) => j.id === selectedJobId) ?? jobs[0] ?? null;
   const isJobPending =
@@ -94,37 +95,67 @@ export function CreativeConversationWorkspace({
     activeJob?.status === "PROCESSING" ||
     activeJob?.status === "SUBMITTED";
 
+  const pendingJobs = useMemo(
+    () =>
+      jobs.filter(
+        (j) =>
+          j.status === "QUEUED" ||
+          j.status === "PROCESSING" ||
+          j.status === "SUBMITTED",
+      ),
+    [jobs],
+  );
+  const hasPendingJobs = pendingJobs.length > 0;
+
   const messageEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const pendingTurnRef = useRef<{
+    key: string;
+    prompt: string;
+    assetId?: string;
+  } | null>(null);
 
-  // Poll for active job status updates when running
+  // Poll for job status updates for any visible active jobs
   useEffect(() => {
-    if (!isJobPending || !activeJob?.id) return;
+    if (!hasPendingJobs) return;
     const timer = setInterval(async () => {
       try {
-        const res = await fetch(
-          `/api/generation-jobs/${encodeURIComponent(activeJob.id)}?organizationId=${encodeURIComponent(organizationId)}`,
-          { cache: "no-store" },
+        let anyFinished = false;
+        await Promise.all(
+          pendingJobs.map(async (pendingJob) => {
+            const res = await fetch(
+              `/api/generation-jobs/${encodeURIComponent(pendingJob.id)}?organizationId=${encodeURIComponent(organizationId)}`,
+              { cache: "no-store" },
+            );
+            if (!res.ok) return;
+            const data = await res.json();
+            if (data.job) {
+              setJobs((prev) =>
+                prev.map((j) =>
+                  j.id === pendingJob.id ? { ...j, ...data.job } : j,
+                ),
+              );
+              if (
+                data.job.status === "SUCCEEDED" ||
+                data.job.status === "FAILED" ||
+                data.job.status === "CANCELLED" ||
+                data.job.status === "MANUAL_REVIEW"
+              ) {
+                anyFinished = true;
+              }
+            }
+          }),
         );
-        const data = await res.json();
-        if (data.job) {
-          setJobs((prev) =>
-            prev.map((j) =>
-              j.id === activeJob.id ? { ...j, ...data.job } : j,
-            ),
-          );
-          if (data.job.status === "SUCCEEDED" || data.job.status === "FAILED") {
-            // Refresh conversation to load new assets
-            void refreshConversation();
-          }
+        if (anyFinished) {
+          void refreshConversation();
         }
       } catch {
-        // Ignore polling error
+        // Non-fatal polling error
       }
     }, 3000);
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isJobPending, activeJob?.id, organizationId]);
+  }, [hasPendingJobs, pendingJobs, organizationId]);
 
   // Refresh conversation details
   async function refreshConversation() {
@@ -132,8 +163,13 @@ export function CreativeConversationWorkspace({
       const res = await fetch(`/api/conversations/${conversationId}`, {
         cache: "no-store",
       });
+      if (!res.ok) {
+        setRefreshError(true);
+        return;
+      }
       const data = await res.json();
       if (data.conversation) {
+        setRefreshError(false);
         if (data.conversation.title) {
           setTitle(data.conversation.title);
           setTitleDraft(data.conversation.title);
@@ -161,13 +197,28 @@ export function CreativeConversationWorkspace({
         }
       }
     } catch {
-      // Ignore
+      setRefreshError(true);
     }
   }
 
-  // If initial title is temporary 'New creation', poll once after background titling completes
+  // Listen for background title updates and poll once after background titling completes
   useEffect(() => {
-    if (title !== "New creation") return;
+    function handleTitleEvent(e: Event) {
+      const customEvent = e as CustomEvent<{ id: string; title: string }>;
+      if (
+        customEvent.detail?.id === conversationId &&
+        customEvent.detail?.title &&
+        !isEditingTitle
+      ) {
+        setTitle(customEvent.detail.title);
+        setTitleDraft(customEvent.detail.title);
+      }
+    }
+    window.addEventListener(
+      "aiwa:conversation-title-updated",
+      handleTitleEvent,
+    );
+
     const timer = setTimeout(async () => {
       try {
         const res = await fetch(`/api/conversations/${conversationId}`, {
@@ -176,24 +227,25 @@ export function CreativeConversationWorkspace({
         const data = await res.json();
         if (
           data.conversation?.title &&
-          data.conversation.title !== "New creation"
+          data.conversation.title !== title &&
+          !isEditingTitle
         ) {
           setTitle(data.conversation.title);
           setTitleDraft(data.conversation.title);
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(
-              new CustomEvent("aiwa:conversation-title-updated", {
-                detail: { id: conversationId, title: data.conversation.title },
-              }),
-            );
-          }
         }
       } catch {
-        // Ignore
+        // Non-fatal
       }
-    }, 2500);
-    return () => clearTimeout(timer);
-  }, [conversationId, title]);
+    }, 3000);
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener(
+        "aiwa:conversation-title-updated",
+        handleTitleEvent,
+      );
+    };
+  }, [conversationId, isEditingTitle, title]);
 
   // Save renamed title
   async function saveTitle() {
@@ -244,9 +296,12 @@ export function CreativeConversationWorkspace({
     const prompt = (textToSend ?? inputPrompt).trim();
     if (!prompt || isSubmitting) return;
 
+    const wasTypedDraft = !textToSend;
     setIsSubmitting(true);
     setError(null);
-    setInputPrompt("");
+    if (wasTypedDraft) {
+      setInputPrompt("");
+    }
 
     try {
       const focusedJob =
@@ -259,27 +314,77 @@ export function CreativeConversationWorkspace({
           : focusedJob?.assets[0]?.id) ??
         undefined;
 
+      const idempotencyKey =
+        pendingTurnRef.current &&
+        pendingTurnRef.current.prompt === prompt &&
+        pendingTurnRef.current.assetId === focusedAssetId
+          ? pendingTurnRef.current.key
+          : crypto.randomUUID();
+
+      pendingTurnRef.current = {
+        key: idempotencyKey,
+        prompt,
+        assetId: focusedAssetId,
+      };
+
       const res = await fetch(`/api/conversations/${conversationId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           content: prompt,
           selectedAssetId: focusedAssetId,
-          idempotencyKey: crypto.randomUUID(),
+          idempotencyKey,
         }),
       });
 
       const data = await res.json();
       if (!res.ok) {
+        if (
+          res.status >= 400 &&
+          res.status < 500 &&
+          res.status !== 408 &&
+          res.status !== 429
+        ) {
+          pendingTurnRef.current = null;
+        }
         throw new Error(data.error ?? "Failed to process request.");
       }
 
+      pendingTurnRef.current = null;
+
       if (typeof data.jobId === "string" && data.jobId) {
+        setJobs((prev) => {
+          if (prev.some((j) => j.id === data.jobId)) return prev;
+          return [
+            {
+              id: data.jobId,
+              status: data.status ?? "QUEUED",
+              assets: [],
+              providerModel: null,
+            },
+            ...prev,
+          ];
+        });
         setSelectedJobId(data.jobId);
         setActiveAssetId(null);
       }
+      if (data.userMessage && data.assistantMessage) {
+        setMessages((prev) => {
+          const next = [...prev];
+          if (!next.some((m) => m.id === data.userMessage.id)) {
+            next.push(data.userMessage);
+          }
+          if (!next.some((m) => m.id === data.assistantMessage.id)) {
+            next.push(data.assistantMessage);
+          }
+          return next;
+        });
+      }
       await refreshConversation();
     } catch (err) {
+      if (wasTypedDraft) {
+        setInputPrompt(prompt);
+      }
       setError(err instanceof Error ? err.message : "Turn failed.");
     } finally {
       setIsSubmitting(false);
@@ -325,7 +430,6 @@ export function CreativeConversationWorkspace({
     return [
       { label: "Speak faster (1.2x)", prompt: "Make it faster" },
       { label: "Speak slower (0.8x)", prompt: "Make it slower" },
-      { label: "Change voice", prompt: "Change voice" },
     ];
   }, [activeModality]);
 
@@ -493,10 +597,7 @@ export function CreativeConversationWorkspace({
                 }
               />
               <div className="mt-4 flex gap-3">
-                <Button
-                  size="sm"
-                  onClick={() => void handleSend("Retry generation")}
-                >
+                <Button size="sm" onClick={() => void handleSend("retry")}>
                   Retry
                 </Button>
                 <Button
@@ -505,6 +606,40 @@ export function CreativeConversationWorkspace({
                   onClick={() => void handleSend("Try another model")}
                 >
                   Try another model
+                </Button>
+              </div>
+            </div>
+          ) : activeJob?.status === "MANUAL_REVIEW" ? (
+            <div className="py-6">
+              <ProcessFeedback
+                kind="delayed"
+                title="Under review"
+                description={
+                  activeJob.errorMessage ||
+                  "This generation requires review before proceeding. Reserved credits are held and will be settled once verified."
+                }
+              />
+            </div>
+          ) : activeJob?.status === "CANCELLED" ? (
+            <div className="py-6">
+              <ProcessFeedback
+                kind="recoverable"
+                title="Generation cancelled"
+                description="This generation was cancelled. Reserved credits have been returned to your balance."
+              />
+            </div>
+          ) : activeJob &&
+            activeJob.status === "SUCCEEDED" &&
+            (!activeJob.assets || activeJob.assets.length === 0) ? (
+            <div className="py-6">
+              <ProcessFeedback
+                kind="recoverable"
+                title="Outputs unavailable"
+                description="The generation finished, but no media assets were stored. Try retrying with different settings."
+              />
+              <div className="mt-4 flex gap-3">
+                <Button size="sm" onClick={() => void handleSend("retry")}>
+                  Retry
                 </Button>
               </div>
             </div>
@@ -643,10 +778,13 @@ export function CreativeConversationWorkspace({
                       const isSelected = asset.id === activeAsset.id;
                       const outputNum = idx + 1;
                       return (
-                        <div
+                        <button
                           key={asset.id}
+                          type="button"
                           onClick={() => void selectAsset(asset.id)}
-                          className={`group relative aspect-square overflow-hidden rounded-xl border cursor-pointer transition ${
+                          aria-label={`Select output #${outputNum}`}
+                          aria-pressed={isSelected}
+                          className={`group relative aspect-square overflow-hidden rounded-xl border cursor-pointer transition text-left ${
                             isSelected
                               ? "border-primary ring-2 ring-primary shadow-sm"
                               : "border-border hover:border-primary/50"
@@ -667,7 +805,7 @@ export function CreativeConversationWorkspace({
                               ✓
                             </span>
                           ) : null}
-                        </div>
+                        </button>
                       );
                     })}
                   </div>
@@ -676,7 +814,9 @@ export function CreativeConversationWorkspace({
             </div>
           ) : (
             <div className="py-12 text-center text-sm text-muted-foreground">
-              Ready to generate your first creation. Enter a prompt below.
+              {jobs.length === 0
+                ? "Ready to generate your first creation. Enter a prompt below."
+                : "Select a step above to view its output."}
             </div>
           )}
         </section>
@@ -738,6 +878,23 @@ export function CreativeConversationWorkspace({
         </section>
       </div>
 
+      {/* Reconnection status banner */}
+      {refreshError ? (
+        <div className="mb-2 rounded-xl border border-warning/40 bg-warning/10 px-4 py-2.5 text-xs font-medium text-warning-foreground flex items-center justify-between gap-2">
+          <span>
+            Status temporarily unavailable — your creative generation is running
+            safely in the background.
+          </span>
+          <button
+            type="button"
+            onClick={() => void refreshConversation()}
+            className="font-semibold underline hover:no-underline shrink-0 cursor-pointer"
+          >
+            Retry connection
+          </button>
+        </div>
+      ) : null}
+
       {/* Error banner */}
       {error ? (
         <div className="mb-2 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-2 text-xs font-medium text-destructive">
@@ -781,17 +938,33 @@ export function CreativeConversationWorkspace({
             value={inputPrompt}
             onChange={(e) => setInputPrompt(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
+              if (
+                e.key === "Enter" &&
+                !e.shiftKey &&
+                !e.nativeEvent.isComposing
+              ) {
                 e.preventDefault();
                 void handleSend();
               }
             }}
             placeholder="Type your next idea... (e.g. 'Make it 9:16', 'Animate this', 'Try another model')"
             disabled={!canGenerate || isSubmitting}
+            maxLength={4000}
             className="flex-1 resize-none bg-transparent px-2 py-1 text-sm text-foreground outline-hidden placeholder:text-muted-foreground"
           />
 
           <div className="flex items-center gap-2 shrink-0 pb-1 pr-1">
+            {inputPrompt.length > 500 ? (
+              <span
+                className={`text-[10px] tabular-nums ${
+                  inputPrompt.length > 3800
+                    ? "text-destructive font-semibold"
+                    : "text-muted-foreground"
+                }`}
+              >
+                {inputPrompt.length}/4000
+              </span>
+            ) : null}
             <span className="hidden sm:inline text-[10px] text-muted-foreground">
               ↵ Enter
             </span>
@@ -811,6 +984,9 @@ export function CreativeConversationWorkspace({
       {/* Lightbox Modal */}
       {lightboxAssetId ? (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Media Preview Lightbox"
           onClick={() => setLightboxAssetId(null)}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4"
         >

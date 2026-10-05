@@ -236,7 +236,7 @@ describe("Conversational Creative Action Planner", () => {
     }
   });
 
-  it("plans speech rate change: 'Make the voice slower.'", async () => {
+  it("plans speech rate change: 'Make the voice slower.' and 'Make it slower'", async () => {
     const voiceContext: ConversationPlannerContext = {
       ...baseContext,
       activeModality: "VOICE",
@@ -251,6 +251,49 @@ describe("Conversational Creative Action Planner", () => {
       type: "change_speaking_rate",
       speechRate: 0.8,
     });
+
+    const chipPlan = await planConversationTurn({
+      userMessage: "Make it slower",
+      organizationId: "org_1",
+      context: voiceContext,
+    });
+    expect(chipPlan.actions[0]).toEqual({
+      type: "change_speaking_rate",
+      speechRate: 0.8,
+    });
+  });
+
+  it("plans speech rate change: 'Make it faster' matching 1.2x UI chip", async () => {
+    const voiceContext: ConversationPlannerContext = {
+      ...baseContext,
+      activeModality: "VOICE",
+    };
+    const plan = await planConversationTurn({
+      userMessage: "Make it faster",
+      organizationId: "org_1",
+      context: voiceContext,
+    });
+
+    expect(plan.actions[0]).toEqual({
+      type: "change_speaking_rate",
+      speechRate: 1.2,
+    });
+  });
+
+  it("plans retry generation for both 'retry' and 'Retry generation'", async () => {
+    const plan1 = await planConversationTurn({
+      userMessage: "retry",
+      organizationId: "org_1",
+      context: baseContext,
+    });
+    expect(plan1.actions[0]?.type).toBe("retry_generation");
+
+    const plan2 = await planConversationTurn({
+      userMessage: "Retry generation",
+      organizationId: "org_1",
+      context: baseContext,
+    });
+    expect(plan2.actions[0]?.type).toBe("retry_generation");
   });
 
   it("plans multi-action turn: 'Use the third image and animate it.'", async () => {

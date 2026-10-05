@@ -674,4 +674,86 @@ describe("POST /api/conversations/[conversationId]/messages", () => {
     expect(body.clarification.question).toContain("only 2 images");
     expect(mocks.createImageJob).not.toHaveBeenCalled();
   });
+
+  it("resumes original action from pending clarification when asset is selected", async () => {
+    const threadWithPending = {
+      ...structuredClone(fakeThread),
+      state: {
+        ...fakeThread.state,
+        pendingOperation: {
+          originalPrompt: "Animate this",
+          createdAt: new Date().toISOString(),
+        },
+      },
+    };
+    mocks.db.chatThread.findUnique.mockResolvedValue(threadWithPending);
+    mocks.db.providerModel.findFirst.mockResolvedValue({
+      id: "model_vid_1",
+      displayName: "Seedance",
+      mediaKind: "VIDEO",
+      priceVersions: [{ id: "pv_video_1" }],
+    });
+
+    const req = new Request(
+      "https://example.com/api/conversations/conv_1/messages",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: "Select asset",
+          selectedAssetId: "asset_2",
+          idempotencyKey: "55555555-5555-4555-8555-555555555555",
+        }),
+      },
+    );
+
+    const res = await POST(req, {
+      params: Promise.resolve({ conversationId: "conv_1" }),
+    });
+
+    expect(res.status).toBe(202);
+    expect(mocks.createVideoJob).toHaveBeenCalledWith(
+      "user_1",
+      expect.objectContaining({
+        workflow: "FRAME_TO_VIDEO",
+        sources: [
+          {
+            assetId: "asset_2",
+            role: "FIRST_FRAME",
+            position: 0,
+          },
+        ],
+      }),
+    );
+  });
+
+  it("increments revision in thread state on state updates", async () => {
+    const req = new Request(
+      "https://example.com/api/conversations/conv_1/messages",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: "A futuristic hovercraft",
+          idempotencyKey: "66666666-6666-4666-8666-666666666666",
+        }),
+      },
+    );
+
+    const res = await POST(req, {
+      params: Promise.resolve({ conversationId: "conv_1" }),
+    });
+
+    expect(res.status).toBe(202);
+    expect(mocks.db.chatThread.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "conv_1" },
+        data: expect.objectContaining({
+          state: expect.objectContaining({
+            revision: 1,
+          }),
+        }),
+      }),
+    );
+  });
 });

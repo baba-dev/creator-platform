@@ -127,7 +127,12 @@ export async function PATCH(
   const { conversationId } = await params;
   const thread = await db.chatThread.findUnique({
     where: { id: conversationId },
-    select: { id: true, organizationId: true, createdById: true, threadType: true },
+    select: {
+      id: true,
+      organizationId: true,
+      createdById: true,
+      threadType: true,
+    },
   });
 
   if (
@@ -202,7 +207,12 @@ export async function DELETE(
   const { conversationId } = await params;
   const thread = await db.chatThread.findUnique({
     where: { id: conversationId },
-    select: { id: true, organizationId: true, createdById: true, threadType: true },
+    select: {
+      id: true,
+      organizationId: true,
+      createdById: true,
+      threadType: true,
+    },
   });
 
   if (

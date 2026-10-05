@@ -86,10 +86,9 @@ export function parseOutputIndex(phrase: string): number | null {
       candidates.push({ index, offset: afterNoun.index });
     }
 
-    const oneForm = new RegExp(
-      `\\b(?:the\\s+)?${word}\\s+one\\b`,
-      "i",
-    ).exec(normalized);
+    const oneForm = new RegExp(`\\b(?:the\\s+)?${word}\\s+one\\b`, "i").exec(
+      normalized,
+    );
     if (oneForm) {
       candidates.push({ index, offset: oneForm.index });
     }

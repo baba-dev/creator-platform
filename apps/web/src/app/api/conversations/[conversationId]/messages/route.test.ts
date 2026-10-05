@@ -114,7 +114,9 @@ describe("POST /api/conversations/[conversationId]/messages", () => {
     mocks.trusted.mockReturnValue(true);
     mocks.session.mockResolvedValue({ user: fakeUser });
     mocks.db.membership.findUnique.mockResolvedValue(fakeMembership);
-    mocks.db.chatThread.findUnique.mockResolvedValue(fakeThread);
+    mocks.db.chatThread.findUnique.mockImplementation(() =>
+      Promise.resolve(structuredClone(fakeThread)),
+    );
     mocks.db.chatMessage.findMany.mockResolvedValue([]);
     mocks.db.chatMessage.create.mockImplementation(({ data }) =>
       Promise.resolve({ id: `msg_${Math.random()}`, ...data }),
@@ -267,6 +269,100 @@ describe("POST /api/conversations/[conversationId]/messages", () => {
 
     expect(res.status).toBe(202);
     expect(mocks.db.generationJob.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("retries frame-to-video with its original first-frame source", async () => {
+    const videoThread = {
+      ...structuredClone(fakeThread),
+      modelId: "model_vid_1",
+      state: {
+        activeModality: "VIDEO",
+        currentModelId: "model_vid_1",
+        settings: {
+          aspectRatio: "adaptive",
+          resolution: "720p",
+          durationSeconds: 5,
+        },
+        activeOutputs: [],
+      },
+      generationJobs: [
+        {
+          id: "job_video_prev",
+          status: "SUCCEEDED",
+          providerModel: {
+            id: "model_vid_1",
+            displayName: "Seedance",
+            mediaKind: "VIDEO",
+          },
+          requestPayload: {
+            schemaVersion: 2,
+            workflow: "FRAME_TO_VIDEO",
+            prompt: "Animate the product",
+            sources: [
+              {
+                assetId: "asset_1",
+                role: "FIRST_FRAME",
+                position: 0,
+              },
+            ],
+            aspectRatio: "adaptive",
+            resolution: "720p",
+            durationSeconds: 5,
+            generateAudio: false,
+            outputFormat: "mp4",
+            returnLastFrame: true,
+          },
+          assets: [
+            {
+              id: "video_out",
+              mimeType: "video/mp4",
+              generationOutputIndex: 0,
+            },
+          ],
+        },
+      ],
+    };
+    mocks.db.chatThread.findUnique.mockResolvedValue(videoThread);
+    mocks.db.providerModel.findFirst.mockResolvedValue({
+      id: "model_vid_1",
+      displayName: "Seedance",
+      mediaKind: "VIDEO",
+      priceVersions: [{ id: "pv_video_1" }],
+    });
+
+    const req = new Request(
+      "https://example.com/api/conversations/conv_1/messages",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: "retry",
+          idempotencyKey: "77777777-7777-4777-8777-777777777777",
+        }),
+      },
+    );
+
+    const res = await POST(req, {
+      params: Promise.resolve({ conversationId: "conv_1" }),
+    });
+
+    expect(res.status).toBe(202);
+    expect(mocks.createVideoJob).toHaveBeenCalledWith(
+      "user_1",
+      expect.objectContaining({
+        workflow: "FRAME_TO_VIDEO",
+        prompt: "Animate the product",
+        aspectRatio: "adaptive",
+        resolution: "720p",
+        sources: [
+          {
+            assetId: "asset_1",
+            role: "FIRST_FRAME",
+            position: 0,
+          },
+        ],
+      }),
+    );
   });
 
   it("handles ambiguity with clarify response: 'Use the tenth image.'", async () => {

@@ -407,6 +407,85 @@ export async function POST(
         targetVoiceKey = action.voiceKey;
       } else if (action.type === "change_speaking_rate") {
         targetSpeechRate = action.speechRate;
+      } else if (action.type === "retry_generation") {
+        if (!latestJob) {
+          throw new GenerationError("There is no generation to retry.", 409);
+        }
+
+        if (targetModality === "IMAGE") {
+          const references = Array.isArray(basePayload.referenceAssetIds)
+            ? basePayload.referenceAssetIds.filter(
+                (assetId): assetId is string => typeof assetId === "string",
+              )
+            : [];
+          imageReferenceAssetIds = references;
+        } else if (targetModality === "VIDEO") {
+          if (basePayload.schemaVersion !== 2) {
+            throw new GenerationError(
+              "This older video turn cannot be retried safely from conversation history.",
+              409,
+            );
+          }
+
+          const priorWorkflow = basePayload.workflow;
+          if (
+            priorWorkflow !== "GENERATE" &&
+            priorWorkflow !== "FRAME_TO_VIDEO" &&
+            priorWorkflow !== "EXTEND"
+          ) {
+            throw new GenerationError(
+              "This video workflow cannot be retried from the conversational workspace yet.",
+              409,
+            );
+          }
+
+          videoWorkflow = priorWorkflow;
+          const priorSources = Array.isArray(basePayload.sources)
+            ? basePayload.sources.filter(
+                (
+                  source,
+                ): source is {
+                  assetId: string;
+                  role: string;
+                  position: number;
+                } =>
+                  Boolean(
+                    source &&
+                      typeof source === "object" &&
+                      "assetId" in source &&
+                      typeof source.assetId === "string" &&
+                      "role" in source &&
+                      typeof source.role === "string" &&
+                      "position" in source &&
+                      typeof source.position === "number",
+                  ),
+              )
+            : [];
+
+          if (videoWorkflow === "FRAME_TO_VIDEO") {
+            firstFrameAssetId = priorSources.find(
+              (source) => source.role === "FIRST_FRAME",
+            )?.assetId;
+            if (!firstFrameAssetId) {
+              throw new GenerationError(
+                "The original first-frame source is no longer available in this turn.",
+                409,
+              );
+            }
+          } else if (videoWorkflow === "EXTEND") {
+            videoSourceAssetId = priorSources.find(
+              (source) => source.role === "SOURCE_VIDEO",
+            )?.assetId;
+            if (!videoSourceAssetId) {
+              throw new GenerationError(
+                "The original source video is no longer available in this turn.",
+                409,
+              );
+            }
+            extensionDirection =
+              basePayload.extensionDirection === "BEFORE" ? "BEFORE" : "AFTER";
+          }
+        }
       } else if (action.type === "generate_image") {
         targetModality = "IMAGE";
         if (action.prompt) targetPrompt = action.prompt;

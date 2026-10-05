@@ -73,7 +73,7 @@ export async function generateConversationTitle(params: {
   const apiKey = process.env.NVIDIA_API_KEY;
   if (!apiKey) {
     // If NVIDIA is not configured, apply fallback to DB
-    await updateThreadTitle(conversationId, fallback);
+    await updateThreadTitle(conversationId, fallback, fallback);
     return fallback;
   }
 
@@ -119,11 +119,11 @@ export async function generateConversationTitle(params: {
         ? cleaned
         : fallback;
 
-    await updateThreadTitle(conversationId, finalTitle);
+    await updateThreadTitle(conversationId, finalTitle, fallback);
     return finalTitle;
   } catch {
     // Fall back deterministically without failing the conversation
-    await updateThreadTitle(conversationId, fallback);
+    await updateThreadTitle(conversationId, fallback, fallback);
     return fallback;
   }
 }
@@ -131,10 +131,15 @@ export async function generateConversationTitle(params: {
 async function updateThreadTitle(
   conversationId: string,
   title: string,
+  expectedCurrentTitle: string,
 ): Promise<void> {
   try {
-    await db.chatThread.update({
-      where: { id: conversationId },
+    // Do not let a delayed AI title overwrite a title the user already renamed.
+    await db.chatThread.updateMany({
+      where: {
+        id: conversationId,
+        title: expectedCurrentTitle,
+      },
       data: { title },
     });
   } catch {

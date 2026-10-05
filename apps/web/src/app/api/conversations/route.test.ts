@@ -41,6 +41,14 @@ vi.mock("@aiwa/generation", () => ({
   createImageJob: mocks.createImageJob,
   createVideoJob: mocks.createVideoJob,
   createVoiceJob: vi.fn(),
+  GenerationError: class GenerationError extends Error {
+    constructor(
+      message: string,
+      public status = 400,
+    ) {
+      super(message);
+    }
+  },
 }));
 
 vi.mock("@/lib/conversations/title-generator", () => ({

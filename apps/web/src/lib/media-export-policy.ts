@@ -19,7 +19,8 @@ export function browserVideoExportBlockReason(
   source: BrowserVideoAsset | undefined,
 ): string | null {
   if (document.clips.length !== 1) return "multi-clip timeline";
-  if (!source || source.mediaKind !== "VIDEO") return "source video unavailable";
+  if (!source || source.mediaKind !== "VIDEO")
+    return "source video unavailable";
   if (!source.width || !source.height || !source.durationMs)
     return "source metadata unavailable";
   if (document.voiceover || document.soundtrack)

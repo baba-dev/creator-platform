@@ -280,11 +280,9 @@ export async function withDatabaseMediaCapacity<T>(
   execute: () => Promise<T>,
 ): Promise<T> {
   try {
-    await db.mediaCapacity.upsert({
-      where: { id: capacityId },
-      create: { id: capacityId },
-      update: {},
-    });
+    // Initialize without updating an existing lease. A concurrent no-op upsert
+    // can fail with MariaDB error 1020 before callers reach the fenced lock.
+    await db.mediaCapacity.create({ data: { id: capacityId } });
   } catch (error) {
     if (
       !(error instanceof Prisma.PrismaClientKnownRequestError) ||

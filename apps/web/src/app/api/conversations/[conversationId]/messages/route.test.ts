@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
     },
     providerModel: {
       findFirst: vi.fn(),
+      findMany: vi.fn(),
     },
     asset: {
       findFirst: vi.fn(),
@@ -138,9 +139,111 @@ describe("POST /api/conversations/[conversationId]/messages", () => {
     });
     mocks.db.providerModel.findFirst.mockResolvedValue({
       id: "model_img_1",
+      providerModelId: "seedream-5-0-260128",
       displayName: "Seedream 5.0",
+      provider: "BYTEPLUS",
       mediaKind: "IMAGE",
+      capabilities: {
+        "aspectRatio:1:1": true,
+        "aspectRatio:9:16": true,
+        "aspectRatio:16:9": true,
+        "resolution:2K": true,
+        referenceImages: true,
+        sequentialImages: true,
+        maxGeneratedImages: 15,
+        maxTotalInputOutputImages: 15,
+      },
       priceVersions: [{ id: "pv_1" }],
+    });
+    mocks.db.providerModel.findMany.mockImplementation(({ where }) => {
+      if (where.mediaKind === "VIDEO") {
+        return Promise.resolve([
+          {
+            id: "model_avatar_1",
+            providerModelId: "omnihuman-1.5",
+            displayName: "OmniHuman 1.5",
+            provider: "BYTEPLUS",
+            mediaKind: "VIDEO",
+            capabilities: {
+              "aspectRatio:adaptive": true,
+              "resolution:720p": true,
+              talkingAvatar: true,
+              returnLastFrame: false,
+            },
+            priceVersions: [{ id: "pv_avatar" }],
+          },
+          {
+            id: "model_vid_fast",
+            providerModelId: "dreamina-seedance-2-0-fast-260128",
+            displayName: "Seedance 2.0 Fast",
+            provider: "BYTEPLUS",
+            mediaKind: "VIDEO",
+            capabilities: {
+              "aspectRatio:adaptive": true,
+              "resolution:720p": true,
+              firstFrame: true,
+              returnLastFrame: true,
+            },
+            priceVersions: [{ id: "pv_video_fast" }],
+          },
+        ]);
+      }
+      return Promise.resolve([
+        {
+          id: "model_img_legacy",
+          providerModelId: "seedream-4-0-250828",
+          displayName: "Seedream 4.0",
+          provider: "BYTEPLUS",
+          mediaKind: "IMAGE",
+          capabilities: {
+            "aspectRatio:1:1": true,
+            "aspectRatio:9:16": true,
+            "aspectRatio:16:9": true,
+            "resolution:2K": true,
+            referenceImages: true,
+            sequentialImages: true,
+            maxGeneratedImages: 15,
+            maxTotalInputOutputImages: 15,
+          },
+          priceVersions: [{ id: "pv_legacy" }],
+        },
+        {
+          id: "model_img_1",
+          providerModelId: "seedream-5-0-260128",
+          displayName: "Seedream 5.0",
+          provider: "BYTEPLUS",
+          mediaKind: "IMAGE",
+          capabilities: {
+            "aspectRatio:1:1": true,
+            "aspectRatio:9:16": true,
+            "aspectRatio:16:9": true,
+            "resolution:2K": true,
+            referenceImages: true,
+            sequentialImages: true,
+            maxGeneratedImages: 15,
+            maxTotalInputOutputImages: 15,
+          },
+          priceVersions: [{ id: "pv_1" }],
+        },
+        {
+          id: "model_img_45",
+          providerModelId: "seedream-4-5-251128",
+          displayName: "Seedream 4.5",
+          provider: "BYTEPLUS",
+          mediaKind: "IMAGE",
+          capabilities: {
+            "aspectRatio:1:1": true,
+            "aspectRatio:9:16": true,
+            "aspectRatio:16:9": true,
+            "resolution:2K": true,
+            referenceImages: true,
+            sequentialImages: true,
+            maxGeneratedImages: 15,
+            maxTotalInputOutputImages: 15,
+          },
+          priceVersions: [{ id: "pv_45" }],
+        },
+      ]);
     });
     mocks.db.asset.findFirst.mockImplementation(({ where }) =>
       Promise.resolve({ id: where.id }),
@@ -269,6 +372,189 @@ describe("POST /api/conversations/[conversationId]/messages", () => {
 
     expect(res.status).toBe(202);
     expect(mocks.db.generationJob.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("preserves the focused image when changing aspect ratio from a quick action", async () => {
+    const req = new Request(
+      "https://example.com/api/conversations/conv_1/messages",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: "Make it 9:16.",
+          selectedAssetId: "asset_1",
+          idempotencyKey: "88888888-8888-4888-8888-888888888888",
+        }),
+      },
+    );
+
+    const res = await POST(req, {
+      params: Promise.resolve({ conversationId: "conv_1" }),
+    });
+
+    expect(res.status).toBe(202);
+    expect(mocks.createImageJob).toHaveBeenCalledWith(
+      "user_1",
+      expect.objectContaining({
+        aspectRatio: "9:16",
+        prompt: "Luxury perfume on sand",
+        referenceAssetIds: ["asset_1"],
+      }),
+    );
+  });
+
+  it("creates four focused variations from the selected image", async () => {
+    const req = new Request(
+      "https://example.com/api/conversations/conv_1/messages",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: "Give me four variations",
+          selectedAssetId: "asset_1",
+          idempotencyKey: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        }),
+      },
+    );
+
+    const res = await POST(req, {
+      params: Promise.resolve({ conversationId: "conv_1" }),
+    });
+
+    expect(res.status).toBe(202);
+    expect(mocks.createImageJob).toHaveBeenCalledWith(
+      "user_1",
+      expect.objectContaining({
+        modelId: "model_img_1",
+        outputCount: 4,
+        referenceAssetIds: ["asset_1"],
+        prompt: "Luxury perfume on sand",
+      }),
+    );
+  });
+
+  it("applies cinematic-lighting quick action as an edit of the focused image", async () => {
+    const req = new Request(
+      "https://example.com/api/conversations/conv_1/messages",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: "Enhance with dramatic cinematic lighting and high contrast",
+          selectedAssetId: "asset_1",
+          idempotencyKey: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        }),
+      },
+    );
+
+    const res = await POST(req, {
+      params: Promise.resolve({ conversationId: "conv_1" }),
+    });
+
+    expect(res.status).toBe(202);
+    expect(mocks.createImageJob).toHaveBeenCalledWith(
+      "user_1",
+      expect.objectContaining({
+        modelId: "model_img_1",
+        prompt: "Enhance with dramatic cinematic lighting and high contrast",
+        referenceAssetIds: ["asset_1"],
+      }),
+    );
+  });
+
+  it("Try another model uses deterministic safe image-model preference", async () => {
+    mocks.db.providerModel.findFirst.mockResolvedValue({
+      id: "model_img_45",
+      providerModelId: "seedream-4-5-251128",
+      displayName: "Seedream 4.5",
+      provider: "BYTEPLUS",
+      mediaKind: "IMAGE",
+      capabilities: {
+        "aspectRatio:1:1": true,
+        "resolution:2K": true,
+        referenceImages: true,
+      },
+      priceVersions: [{ id: "pv_45" }],
+    });
+
+    const req = new Request(
+      "https://example.com/api/conversations/conv_1/messages",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: "Try another model",
+          selectedAssetId: "asset_1",
+          idempotencyKey: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        }),
+      },
+    );
+
+    const res = await POST(req, {
+      params: Promise.resolve({ conversationId: "conv_1" }),
+    });
+
+    expect(res.status).toBe(202);
+    expect(mocks.createImageJob).toHaveBeenCalledWith(
+      "user_1",
+      expect.objectContaining({
+        modelId: "model_img_45",
+        prompt: "Luxury perfume on sand",
+      }),
+    );
+  });
+
+  it("routes Animate this to Seedance and never to the talking-avatar model", async () => {
+    mocks.db.providerModel.findFirst.mockResolvedValue({
+      id: "model_vid_fast",
+      providerModelId: "dreamina-seedance-2-0-fast-260128",
+      displayName: "Seedance 2.0 Fast",
+      provider: "BYTEPLUS",
+      mediaKind: "VIDEO",
+      capabilities: {
+        "aspectRatio:adaptive": true,
+        "resolution:720p": true,
+        firstFrame: true,
+        returnLastFrame: true,
+      },
+      priceVersions: [{ id: "pv_video_fast" }],
+    });
+
+    const req = new Request(
+      "https://example.com/api/conversations/conv_1/messages",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: "Animate this",
+          selectedAssetId: "asset_1",
+          idempotencyKey: "99999999-9999-4999-8999-999999999999",
+        }),
+      },
+    );
+
+    const res = await POST(req, {
+      params: Promise.resolve({ conversationId: "conv_1" }),
+    });
+
+    expect(res.status).toBe(202);
+    expect(mocks.createVideoJob).toHaveBeenCalledWith(
+      "user_1",
+      expect.objectContaining({
+        modelId: "model_vid_fast",
+        workflow: "FRAME_TO_VIDEO",
+        aspectRatio: "adaptive",
+        resolution: "720p",
+        returnLastFrame: true,
+        sources: [
+          {
+            assetId: "asset_1",
+            role: "FIRST_FRAME",
+            position: 0,
+          },
+        ],
+      }),
+    );
   });
 
   it("retries frame-to-video with its original first-frame source", async () => {

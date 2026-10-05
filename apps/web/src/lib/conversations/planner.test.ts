@@ -177,6 +177,23 @@ describe("Conversational Creative Action Planner", () => {
     expect(plan.actions[0]?.type).toBe("generate_image");
   });
 
+  it("treats enhancement direction as an edit of the focused image", async () => {
+    const plan = await planConversationTurn({
+      userMessage: "Enhance with dramatic cinematic lighting and high contrast",
+      organizationId: "org_1",
+      context: baseContext,
+      explicitAssetId: "asset_902",
+    });
+
+    expect(plan.actions).toEqual([
+      {
+        type: "edit_image",
+        prompt: "Enhance with dramatic cinematic lighting and high contrast",
+        sourceAssetId: "asset_902",
+      },
+    ]);
+  });
+
   it("plans model switch: 'Try another model.'", async () => {
     const plan = await planConversationTurn({
       userMessage: "Try another model.",

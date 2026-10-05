@@ -214,7 +214,39 @@ export async function planConversationTurn(params: {
   }
 
   // =========================================================
-  // 5. Alternate Model ("Try another model", "Use a different model")
+  // 5. Focused Image Edit ("Enhance with cinematic lighting", etc.)
+  // =========================================================
+  // Follow-up creative direction should operate on the focused image when the
+  // user asks to enhance/edit it. Without this branch the generic fallback
+  // treats the instruction as a brand-new text-to-image prompt and loses the
+  // visual continuity the conversation UI promises.
+  const imageEditSource =
+    resolvedRef?.assetId ?? context.selectedAssetId ?? undefined;
+  const isFocusedImageEdit =
+    context.activeModality === "IMAGE" &&
+    Boolean(imageEditSource) &&
+    (lower.startsWith("enhance with ") ||
+      lower.startsWith("edit this ") ||
+      lower.startsWith("retouch this ") ||
+      lower.startsWith("adjust the ") ||
+      lower.startsWith("change the lighting") ||
+      lower.startsWith("make the lighting"));
+
+  if (isFocusedImageEdit) {
+    actions.push({
+      type: "edit_image",
+      prompt: text,
+      sourceAssetId: imageEditSource,
+    });
+    return {
+      version: ACTION_PROTOCOL_VERSION,
+      actions,
+      reasoning: "Apply the requested edit to the focused image.",
+    };
+  }
+
+  // =========================================================
+  // 6. Alternate Model ("Try another model", "Use a different model")
   // =========================================================
   if (
     lower.includes("try another model") ||
@@ -235,7 +267,7 @@ export async function planConversationTurn(params: {
   }
 
   // =========================================================
-  // 6. Variations ("Give me four variations", "Create 4 variations")
+  // 7. Variations ("Give me four variations", "Create 4 variations")
   // =========================================================
   if (lower.includes("variation") || lower.includes("variations")) {
     const countMatch = /(\d+)\s+variations?/i.exec(lower);
@@ -264,7 +296,7 @@ export async function planConversationTurn(params: {
   }
 
   // =========================================================
-  // 7. Video Animation ("Animate this", "Animate it")
+  // 8. Video Animation ("Animate this", "Animate it")
   // =========================================================
   if (isAnimate) {
     actions.push({
@@ -282,7 +314,7 @@ export async function planConversationTurn(params: {
   }
 
   // =========================================================
-  // 8. Video extension ("Extend this video by 5 seconds")
+  // 9. Video extension ("Extend this video by 5 seconds")
   // =========================================================
   if (/\bextend\b/i.test(lower) && /\b(?:video|this|it)\b/i.test(lower)) {
     const durationMatch = /\b(\d{1,2})\s*(?:s|sec|secs|second|seconds)\b/i.exec(
@@ -307,7 +339,7 @@ export async function planConversationTurn(params: {
   }
 
   // =========================================================
-  // 9. First / Last Frame Mapping
+  // 10. First / Last Frame Mapping
   // =========================================================
   if (lower.includes("first frame")) {
     actions.push({
@@ -323,7 +355,7 @@ export async function planConversationTurn(params: {
   }
 
   // =========================================================
-  // 9. Speech Speed / Voice Adjustments
+  // 11. Speech Speed / Voice Adjustments
   // =========================================================
   if (lower.includes("voice slower") || lower.includes("speak slower")) {
     actions.push({
@@ -349,7 +381,7 @@ export async function planConversationTurn(params: {
   }
 
   // =========================================================
-  // 10. Retry
+  // 12. Retry
   // =========================================================
   if (lower === "retry" || lower === "try again" || lower === "regenerate") {
     actions.push({
@@ -364,7 +396,7 @@ export async function planConversationTurn(params: {
   }
 
   // =========================================================
-  // 11. Default Fallback: Generate Media with User Prompt
+  // 13. Default Fallback: Generate Media with User Prompt
   // =========================================================
   if (context.activeModality === "VIDEO") {
     actions.push({

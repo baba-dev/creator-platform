@@ -5,7 +5,7 @@ type QuickCreateModelLike = {
   capabilities?: Record<string, unknown> | null;
 };
 
-const QUICK_CREATE_PREFERRED_PROVIDER_MODEL_IDS = {
+export const QUICK_CREATE_PREFERRED_PROVIDER_MODEL_IDS = {
   IMAGE: [
     "seedream-5-0-260128",
     "seedream-4-5-251128",

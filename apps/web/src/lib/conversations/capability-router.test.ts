@@ -51,6 +51,52 @@ vi.mock("@aiwa/db", () => ({
             },
           ]);
         }
+        if (where.mediaKind === "VIDEO") {
+          return Promise.resolve([
+            {
+              id: "model_avatar_1",
+              providerModelId: "omnihuman-1.5",
+              displayName: "OmniHuman 1.5",
+              provider: "BYTEPLUS",
+              mediaKind: "VIDEO",
+              capabilities: {
+                "aspectRatio:adaptive": true,
+                "resolution:720p": true,
+                talkingAvatar: true,
+                returnLastFrame: false,
+              },
+              priceVersions: [{ id: "pv_avatar" }],
+            },
+            {
+              id: "model_video_standard",
+              providerModelId: "dreamina-seedance-2-0-260128",
+              displayName: "Seedance 2.0",
+              provider: "BYTEPLUS",
+              mediaKind: "VIDEO",
+              capabilities: {
+                "aspectRatio:adaptive": true,
+                "resolution:720p": true,
+                firstFrame: true,
+                returnLastFrame: true,
+              },
+              priceVersions: [{ id: "pv_video_standard" }],
+            },
+            {
+              id: "model_video_fast",
+              providerModelId: "dreamina-seedance-2-0-fast-260128",
+              displayName: "Seedance 2.0 Fast",
+              provider: "BYTEPLUS",
+              mediaKind: "VIDEO",
+              capabilities: {
+                "aspectRatio:adaptive": true,
+                "resolution:720p": true,
+                firstFrame: true,
+                returnLastFrame: true,
+              },
+              priceVersions: [{ id: "pv_video_fast" }],
+            },
+          ]);
+        }
         return Promise.resolve([]);
       }),
     },
@@ -97,5 +143,31 @@ describe("Capability-Aware Model Router", () => {
     });
 
     expect(result).toBeNull();
+  });
+
+  it("routes frame-to-video to a Seedance model instead of OmniHuman", async () => {
+    const result = await findCompatibleAlternativeModel({
+      modality: "VIDEO",
+      currentModelId: "model_image_1",
+      requiredAspectRatio: "adaptive",
+      requiredResolution: "720p",
+      requireFirstFrame: true,
+      requireReturnLastFrame: true,
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.providerModelId).toBe("dreamina-seedance-2-0-fast-260128");
+    expect(result?.modelId).toBe("model_video_fast");
+  });
+
+  it("uses deterministic preferred ordering instead of database row order", async () => {
+    const result = await findCompatibleAlternativeModel({
+      modality: "VIDEO",
+      requiredAspectRatio: "adaptive",
+      requiredResolution: "720p",
+      requireReturnLastFrame: true,
+    });
+
+    expect(result?.providerModelId).toBe("dreamina-seedance-2-0-fast-260128");
   });
 });

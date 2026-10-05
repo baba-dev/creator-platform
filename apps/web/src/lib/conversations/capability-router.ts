@@ -1,4 +1,5 @@
 import { db } from "@aiwa/db";
+import { QUICK_CREATE_PREFERRED_PROVIDER_MODEL_IDS } from "../quick-create-model";
 import { capabilityValues } from "../studio-model-capabilities";
 import type { CreativeModality } from "./types";
 
@@ -9,7 +10,9 @@ export interface CapabilityRoutingInput {
   requiredResolution?: string;
   requireReferenceImages?: boolean;
   requiredOutputCount?: number;
+  requireFirstFrame?: boolean;
   requireExtendVideo?: boolean;
+  requireReturnLastFrame?: boolean;
   excludeCurrentModel?: boolean;
 }
 
@@ -93,6 +96,12 @@ export async function findCompatibleAlternativeModel(
       }
     }
 
+    // Normal creative video turns must not implicitly route to a
+    // talking-avatar-only model. Those require their dedicated source workflow.
+    if (input.modality === "VIDEO" && caps.talkingAvatar === true) {
+      return false;
+    }
+
     // Check reference image support
     if (input.requireReferenceImages && caps.referenceImages !== true) {
       return false;
@@ -117,7 +126,15 @@ export async function findCompatibleAlternativeModel(
       }
     }
 
+    if (input.requireFirstFrame && caps.firstFrame !== true) {
+      return false;
+    }
+
     if (input.requireExtendVideo && caps.extendVideo !== true) {
+      return false;
+    }
+
+    if (input.requireReturnLastFrame && caps.returnLastFrame !== true) {
       return false;
     }
 
@@ -131,18 +148,37 @@ export async function findCompatibleAlternativeModel(
   // Preserve the current model whenever it already satisfies the requested
   // capabilities; only move away when the user explicitly asks to switch.
   if (input.currentModelId && input.excludeCurrentModel !== true) {
-    matchingCandidates.sort((a, b) => {
-      const aCurrent =
-        a.id === input.currentModelId ||
-        a.providerModelId === input.currentModelId;
-      const bCurrent =
-        b.id === input.currentModelId ||
-        b.providerModelId === input.currentModelId;
-      return Number(bCurrent) - Number(aCurrent);
-    });
+    const current = matchingCandidates.find(
+      (model) =>
+        model.id === input.currentModelId ||
+        model.providerModelId === input.currentModelId,
+    );
+    if (current) {
+      const price = current.priceVersions[0]!;
+      return {
+        modelId: current.id,
+        providerModelId: current.providerModelId,
+        displayName: current.displayName,
+        provider: current.provider,
+        priceVersionId: price.id,
+      };
+    }
   }
 
-  const selected = matchingCandidates[0]!;
+  // Use the same verified preference order as Quick Create instead of relying
+  // on database row order. This prevents regressions such as choosing
+  // OmniHuman for normal video generation or an older image model before the
+  // known-good defaults.
+  const preferredIds: readonly string[] =
+    QUICK_CREATE_PREFERRED_PROVIDER_MODEL_IDS[input.modality];
+  const preference = new Map(
+    preferredIds.map((providerModelId, index) => [providerModelId, index]),
+  );
+  const selected = [...matchingCandidates].sort(
+    (a, b) =>
+      (preference.get(a.providerModelId) ?? Number.MAX_SAFE_INTEGER) -
+      (preference.get(b.providerModelId) ?? Number.MAX_SAFE_INTEGER),
+  )[0]!;
   const price = selected.priceVersions[0]!;
 
   return {

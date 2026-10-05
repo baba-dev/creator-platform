@@ -327,6 +327,19 @@ export async function POST(
         }
       } else if (action.type === "change_aspect_ratio") {
         targetRatio = action.aspectRatio;
+        // In an image conversation, "make it 9:16" refers to the focused
+        // visual, not a brand-new prompt-only generation. Preserve that source
+        // as a reference so reframing remains visually related to the asset.
+        if (targetModality === "IMAGE") {
+          const sourceAssetId =
+            plannerContext.selectedAssetId ??
+            currentState.activeAssetId ??
+            undefined;
+          if (sourceAssetId) {
+            imageReferenceAssetIds = [sourceAssetId];
+            needsCapabilityRouting = true;
+          }
+        }
       } else if (action.type === "change_resolution") {
         targetResolution = action.resolution;
       } else if (action.type === "create_variations") {
@@ -543,8 +556,14 @@ export async function POST(
           targetModality === "IMAGE" && imageReferenceAssetIds.length > 0,
         requiredOutputCount:
           targetModality === "IMAGE" ? targetOutputCount : undefined,
+        requireFirstFrame:
+          targetModality === "VIDEO" && videoWorkflow === "FRAME_TO_VIDEO",
         requireExtendVideo:
           targetModality === "VIDEO" && videoWorkflow === "EXTEND",
+        // Conversational video jobs currently request a durable last-frame
+        // asset for lineage/continuation. Route only to models that can honor
+        // that contract instead of selecting one and failing during admission.
+        requireReturnLastFrame: targetModality === "VIDEO",
         excludeCurrentModel: requestedModelSwitch,
       });
       if (!routed) {

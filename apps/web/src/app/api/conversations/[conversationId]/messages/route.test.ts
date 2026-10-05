@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   createImageJob: vi.fn(),
   createVideoJob: vi.fn(),
   db: {
+    $transaction: vi.fn(),
+    $queryRaw: vi.fn(),
     membership: {
       findUnique: vi.fn(),
     },
@@ -16,10 +18,13 @@ const mocks = vi.hoisted(() => ({
     chatMessage: {
       create: vi.fn(),
       upsert: vi.fn(),
+      findUnique: vi.fn(),
+      findFirst: vi.fn(),
       findMany: vi.fn(),
     },
     generationJob: {
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
       update: vi.fn(),
       updateMany: vi.fn(),
     },
@@ -114,10 +119,14 @@ describe("POST /api/conversations/[conversationId]/messages", () => {
     vi.clearAllMocks();
     mocks.trusted.mockReturnValue(true);
     mocks.session.mockResolvedValue({ user: fakeUser });
+    mocks.db.$transaction.mockImplementation(async (fn) => fn(mocks.db));
+    mocks.db.$queryRaw.mockResolvedValue([{ id: "conv_1" }]);
     mocks.db.membership.findUnique.mockResolvedValue(fakeMembership);
     mocks.db.chatThread.findUnique.mockImplementation(() =>
       Promise.resolve(structuredClone(fakeThread)),
     );
+    mocks.db.chatMessage.findUnique.mockResolvedValue(null);
+    mocks.db.chatMessage.findFirst.mockResolvedValue(null);
     mocks.db.chatMessage.findMany.mockResolvedValue([]);
     mocks.db.chatMessage.create.mockImplementation(({ data }) =>
       Promise.resolve({ id: `msg_${Math.random()}`, ...data }),
@@ -126,6 +135,7 @@ describe("POST /api/conversations/[conversationId]/messages", () => {
       Promise.resolve({ id: `msg_${Math.random()}`, ...create }),
     );
     mocks.db.chatThread.update.mockResolvedValue({});
+    mocks.db.generationJob.findFirst.mockResolvedValue(null);
     mocks.db.generationJob.findUnique.mockResolvedValue({
       chatThreadId: null,
       parentGenerationId: null,
@@ -702,6 +712,7 @@ describe("POST /api/conversations/[conversationId]/messages", () => {
         body: JSON.stringify({
           content: "Select asset",
           selectedAssetId: "asset_2",
+          resumePendingOperation: true,
           idempotencyKey: "55555555-5555-4555-8555-555555555555",
         }),
       },
@@ -725,6 +736,89 @@ describe("POST /api/conversations/[conversationId]/messages", () => {
         ],
       }),
     );
+  });
+
+  it("does not resume a pending billable action for an ordinary asset selection", async () => {
+    const threadWithPending = {
+      ...structuredClone(fakeThread),
+      state: {
+        ...fakeThread.state,
+        pendingOperation: {
+          originalPrompt: "Animate this",
+          createdAt: new Date().toISOString(),
+        },
+      },
+    };
+    mocks.db.chatThread.findUnique.mockResolvedValue(threadWithPending);
+
+    const req = new Request(
+      "https://example.com/api/conversations/conv_1/messages",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: "Select asset",
+          selectedAssetId: "asset_2",
+          idempotencyKey: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+        }),
+      },
+    );
+
+    const res = await POST(req, {
+      params: Promise.resolve({ conversationId: "conv_1" }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.selectedAssetId).toBe("asset_2");
+    expect(mocks.createVideoJob).not.toHaveBeenCalled();
+    expect(mocks.createImageJob).not.toHaveBeenCalled();
+  });
+
+  it("recovers an already accepted generation before replanning a transport retry", async () => {
+    mocks.db.generationJob.findFirst.mockResolvedValue({
+      id: "job_replay",
+      idempotencyKey: "server-hash",
+      status: "QUEUED",
+      chatThreadId: "conv_1",
+      parentGenerationId: "job_prev",
+      requestPayload: {
+        prompt: "Luxury perfume on sand",
+        aspectRatio: "9:16",
+        resolution: "2K",
+        outputCount: 1,
+      },
+      providerModel: {
+        id: "model_img_1",
+        provider: "BYTEPLUS",
+        displayName: "Seedream 5.0",
+        mediaKind: "IMAGE",
+      },
+    });
+
+    const req = new Request(
+      "https://example.com/api/conversations/conv_1/messages",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: "Make it 9:16.",
+          idempotencyKey: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        }),
+      },
+    );
+
+    const res = await POST(req, {
+      params: Promise.resolve({ conversationId: "conv_1" }),
+    });
+
+    expect(res.status).toBe(202);
+    const body = await res.json();
+    expect(body.replayed).toBe(true);
+    expect(body.jobId).toBe("job_replay");
+    expect(mocks.createImageJob).not.toHaveBeenCalled();
+    expect(mocks.createVideoJob).not.toHaveBeenCalled();
+    expect(mocks.db.providerModel.findFirst).not.toHaveBeenCalled();
   });
 
   it("increments revision in thread state on state updates", async () => {

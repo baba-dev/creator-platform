@@ -1,9 +1,13 @@
 import {
   assertMediaOwnership,
   completeMediaTask,
+  MediaPermanentFailure,
   recordMediaOutput,
 } from "./media-tasks";
-import { probeUploadedMedia } from "@aiwa/assets/media-probe";
+import {
+  MediaProbeValidationError,
+  probeUploadedMedia,
+} from "@aiwa/assets/media-probe";
 import {
   claimExpiredAssetForPurge,
   commitAssetVariantStorage,
@@ -90,9 +94,36 @@ function metadataExtension(asset: {
   return "mp3";
 }
 
+async function quarantineInvalidAsset(
+  assetId: string,
+  organizationId: string,
+  reason: string,
+): Promise<void> {
+  await db.$transaction(async (tx) => {
+    await assertMediaOwnership(tx);
+    await tx.$queryRaw`SELECT id FROM Asset WHERE id = ${assetId} FOR UPDATE`;
+    const current = await tx.asset.findUnique({ where: { id: assetId } });
+    if (!current || current.status !== "READY") return;
+    await tx.asset.update({
+      where: { id: assetId },
+      data: { status: "QUARANTINED" },
+    });
+    await tx.auditEvent.create({
+      data: {
+        organizationId,
+        action: "asset.media_validation_failed",
+        targetType: "Asset",
+        targetId: assetId,
+        metadata: { reason },
+      },
+    });
+  });
+}
+
 /**
- * Probe canonical media only on the media worker. Metadata is advisory for UI
- * and provider validation, so a failed probe never rolls back a READY original.
+ * Probe canonical media only on the media worker. Transient storage/tooling
+ * failures remain retryable; permanently invalid media is quarantined so it
+ * can never be consumed as a READY generation input.
  */
 export async function processAssetMetadata(assetId: string): Promise<void> {
   const asset = await db.asset.findUnique({ where: { id: assetId } });
@@ -117,24 +148,45 @@ export async function processAssetMetadata(assetId: string): Promise<void> {
   let durationMs: number | null = null;
 
   if (asset.mediaKind === "IMAGE") {
-    const metadata = await sharp(original, { failOn: "error" })
-      .rotate()
-      .metadata();
-    width = metadata.width ?? null;
-    height = metadata.height ?? null;
-    if (!width || !height) throw new Error("Image metadata is unavailable.");
+    try {
+      const metadata = await sharp(original, { failOn: "error" })
+        .rotate()
+        .metadata();
+      width = metadata.width ?? null;
+      height = metadata.height ?? null;
+      if (!width || !height) {
+        throw new Error("Image metadata is unavailable.");
+      }
+    } catch (error) {
+      const reason =
+        error instanceof Error ? error.message : "Invalid image payload.";
+      await quarantineInvalidAsset(assetId, asset.organizationId, reason);
+      throw new MediaPermanentFailure(reason);
+    }
   } else {
     const work = await mkdtemp(join(tmpdir(), "aiwa-asset-metadata-"));
     try {
       const sourcePath = join(work, `source.${metadataExtension(asset)}`);
       await writeFile(sourcePath, original, { mode: 0o600 });
-      const probed = await probeUploadedMedia(
-        sourcePath,
-        asset.mediaKind as "VIDEO" | "AUDIO",
-      );
-      width = probed.width;
-      height = probed.height;
-      durationMs = probed.durationMs;
+      try {
+        const probed = await probeUploadedMedia(
+          sourcePath,
+          asset.mediaKind as "VIDEO" | "AUDIO",
+        );
+        width = probed.width;
+        height = probed.height;
+        durationMs = probed.durationMs;
+      } catch (error) {
+        if (error instanceof MediaProbeValidationError) {
+          await quarantineInvalidAsset(
+            assetId,
+            asset.organizationId,
+            error.message,
+          );
+          throw new MediaPermanentFailure(error.message);
+        }
+        throw error;
+      }
     } finally {
       await rm(work, { recursive: true, force: true }).catch(() => undefined);
     }

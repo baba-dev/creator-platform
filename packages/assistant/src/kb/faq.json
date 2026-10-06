@@ -6,7 +6,7 @@
   },
   {
     "q": "Why was my generation charged even though it failed?",
-    "a": "Credits are temporarily reserved when starting. If a job fails or times out, reservations are automatically released or refunded. Check your wallet ledger in Settings → Billing.",
+    "a": "Check the exact job and its wallet entries. A reservation is not a final charge. Delayed or MANUAL_REVIEW jobs can retain reservations until the outcome is known; do not resubmit an ambiguous request.",
     "keywords": ["charged", "failed", "refund", "credits", "ledger"]
   },
   {
@@ -16,12 +16,12 @@
   },
   {
     "q": "How do I top up my credits?",
-    "a": "Go to Settings → Billing and record a payment or contact your workspace finance admin. 1 credit = 1 baisa.",
+    "a": "Contact your workspace owner or finance team to arrange a credit top-up. Pixel cannot grant credits.",
     "keywords": ["top up", "add credits", "pay", "billing", "wallet"]
   },
   {
     "q": "What models are available?",
-    "a": "Aiwa Creator supports models across providers: BytePlus Seedream 3.0 (images), MegaCreator/Wan (video), Seed-TTS 2.0 (voice), OmniHuman 1.5 (talking avatars), and Groq ultra-fast LPU models (GPT-OSS 20B/120B).",
+    "a": "Use the current studio model selector or ask Pixel for the live model catalog. Models, capabilities and prices can change.",
     "keywords": ["model", "available", "which", "list", "groq", "byteplus"]
   }
 ]

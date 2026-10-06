@@ -15,6 +15,28 @@ describe("runQuotedTextFeature", () => {
     vi.useRealTimers();
   });
 
+  it("does not submit a billable request when quote approval is declined", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        quote: {
+          quoteToken: "signed",
+          quotedModelId: "model",
+          priceVersionId: "price",
+          maximumChargeCredits: "12",
+        },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(
+      runQuotedTextFeature(
+        "/api/assistant/message",
+        { content: "Hello" },
+        { approveQuote: async () => false },
+      ),
+    ).rejects.toThrow("approval cancelled");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("preserves idempotent POST replay for feature routes without a GET status resource", async () => {
     vi.useFakeTimers();
     const fetchMock = vi

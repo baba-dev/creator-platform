@@ -2,29 +2,29 @@
   {
     "key": "image-generation",
     "title": "Image Generation",
-    "summary": "Generate AI images from text prompts using models like BytePlus Seedream 3.0. Supports 1:1, 16:9, 9:16 and other aspect ratios. Priced per request.",
-    "route": "/assets",
+    "summary": "Generate images from prompts and authorized reference assets. The live model catalog determines available resolutions, ratios and output counts. Review the current quote before generating.",
+    "route": "/image",
     "keywords": ["image", "generate", "photo", "picture", "seedream", "create"]
   },
   {
     "key": "video-generation",
     "title": "Video Generation",
-    "summary": "Generate AI videos from text or images using BytePlus MegaCreator and Wan models. Supports 5-10s clips in various aspect ratios. Priced per second.",
-    "route": "/assets",
+    "summary": "Generate videos from text, first frames or other supported sources. Supported workflows, durations and resolutions depend on the selected model; review its live capabilities and quote.",
+    "route": "/video",
     "keywords": ["video", "generate", "clip", "animation", "megacreator", "wan"]
   },
   {
     "key": "voice-generation",
     "title": "Voice & TTS",
-    "summary": "Generate natural speech from text using BytePlus Seed-TTS 2.0. Choose from multiple voices and languages. Priced per 1,000 characters.",
-    "route": "/assets",
+    "summary": "Generate speech from text with a supported voice and speaking rate. Review the live quote before submitting.",
+    "route": "/speech",
     "keywords": ["voice", "tts", "speech", "audio", "seed-tts", "narration"]
   },
   {
     "key": "spokesperson-studio",
     "title": "Digital Spokesperson Studio",
-    "summary": "Create talking avatar videos with OmniHuman 1.5 — upload a portrait image and provide a script or audio. Priced per second of video.",
-    "route": "/studio/spokesperson",
+    "summary": "Create a talking avatar using a portrait and supported audio or script inputs. Availability and pricing depend on the live model catalog.",
+    "route": "/spokesperson",
     "keywords": [
       "spokesperson",
       "avatar",
@@ -37,7 +37,7 @@
   {
     "key": "templates",
     "title": "Generation Templates",
-    "summary": "Use pre-built templates for common workflows — fill in variables and generate in one click.",
+    "summary": "Use pre-built templates for common workflows \u2014 fill in variables and generate in one click.",
     "route": "/templates",
     "keywords": ["template", "workflow", "preset", "quick"]
   },
@@ -51,8 +51,8 @@
   {
     "key": "credits",
     "title": "Credits & Billing",
-    "summary": "Credits are the currency for generation. Top up via manual payment. 1 credit = 1 baisa. Credits are reserved before generation starts and charged on completion.",
-    "route": "/settings",
+    "summary": "Credits are reserved before generation. Final settlement depends on job state and actual usage. A delayed or MANUAL_REVIEW job may retain its reservation; inspect the job and wallet records before claiming a refund.",
+    "route": "/",
     "keywords": [
       "credit",
       "balance",
@@ -74,8 +74,29 @@
   {
     "key": "chat",
     "title": "AI Chat (Creative Characters)",
-    "summary": "Chat with AI personas — roleplay characters, creative directors, and more. Supports voice output via Seed-TTS.",
-    "route": "/studio/chat",
+    "summary": "Chat with creative personas using available text models. Open a creative conversation to continue generation from previous outputs.",
+    "route": "/chat",
     "keywords": ["chat", "conversation", "persona", "character", "roleplay"]
+  },
+  {
+    "key": "storage",
+    "title": "Connect Google Drive or OneDrive",
+    "summary": "Open Storage. A workspace owner can connect Google Drive or OneDrive through the provider authorization screen, then select the connected provider. If unavailable, the administrator must configure the integration. Pixel never asks for passwords or OAuth secrets. Existing assets keep their own storage location.",
+    "route": "/storage",
+    "keywords": ["storage", "google", "drive", "onedrive", "connect", "byos"]
+  },
+  {
+    "key": "editing",
+    "title": "Image and video editing",
+    "summary": "Open Image or Video with an accessible source asset. Use the available editing controls, inspect your changes, and save or export. Supported editing operations depend on the source type.",
+    "route": "/image",
+    "keywords": ["edit", "crop", "rotate", "resize", "trim", "zoom"]
+  },
+  {
+    "key": "members",
+    "title": "Team members",
+    "summary": "Workspace owners manage membership and permissions in Members. Pixel can show permitted member information and open the management page; access changes use the normal permission controls.",
+    "route": "/members",
+    "keywords": ["members", "team", "invite", "roles", "permissions"]
   }
 ]

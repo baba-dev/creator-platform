@@ -6,6 +6,12 @@ export interface AssistantToolContext {
   organizationSlug: string;
   threadId: string;
   idempotencyKey: string;
+  userMessage?: string;
+  workspace?: {
+    page?: string;
+    selectedAssetIds?: string[];
+    conversationId?: string;
+  };
 }
 
 export interface AssistantTool<I = unknown, O = unknown> {

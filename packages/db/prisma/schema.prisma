@@ -203,6 +203,7 @@ model User {
   brandProfiles          BrandProfile[]
   storyPlans             StoryPlan[]
   externalStorageConfigs ExternalStorageConfig[]
+  pixelPreferences       PixelPreference[]
   assistantReminders     AssistantReminder[]
   supportRequests        SupportRequest[]
   assistantSettings      AssistantSetting[]
@@ -316,6 +317,7 @@ model Organization {
   storyPlans             StoryPlan[]
   defaultStorageProvider AssetStorageProvider     @default(LOCAL)
   externalStorageConfigs ExternalStorageConfig[]
+  pixelPreferences       PixelPreference[]
   assistantReminders     AssistantReminder[]
   supportRequests        SupportRequest[]
 
@@ -1041,6 +1043,7 @@ model ChatThread {
   persona        Persona?      @relation(fields: [personaId], references: [id], onDelete: SetNull)
   providerModel  ProviderModel? @relation("ChatThreadProviderModel", fields: [providerModelRecordId], references: [id], onDelete: SetNull)
   messages       ChatMessage[]
+  pixelWorkflows     PixelWorkflow[]
   assistantReminders AssistantReminder[]
   supportRequests    SupportRequest[]
   generationJobs     GenerationJob[]
@@ -1207,4 +1210,42 @@ model AssistantSetting {
   updatedBy             User?          @relation(fields: [updatedById], references: [id], onDelete: SetNull)
 
   @@index([providerModelRecordId])
+}
+
+// Pixel drafts are immutable; execution uses canonical generation services.
+model PixelWorkflow {
+  id             String @id @default(cuid())
+  threadId       String
+  requestKey     String
+  title          String @db.VarChar(160)
+  cancelledAt    DateTime?
+  createdAt      DateTime @default(now())
+  thread         ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  actions        PixelAction[]
+  @@unique([threadId, requestKey])
+  @@index([threadId, createdAt])
+}
+model PixelAction {
+  id             String @id @default(cuid())
+  workflowId     String
+  position       Int
+  payload        Json
+  status         String @default("DRAFT") @db.VarChar(32)
+  quote          Json?
+  jobId          String? @db.VarChar(191)
+  approvedAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  workflow       PixelWorkflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  @@unique([workflowId, position])
+  @@index([workflowId, status])
+}
+model PixelPreference {
+  organizationId String
+  userId         String
+  preferences    Json
+  updatedAt      DateTime @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@id([organizationId, userId])
 }

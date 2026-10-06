@@ -6,3 +6,7 @@ export * from "./run-assistant";
 export * from "./kb/search";
 export * from "./tools/types";
 export * from "./tools/registry";
+export * from "./access";
+export * from "./local";
+export * from "./preferences";
+export * from "./workflows";

@@ -65,8 +65,8 @@ export async function getOrCreateAssistantPersona(
       description: "Creative mascot and AI assistant for Aiwa Creator",
       systemPrompt: prompt,
       voiceKey: "charlotte",
-      modelId: model.providerModelId,
-      providerModelRecordId: model.id,
+      modelId: model?.providerModelId ?? "pixel-local",
+      providerModelRecordId: model?.id ?? null,
       isPreset: true,
       createdById,
     },
@@ -86,16 +86,20 @@ export async function getOrCreateAssistantThread(
   organizationId: string,
   userId: string,
 ) {
-  const persona = await getOrCreateAssistantPersona(organizationId, userId);
   const settings = await getAssistantSettings();
   const model = settings.providerModel;
-  if (!model) throw new Error("Pixel has no configured text model.");
+  const persona = model
+    ? await getOrCreateAssistantPersona(organizationId, userId)
+    : null;
 
   const existing = await db.chatThread.findFirst({
     where: {
       organizationId,
       createdById: userId,
-      personaId: persona.id,
+      OR: [
+        { threadType: "PIXEL" },
+        ...(persona ? [{ personaId: persona.id }] : []),
+      ],
     },
     select: {
       id: true,
@@ -108,14 +112,15 @@ export async function getOrCreateAssistantThread(
 
   if (existing) {
     const thread =
-      existing.modelId === model.providerModelId &&
-      existing.providerModelRecordId === model.id
+      existing.modelId === (model?.providerModelId ?? "pixel-local") &&
+      existing.providerModelRecordId === (model?.id ?? null)
         ? existing
         : await db.chatThread.update({
             where: { id: existing.id },
             data: {
-              modelId: model.providerModelId,
-              providerModelRecordId: model.id,
+              modelId: model?.providerModelId ?? "pixel-local",
+              providerModelRecordId: model?.id ?? null,
+              threadType: "PIXEL",
               systemPrompt: effectivePrompt(settings.systemPromptOverride),
             },
             select: {
@@ -132,10 +137,11 @@ export async function getOrCreateAssistantThread(
     data: {
       organizationId,
       createdById: userId,
-      personaId: persona.id,
+      personaId: persona?.id,
+      threadType: "PIXEL",
       title: "Pixel Assistant",
-      modelId: model.providerModelId,
-      providerModelRecordId: model.id,
+      modelId: model?.providerModelId ?? "pixel-local",
+      providerModelRecordId: model?.id ?? null,
       systemPrompt: effectivePrompt(settings.systemPromptOverride),
     },
     select: {

@@ -129,6 +129,14 @@ export const textRequestSchema = z
     idempotencyKey: z.uuid(),
     templateId: z.string().min(1).max(100).optional(),
     chatThreadId: z.string().min(1).max(100).optional(),
+    chatOptions: z
+      .object({
+        autoVoice: z.boolean().default(false),
+        voiceKey: z.string().trim().min(1).max(100).optional(),
+        speechRate: z.number().min(0.5).max(2).default(1),
+      })
+      .strict()
+      .optional(),
     messages: z
       .array(
         z.object({

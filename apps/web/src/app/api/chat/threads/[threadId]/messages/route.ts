@@ -135,6 +135,11 @@ export async function POST(
       quoteToken: input.quoteToken,
       idempotencyKey: input.idempotencyKey,
       chatThreadId: threadId,
+      chatOptions: {
+        autoVoice: input.autoVoice,
+        voiceKey: thread.persona?.voiceKey || "jasper",
+        speechRate: 1,
+      },
       messages,
       temperature: 0.7,
       maxTokens,

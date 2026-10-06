@@ -147,6 +147,11 @@ function requestFingerprint(input: {
   temperature: number;
   maxTokens: number;
   responseFormat: "text" | "json_object";
+  chatOptions?: {
+    autoVoice?: boolean;
+    voiceKey?: string;
+    speechRate?: number;
+  };
 }): string {
   return createHash("sha256")
     .update(
@@ -158,6 +163,7 @@ function requestFingerprint(input: {
         messages: input.messages,
         temperature: input.temperature,
         maxTokens: input.maxTokens,
+        chatOptions: input.chatOptions ?? null,
         ...(input.responseFormat === "json_object"
           ? { responseFormat: "json_object" }
           : {}),
@@ -189,6 +195,11 @@ function sameIdempotentRequest(
     temperature: number;
     maxTokens: number;
     responseFormat: "text" | "json_object";
+    chatOptions?: {
+      autoVoice?: boolean;
+      voiceKey?: string;
+      speechRate?: number;
+    };
   },
   resolvedTemplateId: string | null,
   sponsored: boolean,
@@ -430,6 +441,7 @@ export async function createTextJob(
               : {}),
             sponsored,
             clientRequestId: input.idempotencyKey,
+            ...(input.chatOptions ? { chatOptions: input.chatOptions } : {}),
             clientRequestHash: requestFingerprint(input),
           } as unknown as Prisma.InputJsonObject,
           status: "QUEUED",
@@ -822,53 +834,6 @@ export async function processTextJob(
           chargedCredits: actualCredits,
         },
       });
-      const targetThreadId = currentJob.chatThreadId ?? job.chatThreadId;
-      const payload = currentJob.requestPayload as Record<
-        string,
-        unknown
-      > | null;
-      const clientRequestId =
-        typeof payload?.clientRequestId === "string"
-          ? payload.clientRequestId
-          : currentJob.idempotencyKey;
-
-      if (targetThreadId && clientRequestId) {
-        await tx.chatMessage.upsert({
-          where: {
-            threadId_clientRequestId_role: {
-              threadId: targetThreadId,
-              clientRequestId,
-              role: "assistant",
-            },
-          },
-          update: {
-            content,
-            tokensUsed: usage?.totalTokens ?? null,
-            metadata: {
-              generationJobId: id,
-              chargedCredits: Number(actualCredits),
-              usage,
-            },
-          },
-          create: {
-            threadId: targetThreadId,
-            clientRequestId,
-            role: "assistant",
-            content,
-            tokensUsed: usage?.totalTokens ?? null,
-            metadata: {
-              generationJobId: id,
-              chargedCredits: Number(actualCredits),
-              usage,
-            },
-          },
-        });
-        await tx.chatThread.update({
-          where: { id: targetThreadId },
-          data: { updatedAt: new Date() },
-        });
-      }
-
       await tx.auditEvent.create({
         data: {
           organizationId: job.organizationId,
@@ -903,6 +868,103 @@ export async function processTextJob(
 }
 
 /**
+ * Idempotently project a financially settled TEXT job into Character Chat.
+ *
+ * This is deliberately separate from provider settlement: deleting a thread or
+ * a transient chat write failure must never roll back credit capture or turn a
+ * successful provider result into MANUAL_REVIEW. Workers call this after
+ * processTextJob on every attempt, so transient projection failures are
+ * naturally retryable while a deleted thread becomes a safe no-op.
+ */
+export async function projectTextJobToChat(id: string): Promise<void> {
+  const job = await db.generationJob.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      status: true,
+      chatThreadId: true,
+      idempotencyKey: true,
+      requestPayload: true,
+      outputPayload: true,
+      chargedCredits: true,
+    },
+  });
+  if (!job || job.status !== "SUCCEEDED" || !job.chatThreadId) return;
+
+  const requestPayload = payloadObject(job.requestPayload);
+  const outputPayload = payloadObject(job.outputPayload);
+  const content =
+    typeof outputPayload.content === "string" ? outputPayload.content : null;
+  if (!content) return;
+
+  const clientRequestId =
+    typeof requestPayload.clientRequestId === "string"
+      ? requestPayload.clientRequestId
+      : job.idempotencyKey;
+  const rawUsage = payloadObject(outputPayload.usage);
+  const usage =
+    Number.isSafeInteger(rawUsage.promptTokens) &&
+    Number.isSafeInteger(rawUsage.completionTokens) &&
+    Number.isSafeInteger(rawUsage.totalTokens)
+      ? {
+          promptTokens: Number(rawUsage.promptTokens),
+          completionTokens: Number(rawUsage.completionTokens),
+          totalTokens: Number(rawUsage.totalTokens),
+        }
+      : undefined;
+
+  await db.$transaction(async (tx) => {
+    const locked = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM ChatThread WHERE id = ${job.chatThreadId} FOR UPDATE
+    `;
+    if (locked.length === 0) return;
+
+    const existing = await tx.chatMessage.findUnique({
+      where: {
+        threadId_clientRequestId_role: {
+          threadId: job.chatThreadId!,
+          clientRequestId,
+          role: "assistant",
+        },
+      },
+    });
+    const existingMetadata = payloadObject(existing?.metadata);
+    const metadata = {
+      ...existingMetadata,
+      generationJobId: id,
+      chargedCredits: Number(job.chargedCredits),
+      ...(usage ? { usage } : {}),
+    };
+
+    if (existing) {
+      await tx.chatMessage.update({
+        where: { id: existing.id },
+        data: {
+          content,
+          tokensUsed: usage?.totalTokens ?? null,
+          metadata,
+        },
+      });
+    } else {
+      await tx.chatMessage.create({
+        data: {
+          threadId: job.chatThreadId!,
+          clientRequestId,
+          role: "assistant",
+          content,
+          tokensUsed: usage?.totalTokens ?? null,
+          metadata,
+        },
+      });
+    }
+    await tx.chatThread.update({
+      where: { id: job.chatThreadId! },
+      data: { updatedAt: new Date() },
+    });
+  });
+}
+
+/**
  * Compatibility helper for tests and trusted server callers. Product HTTP
  * routes use createTextJob and let the generation worker execute the provider.
  */
@@ -930,6 +992,7 @@ export async function executeTextGeneration(
       modelArkBaseUrl: process.env.BYTEPLUS_MODELARK_BASE_URL,
     });
   await processTextJob(job.id, provider);
+  await projectTextJobToChat(job.id);
   const completed = await db.generationJob.findUniqueOrThrow({
     where: { id: job.id },
   });

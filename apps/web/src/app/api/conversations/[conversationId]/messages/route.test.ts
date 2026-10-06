@@ -56,7 +56,14 @@ vi.mock("@aiwa/generation", () => ({
   createImageJob: mocks.createImageJob,
   createVideoJob: mocks.createVideoJob,
   createVoiceJob: vi.fn(),
-  GenerationError: class GenerationError extends Error {},
+  GenerationError: class GenerationError extends Error {
+    constructor(
+      message: string,
+      public status = 400,
+    ) {
+      super(message);
+    }
+  },
   priceCredits: vi.fn(),
 }));
 
@@ -800,7 +807,6 @@ describe("POST /api/conversations/[conversationId]/messages", () => {
     mocks.db.generationJob.findFirst.mockResolvedValue({
       id: "job_replay",
       idempotencyKey: "server-hash",
-          expectedRevision: 0,
       status: "QUEUED",
       chatThreadId: "conv_1",
       parentGenerationId: "job_prev",
@@ -922,7 +928,8 @@ describe("POST /api/conversations/[conversationId]/messages", () => {
     });
     const body = await res.json();
 
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(409);
+    expect(body.code).toBe("CONVERSATION_CONFLICT");
     expect(mocks.createImageJob).not.toHaveBeenCalled();
     expect(mocks.createVideoJob).not.toHaveBeenCalled();
     expect(body.error).toContain("modified in another request");

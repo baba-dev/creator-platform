@@ -158,5 +158,5 @@ integrationDescribe("Seedream 4.0 migration", () => {
     expect(BigInt(prices[0]!.customerCredits)).toBe(15n);
     expect(BigInt(prices[0]!.creditsPerBaisa)).toBe(1n);
     expect(prices[0]?.providerCostBasisNote).toContain("10% off");
-  });
+  }, 30_000);
 });

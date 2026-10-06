@@ -94,6 +94,7 @@ export async function GET(
       createdAt: true,
       reservedCredits: true,
       chargedCredits: true,
+      requestPayload: true,
       assets: {
         where: { status: "READY", deletedAt: null },
         orderBy: { generationOutputIndex: "asc" },

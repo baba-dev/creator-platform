@@ -7,6 +7,7 @@ import { GenerationStudio } from "@/components/studio/generation-studio";
 import { Button } from "@/components/ui/button";
 import { Annotation, Eyebrow } from "@/components/ui/creative";
 import { Icon, type IconName } from "@/components/ui/icon";
+import { mediaGenerationJobFilter } from "@/lib/media-generation-query";
 import { requireOrganizationPermission } from "@/lib/request-auth";
 import { getAvailableStudioModels } from "@/lib/studio-model-discovery";
 
@@ -21,6 +22,15 @@ function promptFor(payload: unknown): string {
     payload.prompt.trim()
   ) {
     return payload.prompt.trim();
+  }
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "text" in payload &&
+    typeof payload.text === "string" &&
+    payload.text.trim()
+  ) {
+    return payload.text.trim();
   }
   return "Prompt unavailable for this generation.";
 }
@@ -71,6 +81,7 @@ export default async function OrganizationWorkspacePage({
         ...(membership.role === "ORGANIZATION_OWNER"
           ? {}
           : { createdById: session.user.id }),
+        ...mediaGenerationJobFilter(),
       },
       select: {
         id: true,
@@ -282,7 +293,7 @@ export default async function OrganizationWorkspacePage({
                   Recent generations
                 </h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Latest creative work in this organization
+                  Latest media generations in this organization
                 </p>
               </div>
               <Link
@@ -370,8 +381,8 @@ export default async function OrganizationWorkspacePage({
               </div>
             ) : (
               <p className="mt-5 rounded-xl border border-border bg-surface-sunken p-5 text-sm text-muted-foreground">
-                Your first generation will appear here. Start with Quick create
-                above.
+                Your first media generation will appear here. Start with Quick
+                create above.
               </p>
             )}
           </div>

@@ -18,6 +18,10 @@ import {
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { generationError } from "@/lib/generation-api";
+import {
+  MEDIA_GENERATION_KINDS,
+  mediaGenerationJobFilter,
+} from "@/lib/media-generation-query";
 import { rateLimit } from "@/lib/rate-limit";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
@@ -112,8 +116,23 @@ export async function GET(request: Request) {
       { error: "Authentication required." },
       { status: 401 },
     );
-  const organizationId =
-    new URL(request.url).searchParams.get("organizationId") ?? "";
+  const searchParams = new URL(request.url).searchParams;
+  const query = z
+    .object({
+      organizationId: z.string().min(1).max(100),
+      kind: z.enum(MEDIA_GENERATION_KINDS).optional(),
+    })
+    .safeParse({
+      organizationId: searchParams.get("organizationId") ?? "",
+      kind: searchParams.get("kind") || undefined,
+    });
+  if (!query.success) {
+    return NextResponse.json(
+      { error: "Invalid generation history query." },
+      { status: 400 },
+    );
+  }
+  const { organizationId, kind } = query.data;
   try {
     const membership = await requireMembership(
       db,
@@ -149,6 +168,7 @@ export async function GET(request: Request) {
           ...(membership.role === "ORGANIZATION_OWNER"
             ? {}
             : { createdById: session.user.id }),
+          ...mediaGenerationJobFilter(kind),
         },
         orderBy: { createdAt: "desc" },
         take: 30,

@@ -1010,9 +1010,7 @@ export function GenerationStudio({
 
   const refresh = useCallback(async () => {
     const kindQuery =
-      variant === "advanced"
-        ? `&kind=${encodeURIComponent(initialMode)}`
-        : "";
+      variant === "advanced" ? `&kind=${encodeURIComponent(initialMode)}` : "";
     const response = await fetch(
       `/api/generations?organizationId=${encodeURIComponent(organizationId)}${kindQuery}`,
       { cache: "no-store" },

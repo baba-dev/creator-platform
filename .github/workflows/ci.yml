@@ -51,10 +51,12 @@ jobs:
       VITEST_MAX_WORKERS: "1"
       RAYON_NUM_THREADS: "1"
       NEXT_TELEMETRY_DISABLED: "1"
-      TURBO_CACHE_DIR: ${{ runner.tool_cache }}/creator-platform-turbo/${{ github.event_name }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+
+      - name: Configure persistent local task cache
+        run: echo "TURBO_CACHE_DIR=$RUNNER_TOOL_CACHE/creator-platform-turbo/$GITHUB_EVENT_NAME" >> "$GITHUB_ENV"
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6

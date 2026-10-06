@@ -116,7 +116,10 @@ export async function runQuotedTextFeature<T>(
           });
       const body = await responseJson(response);
 
-      if (response.status === 202 || (statusUrl && response.ok && body.complete === false)) {
+      if (
+        response.status === 202 ||
+        (statusUrl && response.ok && body.complete === false)
+      ) {
         continue;
       }
       if (!response.ok) {

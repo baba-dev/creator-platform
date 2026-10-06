@@ -215,6 +215,7 @@ export async function POST(
               voiceModel.id,
               voiceModel.priceVersions[0].id,
               voiceKey,
+              "1",
               result.content,
             ].join("\u0000"),
           );

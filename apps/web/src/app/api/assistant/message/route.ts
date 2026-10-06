@@ -399,12 +399,10 @@ export async function DELETE(request: Request) {
         select: { status: true },
       });
       const recentlyCreatedWithoutJob =
-        !job &&
-        message.createdAt.getTime() > clearCutoff.getTime() - 60_000;
+        !job && message.createdAt.getTime() > clearCutoff.getTime() - 60_000;
       if (
         recentlyCreatedWithoutJob ||
-        (job &&
-          !["FAILED", "CANCELLED", "MANUAL_REVIEW"].includes(job.status))
+        (job && !["FAILED", "CANCELLED", "MANUAL_REVIEW"].includes(job.status))
       )
         return NextResponse.json(
           {

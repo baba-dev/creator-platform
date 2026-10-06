@@ -6,6 +6,7 @@ import { z } from "zod";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
 
+import { resolveAvailableGenerationActions } from "../../../../lib/conversations/available-actions";
 import { serializeConversationDTO } from "../../../../lib/conversations/serialization";
 
 export async function GET(
@@ -51,8 +52,10 @@ export async function GET(
             select: {
               id: true,
               provider: true,
+              providerModelId: true,
               displayName: true,
               mediaKind: true,
+              capabilities: true,
             },
           },
         },
@@ -90,6 +93,9 @@ export async function GET(
     take: 100,
   });
   const rawMessages = rawMessagesDesc.reverse();
+  const availableActions = await resolveAvailableGenerationActions(
+    thread.generationJobs,
+  );
 
   const conversationDTO = serializeConversationDTO({
     id: thread.id,
@@ -100,7 +106,10 @@ export async function GET(
     createdAt: thread.createdAt,
     updatedAt: thread.updatedAt,
     messages: rawMessages,
-    generationJobs: thread.generationJobs,
+    generationJobs: thread.generationJobs.map((job) => ({
+      ...job,
+      availableActions: availableActions.get(job.id) ?? [],
+    })),
   });
 
   return NextResponse.json(

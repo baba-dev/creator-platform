@@ -26,6 +26,7 @@ export interface ActionAvailabilityJob {
   id: string;
   status: string;
   assets: Array<{ mimeType: string }>;
+  requestPayload?: unknown;
   providerModel?: {
     id: string;
     providerModelId?: string | null;
@@ -42,6 +43,41 @@ function capabilities(value: unknown): CapabilityRecord {
 
 function mediaKind(value: string): string {
   return value.trim().toUpperCase();
+}
+
+function requestSettings(job: ActionAvailabilityJob): {
+  aspectRatio?: string;
+  resolution?: string;
+} {
+  const payload = capabilities(job.requestPayload);
+  return {
+    aspectRatio:
+      typeof payload.aspectRatio === "string" ? payload.aspectRatio : undefined,
+    resolution:
+      typeof payload.resolution === "string" ? payload.resolution : undefined,
+  };
+}
+
+function supportsSetting(
+  model: ActionAvailabilityModel,
+  name: "aspectRatio" | "resolution",
+  value: string | undefined,
+): boolean {
+  if (!value) return true;
+  const caps = capabilities(model.capabilities);
+  const prefix = `${name}:`;
+  const advertised = Object.keys(caps).filter((key) => key.startsWith(prefix));
+  return advertised.length === 0 || caps[`${prefix}${value}`] === true;
+}
+
+function supportsImageSettings(
+  model: ActionAvailabilityModel,
+  settings: ReturnType<typeof requestSettings>,
+): boolean {
+  return (
+    supportsSetting(model, "aspectRatio", settings.aspectRatio) &&
+    supportsSetting(model, "resolution", settings.resolution)
+  );
 }
 
 function isUsableVideoModel(model: ActionAvailabilityModel): boolean {
@@ -76,8 +112,13 @@ export function computeAvailableGenerationActions(
   if (job.status !== "SUCCEEDED" || job.assets.length === 0) return [];
 
   const kind = mediaKind(job.providerModel?.mediaKind ?? "");
-  const hasImage = job.assets.some((asset) => asset.mimeType.startsWith("image/"));
-  const hasVideo = job.assets.some((asset) => asset.mimeType.startsWith("video/"));
+  const settings = requestSettings(job);
+  const hasImage = job.assets.some((asset) =>
+    asset.mimeType.startsWith("image/"),
+  );
+  const hasVideo = job.assets.some((asset) =>
+    asset.mimeType.startsWith("video/"),
+  );
   const actions = new Set<AvailableGenerationAction>();
 
   if (kind === "IMAGE" && hasImage) {
@@ -86,7 +127,12 @@ export function computeAvailableGenerationActions(
     );
     const canAnimate = models.some((model) => {
       if (!isUsableVideoModel(model)) return false;
-      return capabilities(model.capabilities).firstFrame === true;
+      const caps = capabilities(model.capabilities);
+      return (
+        caps.firstFrame === true &&
+        supportsSetting(model, "aspectRatio", "adaptive") &&
+        supportsSetting(model, "resolution", "720p")
+      );
     });
     const canCreateVariations = imageModels.some((model) => {
       const caps = capabilities(model.capabilities);
@@ -102,7 +148,8 @@ export function computeAvailableGenerationActions(
         caps.referenceImages === true &&
         caps.sequentialImages === true &&
         maxGenerated >= 4 &&
-        maxTotal >= 5
+        maxTotal >= 5 &&
+        supportsImageSettings(model, settings)
       );
     });
     const canReframe = imageModels.some((model) => {
@@ -110,14 +157,20 @@ export function computeAvailableGenerationActions(
       return (
         caps.referenceImages === true &&
         caps["aspectRatio:9:16"] === true &&
-        caps["aspectRatio:16:9"] === true
+        caps["aspectRatio:16:9"] === true &&
+        supportsSetting(model, "resolution", settings.resolution)
       );
     });
     const canEdit = imageModels.some(
-      (model) => capabilities(model.capabilities).referenceImages === true,
+      (model) =>
+        capabilities(model.capabilities).referenceImages === true &&
+        supportsImageSettings(model, settings),
     );
     const canSwitch = hasDifferentModel(models, job, "IMAGE", (model) => {
-      return capabilities(model.capabilities).referenceImages === true;
+      return (
+        capabilities(model.capabilities).referenceImages === true &&
+        supportsImageSettings(model, settings)
+      );
     });
 
     if (canAnimate) actions.add("animate");
@@ -130,12 +183,24 @@ export function computeAvailableGenerationActions(
       models.some(
         (model) =>
           isUsableVideoModel(model) &&
-          capabilities(model.capabilities).extendVideo === true,
+          capabilities(model.capabilities).extendVideo === true &&
+          supportsSetting(model, "aspectRatio", "adaptive") &&
+          supportsSetting(model, "resolution", settings.resolution),
       )
     ) {
       actions.add("extend");
     }
-    if (hasDifferentModel(models, job, "VIDEO", isUsableVideoModel)) {
+    if (
+      hasDifferentModel(
+        models,
+        job,
+        "VIDEO",
+        (model) =>
+          isUsableVideoModel(model) &&
+          supportsSetting(model, "aspectRatio", settings.aspectRatio) &&
+          supportsSetting(model, "resolution", settings.resolution),
+      )
+    ) {
       actions.add("switch_model");
     }
   } else if (kind === "VOICE") {

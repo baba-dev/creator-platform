@@ -1,20 +1,27 @@
 {
   "$schema": "https://turborepo.com/schema.json",
   "globalDependencies": [".env", ".env.local"],
-  "globalEnv": ["NODE_ENV", "APP_ENV", "APP_VERSION"],
+  "globalEnv": ["NODE_ENV", "APP_ENV"],
   "globalPassThroughEnv": [
     "APP_URL",
     "AUTH_SECRET",
     "DATABASE_URL",
     "SIGNUPS_ENABLED",
     "REDIS_URL",
-    "ASSET_STORAGE_ROOT"
+    "ASSET_STORAGE_ROOT",
+    "NODE_OPTIONS",
+    "UV_THREADPOOL_SIZE",
+    "VITEST_MAX_WORKERS",
+    "RAYON_NUM_THREADS",
+    "NEXT_TELEMETRY_DISABLED",
+    "TURBO_CACHE_DIR"
   ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": []
+      "outputs": [],
+      "env": ["APP_VERSION"]
     },
     "dev": {
       "cache": false,
@@ -26,7 +33,8 @@
     "test": {
       "dependsOn": ["^build"],
       "outputs": [],
-      "env": ["GENERATION_INTEGRATION_TEST"]
+      "env": ["GENERATION_INTEGRATION_TEST"],
+      "cache": false
     },
     "typecheck": {
       "dependsOn": ["^typecheck"],

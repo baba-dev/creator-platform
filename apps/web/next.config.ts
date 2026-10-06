@@ -18,6 +18,9 @@ const nextConfig: NextConfig = {
     "@aiwa/generation",
   ],
   typedRoutes: true,
+  experimental: {
+    ...(process.env.CI ? { cpus: 1 } : {}),
+  },
 };
 
 export default nextConfig;

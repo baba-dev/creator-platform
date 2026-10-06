@@ -35,7 +35,7 @@ export function deriveDeterministicTitle(prompt: string): string {
 
   const words = stripped
     .split(/\s+/)
-    .map((word) => word.replace(/[^a-zA-Z0-9'-]/g, ""))
+    .map((word) => word.replace(/[^\p{L}\p{N}'’-]/gu, ""))
     .filter(Boolean);
 
   if (words.length === 0) {

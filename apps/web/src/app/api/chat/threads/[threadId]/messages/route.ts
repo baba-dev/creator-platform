@@ -368,6 +368,30 @@ export async function GET(
       });
       const metadata =
         (assistantMessage.metadata as Record<string, unknown> | null) ?? {};
+      const projectedStatus =
+        typeof metadata.generationStatus === "string"
+          ? metadata.generationStatus
+          : "SUCCEEDED";
+      if (
+        projectedStatus === "FAILED" ||
+        projectedStatus === "CANCELLED" ||
+        projectedStatus === "MANUAL_REVIEW"
+      ) {
+        return NextResponse.json(
+          {
+            status: projectedStatus,
+            complete: true,
+            error: assistantMessage.content,
+            errorCode:
+              typeof metadata.errorCode === "string"
+                ? metadata.errorCode
+                : undefined,
+            userMessage,
+            message: assistantMessage,
+          },
+          { status: projectedStatus === "MANUAL_REVIEW" ? 409 : 400 },
+        );
+      }
       return NextResponse.json({
         status: "SUCCEEDED",
         complete: true,

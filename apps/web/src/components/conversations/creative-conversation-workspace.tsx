@@ -36,6 +36,7 @@ interface GenerationJobItem {
   status: string;
   errorCode?: string | null;
   errorMessage?: string | null;
+  availableActions?: string[];
   providerModel?: {
     id: string;
     displayName: string;
@@ -144,10 +145,19 @@ export function CreativeConversationWorkspace({
     resumePendingOperation: boolean;
   } | null>(null);
 
-  // Poll for job status updates for any visible active jobs via batch endpoint
+  // Poll for job status updates without stacking requests or waking hidden tabs.
   useEffect(() => {
     if (!hasPendingJobs || pendingJobs.length === 0) return;
-    const timer = setInterval(async () => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const poll = async () => {
+      if (cancelled) return;
+      if (document.visibilityState === "hidden") {
+        timer = setTimeout(poll, 5000);
+        return;
+      }
+
       try {
         const ids = pendingJobs.map((p) => p.id).join(",");
         const res = await fetch(
@@ -182,9 +192,18 @@ export function CreativeConversationWorkspace({
         }
       } catch {
         setRefreshError(true);
+      } finally {
+        if (!cancelled) {
+          timer = setTimeout(poll, 3000 + Math.floor(Math.random() * 750));
+        }
       }
-    }, 3000);
-    return () => clearInterval(timer);
+    };
+
+    timer = setTimeout(poll, 3000);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasPendingJobs, pendingJobs, conversationId]);
 
@@ -496,32 +515,70 @@ export function CreativeConversationWorkspace({
     return activeJob.assets.findIndex((a) => a.id === activeAsset.id);
   }, [activeJob?.assets, activeAsset]);
 
-  // Contextual smart suggestions
+  // Contextual smart suggestions are emitted only when the server proved that
+  // an enabled, actively priced model can execute the corresponding action.
   const quickChips = useMemo(() => {
     if (activeModality === "IMAGE") {
       return [
-        { label: "Animate this (Video)", prompt: "Animate this" },
-        { label: "4 variations", prompt: "Give me four variations" },
-        { label: "9:16 vertical", prompt: "Make it 9:16" },
-        { label: "16:9 widescreen", prompt: "Make it 16:9" },
         {
+          action: "animate",
+          label: "Animate this (Video)",
+          prompt: "Animate this",
+        },
+        {
+          action: "variations",
+          label: "4 variations",
+          prompt: "Give me four variations",
+        },
+        {
+          action: "aspect_ratio",
+          label: "9:16 vertical",
+          prompt: "Make it 9:16",
+        },
+        {
+          action: "aspect_ratio",
+          label: "16:9 widescreen",
+          prompt: "Make it 16:9",
+        },
+        {
+          action: "edit",
           label: "Cinematic lighting",
           prompt: "Enhance with dramatic cinematic lighting and high contrast",
         },
-        { label: "Try another model", prompt: "Try another model" },
-      ];
+        {
+          action: "switch_model",
+          label: "Try another model",
+          prompt: "Try another model",
+        },
+      ].filter((chip) => activeJob?.availableActions?.includes(chip.action));
     }
     if (activeModality === "VIDEO") {
       return [
-        { label: "Extend by 5s", prompt: "Extend this video by 5 seconds" },
-        { label: "Try another video model", prompt: "Try another model" },
-      ];
+        {
+          action: "extend",
+          label: "Extend by 5s",
+          prompt: "Extend this video by 5 seconds",
+        },
+        {
+          action: "switch_model",
+          label: "Try another video model",
+          prompt: "Try another model",
+        },
+      ].filter((chip) => activeJob?.availableActions?.includes(chip.action));
     }
     return [
-      { label: "Speak faster (1.2x)", prompt: "Make it faster" },
-      { label: "Speak slower (0.8x)", prompt: "Make it slower" },
-    ];
-  }, [activeModality]);
+      {
+        action: "speech_rate",
+        label: "Speak faster (1.2x)",
+        prompt: "Make it faster",
+      },
+      {
+        action: "speech_rate",
+        label: "Speak slower (0.8x)",
+        prompt: "Make it slower",
+      },
+    ].filter((chip) => activeJob?.availableActions?.includes(chip.action));
+  }, [activeJob?.availableActions, activeModality]);
 
   // Keyboard shortcut listener for Lightbox (Esc to close)
   useEffect(() => {

@@ -153,6 +153,7 @@ export function CharacterChatWorkspace({
   }
 
   const activeThreadId = selectedThreadId ?? initialThreadId ?? null;
+  const activeThreadIdRef = useRef(activeThreadId);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const defaultTextModel = defaultModelId ?? textModels[0]?.id ?? "";
   const [selectedModel, setSelectedModel] = useState<string>(defaultTextModel);
@@ -190,6 +191,14 @@ export function CharacterChatWorkspace({
     null,
   );
   const voicePollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    activeThreadIdRef.current = activeThreadId;
+    if (voicePollTimerRef.current) {
+      clearTimeout(voicePollTimerRef.current);
+      voicePollTimerRef.current = null;
+    }
+  }, [activeThreadId]);
 
   useEffect(() => {
     return () => {
@@ -496,6 +505,7 @@ export function CharacterChatWorkspace({
         return;
       }
       threadId = data.thread.id;
+      activeThreadIdRef.current = threadId;
       setSelectedThreadId(threadId);
       setActiveThreadModelId(data.thread.modelId);
       setActiveThreadModelAvailable(true);
@@ -532,6 +542,7 @@ export function CharacterChatWorkspace({
           statusUrl: `/api/chat/threads/${encodeURIComponent(threadId!)}/messages?clientRequestId=${encodeURIComponent(clientRequestId)}`,
         },
       );
+      if (activeThreadIdRef.current !== threadId) return;
       setMessages((prev) => {
         const filtered = prev.filter((m) => m.id !== tempUserMsg.id);
         return [...filtered, data.userMessage, data.message];
@@ -541,11 +552,13 @@ export function CharacterChatWorkspace({
         pollVoiceJob(threadId);
       }
     } catch (err) {
-      setErrorMessage(
-        err instanceof Error
-          ? err.message
-          : "Failed to receive character response.",
-      );
+      if (activeThreadIdRef.current === threadId) {
+        setErrorMessage(
+          err instanceof Error
+            ? err.message
+            : "Failed to receive character response.",
+        );
+      }
     } finally {
       setIsSending(false);
     }
@@ -555,7 +568,7 @@ export function CharacterChatWorkspace({
     if (voicePollTimerRef.current) clearTimeout(voicePollTimerRef.current);
 
     const poll = async (attempt: number): Promise<void> => {
-      if (attempt > 25) return;
+      if (attempt > 25 || activeThreadIdRef.current !== targetThreadId) return;
       try {
         const res = await fetch(
           `/api/chat/threads/${encodeURIComponent(targetThreadId)}`,
@@ -563,7 +576,10 @@ export function CharacterChatWorkspace({
         );
         if (res.ok) {
           const data = await res.json();
-          if (data.thread?.messages) {
+          if (
+            data.thread?.messages &&
+            activeThreadIdRef.current === targetThreadId
+          ) {
             setMessages(data.thread.messages);
             const anyPending = data.thread.messages.some(
               (m: ChatMessage) => m.audioJobId && !m.audioAssetId,
@@ -575,12 +591,14 @@ export function CharacterChatWorkspace({
         // A transient refresh failure should not terminate voice progress.
       }
 
-      voicePollTimerRef.current = setTimeout(
-        () => {
-          void poll(attempt + 1);
-        },
-        Math.min(1500 + attempt * 250, 5000),
-      );
+      if (activeThreadIdRef.current === targetThreadId) {
+        voicePollTimerRef.current = setTimeout(
+          () => {
+            void poll(attempt + 1);
+          },
+          Math.min(1500 + attempt * 250, 5000),
+        );
+      }
     };
 
     void poll(1);

@@ -618,6 +618,7 @@ export const VERIFIED_BYTEPLUS_MODELS: readonly ProviderModelDescriptor[] = [
     mediaKind: "voice",
     capabilities: {
       streaming: true,
+      speechRate: true,
       "format:mp3": true,
       "format:ogg_opus": true,
       "format:pcm": true,

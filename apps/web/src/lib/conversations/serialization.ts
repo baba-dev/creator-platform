@@ -27,6 +27,7 @@ export interface SerializedGenerationJobDTO {
   chargedCredits: string;
   assets: SerializedGenerationJobAsset[];
   providerModel?: SerializedProviderModelSummary | null;
+  availableActions: string[];
 }
 
 export interface SerializedChatMessageDTO {
@@ -72,6 +73,7 @@ export function serializeGenerationJob(job: {
     displayName: string;
     mediaKind: string;
   } | null;
+  availableActions?: readonly string[];
 }): SerializedGenerationJobDTO {
   return {
     id: job.id,
@@ -95,6 +97,7 @@ export function serializeGenerationJob(job: {
       previewUrl: `/api/assets/${asset.id}/variant/preview`,
       url: `/api/assets/${asset.id}`,
     })),
+    availableActions: [...(job.availableActions ?? [])],
     providerModel: job.providerModel
       ? {
           id: job.providerModel.id,
@@ -163,6 +166,7 @@ export function serializeConversationDTO(thread: {
       displayName: string;
       mediaKind: string;
     } | null;
+    availableActions?: readonly string[];
   }>;
 }): SerializedConversationDTO {
   return {

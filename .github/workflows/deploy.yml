@@ -19,7 +19,7 @@ jobs:
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push'
-    runs-on: ubuntu-22.04
+    runs-on: [self-hosted, Linux, X64, creators-ci]
     timeout-minutes: 45
     environment:
       name: staging
@@ -192,7 +192,7 @@ jobs:
           STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
         run: |
           set -Eeuo pipefail
-          archive="dist/creator-platform-${RELEASE_SHA}.tar.gz"
+          archive="creator-platform-${RELEASE_SHA}.tar.gz"
           remote_dir="/var/www/creator-platform/incoming"
           remote_archive="$remote_dir/creator-platform-${RELEASE_SHA}.tar.gz"
           remote_partial="${remote_archive}.part"

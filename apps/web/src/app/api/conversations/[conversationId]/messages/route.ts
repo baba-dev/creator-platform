@@ -1274,9 +1274,11 @@ export async function POST(
         { status: 400, headers: { "x-correlation-id": correlationId } },
       );
     }
-    const message =
-      error instanceof Error ? error.message : "Message turn execution failed.";
-    const status = error instanceof GenerationError ? error.status : 400;
+    const isExpected = error instanceof GenerationError;
+    const message = isExpected
+      ? error.message
+      : "Message turn execution failed. Please retry with the same request.";
+    const status = isExpected ? error.status : 500;
     const code =
       status === 409 && message.startsWith("Conversation state was modified")
         ? "CONVERSATION_CONFLICT"

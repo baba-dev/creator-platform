@@ -873,13 +873,12 @@ export async function processTextJob(
 }
 
 /**
- * Idempotently project a financially settled TEXT job into Character Chat.
+ * Idempotently project a terminal TEXT job into Character Chat.
  *
- * This is deliberately separate from provider settlement: deleting a thread or
- * a transient chat write failure must never roll back credit capture or turn a
- * successful provider result into MANUAL_REVIEW. Workers call this after
- * processTextJob on every attempt, so transient projection failures are
- * naturally retryable while a deleted thread becomes a safe no-op.
+ * Projection is deliberately separate from provider settlement: deleting a
+ * thread or a transient chat write failure must never roll back billing. The
+ * worker invokes this after every processing attempt, so a retry replays only
+ * this idempotent side effect once the generation job is already terminal.
  */
 export async function projectTextJobToChat(id: string): Promise<void> {
   const job = await db.generationJob.findUnique({
@@ -892,15 +891,31 @@ export async function projectTextJobToChat(id: string): Promise<void> {
       requestPayload: true,
       outputPayload: true,
       chargedCredits: true,
+      errorCode: true,
     },
   });
-  if (!job || job.status !== "SUCCEEDED" || !job.chatThreadId) return;
+  if (
+    !job ||
+    !job.chatThreadId ||
+    !["SUCCEEDED", "FAILED", "CANCELLED", "MANUAL_REVIEW"].includes(job.status)
+  ) {
+    return;
+  }
 
   const requestPayload = payloadObject(job.requestPayload);
   const outputPayload = payloadObject(job.outputPayload);
-  const content =
+  const successfulContent =
     typeof outputPayload.content === "string" ? outputPayload.content : null;
-  if (!content) return;
+  if (job.status === "SUCCEEDED" && !successfulContent) return;
+
+  const content =
+    job.status === "SUCCEEDED"
+      ? successfulContent!
+      : job.status === "CANCELLED"
+        ? "Generation was cancelled. You can retry this message."
+        : job.status === "MANUAL_REVIEW"
+          ? "Generation needs review before it can be retried safely."
+          : "Generation failed. You can retry this message.";
 
   const clientRequestId =
     typeof requestPayload.clientRequestId === "string"
@@ -908,6 +923,7 @@ export async function projectTextJobToChat(id: string): Promise<void> {
       : job.idempotencyKey;
   const rawUsage = payloadObject(outputPayload.usage);
   const usage =
+    job.status === "SUCCEEDED" &&
     Number.isSafeInteger(rawUsage.promptTokens) &&
     Number.isSafeInteger(rawUsage.completionTokens) &&
     Number.isSafeInteger(rawUsage.totalTokens)
@@ -937,7 +953,9 @@ export async function projectTextJobToChat(id: string): Promise<void> {
     const metadata = {
       ...existingMetadata,
       generationJobId: id,
+      generationStatus: job.status,
       chargedCredits: Number(job.chargedCredits),
+      ...(job.errorCode ? { errorCode: job.errorCode } : {}),
       ...(usage ? { usage } : {}),
     };
 
@@ -967,6 +985,30 @@ export async function projectTextJobToChat(id: string): Promise<void> {
       data: { updatedAt: new Date() },
     });
   });
+}
+
+/**
+ * Best-effort read repair for terminal text jobs. Worker completion is the
+ * canonical projection path; this bounded reconciliation only repairs a recent
+ * missed side effect and callers must treat failure as non-fatal.
+ */
+export async function reconcileTextChatThread(
+  threadId: string,
+  limit = 50,
+): Promise<void> {
+  const jobs = await db.generationJob.findMany({
+    where: {
+      chatThreadId: threadId,
+      status: { in: ["SUCCEEDED", "FAILED", "CANCELLED", "MANUAL_REVIEW"] },
+      providerModel: { mediaKind: "TEXT" },
+    },
+    orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+    take: Math.min(Math.max(1, limit), 100),
+    select: { id: true },
+  });
+  for (const job of jobs) {
+    await projectTextJobToChat(job.id);
+  }
 }
 
 /**

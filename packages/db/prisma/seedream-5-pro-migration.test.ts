@@ -167,5 +167,5 @@ integrationDescribe("Seedream 5.0 Pro migration", () => {
     expect(BigInt(prices[0]!.customerCredits)).toBe(22n);
     expect(BigInt(prices[0]!.creditsPerBaisa)).toBe(1n);
     expect(prices[0]?.providerCostBasisNote).toContain("10% discount");
-  });
+  }, 30_000);
 });

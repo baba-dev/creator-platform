@@ -304,17 +304,24 @@ export async function GET(
   const { threadId } = await params;
   const thread = await db.chatThread.findUnique({
     where: { id: threadId },
-    select: { organizationId: true },
+    select: { organizationId: true, createdById: true },
   });
-  if (!thread) {
+  if (!thread || thread.createdById !== session.user.id) {
     return NextResponse.json({ error: "Thread not found." }, { status: 404 });
   }
 
-  const membership = await db.membership.findFirst({
-    where: { organizationId: thread.organizationId, userId: session.user.id },
+  const membership = await db.membership.findUnique({
+    where: {
+      organizationId_userId: {
+        organizationId: thread.organizationId,
+        userId: session.user.id,
+      },
+    },
+    include: { organization: true },
   });
   if (
     !membership ||
+    membership.organization.status !== "ACTIVE" ||
     !hasOrganizationPermission(membership.role, "workspace:view")
   ) {
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
@@ -371,14 +378,23 @@ export async function GET(
         where: { id: jobId },
         select: { status: true, errorCode: true, errorMessage: true },
       });
-      if (job?.status === "FAILED" || job?.status === "CANCELLED") {
+      if (
+        job?.status === "FAILED" ||
+        job?.status === "CANCELLED" ||
+        job?.status === "MANUAL_REVIEW"
+      ) {
         return NextResponse.json(
           {
             status: job.status,
             complete: true,
-            error: job.errorMessage ?? "Generation failed.",
+            error:
+              job.errorMessage ??
+              (job.status === "MANUAL_REVIEW"
+                ? "Generation requires provider or billing reconciliation."
+                : "Generation failed."),
+            errorCode: job.errorCode,
           },
-          { status: 400 },
+          { status: job.status === "MANUAL_REVIEW" ? 409 : 400 },
         );
       }
       return NextResponse.json(

@@ -32,6 +32,12 @@ export async function runQuotedTextFeature<T>(
     onQuote?: (quote: TextFeatureQuote) => void;
     maxPolls?: number;
     idempotencyKey?: string;
+    /**
+     * Optional authenticated read-only status resource. When omitted, the
+     * helper preserves the legacy idempotent POST replay contract so feature
+     * routes that only implement POST remain safe.
+     */
+    statusUrl?: string | ((idempotencyKey: string) => string);
   },
 ): Promise<T> {
   const idempotencyKey = options?.idempotencyKey ?? crypto.randomUUID();
@@ -86,8 +92,10 @@ export async function runQuotedTextFeature<T>(
     );
   }
 
-  // Initial POST was accepted with 202; poll durable turn with authenticated read-only GET
-  const pollUrl = `${url}${url.includes("?") ? "&" : "?"}clientRequestId=${encodeURIComponent(idempotencyKey)}`;
+  const statusUrl =
+    typeof options?.statusUrl === "function"
+      ? options.statusUrl(idempotencyKey)
+      : options?.statusUrl;
   const maxPolls = options?.maxPolls ?? 90;
 
   for (let attempt = 0; attempt < maxPolls; attempt += 1) {
@@ -95,28 +103,29 @@ export async function runQuotedTextFeature<T>(
     await new Promise((resolve) => setTimeout(resolve, delay));
 
     try {
-      const getResponse = await fetch(pollUrl, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-        cache: "no-store",
-      });
-      const getBody = await responseJson(getResponse);
+      const response = statusUrl
+        ? await fetch(statusUrl, {
+            method: "GET",
+            headers: { "Content-Type": "application/json" },
+            cache: "no-store",
+          })
+        : await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(generateBody),
+          });
+      const body = await responseJson(response);
 
-      if (getResponse.status === 200 && getBody.complete) {
-        return getBody as T;
-      }
-      if (getResponse.status === 202 || (getResponse.ok && !getBody.complete)) {
+      if (response.status === 202 || (statusUrl && response.ok && body.complete === false)) {
         continue;
       }
-      if (!getResponse.ok) {
+      if (!response.ok) {
         throw new TextFeatureRequestError(
-          typeof getBody.error === "string"
-            ? getBody.error
-            : "Generation failed.",
-          getResponse.status,
+          typeof body.error === "string" ? body.error : "Generation failed.",
+          response.status,
         );
       }
-      return getBody as T;
+      return body as T;
     } catch (error) {
       if (error instanceof TextFeatureRequestError) throw error;
       if (attempt === maxPolls - 1) {

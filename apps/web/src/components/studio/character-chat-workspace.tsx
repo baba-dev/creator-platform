@@ -527,7 +527,10 @@ export function CharacterChatWorkspace({
           content: userText,
           autoVoice,
         },
-        { idempotencyKey: clientRequestId },
+        {
+          idempotencyKey: clientRequestId,
+          statusUrl: `/api/chat/threads/${encodeURIComponent(threadId!)}/messages?clientRequestId=${encodeURIComponent(clientRequestId)}`,
+        },
       );
       setMessages((prev) => {
         const filtered = prev.filter((m) => m.id !== tempUserMsg.id);

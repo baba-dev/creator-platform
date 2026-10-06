@@ -1,5 +1,6 @@
 import { hasOrganizationPermission } from "@aiwa/authz";
 import { db } from "@aiwa/db";
+import { reconcileTextChatThread } from "@aiwa/generation";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { clientChatModelReference } from "@/lib/chat-model-selection";
@@ -66,6 +67,15 @@ export async function GET(
   });
   if (!membership || membership.organization.status !== "ACTIVE") {
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
+  }
+
+  try {
+    await reconcileTextChatThread(threadId);
+  } catch (error) {
+    console.error("Character-chat projection reconciliation failed.", {
+      threadId,
+      errorName: error instanceof Error ? error.name : "UnknownError",
+    });
   }
 
   const [newestMessages, discovery] = await Promise.all([

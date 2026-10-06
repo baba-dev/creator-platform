@@ -18,6 +18,7 @@ import {
 } from "@aiwa/providers";
 import {
   GenerationError,
+  assertGenerationAdmission,
   assertWithinMonthlySpendingCap,
   priceCredits,
   quoteParameters,
@@ -314,6 +315,10 @@ export async function createTextJob(
         return existing;
       }
 
+      await assertGenerationAdmission(tx, {
+        organizationId: input.organizationId,
+        userId,
+      });
       await assertAssignableProject(tx, input.organizationId, input.projectId);
       const now = new Date();
       const modelRow = await tx.providerModel.findFirst({

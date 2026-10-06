@@ -11,7 +11,6 @@ import {
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { assertGenerationAdmission } from "../../../../../lib/central-admission";
 import { rateLimit } from "@/lib/rate-limit";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
@@ -608,14 +607,6 @@ export async function POST(
     // Clarification and state-only actions above remain free of this limit.
     const rateLimited = await generationLimiter.check(session.user.id);
     if (rateLimited) return rateLimited;
-
-    // Validate centralized admission limits (actor rate, org rate, pending job quota)
-    const admissionRejection = await assertGenerationAdmission({
-      userId: session.user.id,
-      organizationId: thread.organizationId,
-      idempotencyKey: input.idempotencyKey,
-    });
-    if (admissionRejection) return admissionRejection;
 
     // Extract base effective generation spec from contextual job (prioritizing focused historical step)
     const contextualJob = sourceJob ?? latestJob;

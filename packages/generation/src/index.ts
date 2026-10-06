@@ -252,6 +252,81 @@ export async function requireMembership(
   return member;
 }
 
+const MAX_PENDING_JOBS_PER_USER = 5;
+const MAX_PENDING_JOBS_PER_ORG = 20;
+const MAX_NEW_JOBS_PER_USER_PER_MINUTE = 15;
+const MAX_NEW_JOBS_PER_ORG_PER_MINUTE = 45;
+const ACTIVE_GENERATION_STATUSES = ["QUEUED", "SUBMITTED", "PROCESSING"] as const;
+
+/**
+ * Authoritative generation admission gate.
+ *
+ * Call only after the idempotency replay lookup and while the caller already
+ * holds the Organization row lock. This helper additionally locks the User row,
+ * so actor limits remain atomic even when the same user submits into multiple
+ * organizations concurrently.
+ */
+export async function assertGenerationAdmission(
+  tx: Prisma.TransactionClient,
+  params: { organizationId: string; userId: string; now?: Date },
+): Promise<void> {
+  const now = params.now ?? new Date();
+  await tx.$queryRaw`SELECT id FROM User WHERE id = ${params.userId} FOR UPDATE`;
+
+  const windowStart = new Date(now.getTime() - 60_000);
+  const [userPending, orgPending, userRecent, orgRecent] = await Promise.all([
+    tx.generationJob.count({
+      where: {
+        createdById: params.userId,
+        status: { in: [...ACTIVE_GENERATION_STATUSES] },
+      },
+    }),
+    tx.generationJob.count({
+      where: {
+        organizationId: params.organizationId,
+        status: { in: [...ACTIVE_GENERATION_STATUSES] },
+      },
+    }),
+    tx.generationJob.count({
+      where: {
+        createdById: params.userId,
+        createdAt: { gte: windowStart },
+      },
+    }),
+    tx.generationJob.count({
+      where: {
+        organizationId: params.organizationId,
+        createdAt: { gte: windowStart },
+      },
+    }),
+  ]);
+
+  if (userPending >= MAX_PENDING_JOBS_PER_USER) {
+    throw new GenerationError(
+      `Concurrent generation quota reached (${userPending}/${MAX_PENDING_JOBS_PER_USER} active). Wait for an active job to finish before submitting another.`,
+      429,
+    );
+  }
+  if (orgPending >= MAX_PENDING_JOBS_PER_ORG) {
+    throw new GenerationError(
+      `Workspace concurrent generation quota reached (${orgPending}/${MAX_PENDING_JOBS_PER_ORG} active). Wait for active workspace jobs to finish.`,
+      429,
+    );
+  }
+  if (userRecent >= MAX_NEW_JOBS_PER_USER_PER_MINUTE) {
+    throw new GenerationError(
+      "Generation rate limit reached. Please retry in a minute.",
+      429,
+    );
+  }
+  if (orgRecent >= MAX_NEW_JOBS_PER_ORG_PER_MINUTE) {
+    throw new GenerationError(
+      "Workspace generation rate limit reached. Please retry in a minute.",
+      429,
+    );
+  }
+}
+
 export async function assertWithinMonthlySpendingCap(
   tx: Prisma.TransactionClient,
   params: {
@@ -363,6 +438,10 @@ export async function createImageJob(userId: string, raw: unknown) {
         }
         return existing;
       }
+      await assertGenerationAdmission(tx, {
+        organizationId: input.organizationId,
+        userId,
+      });
       await assertAssignableProject(tx, input.organizationId, input.projectId);
       const now = new Date();
       const model = await tx.providerModel.findFirst({
@@ -739,6 +818,10 @@ export async function createVideoJob(userId: string, raw: unknown) {
         return existing;
       }
 
+      await assertGenerationAdmission(tx, {
+        organizationId: input.organizationId,
+        userId,
+      });
       await assertAssignableProject(tx, input.organizationId, input.projectId);
       const now = new Date();
       const model = await tx.providerModel.findFirst({
@@ -1265,6 +1348,10 @@ export async function createVoiceJob(userId: string, raw: unknown) {
         }
         return existing;
       }
+      await assertGenerationAdmission(tx, {
+        organizationId: input.organizationId,
+        userId,
+      });
       await assertAssignableProject(tx, input.organizationId, input.projectId);
       const now = new Date();
       const model = await tx.providerModel.findFirst({
@@ -1456,6 +1543,10 @@ export async function createTranscriptionJob(userId: string, raw: unknown) {
         return existing;
       }
 
+      await assertGenerationAdmission(tx, {
+        organizationId: input.organizationId,
+        userId,
+      });
       await assertAssignableProject(tx, input.organizationId, input.projectId);
       const now = new Date();
       const model = await tx.providerModel.findFirst({

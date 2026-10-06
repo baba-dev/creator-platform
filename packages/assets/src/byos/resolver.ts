@@ -18,7 +18,7 @@ export interface StorageResolverOptions {
 
 type ExternalProvider = "GOOGLE_DRIVE" | "ONEDRIVE";
 
-async function resolveExternalStorage(
+export async function resolveExternalStorage(
   db: PrismaClient,
   organizationId: string,
   provider: ExternalProvider,

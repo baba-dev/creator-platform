@@ -22,7 +22,14 @@ export interface AssetObjectStat {
   readonly byteSize: bigint;
 }
 
+export interface StorageQuota {
+  totalBytes: string | null;
+  usedBytes: string;
+  availableBytes: string | null;
+}
+
 export interface AssetStorage {
+  getQuota?(): Promise<StorageQuota>;
   readonly provider: "LOCAL" | "S3" | "GOOGLE_DRIVE" | "ONEDRIVE";
   put(
     objectKey: string,

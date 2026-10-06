@@ -637,7 +637,6 @@ describe("durable text generation billing", () => {
   });
 });
 
-
 describe("character chat terminal projection", () => {
   beforeEach(() => {
     vi.resetAllMocks();

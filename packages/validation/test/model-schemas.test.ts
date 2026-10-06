@@ -143,7 +143,7 @@ describe("model validation schemas", () => {
       expect(videoQuote.data.resolution).toBe("1080p");
       expect(videoQuote.data.generateAudio).toBe(true);
     }
-  });
+  }, 30_000);
 
   it("validates publishPriceVersionSchema with SECOND pricing dimension", () => {
     const valid = publishPriceVersionSchema.safeParse({

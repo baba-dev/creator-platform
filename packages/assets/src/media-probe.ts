@@ -13,6 +13,16 @@ export class MediaProbeValidationError extends Error {
   }
 }
 
+interface FfprobePayload {
+  format?: { duration?: string };
+  streams?: {
+    codec_type: string;
+    codec_name?: string;
+    width?: number;
+    height?: number;
+  }[];
+}
+
 export interface ProbedMediaMetadata {
   durationMs: number | null;
   width: number | null;
@@ -36,31 +46,12 @@ export async function probeUploadedMedia(
     ],
     { timeout: 15_000, maxBuffer: 100_000 },
   );
-  let data: {
-    format?: { duration?: string };
-    streams?: {
-      codec_type: string;
-      codec_name?: string;
-      width?: number;
-      height?: number;
-    }[];
-  };
+  let data: FfprobePayload;
   try {
-    data = JSON.parse(stdout) as typeof data;
+    data = JSON.parse(stdout) as FfprobePayload;
   } catch {
     throw new MediaProbeValidationError("Media metadata is malformed.");
   }
-  /* c8 ignore start -- shape documented by ffprobe JSON */
-  data = data as {
-    format?: { duration?: string };
-    streams?: {
-      codec_type: string;
-      codec_name?: string;
-      width?: number;
-      height?: number;
-    }[];
-  };
-  /* c8 ignore stop */
   const durationMs = Math.round(Number(data.format?.duration) * 1000);
   if (!Number.isFinite(durationMs) || durationMs < 100 || durationMs > 120_000)
     throw new MediaProbeValidationError(

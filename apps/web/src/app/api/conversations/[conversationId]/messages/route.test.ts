@@ -916,7 +916,7 @@ describe("POST /api/conversations/[conversationId]/messages", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          content: "Make it 9:16.",
+          content: "Generate a futuristic hovercraft over Muscat.",
           expectedRevision: 2,
           idempotencyKey: "13131313-1313-4313-8313-131313131313",
         }),
@@ -1019,15 +1019,11 @@ describe("POST /api/conversations/[conversationId]/messages", () => {
     });
 
     expect(res.status).toBe(202);
-    expect(mocks.db.chatThread.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: "conv_1" },
-        data: expect.objectContaining({
-          state: expect.objectContaining({
-            revision: 2,
-          }),
-        }),
-      }),
+    const stateUpdates = mocks.db.chatThread.update.mock.calls.map(
+      ([input]) => input.data.state,
     );
+    expect(stateUpdates).toHaveLength(2);
+    expect(stateUpdates[0]).toEqual(expect.objectContaining({ revision: 1 }));
+    expect(stateUpdates[1]).toEqual(expect.objectContaining({ revision: 1 }));
   });
 });

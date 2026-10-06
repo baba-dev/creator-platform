@@ -1283,8 +1283,8 @@ export async function POST(
         : status === 409 && message.startsWith("Another conversation turn")
           ? "CONVERSATION_BUSY"
           : conversationRevisionClaimed
-          ? "CONVERSATION_REFRESH_REQUIRED"
-          : undefined;
+            ? "CONVERSATION_REFRESH_REQUIRED"
+            : undefined;
     return NextResponse.json(
       { error: message, correlationId, ...(code ? { code } : {}) },
       { status, headers: { "x-correlation-id": correlationId } },

@@ -1,4 +1,5 @@
 import { Button } from "@aiwa/ui/button";
+import type { Route } from "next";
 import Link from "next/link";
 
 import { ThemeToggle } from "@/components/theme/theme-toggle";
@@ -300,6 +301,26 @@ export default function HomePage() {
       <footer className="border-t border-border bg-background/80">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-5 px-5 py-8 sm:flex-row sm:px-7 lg:px-10">
           <Brand />
+          <div className="flex items-center gap-6 text-xs text-muted-foreground">
+            <Link
+              href={"/privacy-policy" as Route}
+              className="transition hover:text-foreground"
+            >
+              Privacy Policy
+            </Link>
+            <Link
+              href={"/terms-of-service" as Route}
+              className="transition hover:text-foreground"
+            >
+              Terms of Service
+            </Link>
+            <Link
+              href={"/sign-in" as Route}
+              className="transition hover:text-foreground"
+            >
+              Sign In
+            </Link>
+          </div>
           <p className="text-[11px] text-subtle-foreground">
             Aiwa Media Group · Muscat, Oman · Private platform preview
           </p>

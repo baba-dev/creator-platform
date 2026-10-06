@@ -67,7 +67,7 @@ export function LandingStudioExperience() {
       variant="sketch"
       className="relative overflow-hidden rounded-[30px] bg-card/90 p-3 shadow-lg sm:p-4"
     >
-      <div className={`pointer-events-none absolute -right-20 -top-24 size-64 rounded-full blur-3xl ${style.glow}`} />
+      <div\n        className={`pointer-events-none absolute -right-20 -top-24 size-64 rounded-full blur-3xl ${style.glow}`}\n      />
       <div className="relative">
         <div className="flex flex-wrap items-center justify-between gap-3 px-2 pb-3 pt-1">
           <div>
@@ -165,7 +165,7 @@ export function LandingStudioExperience() {
           </div>
 
           <div className="flex min-h-[420px] flex-col overflow-hidden rounded-[24px] border border-border bg-surface-sunken">
-            <div className={`relative flex min-h-56 flex-1 overflow-hidden p-5 ${style.tile}`}>
+            <div\n              className={`relative flex min-h-56 flex-1 overflow-hidden p-5 ${style.tile}`}\n            >
               <div className="paper-grid absolute inset-0 opacity-25" />
               <div className="absolute left-1/2 top-1/2 size-40 -translate-x-1/2 -translate-y-1/2 rounded-full border border-foreground/10 bg-card/28 shadow-lg backdrop-blur-md" />
               <div className="relative z-10 flex w-full flex-col justify-between">

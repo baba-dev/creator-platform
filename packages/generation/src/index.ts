@@ -256,7 +256,11 @@ const MAX_PENDING_JOBS_PER_USER = 5;
 const MAX_PENDING_JOBS_PER_ORG = 20;
 const MAX_NEW_JOBS_PER_USER_PER_MINUTE = 15;
 const MAX_NEW_JOBS_PER_ORG_PER_MINUTE = 45;
-const ACTIVE_GENERATION_STATUSES = ["QUEUED", "SUBMITTED", "PROCESSING"] as const;
+const ACTIVE_GENERATION_STATUSES = [
+  "QUEUED",
+  "SUBMITTED",
+  "PROCESSING",
+] as const;
 
 /**
  * Authoritative generation admission gate.

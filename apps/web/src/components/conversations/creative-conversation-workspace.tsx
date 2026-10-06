@@ -67,11 +67,14 @@ function retryBoundedDerivative(
   }
   const nextAttempt = attempt + 1;
   image.dataset.derivativeRetry = String(nextAttempt);
-  window.setTimeout(() => {
-    if (!image.isConnected) return;
-    const separator = baseUrl.includes("?") ? "&" : "?";
-    image.src = `${baseUrl}${separator}retry=${nextAttempt}`;
-  }, Math.min(1_000 * 2 ** attempt, 4_000));
+  window.setTimeout(
+    () => {
+      if (!image.isConnected) return;
+      const separator = baseUrl.includes("?") ? "&" : "?";
+      image.src = `${baseUrl}${separator}retry=${nextAttempt}`;
+    },
+    Math.min(1_000 * 2 ** attempt, 4_000),
+  );
 }
 
 export function CreativeConversationWorkspace({
@@ -223,9 +226,7 @@ export function CreativeConversationWorkspace({
         if (data.conversation.state?.activeModality) {
           setActiveModality(data.conversation.state.activeModality);
         }
-        setConversationRevision(
-          Number(data.conversation.state?.revision ?? 0),
-        );
+        setConversationRevision(Number(data.conversation.state?.revision ?? 0));
       }
     } catch {
       setRefreshError(true);

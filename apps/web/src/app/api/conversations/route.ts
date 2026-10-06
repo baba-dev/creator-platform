@@ -12,10 +12,7 @@ import { z } from "zod";
 import { rateLimit } from "@/lib/rate-limit";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
-import {
-  decodeTimeIdCursor,
-  encodeTimeIdCursor,
-} from "@/lib/time-id-cursor";
+import { decodeTimeIdCursor, encodeTimeIdCursor } from "@/lib/time-id-cursor";
 import {
   deriveDeterministicTitle,
   generateConversationTitle,

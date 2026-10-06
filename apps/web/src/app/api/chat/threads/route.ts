@@ -10,7 +10,10 @@ import {
 } from "@/lib/chat-model-selection";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
-import { decodeTimeIdCursor, encodeTimeIdCursor } from "@/lib/time-id-cursor";
+import {
+  decodeTimeIdCursor,
+  encodeTimeIdCursor,
+} from "../../../../lib/time-id-cursor";
 import {
   getAvailableStudioModels,
   StudioModelUnavailableError,

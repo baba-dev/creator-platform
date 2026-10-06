@@ -85,6 +85,9 @@ export function CreativeConversationWorkspace({
   const [activeModality, setActiveModality] = useState<CreativeModality>(
     initialState?.activeModality ?? "IMAGE",
   );
+  const [conversationRevision, setConversationRevision] = useState(
+    Number(initialState?.revision ?? 0),
+  );
   const [lightboxAssetId, setLightboxAssetId] = useState<string | null>(null);
   const [inputPrompt, setInputPrompt] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -115,6 +118,7 @@ export function CreativeConversationWorkspace({
     key: string;
     prompt: string;
     assetId?: string;
+    sourceGenerationId?: string;
     resumePendingOperation: boolean;
   } | null>(null);
 
@@ -134,24 +138,19 @@ export function CreativeConversationWorkspace({
         }
         const data = await res.json();
         if (Array.isArray(data.jobs)) {
-          let anyFinished = false;
+          const anyFinished = data.jobs.some(
+            (job: { status?: string }) =>
+              job.status === "SUCCEEDED" ||
+              job.status === "FAILED" ||
+              job.status === "CANCELLED" ||
+              job.status === "MANUAL_REVIEW",
+          );
           setJobs((prev) =>
             prev.map((existing) => {
               const updated = data.jobs.find(
                 (j: { id: string }) => j.id === existing.id,
               );
-              if (updated) {
-                if (
-                  updated.status === "SUCCEEDED" ||
-                  updated.status === "FAILED" ||
-                  updated.status === "CANCELLED" ||
-                  updated.status === "MANUAL_REVIEW"
-                ) {
-                  anyFinished = true;
-                }
-                return { ...existing, ...updated };
-              }
-              return existing;
+              return updated ? { ...existing, ...updated } : existing;
             }),
           );
           setRefreshError(false);
@@ -205,6 +204,9 @@ export function CreativeConversationWorkspace({
         if (data.conversation.state?.activeModality) {
           setActiveModality(data.conversation.state.activeModality);
         }
+        setConversationRevision(
+          Number(data.conversation.state?.revision ?? 0),
+        );
       }
     } catch {
       setRefreshError(true);
@@ -306,6 +308,9 @@ export function CreativeConversationWorkspace({
   // Handle asset click (state-only selection: 0 credits)
   async function selectAsset(assetId: string) {
     setActiveAssetId(assetId);
+    const sourceJob =
+      jobs.find((job) => job.assets.some((asset) => asset.id === assetId)) ??
+      activeJob;
     try {
       const res = await fetch(`/api/conversations/${conversationId}/messages`, {
         method: "POST",
@@ -313,11 +318,21 @@ export function CreativeConversationWorkspace({
         body: JSON.stringify({
           content: "Select asset",
           selectedAssetId: assetId,
+          sourceGenerationId: sourceJob?.id,
+          expectedRevision: conversationRevision,
           idempotencyKey: crypto.randomUUID(),
         }),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setRefreshError(true);
+        if (data.code === "CONVERSATION_CONFLICT") {
+          await refreshConversation();
+        }
+        return;
+      }
+      if (typeof data.revision === "number") {
+        setConversationRevision(data.revision);
       }
     } catch {
       setRefreshError(true);
@@ -355,6 +370,7 @@ export function CreativeConversationWorkspace({
         pendingTurnRef.current &&
         pendingTurnRef.current.prompt === prompt &&
         pendingTurnRef.current.assetId === focusedAssetId &&
+        pendingTurnRef.current.sourceGenerationId === focusedJob?.id &&
         pendingTurnRef.current.resumePendingOperation === resumePendingOperation
           ? pendingTurnRef.current.key
           : crypto.randomUUID();
@@ -363,6 +379,7 @@ export function CreativeConversationWorkspace({
         key: idempotencyKey,
         prompt,
         assetId: focusedAssetId,
+        sourceGenerationId: focusedJob?.id,
         resumePendingOperation,
       };
 
@@ -372,6 +389,8 @@ export function CreativeConversationWorkspace({
         body: JSON.stringify({
           content: prompt,
           selectedAssetId: focusedAssetId,
+          sourceGenerationId: focusedJob?.id,
+          expectedRevision: conversationRevision,
           resumePendingOperation,
           idempotencyKey,
         }),
@@ -379,18 +398,28 @@ export function CreativeConversationWorkspace({
 
       const data = await res.json();
       if (!res.ok) {
+        const needsRefresh =
+          data.code === "CONVERSATION_CONFLICT" ||
+          data.code === "CONVERSATION_REFRESH_REQUIRED";
         if (
           res.status >= 400 &&
           res.status < 500 &&
           res.status !== 408 &&
-          res.status !== 429
+          res.status !== 429 &&
+          !needsRefresh
         ) {
           pendingTurnRef.current = null;
+        }
+        if (needsRefresh) {
+          await refreshConversation();
         }
         throw new Error(data.error ?? "Failed to process request.");
       }
 
       pendingTurnRef.current = null;
+      if (typeof data.revision === "number") {
+        setConversationRevision(data.revision);
+      }
 
       if (typeof data.jobId === "string" && data.jobId) {
         setJobs((prev) => {

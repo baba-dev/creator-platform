@@ -31,17 +31,25 @@ const generationLimiter = rateLimit({
   prefix: "generation",
 });
 
-const messageInputSchema = z.object({
-  content: z.string().trim().min(1, "Message cannot be empty.").max(4000),
-  selectedAssetId: z.string().min(1).max(100).optional(),
-  sourceGenerationId: z.string().min(1).max(100).optional(),
-  outputGroupId: z.string().optional(),
-  expectedRevision: z.number().int().nonnegative().optional(),
-  quoteToken: z.string().optional(),
-  mode: z.enum(["plan", "execute"]).default("execute"),
-  resumePendingOperation: z.boolean().optional().default(false),
-  idempotencyKey: z.string().uuid(),
-});
+const messageInputSchema = z
+  .object({
+    content: z.string().trim().min(1, "Message cannot be empty.").max(4000),
+    selectedAssetId: z.string().min(1).max(100).optional(),
+    sourceGenerationId: z.string().min(1).max(100).optional(),
+    expectedRevision: z.number().int().nonnegative().optional(),
+    mode: z.enum(["plan", "execute"]).default("execute"),
+    resumePendingOperation: z.boolean().optional().default(false),
+    idempotencyKey: z.string().uuid(),
+  })
+  .superRefine((value, context) => {
+    if (value.mode === "execute" && value.expectedRevision === undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["expectedRevision"],
+        message: "Conversation revision is required for execution.",
+      });
+    }
+  });
 
 async function mutateConversationState(
   conversationId: string,
@@ -163,6 +171,7 @@ export async function POST(
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
   }
 
+  let conversationRevisionClaimed = false;
   try {
     const json = await request.json();
     const input = messageInputSchema.parse(json);
@@ -171,6 +180,7 @@ export async function POST(
         JSON.stringify({
           content: input.content,
           selectedAssetId: input.selectedAssetId ?? null,
+          sourceGenerationId: input.sourceGenerationId ?? null,
           resumePendingOperation: input.resumePendingOperation,
         }),
       )
@@ -316,7 +326,11 @@ export async function POST(
         !latestJob ||
         latestJob.id === replayJob.id ||
         replayJob.chatThreadId === null;
-      if (replayIsCurrent && currentState.activeGenerationId !== replayJob.id) {
+      if (
+        replayIsCurrent &&
+        currentState.activeGenerationId !== replayJob.id &&
+        Number(currentState.revision ?? 0) === input.expectedRevision
+      ) {
         const payload =
           replayJob.requestPayload &&
           typeof replayJob.requestPayload === "object" &&
@@ -501,7 +515,7 @@ export async function POST(
     // Case 1: Clarification needed (Ambiguity)
     // =========================================================
     if (firstAction.type === "clarify") {
-      await mutateConversationState(
+      const nextState = await mutateConversationState(
         conversationId,
         currentState,
         (state) => {
@@ -537,6 +551,7 @@ export async function POST(
             options: firstAction.options,
           },
           status: 200,
+          revision: nextState.revision ?? 0,
         },
         { status: 200 },
       );
@@ -563,8 +578,9 @@ export async function POST(
         label = "Asset selected";
       }
 
+      let nextRevision = Number(currentState.revision ?? 0);
       if (selectedAssetId) {
-        await mutateConversationState(
+        const nextState = await mutateConversationState(
           conversationId,
           currentState,
           (state) => {
@@ -575,6 +591,7 @@ export async function POST(
           },
           input.expectedRevision,
         );
+        nextRevision = Number(nextState.revision ?? nextRevision);
       }
 
       const userMessage = await upsertUserMessage();
@@ -595,6 +612,7 @@ export async function POST(
           assistantMessage,
           selectedAssetId,
           status: 200,
+          revision: nextRevision,
         },
         { status: 200 },
       );
@@ -603,11 +621,6 @@ export async function POST(
     // =========================================================
     // Case 3: Media Generation Action
     // =========================================================
-    // Share the same billable-generation throttle as the Studio endpoint.
-    // Clarification and state-only actions above remain free of this limit.
-    const rateLimited = await generationLimiter.check(session.user.id);
-    if (rateLimited) return rateLimited;
-
     // Extract base effective generation spec from contextual job (prioritizing focused historical step)
     const contextualJob = sourceJob ?? latestJob;
     const basePayload =
@@ -1008,7 +1021,21 @@ export async function POST(
       });
     }
 
-    // Create user message
+    // Planning is read-only. Execution first claims the caller's conversation
+    // revision under a row lock, before any billable generation job can be
+    // admitted. This prevents a stale concurrent turn from reserving credits.
+    const rateLimited = await generationLimiter.check(session.user.id);
+    if (rateLimited) return rateLimited;
+
+    const claimedState = await mutateConversationState(
+      conversationId,
+      currentState,
+      () => undefined,
+      input.expectedRevision,
+    );
+    conversationRevisionClaimed = true;
+
+    // Create user message only after the revision claim succeeds.
     const userMessage = await upsertUserMessage();
 
     // Execute generation job with parent derivation tracking
@@ -1129,9 +1156,9 @@ export async function POST(
 
     // Serialize conversation-state mutation under a row lock so concurrent
     // turns cannot overwrite each other's working state.
-    await mutateConversationState(
+    const finalState = await mutateConversationState(
       conversationId,
-      currentState,
+      claimedState,
       (state) => {
         state.activeGenerationId = job.id;
         state.activeAssetId = null;
@@ -1149,7 +1176,6 @@ export async function POST(
         };
         state.pendingOperation = null;
       },
-      input.expectedRevision,
     );
 
     const assistantMessage = await upsertMessage(
@@ -1179,6 +1205,7 @@ export async function POST(
         assistantMessage,
         jobId: job.id,
         status: job.status,
+        revision: finalState.revision ?? 0,
       },
       { status: 202 },
     );
@@ -1194,8 +1221,15 @@ export async function POST(
     const message =
       error instanceof Error ? error.message : "Message turn execution failed.";
     const status = error instanceof GenerationError ? error.status : 400;
+    const code =
+      status === 409 &&
+      message.startsWith("Conversation state was modified")
+        ? "CONVERSATION_CONFLICT"
+        : conversationRevisionClaimed
+          ? "CONVERSATION_REFRESH_REQUIRED"
+          : undefined;
     return NextResponse.json(
-      { error: message, correlationId },
+      { error: message, correlationId, ...(code ? { code } : {}) },
       { status, headers: { "x-correlation-id": correlationId } },
     );
   }

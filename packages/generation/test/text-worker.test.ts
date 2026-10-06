@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   db: {
     $transaction: vi.fn(),
     generationJob: {
+      findUnique: vi.fn(),
       findUniqueOrThrow: vi.fn(),
       updateMany: vi.fn(),
     },
@@ -36,7 +37,11 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@aiwa/db", () => ({ db: mocks.db }));
 vi.mock("@aiwa/credits", () => mocks.credits);
 
-import { createTextJob, processTextJob } from "../src/text";
+import {
+  createTextJob,
+  processTextJob,
+  projectTextJobToChat,
+} from "../src/text";
 
 const validMembership = {
   role: "ORGANIZATION_MEMBER",
@@ -629,5 +634,107 @@ describe("durable text generation billing", () => {
         }),
       }),
     );
+  });
+});
+
+
+describe("character chat terminal projection", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it.each([
+    ["FAILED", "Generation failed. You can retry this message."],
+    ["CANCELLED", "Generation was cancelled. You can retry this message."],
+    [
+      "MANUAL_REVIEW",
+      "Generation needs review before it can be retried safely.",
+    ],
+  ])("projects %s as a durable assistant turn", async (status, content) => {
+    mocks.db.generationJob.findUnique.mockResolvedValue({
+      id: "job_terminal",
+      status,
+      chatThreadId: "thread_1",
+      idempotencyKey: "server-key",
+      requestPayload: { clientRequestId: "client-key" },
+      outputPayload: null,
+      chargedCredits: 0n,
+      errorCode: "SAFE_CODE",
+    });
+    const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([{ id: "thread_1" }]),
+      chatMessage: {
+        findUnique: vi.fn().mockResolvedValue(null),
+        update: vi.fn(),
+        create: vi.fn(),
+      },
+      chatThread: { update: vi.fn() },
+    };
+    mocks.db.$transaction.mockImplementationOnce(async (callback) =>
+      callback(tx),
+    );
+
+    await projectTextJobToChat("job_terminal");
+
+    expect(tx.chatMessage.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        threadId: "thread_1",
+        clientRequestId: "client-key",
+        role: "assistant",
+        content,
+        metadata: expect.objectContaining({
+          generationJobId: "job_terminal",
+          generationStatus: status,
+          errorCode: "SAFE_CODE",
+        }),
+      }),
+    });
+  });
+
+  it("keeps successful projection idempotent", async () => {
+    mocks.db.generationJob.findUnique.mockResolvedValue({
+      id: "job_success",
+      status: "SUCCEEDED",
+      chatThreadId: "thread_1",
+      idempotencyKey: "server-key",
+      requestPayload: { clientRequestId: "client-key" },
+      outputPayload: {
+        content: "Recovered answer",
+        usage: { promptTokens: 2, completionTokens: 3, totalTokens: 5 },
+      },
+      chargedCredits: 4n,
+      errorCode: null,
+    });
+    const existing = {
+      id: "message_1",
+      metadata: { audioJobId: "voice_1" },
+    };
+    const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([{ id: "thread_1" }]),
+      chatMessage: {
+        findUnique: vi.fn().mockResolvedValue(existing),
+        update: vi.fn(),
+        create: vi.fn(),
+      },
+      chatThread: { update: vi.fn() },
+    };
+    mocks.db.$transaction.mockImplementationOnce(async (callback) =>
+      callback(tx),
+    );
+
+    await projectTextJobToChat("job_success");
+
+    expect(tx.chatMessage.create).not.toHaveBeenCalled();
+    expect(tx.chatMessage.update).toHaveBeenCalledWith({
+      where: { id: "message_1" },
+      data: expect.objectContaining({
+        content: "Recovered answer",
+        tokensUsed: 5,
+        metadata: expect.objectContaining({
+          audioJobId: "voice_1",
+          generationStatus: "SUCCEEDED",
+        }),
+      }),
+    });
   });
 });

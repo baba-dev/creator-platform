@@ -2,7 +2,7 @@ import { hasOrganizationPermission } from "@aiwa/authz";
 import { db } from "@aiwa/db";
 import { chatThreadCreateSchema } from "@aiwa/validation";
 import { NextResponse } from "next/server";
-import { ZodError } from "zod";
+import { z, ZodError } from "zod";
 
 import {
   clientChatModelReference,
@@ -11,10 +11,19 @@ import {
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
 import {
+  decodeTimeIdCursor,
+  encodeTimeIdCursor,
+} from "../../../../lib/time-id-cursor";
+import {
   getAvailableStudioModels,
   StudioModelUnavailableError,
   type PublicStudioModel,
 } from "@/lib/studio-model-discovery";
+
+const threadListSchema = z.object({
+  cursor: z.string().min(1).max(512).optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+});
 
 const personaSelect = {
   id: true,
@@ -88,11 +97,39 @@ export async function GET(request: Request) {
     );
   }
 
+  const parsedList = threadListSchema.safeParse({
+    cursor: url.searchParams.get("cursor") ?? undefined,
+    limit: url.searchParams.get("limit") ?? undefined,
+  });
+  if (!parsedList.success) {
+    return NextResponse.json(
+      { error: "Invalid pagination parameters." },
+      { status: 400 },
+    );
+  }
+  const cursor = parsedList.data.cursor
+    ? decodeTimeIdCursor(parsedList.data.cursor)
+    : null;
+  if (parsedList.data.cursor && !cursor) {
+    return NextResponse.json({ error: "Invalid cursor." }, { status: 400 });
+  }
+  const limit = parsedList.data.limit;
+
   const [threads, discovery] = await Promise.all([
     db.chatThread.findMany({
       where: {
         organizationId,
         createdById: session.user.id,
+        ...(cursor
+          ? cursor.id
+            ? {
+                OR: [
+                  { updatedAt: { lt: cursor.at } },
+                  { updatedAt: cursor.at, id: { lt: cursor.id } },
+                ],
+              }
+            : { updatedAt: { lt: cursor.at } }
+          : {}),
       },
       select: {
         id: true,
@@ -104,20 +141,29 @@ export async function GET(request: Request) {
         persona: { select: personaSelect },
         _count: { select: { messages: true } },
       },
-      orderBy: { updatedAt: "desc" },
-      take: 100,
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+      take: limit + 1,
     }),
     getAvailableStudioModels("character-chat"),
   ]);
 
+  const hasMore = threads.length > limit;
+  const items = hasMore ? threads.slice(0, limit) : threads;
+  const lastItem = items.length > 0 ? items[items.length - 1] : undefined;
+  const nextCursor =
+    hasMore && lastItem
+      ? encodeTimeIdCursor(lastItem.updatedAt, lastItem.id)
+      : null;
+
   return NextResponse.json(
     {
-      threads: threads.map((thread) => ({
+      threads: items.map((thread) => ({
         ...thread,
         ...clientChatModelReference(thread, discovery.models),
         providerModelRecordId: undefined,
         persona: serializePersona(thread.persona, discovery.models),
       })),
+      nextCursor,
     },
     { headers: { "Cache-Control": "no-store" } },
   );

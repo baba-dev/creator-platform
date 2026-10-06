@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { hostPressure } from "./host-pressure";
 import { mediaAlerts } from "@aiwa/assets/worker-health";
 import { monitorEventLoopDelay } from "node:perf_hooks";
@@ -23,7 +23,12 @@ import {
   processVideoSubmitJob,
   processVoiceJob,
 } from "@aiwa/generation/process";
-import { processTextJob, processTranscriptionJob } from "@aiwa/generation";
+import {
+  createVoiceJob,
+  processTextJob,
+  processTranscriptionJob,
+  projectTextJobToChat,
+} from "@aiwa/generation";
 import { mailJobId } from "@aiwa/mail";
 import {
   closeSmtpTransport,
@@ -45,6 +50,7 @@ import {
 import Redis from "ioredis";
 import {
   processAssetDerivatives,
+  processAssetMetadata,
   purgeExpiredAssets,
   purgeMediaAttemptOutputs,
 } from "./assets";
@@ -65,6 +71,179 @@ import {
 } from "./provider-concurrency";
 
 configureMediaCapacityGate(withDatabaseMediaCapacity);
+
+function deterministicWorkerUuid(value: string): string {
+  const digest = createHash("sha256").update(value).digest("hex");
+  const variantNibble = (
+    (Number.parseInt(digest[16]!, 16) & 0x3) |
+    0x8
+  ).toString(16);
+  return [
+    digest.slice(0, 8),
+    digest.slice(8, 12),
+    `5${digest.slice(13, 16)}`,
+    `${variantNibble}${digest.slice(17, 20)}`,
+    digest.slice(20, 32),
+  ].join("-");
+}
+
+async function ensureTextChatAutoVoice(jobId: string): Promise<void> {
+  const job = await db.generationJob.findUnique({
+    where: { id: jobId },
+    select: {
+      id: true,
+      status: true,
+      organizationId: true,
+      projectId: true,
+      createdById: true,
+      chatThreadId: true,
+      requestPayload: true,
+      outputPayload: true,
+    },
+  });
+  if (!job || job.status !== "SUCCEEDED" || !job.chatThreadId) return;
+
+  const requestPayload =
+    job.requestPayload &&
+    typeof job.requestPayload === "object" &&
+    !Array.isArray(job.requestPayload)
+      ? (job.requestPayload as Record<string, unknown>)
+      : {};
+  const chatOptions =
+    requestPayload.chatOptions &&
+    typeof requestPayload.chatOptions === "object" &&
+    !Array.isArray(requestPayload.chatOptions)
+      ? (requestPayload.chatOptions as Record<string, unknown>)
+      : {};
+  if (chatOptions.autoVoice !== true) return;
+
+  const outputPayload =
+    job.outputPayload &&
+    typeof job.outputPayload === "object" &&
+    !Array.isArray(job.outputPayload)
+      ? (job.outputPayload as Record<string, unknown>)
+      : {};
+  const content =
+    typeof outputPayload.content === "string"
+      ? outputPayload.content.trim()
+      : "";
+  if (!content) return;
+
+  const clientRequestId =
+    typeof requestPayload.clientRequestId === "string"
+      ? requestPayload.clientRequestId
+      : null;
+  if (!clientRequestId) return;
+
+  const [thread, assistantMessage] = await Promise.all([
+    db.chatThread.findUnique({
+      where: { id: job.chatThreadId },
+      select: { id: true, organizationId: true, createdById: true },
+    }),
+    db.chatMessage.findUnique({
+      where: {
+        threadId_clientRequestId_role: {
+          threadId: job.chatThreadId,
+          clientRequestId,
+          role: "assistant",
+        },
+      },
+    }),
+  ]);
+  if (
+    !thread ||
+    thread.organizationId !== job.organizationId ||
+    thread.createdById !== job.createdById ||
+    !assistantMessage
+  )
+    return;
+
+  const currentMetadata =
+    assistantMessage.metadata &&
+    typeof assistantMessage.metadata === "object" &&
+    !Array.isArray(assistantMessage.metadata)
+      ? (assistantMessage.metadata as Record<string, unknown>)
+      : {};
+  if (typeof currentMetadata.audioJobId === "string") return;
+
+  const now = new Date();
+  const voiceModel = await db.providerModel.findFirst({
+    where: {
+      mediaKind: "VOICE",
+      provider: "BYTEPLUS",
+      providerModelId: "seed-tts-2.0",
+      enabled: true,
+    },
+    include: {
+      priceVersions: {
+        where: {
+          effectiveFrom: { lte: now },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
+        },
+        orderBy: { effectiveFrom: "desc" },
+        take: 1,
+      },
+    },
+  });
+  const price = voiceModel?.priceVersions[0];
+  if (!voiceModel || !price) return;
+
+  const voiceKey =
+    typeof chatOptions.voiceKey === "string" ? chatOptions.voiceKey : "jasper";
+  const speechRate =
+    typeof chatOptions.speechRate === "number" &&
+    chatOptions.speechRate >= 0.5 &&
+    chatOptions.speechRate <= 2
+      ? chatOptions.speechRate
+      : 1;
+  const voiceIdempotencyKey = deterministicWorkerUuid(
+    [
+      "chat-auto-voice-v2",
+      job.id,
+      voiceModel.id,
+      price.id,
+      voiceKey,
+      String(speechRate),
+      content,
+    ].join("\u0000"),
+  );
+  const voiceJob = await createVoiceJob(job.createdById, {
+    organizationId: job.organizationId,
+    projectId: job.projectId,
+    modelId: voiceModel.id,
+    priceVersionId: price.id,
+    idempotencyKey: voiceIdempotencyKey,
+    text: content,
+    voiceKey,
+    speechRate,
+    format: "mp3",
+  });
+
+  await db.$transaction(async (tx) => {
+    const current = await tx.chatMessage.findUnique({
+      where: {
+        threadId_clientRequestId_role: {
+          threadId: job.chatThreadId!,
+          clientRequestId,
+          role: "assistant",
+        },
+      },
+    });
+    if (!current) return;
+    const metadata =
+      current.metadata &&
+      typeof current.metadata === "object" &&
+      !Array.isArray(current.metadata)
+        ? (current.metadata as Record<string, unknown>)
+        : {};
+    if (typeof metadata.audioJobId === "string") return;
+    await tx.chatMessage.update({
+      where: { id: current.id },
+      data: { metadata: { ...metadata, audioJobId: voiceJob.id } },
+    });
+  });
+}
+
 const env = parseServerEnv();
 const instanceId = randomUUID();
 const PROVIDER_CAPACITY_RETRY_MS = 15_000;
@@ -341,27 +520,33 @@ const generationWorker = createWorker(
             if (!bytePlusProvider)
               throw new Error("BytePlus text provider is not configured");
             await processTextJob(job.data.jobId, bytePlusProvider);
-            return;
+            break;
           case "GROQ":
             if (!groqProvider)
               throw new Error("Groq text provider is not configured");
             await processTextJob(job.data.jobId, groqProvider);
-            return;
+            break;
           case "GEMINI":
             if (!geminiProvider)
               throw new Error("Gemini text provider is not configured");
             await processTextJob(job.data.jobId, geminiProvider);
-            return;
+            break;
           case "CLOUDFLARE":
             if (!cloudflareProvider)
               throw new Error("Cloudflare text provider is not configured");
             await processTextJob(job.data.jobId, cloudflareProvider);
-            return;
+            break;
           default:
             throw new Error(
               "Selected provider does not support text generation",
             );
         }
+        // Projection and optional voice are post-settlement side effects.
+        // If either transiently fails, BullMQ can retry this worker job; the
+        // provider call/financial settlement stay idempotent and are not redone.
+        await projectTextJobToChat(job.data.jobId);
+        await ensureTextChatAutoVoice(job.data.jobId);
+        return;
       }
       default:
         throw new Error("Unknown generation queue job");
@@ -403,6 +588,8 @@ const assetWorker = createWorker(
             await processImageOperation(task.targetId);
           else if (task.kind === "VIDEO_RENDER")
             await processVideoRender(task.targetId);
+          else if (task.kind === "METADATA")
+            await processAssetMetadata(task.targetId);
           else await processAssetDerivatives(task.targetId, task.kind);
         });
         return;
@@ -448,6 +635,17 @@ const assetWorker = createWorker(
           include: { variants: true },
         });
         if (!asset) return;
+        if (needsAssetMetadata(asset)) {
+          const metadataTask = await ensureMediaTask({
+            targetId: asset.id,
+            organizationId: asset.organizationId,
+            kind: "METADATA",
+            legacyAttempts: job.attemptsMade,
+          });
+          await runMediaTask(metadataTask.id, () =>
+            processAssetMetadata(asset.id),
+          );
+        }
         for (const kind of derivativeKinds(asset.mediaKind)) {
           if (asset.variants.some((variant) => variant.kind === kind)) continue;
           const task = await ensureMediaTask({
@@ -475,6 +673,23 @@ assetWorker?.on("failed", (job) => {
     jobId: job?.id,
   });
 });
+function needsAssetMetadata(asset: {
+  mediaKind: string;
+  width: number | null;
+  height: number | null;
+  durationMs: number | null;
+}): boolean {
+  if (asset.mediaKind === "IMAGE") {
+    return asset.width === null || asset.height === null;
+  }
+  if (asset.mediaKind === "VIDEO") {
+    return (
+      asset.width === null || asset.height === null || asset.durationMs === null
+    );
+  }
+  return asset.mediaKind === "AUDIO" && asset.durationMs === null;
+}
+
 function derivativeKinds(
   kind: string,
 ): ("THUMBNAIL" | "PREVIEW" | "POSTER" | "STORYBOARD" | "WAVEFORM")[] {
@@ -614,6 +829,8 @@ async function dispatchAssets() {
           {
             mediaKind: "IMAGE",
             OR: [
+              { width: null },
+              { height: null },
               { variants: { none: { kind: "PREVIEW" } } },
               { variants: { none: { kind: "THUMBNAIL" } } },
             ],
@@ -621,11 +838,20 @@ async function dispatchAssets() {
           {
             mediaKind: "VIDEO",
             OR: [
+              { width: null },
+              { height: null },
+              { durationMs: null },
               { variants: { none: { kind: "POSTER" } } },
               { variants: { none: { kind: "STORYBOARD" } } },
             ],
           },
-          { mediaKind: "AUDIO", variants: { none: { kind: "WAVEFORM" } } },
+          {
+            mediaKind: "AUDIO",
+            OR: [
+              { durationMs: null },
+              { variants: { none: { kind: "WAVEFORM" } } },
+            ],
+          },
         ],
       },
       include: { variants: true },
@@ -634,11 +860,15 @@ async function dispatchAssets() {
     });
     assetScanCursor =
       assets.length === 100 ? assets[assets.length - 1]!.id : undefined;
-    for (const asset of assets)
+    for (const asset of assets) {
+      if (needsAssetMetadata(asset)) {
+        await importTask(asset.id, asset.organizationId, "METADATA", asset.id);
+      }
       for (const kind of derivativeKinds(asset.mediaKind)) {
         if (asset.variants.some((variant) => variant.kind === kind)) continue;
         await importTask(asset.id, asset.organizationId, kind, asset.id);
       }
+    }
     const tasks = await db.mediaTask.findMany({
       where: {
         status: { in: ["PENDING", "RETRY_WAIT"] },

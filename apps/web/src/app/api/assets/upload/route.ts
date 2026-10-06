@@ -7,15 +7,11 @@ import {
 } from "@aiwa/assets";
 import {
   createAssetObjectKey,
-  createAssetVariantObjectKey,
-  LocalAssetStorage,
   resolveOrganizationStorage,
 } from "@aiwa/assets/storage";
-import { inspectAndProbeUploadedMedia } from "@aiwa/assets/media-probe";
 import { parseServerEnv } from "@aiwa/config";
 import { db } from "@aiwa/db";
 import { NextResponse } from "next/server";
-import sharp from "sharp";
 
 import { requireAssetMembership, serializeAsset } from "@/lib/asset-api";
 import { rateLimit } from "@/lib/rate-limit";
@@ -32,6 +28,13 @@ import { safeErrorMessage } from "@/lib/safe-error";
 export const runtime = "nodejs";
 const env = parseServerEnv();
 
+// request.formData() materializes multipart bodies in the Node process. Keep
+// this deliberately small on the low-memory web tier; native inspection and
+// derivative work happens in the media worker after the canonical object is
+// durable.
+const MAX_CONCURRENT_UPLOAD_BODIES = 1;
+let activeUploadBodies = 0;
+
 export async function POST(request: Request) {
   if (!hasTrustedMutationOrigin(request))
     return NextResponse.json({ error: "Origin not allowed." }, { status: 403 });
@@ -44,6 +47,17 @@ export async function POST(request: Request) {
 
   const rateLimited = await uploadLimiter.check(session.user.id);
   if (rateLimited) return rateLimited;
+  if (activeUploadBodies >= MAX_CONCURRENT_UPLOAD_BODIES) {
+    return NextResponse.json(
+      {
+        error:
+          "Another large upload is being processed. Please retry when it finishes.",
+      },
+      { status: 429, headers: { "Retry-After": "3" } },
+    );
+  }
+  activeUploadBodies += 1;
+
   let pending:
     | {
         id: string;
@@ -55,8 +69,6 @@ export async function POST(request: Request) {
   let pendingStorage:
     Awaited<ReturnType<typeof resolveOrganizationStorage>> | undefined;
   let pendingExternalFileId: string | undefined;
-  let pendingThumbnailKey: string | undefined;
-  const storage = new LocalAssetStorage(env.ASSET_STORAGE_ROOT);
 
   try {
     const form = await request.formData();
@@ -140,56 +152,12 @@ export async function POST(request: Request) {
     );
     pending = created;
 
-    const media = await inspectAndProbeUploadedMedia({
-      bytes,
-      kind: inspected.mediaKind,
-      extension: inspected.extension,
-      imageInspector: async (source) => {
-        const metadata = await sharp(source, { failOn: "error" }).metadata();
-        return {
-          width: metadata.width ?? null,
-          height: metadata.height ?? null,
-        };
-      },
-    });
-
     const stored = await targetStorage.put(
       objectKey,
       bytes,
       inspected.mimeType,
     );
     pendingExternalFileId = stored.externalFileId;
-
-    // If BYOS is active and asset is an image, store thumbnail locally on platform storage for instant grid preview
-    if (targetStorage.provider !== "LOCAL" && inspected.mediaKind === "IMAGE") {
-      try {
-        const thumbBytes = await sharp(bytes)
-          .rotate()
-          .resize(560, 560, { fit: "inside", withoutEnlargement: true })
-          .webp({ quality: 80 })
-          .toBuffer({ resolveWithObject: true });
-
-        const thumbKey = createAssetVariantObjectKey(organizationId, "webp");
-        pendingThumbnailKey = thumbKey;
-        const storedThumb = await storage.put(thumbKey, thumbBytes.data);
-
-        await db.assetVariant.create({
-          data: {
-            assetId: created.id,
-            kind: "THUMBNAIL",
-            storageProvider: "LOCAL",
-            objectKey: thumbKey,
-            mimeType: "image/webp",
-            byteSize: storedThumb.byteSize,
-            sha256: storedThumb.sha256,
-            width: thumbBytes.info.width,
-            height: thumbBytes.info.height,
-          },
-        });
-      } catch {
-        // Derivative generation non-fatal
-      }
-    }
 
     const asset = await db.$transaction((tx) =>
       finalizeUploadedAsset(tx, {
@@ -198,9 +166,9 @@ export async function POST(request: Request) {
         actorUserId: session.user.id,
         actualBytes: stored.byteSize,
         sha256: stored.sha256,
-        width: media.width,
-        height: media.height,
-        durationMs: media.durationMs,
+        width: null,
+        height: null,
+        durationMs: null,
         externalFileId: stored.externalFileId ?? null,
         storageProvider: targetStorage.provider,
       }),
@@ -223,14 +191,13 @@ export async function POST(request: Request) {
             .delete(pending.objectKey, pendingExternalFileId)
             .catch(() => undefined);
         }
-        if (pendingThumbnailKey) {
-          await storage.delete(pendingThumbnailKey).catch(() => undefined);
-        }
       }
     }
     return NextResponse.json(
       { error: safeErrorMessage(error, "Upload failed.") },
       { status: 400 },
     );
+  } finally {
+    activeUploadBodies = Math.max(0, activeUploadBodies - 1);
   }
 }

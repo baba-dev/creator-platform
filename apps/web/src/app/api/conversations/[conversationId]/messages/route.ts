@@ -14,7 +14,10 @@ import { z } from "zod";
 import { rateLimit } from "@/lib/rate-limit";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
-import { buildPlannerContext } from "../../../../../lib/conversations/context-builder";
+import {
+  buildPlannerContext,
+  type ContextBuilderJobSummary,
+} from "../../../../../lib/conversations/context-builder";
 import { planConversationTurn } from "../../../../../lib/conversations/planner";
 import { findCompatibleAlternativeModel } from "../../../../../lib/conversations/capability-router";
 import type {
@@ -27,18 +30,59 @@ const generationLimiter = rateLimit({
   windowMs: 60_000,
   prefix: "generation",
 });
+const CONVERSATION_TURN_LEASE_MS = 60_000;
 
-const messageInputSchema = z.object({
-  content: z.string().trim().min(1, "Message cannot be empty.").max(4000),
-  selectedAssetId: z.string().min(1).max(100).optional(),
-  resumePendingOperation: z.boolean().optional().default(false),
-  idempotencyKey: z.string().uuid(),
-});
+const messageInputSchema = z
+  .object({
+    content: z.string().trim().min(1, "Message cannot be empty.").max(4000),
+    selectedAssetId: z.string().min(1).max(100).optional(),
+    sourceGenerationId: z.string().min(1).max(100).optional(),
+    expectedRevision: z.number().int().nonnegative().optional(),
+    mode: z.enum(["plan", "execute"]).default("execute"),
+    resumePendingOperation: z.boolean().optional().default(false),
+    idempotencyKey: z.string().uuid(),
+  })
+  .superRefine((value, context) => {
+    if (value.mode === "execute" && value.expectedRevision === undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["expectedRevision"],
+        message: "Conversation revision is required for execution.",
+      });
+    }
+  });
+
+async function releaseConversationTurnLease(
+  conversationId: string,
+  idempotencyKey: string,
+): Promise<void> {
+  await db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM ChatThread WHERE id = ${conversationId} FOR UPDATE`;
+    const row = await tx.chatThread.findUnique({
+      where: { id: conversationId },
+      select: { state: true },
+    });
+    const state = row?.state as unknown as ConversationState | null;
+    if (!state || state.inFlightTurn?.idempotencyKey !== idempotencyKey) return;
+
+    const nextState = structuredClone(state);
+    nextState.inFlightTurn = null;
+    nextState.revision = Number(state.revision ?? 0) + 1;
+    await tx.chatThread.update({
+      where: { id: conversationId },
+      data: {
+        state: nextState as unknown as object,
+        updatedAt: new Date(),
+      },
+    });
+  });
+}
 
 async function mutateConversationState(
   conversationId: string,
   fallbackState: ConversationState,
   mutate: (state: ConversationState) => void,
+  expectedRevision?: number,
 ): Promise<ConversationState> {
   return db.$transaction(
     async (tx) => {
@@ -49,9 +93,19 @@ async function mutateConversationState(
       });
       const sourceState =
         (row?.state as unknown as ConversationState | null) ?? fallbackState;
+      const currentRevision = Number(sourceState.revision ?? 0);
+      if (
+        expectedRevision !== undefined &&
+        currentRevision !== expectedRevision
+      ) {
+        throw new GenerationError(
+          "Conversation state was modified in another request. Please reload to see the latest changes.",
+          409,
+        );
+      }
       const nextState = structuredClone(sourceState);
       mutate(nextState);
-      nextState.revision = Number(nextState.revision ?? 0) + 1;
+      nextState.revision = currentRevision + 1;
 
       await tx.chatThread.update({
         where: { id: conversationId },
@@ -144,6 +198,8 @@ export async function POST(
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
   }
 
+  let conversationRevisionClaimed = false;
+  let claimedTurnId: string | null = null;
   try {
     const json = await request.json();
     const input = messageInputSchema.parse(json);
@@ -152,6 +208,7 @@ export async function POST(
         JSON.stringify({
           content: input.content,
           selectedAssetId: input.selectedAssetId ?? null,
+          sourceGenerationId: input.sourceGenerationId ?? null,
           resumePendingOperation: input.resumePendingOperation,
         }),
       )
@@ -297,7 +354,11 @@ export async function POST(
         !latestJob ||
         latestJob.id === replayJob.id ||
         replayJob.chatThreadId === null;
-      if (replayIsCurrent && currentState.activeGenerationId !== replayJob.id) {
+      if (
+        replayIsCurrent &&
+        currentState.activeGenerationId !== replayJob.id &&
+        Number(currentState.revision ?? 0) === input.expectedRevision
+      ) {
         const payload =
           replayJob.requestPayload &&
           typeof replayJob.requestPayload === "object" &&
@@ -400,12 +461,57 @@ export async function POST(
       select: { role: true, content: true },
     });
 
+    // Resolve and authorize historical source job if client focused a specific step
+    let sourceJob: ContextBuilderJobSummary | null = null;
+    if (input.sourceGenerationId) {
+      const foundSource = await db.generationJob.findFirst({
+        where: {
+          id: input.sourceGenerationId,
+          chatThreadId: conversationId,
+          organizationId: thread.organizationId,
+        },
+        select: {
+          id: true,
+          status: true,
+          requestPayload: true,
+          assets: {
+            where: { status: "READY", deletedAt: null },
+            orderBy: { generationOutputIndex: "asc" },
+            select: {
+              id: true,
+              mimeType: true,
+              generationOutputIndex: true,
+              width: true,
+              height: true,
+              durationMs: true,
+            },
+          },
+          providerModel: {
+            select: {
+              id: true,
+              provider: true,
+              displayName: true,
+              mediaKind: true,
+            },
+          },
+        },
+      });
+      if (!foundSource) {
+        return NextResponse.json(
+          { error: "Referenced source step not found in this conversation." },
+          { status: 404 },
+        );
+      }
+      sourceJob = foundSource;
+    }
+
     // Build planner context
     const plannerContext = buildPlannerContext({
       conversationId,
       title: thread.title,
       state: currentState,
       latestJob,
+      sourceJob,
       recentMessages: recentMessages.reverse(),
       clientSelectedAssetId: input.selectedAssetId ?? null,
     });
@@ -437,12 +543,17 @@ export async function POST(
     // Case 1: Clarification needed (Ambiguity)
     // =========================================================
     if (firstAction.type === "clarify") {
-      await mutateConversationState(conversationId, currentState, (state) => {
-        state.pendingOperation = {
-          originalPrompt: input.content,
-          createdAt: new Date().toISOString(),
-        };
-      });
+      const nextState = await mutateConversationState(
+        conversationId,
+        currentState,
+        (state) => {
+          state.pendingOperation = {
+            originalPrompt: input.content,
+            createdAt: new Date().toISOString(),
+          };
+        },
+        input.expectedRevision,
+      );
 
       const userMessage = await upsertUserMessage();
 
@@ -468,6 +579,7 @@ export async function POST(
             options: firstAction.options,
           },
           status: 200,
+          revision: nextState.revision ?? 0,
         },
         { status: 200 },
       );
@@ -494,13 +606,20 @@ export async function POST(
         label = "Asset selected";
       }
 
+      let nextRevision = Number(currentState.revision ?? 0);
       if (selectedAssetId) {
-        await mutateConversationState(conversationId, currentState, (state) => {
-          state.activeAssetId = selectedAssetId;
-          if (isResumedClarification) {
-            state.pendingOperation = null;
-          }
-        });
+        const nextState = await mutateConversationState(
+          conversationId,
+          currentState,
+          (state) => {
+            state.activeAssetId = selectedAssetId;
+            if (isResumedClarification) {
+              state.pendingOperation = null;
+            }
+          },
+          input.expectedRevision,
+        );
+        nextRevision = Number(nextState.revision ?? nextRevision);
       }
 
       const userMessage = await upsertUserMessage();
@@ -521,6 +640,7 @@ export async function POST(
           assistantMessage,
           selectedAssetId,
           status: 200,
+          revision: nextRevision,
         },
         { status: 200 },
       );
@@ -529,14 +649,10 @@ export async function POST(
     // =========================================================
     // Case 3: Media Generation Action
     // =========================================================
-    // Share the same billable-generation throttle as the Studio endpoint.
-    // Clarification and state-only actions above remain free of this limit.
-    const rateLimited = await generationLimiter.check(session.user.id);
-    if (rateLimited) return rateLimited;
-
-    // Extract base effective generation spec from latest job
+    // Extract base effective generation spec from contextual job (prioritizing focused historical step)
+    const contextualJob = sourceJob ?? latestJob;
     const basePayload =
-      (latestJob?.requestPayload as Record<string, unknown>) ?? {};
+      (contextualJob?.requestPayload as Record<string, unknown>) ?? {};
     let targetModality: CreativeModality = plannerContext.activeModality;
     let targetModelId = plannerContext.currentModelId || thread.modelId;
     let targetPrompt =
@@ -718,17 +834,15 @@ export async function POST(
           targetPrompt = (basePayload.text || basePayload.prompt) as string;
         }
       } else if (action.type === "retry_generation") {
-        if (!latestJob) {
+        const targetRetryJob = sourceJob ?? latestJob;
+        if (!targetRetryJob) {
           throw new GenerationError("There is no generation to retry.", 409);
         }
 
-        if (
-          ["SUBMITTED", "PROCESSING", "MANUAL_REVIEW"].includes(
-            latestJob.status,
-          )
-        ) {
+        const RETRYABLE_TERMINAL_STATES = new Set(["FAILED", "CANCELLED"]);
+        if (!RETRYABLE_TERMINAL_STATES.has(targetRetryJob.status)) {
           throw new GenerationError(
-            "This generation is still active or under review and cannot be retried safely.",
+            `Generation in status ${targetRetryJob.status} cannot be retried. Only explicitly failed or cancelled generations are eligible for retry.`,
             409,
           );
         }
@@ -911,7 +1025,65 @@ export async function POST(
 
     const priceVersion = model.priceVersions[0];
 
-    // Create user message
+    // If client requested planning mode, return plan parameters before executing billable generation
+    if (input.mode === "plan") {
+      return NextResponse.json({
+        mode: "plan",
+        action: firstAction.type,
+        targetModality,
+        model: {
+          id: model.id,
+          provider: model.provider,
+          displayName: model.displayName,
+        },
+        settings: {
+          aspectRatio: targetRatio,
+          resolution: targetResolution,
+          outputCount: targetOutputCount,
+          durationSeconds: targetDuration,
+        },
+        prompt: targetPrompt,
+        sourceGenerationId: sourceJob?.id ?? latestJob?.id ?? null,
+        expectedRevision: currentState.revision ?? 0,
+        priceVersionId: priceVersion.id,
+      });
+    }
+
+    // Planning is read-only. Execution first claims the caller's conversation
+    // revision under a row lock, before any billable generation job can be
+    // admitted. This prevents a stale concurrent turn from reserving credits.
+    const rateLimited = await generationLimiter.check(session.user.id);
+    if (rateLimited) return rateLimited;
+
+    const leaseStartedAt = new Date();
+    const claimedState = await mutateConversationState(
+      conversationId,
+      currentState,
+      (state) => {
+        const activeLease = state.inFlightTurn;
+        if (
+          activeLease &&
+          activeLease.idempotencyKey !== input.idempotencyKey &&
+          Number.isFinite(Date.parse(activeLease.startedAt)) &&
+          Date.parse(activeLease.startedAt) + CONVERSATION_TURN_LEASE_MS >
+            leaseStartedAt.getTime()
+        ) {
+          throw new GenerationError(
+            "Another conversation turn is still being admitted. Please retry after it finishes.",
+            409,
+          );
+        }
+        state.inFlightTurn = {
+          idempotencyKey: input.idempotencyKey,
+          startedAt: leaseStartedAt.toISOString(),
+        };
+      },
+      input.expectedRevision,
+    );
+    conversationRevisionClaimed = true;
+    claimedTurnId = input.idempotencyKey;
+
+    // Create user message only after the revision claim succeeds.
     const userMessage = await upsertUserMessage();
 
     // Execute generation job with parent derivation tracking
@@ -1005,9 +1177,8 @@ export async function POST(
     const parentGenerationId =
       durableJob?.chatThreadId === conversationId
         ? durableJob.parentGenerationId
-        : latestJob?.id === job.id
-          ? null
-          : (latestJob?.id ?? null);
+        : (sourceJob?.id ??
+          (latestJob?.id === job.id ? null : (latestJob?.id ?? null)));
 
     if (!durableJob?.chatThreadId) {
       const claim = await db.generationJob.updateMany({
@@ -1033,23 +1204,30 @@ export async function POST(
 
     // Serialize conversation-state mutation under a row lock so concurrent
     // turns cannot overwrite each other's working state.
-    await mutateConversationState(conversationId, currentState, (state) => {
-      state.activeGenerationId = job.id;
-      state.activeAssetId = null;
-      state.activeOutputs = [];
-      state.activeModality = targetModality;
-      state.currentModelId = model.id;
-      state.currentProvider = model.provider;
-      state.settings = {
-        aspectRatio: targetRatio,
-        resolution: targetResolution,
-        outputCount: targetOutputCount,
-        durationSeconds: targetDuration,
-        voiceKey: targetVoiceKey,
-        speechRate: targetSpeechRate,
-      };
-      state.pendingOperation = null;
-    });
+    const finalState = await mutateConversationState(
+      conversationId,
+      claimedState,
+      (state) => {
+        state.activeGenerationId = job.id;
+        state.activeAssetId = null;
+        state.activeOutputs = [];
+        state.activeModality = targetModality;
+        state.currentModelId = model.id;
+        state.currentProvider = model.provider;
+        state.settings = {
+          aspectRatio: targetRatio,
+          resolution: targetResolution,
+          outputCount: targetOutputCount,
+          durationSeconds: targetDuration,
+          voiceKey: targetVoiceKey,
+          speechRate: targetSpeechRate,
+        };
+        state.pendingOperation = null;
+        if (state.inFlightTurn?.idempotencyKey === input.idempotencyKey) {
+          state.inFlightTurn = null;
+        }
+      },
+    );
 
     const assistantMessage = await upsertMessage(
       "assistant",
@@ -1078,19 +1256,38 @@ export async function POST(
         assistantMessage,
         jobId: job.id,
         status: job.status,
+        revision: finalState.revision ?? 0,
       },
       { status: 202 },
     );
   } catch (error) {
+    if (claimedTurnId) {
+      await releaseConversationTurnLease(conversationId, claimedTurnId).catch(
+        () => undefined,
+      );
+    }
+    const correlationId =
+      request.headers.get("x-correlation-id") || crypto.randomUUID();
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: "Invalid message data.", issues: error.issues },
-        { status: 400 },
+        { error: "Invalid message data.", issues: error.issues, correlationId },
+        { status: 400, headers: { "x-correlation-id": correlationId } },
       );
     }
     const message =
       error instanceof Error ? error.message : "Message turn execution failed.";
     const status = error instanceof GenerationError ? error.status : 400;
-    return NextResponse.json({ error: message }, { status });
+    const code =
+      status === 409 && message.startsWith("Conversation state was modified")
+        ? "CONVERSATION_CONFLICT"
+        : status === 409 && message.startsWith("Another conversation turn")
+          ? "CONVERSATION_BUSY"
+          : conversationRevisionClaimed
+            ? "CONVERSATION_REFRESH_REQUIRED"
+            : undefined;
+    return NextResponse.json(
+      { error: message, correlationId, ...(code ? { code } : {}) },
+      { status, headers: { "x-correlation-id": correlationId } },
+    );
   }
 }

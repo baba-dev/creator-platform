@@ -5,6 +5,9 @@ export interface SerializedGenerationJobAsset {
   width?: number | null;
   height?: number | null;
   durationMs?: number | null;
+  thumbnailUrl?: string;
+  previewUrl?: string;
+  url?: string;
 }
 
 export interface SerializedProviderModelSummary {
@@ -22,7 +25,6 @@ export interface SerializedGenerationJobDTO {
   createdAt: string;
   reservedCredits: string;
   chargedCredits: string;
-  actualProviderCostMicroUsd?: string | null;
   assets: SerializedGenerationJobAsset[];
   providerModel?: SerializedProviderModelSummary | null;
 }
@@ -82,10 +84,6 @@ export function serializeGenerationJob(job: {
         : String(job.createdAt),
     reservedCredits: (job.reservedCredits ?? 0n).toString(),
     chargedCredits: (job.chargedCredits ?? 0n).toString(),
-    actualProviderCostMicroUsd:
-      job.actualProviderCostMicroUsd != null
-        ? job.actualProviderCostMicroUsd.toString()
-        : null,
     assets: (job.assets ?? []).map((asset) => ({
       id: asset.id,
       mimeType: asset.mimeType,
@@ -93,6 +91,9 @@ export function serializeGenerationJob(job: {
       width: asset.width ?? null,
       height: asset.height ?? null,
       durationMs: asset.durationMs ?? null,
+      thumbnailUrl: `/api/assets/${asset.id}/variant/thumbnail`,
+      previewUrl: `/api/assets/${asset.id}/variant/preview`,
+      url: `/api/assets/${asset.id}`,
     })),
     providerModel: job.providerModel
       ? {

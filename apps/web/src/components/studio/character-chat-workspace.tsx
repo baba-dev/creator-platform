@@ -184,6 +184,7 @@ export function CharacterChatWorkspace({
 
   // Dictation & Voice Call mode state
   const [isListening, setIsListening] = useState(false);
+  const [interimTranscript, setInterimTranscript] = useState("");
   const [isCallModeActive, setIsCallModeActive] = useState(false);
   const recognitionRef = useRef<{ stop: () => void; start: () => void } | null>(
     null,
@@ -206,9 +207,9 @@ export function CharacterChatWorkspace({
         lang: string;
         onresult: (e: {
           resultIndex: number;
-          results: Array<{ 0: { transcript: string } }>;
+          results: Array<{ 0: { transcript: string }; isFinal?: boolean }>;
         }) => void;
-        onerror: () => void;
+        onerror: (e: { error: string }) => void;
         onend: () => void;
         start: () => void;
         stop: () => void;
@@ -219,9 +220,9 @@ export function CharacterChatWorkspace({
         lang: string;
         onresult: (e: {
           resultIndex: number;
-          results: Array<{ 0: { transcript: string } }>;
+          results: Array<{ 0: { transcript: string }; isFinal?: boolean }>;
         }) => void;
-        onerror: () => void;
+        onerror: (e: { error: string }) => void;
         onend: () => void;
         start: () => void;
         stop: () => void;
@@ -242,6 +243,7 @@ export function CharacterChatWorkspace({
     if (isListening) {
       recognitionRef.current?.stop();
       setIsListening(false);
+      setInterimTranscript("");
       return;
     }
 
@@ -252,26 +254,49 @@ export function CharacterChatWorkspace({
       recognition.lang = "en-US";
 
       recognition.onresult = (event) => {
-        let transcript = "";
+        let finalChunk = "";
+        let interimChunk = "";
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const item = event.results[i];
           if (item?.[0]?.transcript) {
-            transcript += item[0].transcript;
+            if (item.isFinal) {
+              finalChunk += item[0].transcript;
+            } else {
+              interimChunk += item[0].transcript;
+            }
           }
         }
-        if (transcript.trim()) {
+        if (finalChunk.trim()) {
           setInputText((prev) =>
-            prev ? `${prev} ${transcript.trim()}` : transcript.trim(),
+            prev ? `${prev} ${finalChunk.trim()}` : finalChunk.trim(),
           );
+          setInterimTranscript("");
+        } else {
+          setInterimTranscript(interimChunk.trim());
         }
       };
 
-      recognition.onerror = () => {
+      recognition.onerror = (e) => {
         setIsListening(false);
+        setInterimTranscript("");
+        if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+          setErrorMessage(
+            "Microphone permission was denied. Please allow microphone access in your browser settings to use dictation.",
+          );
+        } else if (e.error === "no-speech") {
+          // No speech detected, quietly end
+        } else if (e.error === "network") {
+          setErrorMessage(
+            "Speech recognition network error. Please verify your internet connection.",
+          );
+        } else {
+          setErrorMessage(`Speech recognition error: ${e.error}`);
+        }
       };
 
       recognition.onend = () => {
         setIsListening(false);
+        setInterimTranscript("");
       };
 
       recognition.start();
@@ -279,6 +304,7 @@ export function CharacterChatWorkspace({
       setIsListening(true);
     } catch {
       setIsListening(false);
+      setInterimTranscript("");
     }
   }
 
@@ -317,15 +343,16 @@ export function CharacterChatWorkspace({
   // Load thread messages when activeThreadId changes
   useEffect(() => {
     if (!activeThreadId) return;
-    let ignore = false;
+    const controller = new AbortController();
     async function loadMessages() {
       try {
         const res = await fetch(
           `/api/chat/threads/${encodeURIComponent(activeThreadId!)}`,
+          { signal: controller.signal },
         );
         if (res.ok) {
           const data = await res.json();
-          if (!ignore) {
+          if (!controller.signal.aborted) {
             setMessages(data.thread?.messages || []);
             if (data.thread?.persona) {
               setSelectedPersona(data.thread.persona);
@@ -346,13 +373,14 @@ export function CharacterChatWorkspace({
             }
           }
         }
-      } catch (err) {
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === "AbortError") return;
         console.error("Failed to load thread messages", err);
       }
     }
     loadMessages();
     return () => {
-      ignore = true;
+      controller.abort();
     };
   }, [activeThreadId]);
 
@@ -499,7 +527,10 @@ export function CharacterChatWorkspace({
           content: userText,
           autoVoice,
         },
-        { idempotencyKey: clientRequestId },
+        {
+          idempotencyKey: clientRequestId,
+          statusUrl: `/api/chat/threads/${encodeURIComponent(threadId!)}/messages?clientRequestId=${encodeURIComponent(clientRequestId)}`,
+        },
       );
       setMessages((prev) => {
         const filtered = prev.filter((m) => m.id !== tempUserMsg.id);
@@ -974,6 +1005,15 @@ export function CharacterChatWorkspace({
             onSubmit={handleSendMessage}
             className="border-t border-border bg-surface-sunken/40 p-3 sm:p-4"
           >
+            {isListening && (
+              <div className="mb-2 flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs text-primary animate-pulse">
+                <span className="size-2 rounded-full bg-primary" />
+                <span className="font-semibold">Listening:</span>
+                <span className="italic text-foreground/80">
+                  {interimTranscript || "Speak into your microphone..."}
+                </span>
+              </div>
+            )}
             <div className="relative flex items-center">
               <textarea
                 value={inputText}

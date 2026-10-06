@@ -84,6 +84,7 @@ function admissionTx(existing: unknown = null) {
     },
     generationJob: {
       findUnique: vi.fn().mockResolvedValue(existing),
+      count: vi.fn().mockResolvedValue(0),
       create: vi.fn().mockResolvedValue({
         id: "job_text_1",
         status: "QUEUED",

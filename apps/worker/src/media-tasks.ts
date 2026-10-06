@@ -4,6 +4,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { db, Prisma } from "@aiwa/db";
 
 export type MediaTaskKind =
+  | "METADATA"
   | "THUMBNAIL"
   | "PREVIEW"
   | "POSTER"
@@ -22,8 +23,8 @@ export class MediaOwnershipLost extends Error {
   }
 }
 export class MediaPermanentFailure extends Error {
-  constructor() {
-    super("Media input is unavailable or invalid.");
+  constructor(message = "Media input is unavailable or invalid.") {
+    super(message);
     this.name = "MediaPermanentFailure";
   }
 }

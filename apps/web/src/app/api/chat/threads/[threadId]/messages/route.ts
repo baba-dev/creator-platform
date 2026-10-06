@@ -14,10 +14,19 @@ import { deterministicUuid } from "@/lib/idempotency";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
 import {
+  decodeTimeIdCursor,
+  encodeTimeIdCursor,
+} from "../../../../../../lib/time-id-cursor";
+import {
   assertQuotedTextModel,
   issueTextFeatureQuote,
 } from "@/lib/text-feature-generation";
 import { StudioModelUnavailableError } from "@/lib/studio-model-discovery";
+
+const messageListSchema = z.object({
+  before: z.string().min(1).max(512).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
 
 const chatGenerationSchema = chatMessageCreateSchema
   .extend({
@@ -134,6 +143,12 @@ export async function POST(
       priceVersionId: input.priceVersionId,
       quoteToken: input.quoteToken,
       idempotencyKey: input.idempotencyKey,
+      chatThreadId: threadId,
+      chatOptions: {
+        autoVoice: input.autoVoice,
+        voiceKey: thread.persona?.voiceKey || "jasper",
+        speechRate: 1,
+      },
       messages,
       temperature: 0.7,
       maxTokens,
@@ -200,6 +215,7 @@ export async function POST(
               voiceModel.id,
               voiceModel.priceVersions[0].id,
               voiceKey,
+              "1",
               result.content,
             ].join("\u0000"),
           );
@@ -287,4 +303,229 @@ export async function POST(
       { status: 502 },
     );
   }
+}
+
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ threadId: string }> },
+) {
+  const session = await getRequestSession(request.headers);
+  if (!session) {
+    return NextResponse.json(
+      { error: "Authentication required." },
+      { status: 401 },
+    );
+  }
+  const { threadId } = await params;
+  const thread = await db.chatThread.findUnique({
+    where: { id: threadId },
+    select: { organizationId: true, createdById: true },
+  });
+  if (!thread || thread.createdById !== session.user.id) {
+    return NextResponse.json({ error: "Thread not found." }, { status: 404 });
+  }
+
+  const membership = await db.membership.findUnique({
+    where: {
+      organizationId_userId: {
+        organizationId: thread.organizationId,
+        userId: session.user.id,
+      },
+    },
+    include: { organization: true },
+  });
+  if (
+    !membership ||
+    membership.organization.status !== "ACTIVE" ||
+    !hasOrganizationPermission(membership.role, "workspace:view")
+  ) {
+    return NextResponse.json({ error: "Access denied." }, { status: 403 });
+  }
+
+  const url = new URL(request.url);
+  const clientRequestId = url.searchParams.get("clientRequestId");
+
+  if (clientRequestId) {
+    const assistantMessage = await db.chatMessage.findUnique({
+      where: {
+        threadId_clientRequestId_role: {
+          threadId,
+          clientRequestId,
+          role: "assistant",
+        },
+      },
+    });
+
+    if (assistantMessage) {
+      const userMessage = await db.chatMessage.findUnique({
+        where: {
+          threadId_clientRequestId_role: {
+            threadId,
+            clientRequestId,
+            role: "user",
+          },
+        },
+      });
+      const metadata =
+        (assistantMessage.metadata as Record<string, unknown> | null) ?? {};
+      return NextResponse.json({
+        status: "SUCCEEDED",
+        complete: true,
+        userMessage,
+        message: assistantMessage,
+        audioJobId: metadata.audioJobId,
+      });
+    }
+
+    const userMessage = await db.chatMessage.findUnique({
+      where: {
+        threadId_clientRequestId_role: {
+          threadId,
+          clientRequestId,
+          role: "user",
+        },
+      },
+    });
+    const jobId = (userMessage?.metadata as Record<string, unknown> | null)
+      ?.generationJobId as string | undefined;
+    if (jobId) {
+      const job = await db.generationJob.findUnique({
+        where: { id: jobId },
+        select: {
+          status: true,
+          errorCode: true,
+          errorMessage: true,
+          outputPayload: true,
+          chargedCredits: true,
+          completedAt: true,
+        },
+      });
+      if (job?.status === "SUCCEEDED") {
+        const output =
+          job.outputPayload &&
+          typeof job.outputPayload === "object" &&
+          !Array.isArray(job.outputPayload)
+            ? (job.outputPayload as Record<string, unknown>)
+            : {};
+        const content =
+          typeof output.content === "string" ? output.content : null;
+        if (content) {
+          const rawUsage =
+            output.usage &&
+            typeof output.usage === "object" &&
+            !Array.isArray(output.usage)
+              ? (output.usage as Record<string, unknown>)
+              : {};
+          const totalTokens =
+            typeof rawUsage.totalTokens === "number"
+              ? rawUsage.totalTokens
+              : null;
+          return NextResponse.json({
+            status: "SUCCEEDED",
+            complete: true,
+            projectionPending: true,
+            userMessage,
+            message: {
+              id: `generation-${jobId}-assistant`,
+              threadId,
+              clientRequestId,
+              role: "assistant",
+              content,
+              tokensUsed: totalTokens,
+              metadata: {
+                generationJobId: jobId,
+                chargedCredits: Number(job.chargedCredits),
+                ...(output.usage ? { usage: output.usage } : {}),
+                projectionPending: true,
+              },
+              createdAt: (job.completedAt ?? new Date()).toISOString(),
+            },
+          });
+        }
+      }
+
+      if (
+        job?.status === "FAILED" ||
+        job?.status === "CANCELLED" ||
+        job?.status === "MANUAL_REVIEW"
+      ) {
+        return NextResponse.json(
+          {
+            status: job.status,
+            complete: true,
+            error:
+              job.errorMessage ??
+              (job.status === "MANUAL_REVIEW"
+                ? "Generation requires provider or billing reconciliation."
+                : "Generation failed."),
+            errorCode: job.errorCode,
+          },
+          { status: job.status === "MANUAL_REVIEW" ? 409 : 400 },
+        );
+      }
+      return NextResponse.json(
+        {
+          status: job?.status ?? "PROCESSING",
+          complete: false,
+          jobId,
+          userMessage,
+        },
+        { status: 202 },
+      );
+    }
+
+    return NextResponse.json(
+      { status: "PROCESSING", complete: false },
+      { status: 202 },
+    );
+  }
+
+  const parsedList = messageListSchema.safeParse({
+    before: url.searchParams.get("before") ?? undefined,
+    limit: url.searchParams.get("limit") ?? undefined,
+  });
+  if (!parsedList.success) {
+    return NextResponse.json(
+      { error: "Invalid pagination parameters." },
+      { status: 400 },
+    );
+  }
+  const beforeCursor = parsedList.data.before
+    ? decodeTimeIdCursor(parsedList.data.before)
+    : null;
+  if (parsedList.data.before && !beforeCursor) {
+    return NextResponse.json({ error: "Invalid cursor." }, { status: 400 });
+  }
+  const limit = parsedList.data.limit;
+
+  const rawMessages = await db.chatMessage.findMany({
+    where: {
+      threadId,
+      ...(beforeCursor
+        ? beforeCursor.id
+          ? {
+              OR: [
+                { createdAt: { lt: beforeCursor.at } },
+                { createdAt: beforeCursor.at, id: { lt: beforeCursor.id } },
+              ],
+            }
+          : { createdAt: { lt: beforeCursor.at } }
+        : {}),
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: limit + 1,
+  });
+
+  const hasMore = rawMessages.length > limit;
+  const items = hasMore ? rawMessages.slice(0, limit) : rawMessages;
+  const lastItem = items.length > 0 ? items[items.length - 1] : undefined;
+  const nextCursor =
+    hasMore && lastItem
+      ? encodeTimeIdCursor(lastItem.createdAt, lastItem.id)
+      : null;
+
+  return NextResponse.json({
+    messages: items.reverse(),
+    nextCursor,
+  });
 }

@@ -49,12 +49,36 @@ interface GenerationJobItem {
     width?: number | null;
     height?: number | null;
     durationMs?: number | null;
+    thumbnailUrl?: string;
+    previewUrl?: string;
+    url?: string;
   }>;
+}
+
+function retryBoundedDerivative(
+  image: HTMLImageElement,
+  baseUrl: string,
+): void {
+  const attempt = Number(image.dataset.derivativeRetry ?? "0");
+  if (attempt >= 3) {
+    image.dataset.derivativeUnavailable = "true";
+    image.style.visibility = "hidden";
+    return;
+  }
+  const nextAttempt = attempt + 1;
+  image.dataset.derivativeRetry = String(nextAttempt);
+  window.setTimeout(
+    () => {
+      if (!image.isConnected) return;
+      const separator = baseUrl.includes("?") ? "&" : "?";
+      image.src = `${baseUrl}${separator}retry=${nextAttempt}`;
+    },
+    Math.min(1_000 * 2 ** attempt, 4_000),
+  );
 }
 
 export function CreativeConversationWorkspace({
   organizationSlug,
-  organizationId,
   conversationId,
   initialTitle,
   initialState,
@@ -63,7 +87,7 @@ export function CreativeConversationWorkspace({
   canGenerate,
 }: {
   organizationSlug: string;
-  organizationId: string;
+  organizationId?: string;
   conversationId: string;
   initialTitle: string;
   initialState?: ConversationState | null;
@@ -82,6 +106,9 @@ export function CreativeConversationWorkspace({
   );
   const [activeModality, setActiveModality] = useState<CreativeModality>(
     initialState?.activeModality ?? "IMAGE",
+  );
+  const [conversationRevision, setConversationRevision] = useState(
+    Number(initialState?.revision ?? 0),
   );
   const [lightboxAssetId, setLightboxAssetId] = useState<string | null>(null);
   const [inputPrompt, setInputPrompt] = useState("");
@@ -113,55 +140,45 @@ export function CreativeConversationWorkspace({
     key: string;
     prompt: string;
     assetId?: string;
+    sourceGenerationId?: string;
     resumePendingOperation: boolean;
   } | null>(null);
 
-  // Poll for job status updates for any visible active jobs
+  // Poll for job status updates for any visible active jobs via batch endpoint
   useEffect(() => {
-    if (!hasPendingJobs) return;
+    if (!hasPendingJobs || pendingJobs.length === 0) return;
     const timer = setInterval(async () => {
       try {
-        let anyFinished = false;
-        let pollFailed = false;
-        await Promise.all(
-          pendingJobs.map(async (pendingJob) => {
-            try {
-              const res = await fetch(
-                `/api/generation-jobs/${encodeURIComponent(pendingJob.id)}?organizationId=${encodeURIComponent(organizationId)}`,
-                { cache: "no-store" },
-              );
-              if (!res.ok) {
-                pollFailed = true;
-                return;
-              }
-              const data = await res.json();
-              if (data.job) {
-                setJobs((prev) =>
-                  prev.map((j) =>
-                    j.id === pendingJob.id ? { ...j, ...data.job } : j,
-                  ),
-                );
-                if (
-                  data.job.status === "SUCCEEDED" ||
-                  data.job.status === "FAILED" ||
-                  data.job.status === "CANCELLED" ||
-                  data.job.status === "MANUAL_REVIEW"
-                ) {
-                  anyFinished = true;
-                }
-              }
-            } catch {
-              pollFailed = true;
-            }
-          }),
+        const ids = pendingJobs.map((p) => p.id).join(",");
+        const res = await fetch(
+          `/api/conversations/${encodeURIComponent(conversationId)}/jobs/status?ids=${encodeURIComponent(ids)}`,
+          { cache: "no-store" },
         );
-        if (pollFailed) {
+        if (!res.ok) {
           setRefreshError(true);
-        } else if (!anyFinished) {
-          setRefreshError(false);
+          return;
         }
-        if (anyFinished) {
-          void refreshConversation();
+        const data = await res.json();
+        if (Array.isArray(data.jobs)) {
+          const anyFinished = data.jobs.some(
+            (job: { status?: string }) =>
+              job.status === "SUCCEEDED" ||
+              job.status === "FAILED" ||
+              job.status === "CANCELLED" ||
+              job.status === "MANUAL_REVIEW",
+          );
+          setJobs((prev) =>
+            prev.map((existing) => {
+              const updated = data.jobs.find(
+                (j: { id: string }) => j.id === existing.id,
+              );
+              return updated ? { ...existing, ...updated } : existing;
+            }),
+          );
+          setRefreshError(false);
+          if (anyFinished) {
+            void refreshConversation();
+          }
         }
       } catch {
         setRefreshError(true);
@@ -169,7 +186,7 @@ export function CreativeConversationWorkspace({
     }, 3000);
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasPendingJobs, pendingJobs, organizationId]);
+  }, [hasPendingJobs, pendingJobs, conversationId]);
 
   // Refresh conversation details
   async function refreshConversation() {
@@ -209,6 +226,7 @@ export function CreativeConversationWorkspace({
         if (data.conversation.state?.activeModality) {
           setActiveModality(data.conversation.state.activeModality);
         }
+        setConversationRevision(Number(data.conversation.state?.revision ?? 0));
       }
     } catch {
       setRefreshError(true);
@@ -310,6 +328,9 @@ export function CreativeConversationWorkspace({
   // Handle asset click (state-only selection: 0 credits)
   async function selectAsset(assetId: string) {
     setActiveAssetId(assetId);
+    const sourceJob =
+      jobs.find((job) => job.assets.some((asset) => asset.id === assetId)) ??
+      activeJob;
     try {
       const res = await fetch(`/api/conversations/${conversationId}/messages`, {
         method: "POST",
@@ -317,11 +338,21 @@ export function CreativeConversationWorkspace({
         body: JSON.stringify({
           content: "Select asset",
           selectedAssetId: assetId,
+          sourceGenerationId: sourceJob?.id,
+          expectedRevision: conversationRevision,
           idempotencyKey: crypto.randomUUID(),
         }),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setRefreshError(true);
+        if (data.code === "CONVERSATION_CONFLICT") {
+          await refreshConversation();
+        }
+        return;
+      }
+      if (typeof data.revision === "number") {
+        setConversationRevision(data.revision);
       }
     } catch {
       setRefreshError(true);
@@ -359,6 +390,7 @@ export function CreativeConversationWorkspace({
         pendingTurnRef.current &&
         pendingTurnRef.current.prompt === prompt &&
         pendingTurnRef.current.assetId === focusedAssetId &&
+        pendingTurnRef.current.sourceGenerationId === focusedJob?.id &&
         pendingTurnRef.current.resumePendingOperation === resumePendingOperation
           ? pendingTurnRef.current.key
           : crypto.randomUUID();
@@ -367,6 +399,7 @@ export function CreativeConversationWorkspace({
         key: idempotencyKey,
         prompt,
         assetId: focusedAssetId,
+        sourceGenerationId: focusedJob?.id,
         resumePendingOperation,
       };
 
@@ -376,6 +409,8 @@ export function CreativeConversationWorkspace({
         body: JSON.stringify({
           content: prompt,
           selectedAssetId: focusedAssetId,
+          sourceGenerationId: focusedJob?.id,
+          expectedRevision: conversationRevision,
           resumePendingOperation,
           idempotencyKey,
         }),
@@ -383,18 +418,29 @@ export function CreativeConversationWorkspace({
 
       const data = await res.json();
       if (!res.ok) {
+        const needsRefresh =
+          data.code === "CONVERSATION_CONFLICT" ||
+          data.code === "CONVERSATION_BUSY" ||
+          data.code === "CONVERSATION_REFRESH_REQUIRED";
         if (
           res.status >= 400 &&
           res.status < 500 &&
           res.status !== 408 &&
-          res.status !== 429
+          res.status !== 429 &&
+          !needsRefresh
         ) {
           pendingTurnRef.current = null;
+        }
+        if (needsRefresh) {
+          await refreshConversation();
         }
         throw new Error(data.error ?? "Failed to process request.");
       }
 
       pendingTurnRef.current = null;
+      if (typeof data.revision === "number") {
+        setConversationRevision(data.revision);
+      }
 
       if (typeof data.jobId === "string" && data.jobId) {
         setJobs((prev) => {
@@ -572,6 +618,8 @@ export function CreativeConversationWorkspace({
         {/* Central Visual Media Canvas */}
         <section
           aria-label="Active Generation Canvas"
+          aria-live="polite"
+          aria-atomic="true"
           className="rounded-2xl border border-border/80 bg-card/70 p-4 sm:p-5 shadow-xs space-y-4"
         >
           {/* Lineage Step Selector (when more than 1 job exists) */}
@@ -722,7 +770,21 @@ export function CreativeConversationWorkspace({
                 <div className="group relative max-h-[520px] overflow-hidden rounded-xl border border-border/80 bg-black/5 flex items-center justify-center">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={`/api/assets/${encodeURIComponent(activeAsset.id)}`}
+                    src={
+                      activeAsset.previewUrl ??
+                      `/api/assets/${encodeURIComponent(activeAsset.id)}/variant/preview`
+                    }
+                    onError={(e) => {
+                      retryBoundedDerivative(
+                        e.currentTarget,
+                        activeAsset.previewUrl ??
+                          `/api/assets/${encodeURIComponent(activeAsset.id)}/variant/preview`,
+                      );
+                    }}
+                    onLoad={(e) => {
+                      e.currentTarget.dataset.derivativeRetry = "0";
+                      e.currentTarget.style.visibility = "visible";
+                    }}
                     alt="Active Creative Canvas"
                     className="w-full max-h-[500px] object-contain rounded-xl"
                   />
@@ -836,7 +898,21 @@ export function CreativeConversationWorkspace({
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
-                            src={`/api/assets/${encodeURIComponent(asset.id)}`}
+                            src={
+                              asset.thumbnailUrl ??
+                              `/api/assets/${encodeURIComponent(asset.id)}/variant/thumbnail`
+                            }
+                            onError={(e) => {
+                              retryBoundedDerivative(
+                                e.currentTarget,
+                                asset.thumbnailUrl ??
+                                  `/api/assets/${encodeURIComponent(asset.id)}/variant/thumbnail`,
+                              );
+                            }}
+                            onLoad={(e) => {
+                              e.currentTarget.dataset.derivativeRetry = "0";
+                              e.currentTarget.style.visibility = "visible";
+                            }}
                             alt={`Output #${outputNum}`}
                             className="size-full object-cover group-hover:scale-102 transition duration-200"
                             loading="lazy"

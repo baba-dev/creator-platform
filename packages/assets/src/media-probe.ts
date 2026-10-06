@@ -6,6 +6,13 @@ import { promisify } from "node:util";
 
 const run = promisify(execFile);
 
+export class MediaProbeValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "MediaProbeValidationError";
+  }
+}
+
 export interface ProbedMediaMetadata {
   durationMs: number | null;
   width: number | null;
@@ -29,7 +36,7 @@ export async function probeUploadedMedia(
     ],
     { timeout: 15_000, maxBuffer: 100_000 },
   );
-  const data = JSON.parse(stdout) as {
+  let data: {
     format?: { duration?: string };
     streams?: {
       codec_type: string;
@@ -38,9 +45,27 @@ export async function probeUploadedMedia(
       height?: number;
     }[];
   };
+  try {
+    data = JSON.parse(stdout) as typeof data;
+  } catch {
+    throw new MediaProbeValidationError("Media metadata is malformed.");
+  }
+  /* c8 ignore start -- shape documented by ffprobe JSON */
+  data = data as {
+    format?: { duration?: string };
+    streams?: {
+      codec_type: string;
+      codec_name?: string;
+      width?: number;
+      height?: number;
+    }[];
+  };
+  /* c8 ignore stop */
   const durationMs = Math.round(Number(data.format?.duration) * 1000);
   if (!Number.isFinite(durationMs) || durationMs < 100 || durationMs > 120_000)
-    throw new Error("Video or audio must be between 0.1 and 120 seconds.");
+    throw new MediaProbeValidationError(
+      "Video or audio must be between 0.1 and 120 seconds.",
+    );
   const video = data.streams?.find((stream) => stream.codec_type === "video");
   const audio = data.streams?.find((stream) => stream.codec_type === "audio");
   if (
@@ -52,13 +77,16 @@ export async function probeUploadedMedia(
       video.height > 2160 ||
       !["h264", "hevc", "av1"].includes(video.codec_name ?? ""))
   )
-    throw new Error("Unsupported video codec or dimensions.");
-  if (kind === "AUDIO" && !audio) throw new Error("Audio track is missing.");
+    throw new MediaProbeValidationError(
+      "Unsupported video codec or dimensions.",
+    );
+  if (kind === "AUDIO" && !audio)
+    throw new MediaProbeValidationError("Audio track is missing.");
   if (
     audio &&
     !["aac", "mp3", "pcm_s16le", "opus"].includes(audio.codec_name ?? "")
   )
-    throw new Error("Unsupported audio codec.");
+    throw new MediaProbeValidationError("Unsupported audio codec.");
   return {
     durationMs,
     width: video?.width ?? null,

@@ -61,14 +61,19 @@ export default async function StoragePage({
       </div>
 
       <StorageManager
+        key={organizationId}
         organizationId={organizationId}
         activeProvider={org.defaultStorageProvider}
         canManage={canManage}
         googleConfigured={Boolean(
-          env.GOOGLE_DRIVE_CLIENT_ID && env.GOOGLE_DRIVE_CLIENT_SECRET,
+          env.STORAGE_ENCRYPTION_KEY &&
+          env.GOOGLE_DRIVE_CLIENT_ID &&
+          env.GOOGLE_DRIVE_CLIENT_SECRET,
         )}
         oneDriveConfigured={Boolean(
-          env.ONEDRIVE_CLIENT_ID && env.ONEDRIVE_CLIENT_SECRET,
+          env.STORAGE_ENCRYPTION_KEY &&
+          env.ONEDRIVE_CLIENT_ID &&
+          env.ONEDRIVE_CLIENT_SECRET,
         )}
         configs={configs}
         connectedParam={connected}

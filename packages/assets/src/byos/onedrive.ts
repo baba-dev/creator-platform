@@ -1,3 +1,6 @@
+import { z } from "zod";
+import type { StorageQuota } from "../storage";
+import { byteValue, quotaFromBytes } from "./quota";
 import { createHash } from "node:crypto";
 import type {
   AssetObjectStat,
@@ -56,6 +59,7 @@ export async function exchangeOneDriveCode(input: {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body,
+      signal: AbortSignal.timeout(8000),
     },
   );
 
@@ -121,6 +125,7 @@ export async function refreshOneDriveAccessToken(input: {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body,
+      signal: AbortSignal.timeout(8000),
     },
   );
 
@@ -192,6 +197,31 @@ export class OneDriveAssetStorage implements AssetStorage {
       rootFolderId: string;
     },
   ) {}
+
+  async getQuota(): Promise<StorageQuota> {
+    const token = await this.options.getAccessToken();
+    const response = await fetch(
+      "https://graph.microsoft.com/v1.0/me/drive?$select=quota",
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+        signal: AbortSignal.timeout(8000),
+      },
+    );
+    if (!response.ok)
+      throw new Error("Storage quota is temporarily unavailable.");
+    const data = z
+      .object({
+        quota: z.object({
+          total: byteValue.optional(),
+          used: byteValue,
+          remaining: byteValue.optional(),
+        }),
+      })
+      .parse(await response.json());
+    const { total, used, remaining } = data.quota;
+    return quotaFromBytes(total, used, remaining);
+  }
 
   private sanitizeFilename(objectKey: string): string {
     return objectKey.replaceAll(/[\\/]/g, "_");

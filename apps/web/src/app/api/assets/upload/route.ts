@@ -7,15 +7,12 @@ import {
 } from "@aiwa/assets";
 import {
   createAssetObjectKey,
-  createAssetVariantObjectKey,
-  LocalAssetStorage,
   resolveOrganizationStorage,
 } from "@aiwa/assets/storage";
 import { inspectAndProbeUploadedMedia } from "@aiwa/assets/media-probe";
 import { parseServerEnv } from "@aiwa/config";
 import { db } from "@aiwa/db";
 import { NextResponse } from "next/server";
-import sharp from "sharp";
 
 import { requireAssetMembership, serializeAsset } from "@/lib/asset-api";
 import { rateLimit } from "@/lib/rate-limit";
@@ -55,8 +52,6 @@ export async function POST(request: Request) {
   let pendingStorage:
     Awaited<ReturnType<typeof resolveOrganizationStorage>> | undefined;
   let pendingExternalFileId: string | undefined;
-  let pendingThumbnailKey: string | undefined;
-  const storage = new LocalAssetStorage(env.ASSET_STORAGE_ROOT);
 
   try {
     const form = await request.formData();
@@ -144,13 +139,6 @@ export async function POST(request: Request) {
       bytes,
       kind: inspected.mediaKind,
       extension: inspected.extension,
-      imageInspector: async (source) => {
-        const metadata = await sharp(source, { failOn: "error" }).metadata();
-        return {
-          width: metadata.width ?? null,
-          height: metadata.height ?? null,
-        };
-      },
     });
 
     const stored = await targetStorage.put(
@@ -159,37 +147,6 @@ export async function POST(request: Request) {
       inspected.mimeType,
     );
     pendingExternalFileId = stored.externalFileId;
-
-    // If BYOS is active and asset is an image, store thumbnail locally on platform storage for instant grid preview
-    if (targetStorage.provider !== "LOCAL" && inspected.mediaKind === "IMAGE") {
-      try {
-        const thumbBytes = await sharp(bytes)
-          .rotate()
-          .resize(560, 560, { fit: "inside", withoutEnlargement: true })
-          .webp({ quality: 80 })
-          .toBuffer({ resolveWithObject: true });
-
-        const thumbKey = createAssetVariantObjectKey(organizationId, "webp");
-        pendingThumbnailKey = thumbKey;
-        const storedThumb = await storage.put(thumbKey, thumbBytes.data);
-
-        await db.assetVariant.create({
-          data: {
-            assetId: created.id,
-            kind: "THUMBNAIL",
-            storageProvider: "LOCAL",
-            objectKey: thumbKey,
-            mimeType: "image/webp",
-            byteSize: storedThumb.byteSize,
-            sha256: storedThumb.sha256,
-            width: thumbBytes.info.width,
-            height: thumbBytes.info.height,
-          },
-        });
-      } catch {
-        // Derivative generation non-fatal
-      }
-    }
 
     const asset = await db.$transaction((tx) =>
       finalizeUploadedAsset(tx, {
@@ -222,9 +179,6 @@ export async function POST(request: Request) {
           await pendingStorage
             .delete(pending.objectKey, pendingExternalFileId)
             .catch(() => undefined);
-        }
-        if (pendingThumbnailKey) {
-          await storage.delete(pendingThumbnailKey).catch(() => undefined);
         }
       }
     }

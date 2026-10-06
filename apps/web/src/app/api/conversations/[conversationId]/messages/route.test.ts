@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
       findFirst: vi.fn(),
       update: vi.fn(),
       updateMany: vi.fn(),
+      count: vi.fn(),
     },
     providerModel: {
       findFirst: vi.fn(),
@@ -142,6 +143,7 @@ describe("POST /api/conversations/[conversationId]/messages", () => {
     );
     mocks.db.chatThread.update.mockResolvedValue({});
     mocks.db.generationJob.findFirst.mockResolvedValue(null);
+    mocks.db.generationJob.count.mockResolvedValue(0);
     mocks.db.generationJob.findUnique.mockResolvedValue({
       chatThreadId: null,
       parentGenerationId: null,
@@ -590,7 +592,7 @@ describe("POST /api/conversations/[conversationId]/messages", () => {
       generationJobs: [
         {
           id: "job_video_prev",
-          status: "SUCCEEDED",
+          status: "FAILED",
           providerModel: {
             id: "model_vid_1",
             displayName: "Seedance",

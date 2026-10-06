@@ -273,6 +273,20 @@ jobs:
           test -n "$(find "$validation_dir/ops/db/node_modules" -path '*/@prisma/engines/schema-engine-debian-openssl-3.0.x' -print -quit)"
           test -n "$(find "$validation_dir/ops/db/node_modules" -path '*/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node' -print -quit)"
 
+      - name: Compute artifact checksum
+        run: |
+          sha256sum "creator-platform-${GITHUB_SHA}.tar.gz" > "creator-platform-${GITHUB_SHA}.tar.gz.sha256"
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: creator-platform-${{ github.sha }}
+          path: |
+            creator-platform-${{ github.sha }}.tar.gz
+            creator-platform-${{ github.sha }}.tar.gz.sha256
+          retention-days: 30
+          if-no-files-found: error
+
   quality:
     name: quality
     if: always()

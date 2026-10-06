@@ -80,11 +80,18 @@ export async function GET(request: Request) {
     );
   }
 
+  const cursor = url.searchParams.get("cursor");
+  const limit = Math.min(
+    Math.max(1, Number(url.searchParams.get("limit") || 20)),
+    50,
+  );
+
   const threads = await db.chatThread.findMany({
     where: {
       organizationId,
       createdById: session.user.id,
       threadType: "CREATIVE",
+      ...(cursor ? { updatedAt: { lt: new Date(cursor) } } : {}),
     },
     select: {
       id: true,
@@ -96,10 +103,19 @@ export async function GET(request: Request) {
       _count: { select: { messages: true } },
     },
     orderBy: { updatedAt: "desc" },
-    take: 50,
+    take: limit + 1,
   });
 
-  return NextResponse.json({ conversations: threads });
+  const hasMore = threads.length > limit;
+  const items = hasMore ? threads.slice(0, limit) : threads;
+  const lastItem = items.length > 0 ? items[items.length - 1] : undefined;
+  const nextCursor =
+    hasMore && lastItem ? lastItem.updatedAt.toISOString() : null;
+
+  return NextResponse.json({
+    conversations: items,
+    nextCursor,
+  });
 }
 
 export async function POST(request: Request) {

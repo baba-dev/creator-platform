@@ -88,11 +88,18 @@ export async function GET(request: Request) {
     );
   }
 
+  const cursor = url.searchParams.get("cursor");
+  const limit = Math.min(
+    Math.max(1, Number(url.searchParams.get("limit") || 20)),
+    50,
+  );
+
   const [threads, discovery] = await Promise.all([
     db.chatThread.findMany({
       where: {
         organizationId,
         createdById: session.user.id,
+        ...(cursor ? { updatedAt: { lt: new Date(cursor) } } : {}),
       },
       select: {
         id: true,
@@ -105,19 +112,26 @@ export async function GET(request: Request) {
         _count: { select: { messages: true } },
       },
       orderBy: { updatedAt: "desc" },
-      take: 100,
+      take: limit + 1,
     }),
     getAvailableStudioModels("character-chat"),
   ]);
 
+  const hasMore = threads.length > limit;
+  const items = hasMore ? threads.slice(0, limit) : threads;
+  const lastItem = items.length > 0 ? items[items.length - 1] : undefined;
+  const nextCursor =
+    hasMore && lastItem ? lastItem.updatedAt.toISOString() : null;
+
   return NextResponse.json(
     {
-      threads: threads.map((thread) => ({
+      threads: items.map((thread) => ({
         ...thread,
         ...clientChatModelReference(thread, discovery.models),
         providerModelRecordId: undefined,
         persona: serializePersona(thread.persona, discovery.models),
       })),
+      nextCursor,
     },
     { headers: { "Cache-Control": "no-store" } },
   );

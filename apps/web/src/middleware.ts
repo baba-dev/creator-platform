@@ -16,12 +16,10 @@ export function middleware() {
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
 
-  // Default deny for browser sensor capabilities.
-  // NOTE: If in-browser voice recording or webcam reference capture is added
-  // in future Creator releases, relax camera and microphone policies here.
+  // Allow microphone on origin for character chat speech recognition, while denying camera and geolocation.
   response.headers.set(
     "Permissions-Policy",
-    "camera=(), microphone=(), geolocation=()",
+    "camera=(), microphone=(self), geolocation=()",
   );
 
   return response;

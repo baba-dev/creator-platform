@@ -65,38 +65,69 @@ export async function runQuotedTextFeature<T>(
     quotedModelId: quote.quotedModelId,
     priceVersionId: quote.priceVersionId,
   };
+
+  const initialResponse = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(generateBody),
+  });
+  const initialBody = await responseJson(initialResponse);
+
+  if (initialResponse.status === 200 || initialResponse.status === 201) {
+    return initialBody as T;
+  }
+
+  if (initialResponse.status !== 202) {
+    throw new TextFeatureRequestError(
+      typeof initialBody.error === "string"
+        ? initialBody.error
+        : "Generation failed.",
+      initialResponse.status,
+    );
+  }
+
+  // Initial POST was accepted with 202; poll durable turn with authenticated read-only GET
+  const pollUrl = `${url}${url.includes("?") ? "&" : "?"}clientRequestId=${encodeURIComponent(idempotencyKey)}`;
   const maxPolls = options?.maxPolls ?? 90;
 
   for (let attempt = 0; attempt < maxPolls; attempt += 1) {
+    const delay = Math.min(800 + attempt * 150, 3_000);
+    await new Promise((resolve) => setTimeout(resolve, delay));
+
     try {
-      const response = await fetch(url, {
-        method: "POST",
+      const getResponse = await fetch(pollUrl, {
+        method: "GET",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(generateBody),
+        cache: "no-store",
       });
-      const body = await responseJson(response);
-      if (response.status === 202) {
-        await new Promise((resolve) =>
-          setTimeout(resolve, Math.min(750 + attempt * 100, 2_500)),
-        );
+      const getBody = await responseJson(getResponse);
+
+      if (getResponse.status === 200 && getBody.complete) {
+        return getBody as T;
+      }
+      if (getResponse.status === 202 || (getResponse.ok && !getBody.complete)) {
         continue;
       }
-      if (!response.ok)
+      if (!getResponse.ok) {
         throw new TextFeatureRequestError(
-          typeof body.error === "string" ? body.error : "Generation failed.",
-          response.status,
+          typeof getBody.error === "string"
+            ? getBody.error
+            : "Generation failed.",
+          getResponse.status,
         );
-      return body as T;
+      }
+      return getBody as T;
     } catch (error) {
       if (error instanceof TextFeatureRequestError) throw error;
-      if (attempt === maxPolls - 1)
+      if (attempt === maxPolls - 1) {
         throw new TextFeatureRequestError(
           "Generation is still running. The durable job was kept and can be retried safely.",
           504,
         );
-      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      }
     }
   }
+
   throw new TextFeatureRequestError(
     "Generation is still running. The durable job was kept and can be retried safely.",
     504,

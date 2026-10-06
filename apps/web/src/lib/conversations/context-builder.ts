@@ -5,29 +5,32 @@ import type {
   CreativeModality,
 } from "./types";
 
+export interface ContextBuilderJobSummary {
+  id: string;
+  status: string;
+  providerModel?: {
+    id: string;
+    provider: string;
+    displayName: string;
+    mediaKind: string;
+  } | null;
+  requestPayload?: unknown;
+  assets: Array<{
+    id: string;
+    mimeType: string;
+    generationOutputIndex?: number | null;
+    width?: number | null;
+    height?: number | null;
+    durationMs?: number | null;
+  }>;
+}
+
 export interface ContextBuilderInput {
   conversationId: string;
   title: string;
   state?: ConversationState | null;
-  latestJob?: {
-    id: string;
-    status: string;
-    providerModel?: {
-      id: string;
-      provider: string;
-      displayName: string;
-      mediaKind: string;
-    } | null;
-    requestPayload?: unknown;
-    assets: Array<{
-      id: string;
-      mimeType: string;
-      generationOutputIndex?: number | null;
-      width?: number | null;
-      height?: number | null;
-      durationMs?: number | null;
-    }>;
-  } | null;
+  latestJob?: ContextBuilderJobSummary | null;
+  sourceJob?: ContextBuilderJobSummary | null;
   recentMessages?: Array<{
     role: string;
     content: string;
@@ -53,11 +56,13 @@ export function buildPlannerContext(
 ): ConversationPlannerContext {
   const existingState = input.state;
   const latestJob = input.latestJob;
+  const sourceJob = input.sourceJob;
+  const contextualJob = sourceJob ?? latestJob;
 
-  // Determine active modality from latest job or existing state
+  // Determine active modality from contextual job, latest job or existing state
   let activeModality: CreativeModality = "IMAGE";
-  if (latestJob?.providerModel?.mediaKind) {
-    const kind = latestJob.providerModel.mediaKind;
+  if (contextualJob?.providerModel?.mediaKind) {
+    const kind = contextualJob.providerModel.mediaKind;
     if (kind === "VIDEO") activeModality = "VIDEO";
     else if (kind === "VOICE") activeModality = "VOICE";
     else activeModality = "IMAGE";
@@ -65,9 +70,11 @@ export function buildPlannerContext(
     activeModality = existingState.activeModality;
   }
 
-  // Extract settings from latest job's request payload or state
+  // Extract settings from contextual job's request payload or state
   const rawPayload =
-    (latestJob?.requestPayload as Record<string, unknown>) ?? {};
+    (contextualJob?.requestPayload as Record<string, unknown>) ??
+    (latestJob?.requestPayload as Record<string, unknown>) ??
+    {};
   const currentSettings: ConversationEffectiveSettings = {
     aspectRatio:
       (rawPayload.aspectRatio as string) ??
@@ -95,10 +102,16 @@ export function buildPlannerContext(
       1.0,
   };
 
-  // Build active output group from latest job assets if available, or state
+  // Build active output group from contextual job assets if available, or state
   const activeOutputGroup: ActiveOutputItem[] = [];
-  if (latestJob?.assets && latestJob.assets.length > 0) {
-    latestJob.assets.forEach((asset, idx) => {
+  const assetsPool =
+    contextualJob?.assets && contextualJob.assets.length > 0
+      ? contextualJob.assets
+      : latestJob?.assets && latestJob.assets.length > 0
+        ? latestJob.assets
+        : [];
+  if (assetsPool.length > 0) {
+    assetsPool.forEach((asset, idx) => {
       activeOutputGroup.push({
         index: (asset.generationOutputIndex ?? idx) + 1,
         assetId: asset.id,
@@ -176,8 +189,12 @@ export function buildPlannerContext(
     title: input.title,
     activeModality,
     currentModelId:
-      latestJob?.providerModel?.id ?? existingState?.currentModelId ?? null,
+      contextualJob?.providerModel?.id ??
+      latestJob?.providerModel?.id ??
+      existingState?.currentModelId ??
+      null,
     currentProvider:
+      contextualJob?.providerModel?.provider ??
       latestJob?.providerModel?.provider ??
       existingState?.currentProvider ??
       null,

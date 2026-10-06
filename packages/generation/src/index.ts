@@ -128,6 +128,7 @@ export const textRequestSchema = z
     quoteToken: z.string().min(1).max(2048).optional(),
     idempotencyKey: z.uuid(),
     templateId: z.string().min(1).max(100).optional(),
+    chatThreadId: z.string().min(1).max(100).optional(),
     messages: z
       .array(
         z.object({

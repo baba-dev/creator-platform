@@ -49,12 +49,14 @@ interface GenerationJobItem {
     width?: number | null;
     height?: number | null;
     durationMs?: number | null;
+    thumbnailUrl?: string;
+    previewUrl?: string;
+    url?: string;
   }>;
 }
 
 export function CreativeConversationWorkspace({
   organizationSlug,
-  organizationId,
   conversationId,
   initialTitle,
   initialState,
@@ -63,7 +65,7 @@ export function CreativeConversationWorkspace({
   canGenerate,
 }: {
   organizationSlug: string;
-  organizationId: string;
+  organizationId?: string;
   conversationId: string;
   initialTitle: string;
   initialState?: ConversationState | null;
@@ -116,52 +118,46 @@ export function CreativeConversationWorkspace({
     resumePendingOperation: boolean;
   } | null>(null);
 
-  // Poll for job status updates for any visible active jobs
+  // Poll for job status updates for any visible active jobs via batch endpoint
   useEffect(() => {
-    if (!hasPendingJobs) return;
+    if (!hasPendingJobs || pendingJobs.length === 0) return;
     const timer = setInterval(async () => {
       try {
-        let anyFinished = false;
-        let pollFailed = false;
-        await Promise.all(
-          pendingJobs.map(async (pendingJob) => {
-            try {
-              const res = await fetch(
-                `/api/generation-jobs/${encodeURIComponent(pendingJob.id)}?organizationId=${encodeURIComponent(organizationId)}`,
-                { cache: "no-store" },
+        const ids = pendingJobs.map((p) => p.id).join(",");
+        const res = await fetch(
+          `/api/conversations/${encodeURIComponent(conversationId)}/jobs/status?ids=${encodeURIComponent(ids)}`,
+          { cache: "no-store" },
+        );
+        if (!res.ok) {
+          setRefreshError(true);
+          return;
+        }
+        const data = await res.json();
+        if (Array.isArray(data.jobs)) {
+          let anyFinished = false;
+          setJobs((prev) =>
+            prev.map((existing) => {
+              const updated = data.jobs.find(
+                (j: { id: string }) => j.id === existing.id,
               );
-              if (!res.ok) {
-                pollFailed = true;
-                return;
-              }
-              const data = await res.json();
-              if (data.job) {
-                setJobs((prev) =>
-                  prev.map((j) =>
-                    j.id === pendingJob.id ? { ...j, ...data.job } : j,
-                  ),
-                );
+              if (updated) {
                 if (
-                  data.job.status === "SUCCEEDED" ||
-                  data.job.status === "FAILED" ||
-                  data.job.status === "CANCELLED" ||
-                  data.job.status === "MANUAL_REVIEW"
+                  updated.status === "SUCCEEDED" ||
+                  updated.status === "FAILED" ||
+                  updated.status === "CANCELLED" ||
+                  updated.status === "MANUAL_REVIEW"
                 ) {
                   anyFinished = true;
                 }
+                return { ...existing, ...updated };
               }
-            } catch {
-              pollFailed = true;
-            }
-          }),
-        );
-        if (pollFailed) {
-          setRefreshError(true);
-        } else if (!anyFinished) {
+              return existing;
+            }),
+          );
           setRefreshError(false);
-        }
-        if (anyFinished) {
-          void refreshConversation();
+          if (anyFinished) {
+            void refreshConversation();
+          }
         }
       } catch {
         setRefreshError(true);
@@ -169,7 +165,7 @@ export function CreativeConversationWorkspace({
     }, 3000);
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasPendingJobs, pendingJobs, organizationId]);
+  }, [hasPendingJobs, pendingJobs, conversationId]);
 
   // Refresh conversation details
   async function refreshConversation() {
@@ -572,6 +568,8 @@ export function CreativeConversationWorkspace({
         {/* Central Visual Media Canvas */}
         <section
           aria-label="Active Generation Canvas"
+          aria-live="polite"
+          aria-atomic="true"
           className="rounded-2xl border border-border/80 bg-card/70 p-4 sm:p-5 shadow-xs space-y-4"
         >
           {/* Lineage Step Selector (when more than 1 job exists) */}
@@ -722,7 +720,18 @@ export function CreativeConversationWorkspace({
                 <div className="group relative max-h-[520px] overflow-hidden rounded-xl border border-border/80 bg-black/5 flex items-center justify-center">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={`/api/assets/${encodeURIComponent(activeAsset.id)}`}
+                    src={
+                      activeAsset.previewUrl ??
+                      `/api/assets/${encodeURIComponent(activeAsset.id)}/variant/preview`
+                    }
+                    onError={(e) => {
+                      // Fallback to original if preview derivative is still generating
+                      const target = e.currentTarget;
+                      const orig = `/api/assets/${encodeURIComponent(activeAsset.id)}`;
+                      if (target.src !== orig) {
+                        target.src = orig;
+                      }
+                    }}
                     alt="Active Creative Canvas"
                     className="w-full max-h-[500px] object-contain rounded-xl"
                   />
@@ -836,7 +845,17 @@ export function CreativeConversationWorkspace({
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
-                            src={`/api/assets/${encodeURIComponent(asset.id)}`}
+                            src={
+                              asset.thumbnailUrl ??
+                              `/api/assets/${encodeURIComponent(asset.id)}/variant/thumbnail`
+                            }
+                            onError={(e) => {
+                              const target = e.currentTarget;
+                              const orig = `/api/assets/${encodeURIComponent(asset.id)}`;
+                              if (target.src !== orig) {
+                                target.src = orig;
+                              }
+                            }}
                             alt={`Output #${outputNum}`}
                             className="size-full object-cover group-hover:scale-102 transition duration-200"
                             loading="lazy"

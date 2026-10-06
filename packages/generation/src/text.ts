@@ -420,6 +420,7 @@ export async function createTextJob(
           providerModelId: modelRow.id,
           priceVersionId: priceRow.id,
           idempotencyKey: key,
+          chatThreadId: input.chatThreadId ?? null,
           requestPayload: {
             messages,
             temperature: input.temperature,
@@ -428,6 +429,7 @@ export async function createTextJob(
               ? { responseFormat: "json_object" }
               : {}),
             sponsored,
+            clientRequestId: input.idempotencyKey,
             clientRequestHash: requestFingerprint(input),
           } as unknown as Prisma.InputJsonObject,
           status: "QUEUED",
@@ -820,6 +822,53 @@ export async function processTextJob(
           chargedCredits: actualCredits,
         },
       });
+      const targetThreadId = currentJob.chatThreadId ?? job.chatThreadId;
+      const payload = currentJob.requestPayload as Record<
+        string,
+        unknown
+      > | null;
+      const clientRequestId =
+        typeof payload?.clientRequestId === "string"
+          ? payload.clientRequestId
+          : currentJob.idempotencyKey;
+
+      if (targetThreadId && clientRequestId) {
+        await tx.chatMessage.upsert({
+          where: {
+            threadId_clientRequestId_role: {
+              threadId: targetThreadId,
+              clientRequestId,
+              role: "assistant",
+            },
+          },
+          update: {
+            content,
+            tokensUsed: usage?.totalTokens ?? null,
+            metadata: {
+              generationJobId: id,
+              chargedCredits: Number(actualCredits),
+              usage,
+            },
+          },
+          create: {
+            threadId: targetThreadId,
+            clientRequestId,
+            role: "assistant",
+            content,
+            tokensUsed: usage?.totalTokens ?? null,
+            metadata: {
+              generationJobId: id,
+              chargedCredits: Number(actualCredits),
+              usage,
+            },
+          },
+        });
+        await tx.chatThread.update({
+          where: { id: targetThreadId },
+          data: { updatedAt: new Date() },
+        });
+      }
+
       await tx.auditEvent.create({
         data: {
           organizationId: job.organizationId,

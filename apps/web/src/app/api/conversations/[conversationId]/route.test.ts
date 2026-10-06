@@ -157,14 +157,14 @@ describe("GET /api/conversations/[conversationId]", () => {
     expect(succeededJob.id).toBe("job_succeeded");
     expect(succeededJob.reservedCredits).toBe("10");
     expect(succeededJob.chargedCredits).toBe("10");
-    expect(succeededJob.actualProviderCostMicroUsd).toBe("150000");
+    expect(succeededJob.actualProviderCostMicroUsd).toBeUndefined();
     expect(succeededJob.assets).toHaveLength(2);
 
     const failedJob = body.conversation.generationJobs[1];
     expect(failedJob.id).toBe("job_failed");
     expect(failedJob.reservedCredits).toBe("5");
     expect(failedJob.chargedCredits).toBe("0");
-    expect(failedJob.actualProviderCostMicroUsd).toBeNull();
+    expect(failedJob.actualProviderCostMicroUsd).toBeUndefined();
     expect(failedJob.errorCode).toBe("PROVIDER_TIMEOUT");
     expect(failedJob.assets).toHaveLength(0);
 

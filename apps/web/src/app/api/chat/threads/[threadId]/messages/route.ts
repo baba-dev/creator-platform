@@ -134,6 +134,7 @@ export async function POST(
       priceVersionId: input.priceVersionId,
       quoteToken: input.quoteToken,
       idempotencyKey: input.idempotencyKey,
+      chatThreadId: threadId,
       messages,
       temperature: 0.7,
       maxTokens,
@@ -287,4 +288,139 @@ export async function POST(
       { status: 502 },
     );
   }
+}
+
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ threadId: string }> },
+) {
+  const session = await getRequestSession(request.headers);
+  if (!session) {
+    return NextResponse.json(
+      { error: "Authentication required." },
+      { status: 401 },
+    );
+  }
+  const { threadId } = await params;
+  const thread = await db.chatThread.findUnique({
+    where: { id: threadId },
+    select: { organizationId: true },
+  });
+  if (!thread) {
+    return NextResponse.json({ error: "Thread not found." }, { status: 404 });
+  }
+
+  const membership = await db.membership.findFirst({
+    where: { organizationId: thread.organizationId, userId: session.user.id },
+  });
+  if (
+    !membership ||
+    !hasOrganizationPermission(membership.role, "workspace:view")
+  ) {
+    return NextResponse.json({ error: "Access denied." }, { status: 403 });
+  }
+
+  const url = new URL(request.url);
+  const clientRequestId = url.searchParams.get("clientRequestId");
+
+  if (clientRequestId) {
+    const assistantMessage = await db.chatMessage.findUnique({
+      where: {
+        threadId_clientRequestId_role: {
+          threadId,
+          clientRequestId,
+          role: "assistant",
+        },
+      },
+    });
+
+    if (assistantMessage) {
+      const userMessage = await db.chatMessage.findUnique({
+        where: {
+          threadId_clientRequestId_role: {
+            threadId,
+            clientRequestId,
+            role: "user",
+          },
+        },
+      });
+      const metadata =
+        (assistantMessage.metadata as Record<string, unknown> | null) ?? {};
+      return NextResponse.json({
+        status: "SUCCEEDED",
+        complete: true,
+        userMessage,
+        message: assistantMessage,
+        audioJobId: metadata.audioJobId,
+      });
+    }
+
+    const userMessage = await db.chatMessage.findUnique({
+      where: {
+        threadId_clientRequestId_role: {
+          threadId,
+          clientRequestId,
+          role: "user",
+        },
+      },
+    });
+    const jobId = (userMessage?.metadata as Record<string, unknown> | null)
+      ?.generationJobId as string | undefined;
+    if (jobId) {
+      const job = await db.generationJob.findUnique({
+        where: { id: jobId },
+        select: { status: true, errorCode: true, errorMessage: true },
+      });
+      if (job?.status === "FAILED" || job?.status === "CANCELLED") {
+        return NextResponse.json(
+          {
+            status: job.status,
+            complete: true,
+            error: job.errorMessage ?? "Generation failed.",
+          },
+          { status: 400 },
+        );
+      }
+      return NextResponse.json(
+        {
+          status: job?.status ?? "PROCESSING",
+          complete: false,
+          jobId,
+          userMessage,
+        },
+        { status: 202 },
+      );
+    }
+
+    return NextResponse.json(
+      { status: "PROCESSING", complete: false },
+      { status: 202 },
+    );
+  }
+
+  const beforeCursor = url.searchParams.get("before");
+  const limit = Math.min(
+    Math.max(1, Number(url.searchParams.get("limit") || 50)),
+    100,
+  );
+
+  const rawMessages = await db.chatMessage.findMany({
+    where: {
+      threadId,
+      ...(beforeCursor ? { createdAt: { lt: new Date(beforeCursor) } } : {}),
+    },
+    orderBy: { createdAt: "desc" },
+    take: limit + 1,
+  });
+
+  const hasMore = rawMessages.length > limit;
+  const items = hasMore ? rawMessages.slice(0, limit) : rawMessages;
+  const lastItem = items.length > 0 ? items[items.length - 1] : undefined;
+  const nextCursor =
+    hasMore && lastItem ? lastItem.createdAt.toISOString() : null;
+
+  return NextResponse.json({
+    messages: items.reverse(),
+    nextCursor,
+  });
 }

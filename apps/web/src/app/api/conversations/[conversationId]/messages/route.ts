@@ -1222,8 +1222,7 @@ export async function POST(
       error instanceof Error ? error.message : "Message turn execution failed.";
     const status = error instanceof GenerationError ? error.status : 400;
     const code =
-      status === 409 &&
-      message.startsWith("Conversation state was modified")
+      status === 409 && message.startsWith("Conversation state was modified")
         ? "CONVERSATION_CONFLICT"
         : conversationRevisionClaimed
           ? "CONVERSATION_REFRESH_REQUIRED"

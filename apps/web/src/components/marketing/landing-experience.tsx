@@ -20,26 +20,22 @@ const previewStyles: Record<
 > = {
   image: {
     glow: "bg-primary/20",
-    tile:
-      "bg-[radial-gradient(circle_at_25%_20%,color-mix(in_oklch,var(--primary)_42%,transparent),transparent_34%),radial-gradient(circle_at_78%_78%,color-mix(in_oklch,var(--accent)_36%,transparent),transparent_38%),linear-gradient(145deg,var(--surface-sunken),var(--card))]",
+    tile: "bg-[radial-gradient(circle_at_25%_20%,color-mix(in_oklch,var(--primary)_42%,transparent),transparent_34%),radial-gradient(circle_at_78%_78%,color-mix(in_oklch,var(--accent)_36%,transparent),transparent_38%),linear-gradient(145deg,var(--surface-sunken),var(--card))]",
     badge: "text-primary",
   },
   video: {
     glow: "bg-info/20",
-    tile:
-      "bg-[radial-gradient(circle_at_72%_18%,color-mix(in_oklch,var(--info)_40%,transparent),transparent_34%),radial-gradient(circle_at_18%_82%,color-mix(in_oklch,var(--primary)_30%,transparent),transparent_38%),linear-gradient(145deg,var(--surface-sunken),var(--card))]",
+    tile: "bg-[radial-gradient(circle_at_72%_18%,color-mix(in_oklch,var(--info)_40%,transparent),transparent_34%),radial-gradient(circle_at_18%_82%,color-mix(in_oklch,var(--primary)_30%,transparent),transparent_38%),linear-gradient(145deg,var(--surface-sunken),var(--card))]",
     badge: "text-info",
   },
   voice: {
     glow: "bg-warning/20",
-    tile:
-      "bg-[radial-gradient(circle_at_50%_20%,color-mix(in_oklch,var(--warning)_38%,transparent),transparent_34%),radial-gradient(circle_at_82%_78%,color-mix(in_oklch,var(--accent)_25%,transparent),transparent_36%),linear-gradient(145deg,var(--surface-sunken),var(--card))]",
+    tile: "bg-[radial-gradient(circle_at_50%_20%,color-mix(in_oklch,var(--warning)_38%,transparent),transparent_34%),radial-gradient(circle_at_82%_78%,color-mix(in_oklch,var(--accent)_25%,transparent),transparent_36%),linear-gradient(145deg,var(--surface-sunken),var(--card))]",
     badge: "text-warning",
   },
   spokesperson: {
     glow: "bg-accent/20",
-    tile:
-      "bg-[radial-gradient(circle_at_50%_18%,color-mix(in_oklch,var(--accent)_36%,transparent),transparent_32%),radial-gradient(circle_at_18%_82%,color-mix(in_oklch,var(--info)_26%,transparent),transparent_34%),linear-gradient(145deg,var(--surface-sunken),var(--card))]",
+    tile: "bg-[radial-gradient(circle_at_50%_18%,color-mix(in_oklch,var(--accent)_36%,transparent),transparent_32%),radial-gradient(circle_at_18%_82%,color-mix(in_oklch,var(--info)_26%,transparent),transparent_34%),linear-gradient(145deg,var(--surface-sunken),var(--card))]",
     badge: "text-accent",
   },
 };

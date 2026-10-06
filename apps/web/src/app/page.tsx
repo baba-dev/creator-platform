@@ -1,72 +1,194 @@
 import { Button } from "@aiwa/ui/button";
-import type { Route } from "next";
+import type { Metadata } from "next";
 import Link from "next/link";
 
+import {
+  LandingFeatureExplorer,
+  LandingStudioExperience,
+} from "@/components/marketing/landing-experience";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Brand } from "@/components/ui/brand";
 import { Annotation, CreativeSurface, Eyebrow } from "@/components/ui/creative";
 import { Icon, type IconName } from "@/components/ui/icon";
 import {
-  DemoBadge,
   PencilArrow,
   RuledNote,
   StatusDot,
   Tape,
 } from "@/components/ui/sketch";
+import { reasoningProviders } from "@/lib/landing-content";
 
-const formats: readonly {
-  name: string;
+export const metadata: Metadata = {
+  title: "AI Creative Studio for Image, Video, Voice & Campaign Workflows",
+  description:
+    "Create images, video, voice, AI spokesperson content, scripts, storyboards, brand workflows, and reusable campaign assets in one AI creative workspace.",
+  robots: {
+    index: true,
+    follow: true,
+  },
+  openGraph: {
+    title:
+      "Aiwa Creators · One AI workspace for the complete creative workflow",
+    description:
+      "From first brief to generated media, editing, assets, projects, storage, and team controls.",
+    type: "website",
+  },
+};
+
+const workflowSteps: readonly {
+  number: string;
+  title: string;
   description: string;
-  detail: string;
   icon: IconName;
-  tone: string;
-  rotate: string;
 }[] = [
   {
-    name: "Image",
+    number: "01",
+    title: "Start with intent",
     description:
-      "Campaign visuals, product scenes, edits, and brand-consistent variations.",
-    detail: "Seedream models",
-    icon: "image",
-    tone: "bg-primary/10 text-primary",
-    rotate: "lg:-rotate-1",
+      "Use Quick Create, a focused studio, or an existing conversation. Add source images, video, audio, or project context when the workflow supports them.",
+    icon: "sparkles",
   },
   {
-    name: "Video",
+    number: "02",
+    title: "Shape the direction",
     description:
-      "Turn a brief into a storyline, shot plan, and production-ready motion.",
-    detail: "Seedance models",
-    icon: "video",
-    tone: "bg-info/10 text-info",
-    rotate: "lg:rotate-1",
+      "Ask Pixel, enhance the prompt, build a storyboard, write the script, or develop the story before spending credits on media generation.",
+    icon: "director",
   },
   {
-    name: "Voice",
+    number: "03",
+    title: "Choose the right model",
     description:
-      "Natural multilingual narration for ads, explainers, and social content.",
-    detail: "Seed Speech models",
-    icon: "voice",
-    tone: "bg-warning/10 text-warning",
-    rotate: "lg:-rotate-[0.6deg]",
+      "Compare enabled models by capability, references, resolution, speed profile, and the credit quote shown before submission.",
+    icon: "wand",
+  },
+  {
+    number: "04",
+    title: "Generate and refine",
+    description:
+      "Create image, video, speech, or spokesperson output, then crop, transform, retouch, extend, trim, reorder, or reuse media as the next input.",
+    icon: "edit",
+  },
+  {
+    number: "05",
+    title: "Keep the work connected",
+    description:
+      "Assets retain generation provenance and stay organized through projects, history, templates, conversations, storage pools, and team permissions.",
+    icon: "projects",
   },
 ];
+
+const platformPillars: readonly {
+  icon: IconName;
+  eyebrow: string;
+  title: string;
+  description: string;
+  bullets: readonly string[];
+}[] = [
+  {
+    icon: "chat",
+    eyebrow: "Context",
+    title: "Pixel stays close to the work.",
+    description:
+      "The assistant is designed to understand the application, continue creative context, and turn short follow-ups into useful actions instead of isolated one-shot prompts.",
+    bullets: [
+      "Conversation continuity",
+      "App-aware navigation",
+      "Prompt and parameter follow-ups",
+      "Private workspace context",
+    ],
+  },
+  {
+    icon: "assets",
+    eyebrow: "Media",
+    title: "Your generations become durable assets.",
+    description:
+      "Generated and uploaded media live in an organization-scoped library with provenance, projects, favourites, folders, tags, and recoverable trash.",
+    bullets: [
+      "Asset Library",
+      "Projects",
+      "Generation history",
+      "Reusable source media",
+    ],
+  },
+  {
+    icon: "upload",
+    eyebrow: "Storage",
+    title: "Choose where originals live.",
+    description:
+      "Use platform storage or connect supported cloud pools. Capacity, active-provider state, and organization limits remain visible inside the product.",
+    bullets: [
+      "Platform storage",
+      "Google Drive",
+      "OneDrive",
+      "Per-pool usage visibility",
+    ],
+  },
+  {
+    icon: "credits",
+    eyebrow: "Control",
+    title: "Creative freedom with accountable spend.",
+    description:
+      "Quotes, reservations, wallet history, payment records, model pricing, usage limits, and administrative operations keep the creative layer commercially manageable.",
+    bullets: [
+      "Pre-generation quotes",
+      "Immutable credit ledger",
+      "OMR cash & cheque payments",
+      "Role-aware administration",
+    ],
+  },
+];
+
+const conversationExamples = [
+  "Use the second image.",
+  "Make it 9:16.",
+  "Try another model.",
+  "Animate this.",
+  "Give me four variations.",
+  "Make the voice slower.",
+  "Use this generated image as the first frame.",
+] as const;
+
+const faq = [
+  {
+    question: "Is this only an image generator?",
+    answer:
+      "No. Creators combines image, video, voice, AI spokesperson generation, creative reasoning, script and story workspaces, editing, templates, assets, projects, conversations, storage, and organization controls.",
+  },
+  {
+    question: "Does the public homepage submit real generations?",
+    answer:
+      "No. The interactive modules on this page are product tours. Real provider work starts only inside an authenticated organization after the application validates the request and shows the applicable quote.",
+  },
+  {
+    question: "Can teams choose different AI models?",
+    answer:
+      "Yes. Enabled models are discovered by task and capability. Media generation is backed by BytePlus models, while text and reasoning workflows can use enabled BytePlus, NVIDIA, Groq, Gemini, and Cloudflare providers.",
+  },
+  {
+    question: "How are generated files organized?",
+    answer:
+      "Media is stored as durable assets with generation provenance. Teams can work with projects, history, favourites, folders, tags, templates, conversation context, and supported platform or bring-your-own storage pools.",
+  },
+] as const;
 
 export default function HomePage() {
   return (
     <main className="min-h-screen overflow-hidden bg-background text-foreground">
-      <div className="creative-glow pointer-events-none absolute inset-x-0 top-0 h-[880px]" />
-      <div className="paper-grid pointer-events-none absolute inset-x-0 top-0 h-[780px] opacity-55 [mask-image:linear-gradient(to_bottom,black,transparent)]" />
+      <div className="creative-glow pointer-events-none absolute inset-x-0 top-0 h-[980px]" />
+      <div className="paper-grid pointer-events-none absolute inset-x-0 top-0 h-[900px] opacity-50 [mask-image:linear-gradient(to_bottom,black,transparent)]" />
 
       <header className="relative z-30 mx-auto flex min-h-20 max-w-7xl items-center justify-between gap-4 px-5 sm:px-7 lg:px-10">
         <Brand />
         <nav
-          className="hidden items-center gap-1 rounded-full border border-border bg-card/70 p-1 text-xs font-semibold text-muted-foreground shadow-xs backdrop-blur-xl md:flex"
+          className="hidden items-center gap-1 rounded-full border border-border bg-card/70 p-1 text-xs font-semibold text-muted-foreground shadow-xs backdrop-blur-xl lg:flex"
           aria-label="Public navigation"
         >
           {[
-            ["#platform", "Creative tools"],
+            ["#platform", "Platform"],
+            ["#models", "Models"],
             ["#workflow", "Workflow"],
-            ["#operations", "Control"],
+            ["#teams", "For teams"],
           ].map(([href, label]) => (
             <a
               key={href}
@@ -95,392 +217,408 @@ export default function HomePage() {
         </div>
       </header>
 
-      <section className="relative mx-auto grid max-w-7xl gap-14 px-5 pb-24 pt-14 sm:px-7 sm:pt-20 lg:grid-cols-[1fr_.92fr] lg:items-center lg:px-10 lg:pb-32 lg:pt-24">
+      <section className="relative mx-auto grid max-w-7xl gap-12 px-5 pb-20 pt-12 sm:px-7 sm:pt-16 lg:grid-cols-[.82fr_1.18fr] lg:items-center lg:px-10 lg:pb-28 lg:pt-20">
         <div className="page-reveal relative z-10">
-          <div>
-            <StatusDot tone="primary">Private creative preview</StatusDot>
-          </div>
-          <h1 className="font-display mt-7 max-w-3xl text-balance text-5xl font-semibold leading-[1.02] tracking-[-0.055em] text-foreground sm:text-6xl lg:text-[76px]">
-            Ideas in the rough.
-            <span className="text-gradient block">Media in full colour.</span>
+          <StatusDot tone="primary">AI creative production workspace</StatusDot>
+          <h1 className="font-display mt-7 max-w-3xl text-balance text-5xl font-semibold leading-[1] tracking-[-0.055em] text-foreground sm:text-6xl lg:text-[72px]">
+            From first thought
+            <span className="text-gradient block">to final media.</span>
           </h1>
-          <p className="mt-7 max-w-xl text-pretty text-base leading-7 text-muted-foreground sm:text-lg">
-            Sketch the brief, pick the right AI model, and turn first thoughts
-            into polished images, video, and voice—all inside one secure
-            workspace.
+          <p className="mt-7 max-w-2xl text-pretty text-base leading-7 text-muted-foreground sm:text-lg">
+            Create images, video, voice, spokesperson content, scripts,
+            storyboards, and campaign systems in one workspace—then edit,
+            organize, store, and manage the work without breaking the creative
+            thread.
           </p>
           <div className="mt-9 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
             <Button asChild size="lg" className="min-w-48">
               <Link href="/sign-up">
-                <Icon name="sparkles" className="size-4" /> Open your canvas
+                <Icon name="sparkles" className="size-4" />
+                Open your workspace
               </Link>
             </Button>
             <Button asChild size="lg" variant="secondary">
-              <Link href="/sign-in">View internal demo</Link>
+              <a href="#platform">Explore the platform</a>
             </Button>
           </div>
-          <div className="mt-7 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px] font-medium text-subtle-foreground">
-            {["Email access", "Isolated workspaces", "Visible credit cost"].map(
-              (item) => (
-                <span key={item} className="inline-flex items-center gap-2">
-                  <Icon name="check" className="size-3.5 text-success" />
-                  {item}
-                </span>
-              ),
-            )}
+          <div className="mt-7 grid max-w-xl grid-cols-2 gap-x-5 gap-y-3 text-[11px] font-semibold text-muted-foreground sm:flex sm:flex-wrap">
+            {[
+              "Multi-model studios",
+              "Reference workflows",
+              "Projects & assets",
+              "Team credit controls",
+            ].map((item) => (
+              <span key={item} className="inline-flex items-center gap-2">
+                <Icon name="check" className="size-3.5 text-success" />
+                {item}
+              </span>
+            ))}
+          </div>
+
+          <div className="relative mt-9 hidden max-w-md sm:block">
+            <RuledNote className="py-4">
+              <Tape className="-top-3 left-10" />
+              <Annotation className="text-lg text-foreground">
+                Generate less blindly. Direct more intentionally.
+              </Annotation>
+            </RuledNote>
+            <PencilArrow className="absolute -right-20 -top-2 h-16 w-28 rotate-[-8deg]" />
           </div>
         </div>
 
-        <div className="relative mx-auto w-full max-w-xl pb-12 lg:pb-4">
-          <div className="absolute -left-8 top-10 z-20 hidden -rotate-6 sm:block">
-            <RuledNote className="w-48 py-4">
-              <Tape className="-top-3 left-12" />
-              <Annotation className="text-lg text-foreground">
-                Begin with a spark,
-                <br /> finish with a story.
-              </Annotation>
-            </RuledNote>
-            <PencilArrow className="absolute -bottom-12 left-32 h-14 w-24 rotate-12" />
-          </div>
-          <CreativeBoard />
-          <div className="absolute -bottom-1 right-2 z-20 rotate-2 rounded-xl border border-border bg-card px-4 py-3 shadow-sketch sm:right-8">
-            <p className="font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-subtle-foreground">
-              From prompt to publish
-            </p>
-            <p className="font-display mt-1 text-lg font-semibold text-foreground">
-              One bright workflow ✦
-            </p>
-          </div>
+        <div className="relative z-10">
+          <LandingStudioExperience />
+        </div>
+      </section>
+
+      <section className="relative border-y border-border bg-card/35">
+        <div className="mx-auto grid max-w-7xl gap-3 px-5 py-5 text-center sm:grid-cols-2 sm:px-7 lg:grid-cols-4 lg:px-10">
+          {[
+            ["Image", "Generate · edit · reference"],
+            ["Video", "Create · extend · assemble"],
+            ["Audio", "Synthesize · cast · converse"],
+            ["Creative AI", "Direct · write · plan · enhance"],
+          ].map(([title, detail]) => (
+            <div
+              key={title}
+              className="rounded-xl border border-border/70 bg-background/45 px-4 py-4"
+            >
+              <p className="font-display text-sm font-semibold text-foreground">
+                {title}
+              </p>
+              <p className="mt-1 text-[10px] text-subtle-foreground">
+                {detail}
+              </p>
+            </div>
+          ))}
         </div>
       </section>
 
       <section
         id="platform"
-        className="relative border-y border-border bg-card/35"
+        className="relative mx-auto max-w-7xl px-5 py-20 sm:px-7 lg:px-10 lg:py-28"
       >
-        <div className="paper-dots mx-auto max-w-7xl px-5 py-20 sm:px-7 lg:px-10 lg:py-28">
-          <div className="grid gap-8 lg:grid-cols-[.7fr_1.3fr] lg:items-end">
-            <div>
-              <Eyebrow>Three ways to make</Eyebrow>
-              <h2 className="font-display mt-4 text-4xl font-semibold tracking-[-0.045em] text-foreground sm:text-5xl">
-                A desk full of creative possibilities.
-              </h2>
-            </div>
-            <p className="max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base lg:justify-self-end">
-              Choose a format, compare models in plain language, see the credit
-              estimate, and keep the result attached to the right client and
-              project.
-            </p>
+        <div className="grid gap-8 lg:grid-cols-[.82fr_1.18fr] lg:items-end">
+          <div>
+            <Eyebrow>The whole creative stack</Eyebrow>
+            <h2 className="font-display mt-4 text-balance text-4xl font-semibold tracking-[-0.045em] text-foreground sm:text-5xl">
+              Not a model playground.
+              <span className="block text-primary">
+                A production workspace.
+              </span>
+            </h2>
           </div>
+          <p className="max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base lg:justify-self-end">
+            The product connects creation, reasoning, editing, organization,
+            storage, conversation, and operations so teams can move from an idea
+            to a reusable body of campaign work without rebuilding context in
+            separate tools.
+          </p>
+        </div>
 
-          <div className="mt-12 grid gap-5 lg:grid-cols-3">
-            {formats.map((format, index) => (
-              <CreativeSurface
-                as="article"
-                variant={index === 1 ? "sketch" : "plain"}
-                key={format.name}
-                className={`hover-lift group flex min-h-80 flex-col overflow-hidden p-6 ${format.rotate}`}
-              >
-                <div className="flex items-start justify-between">
+        <LandingFeatureExplorer />
+      </section>
+
+      <section id="models" className="border-y border-border bg-sidebar/55">
+        <div className="paper-dots mx-auto max-w-7xl px-5 py-20 sm:px-7 lg:px-10 lg:py-28">
+          <div className="grid gap-10 lg:grid-cols-[.86fr_1.14fr] lg:items-center">
+            <div>
+              <Eyebrow className="text-info">
+                Model choice without model chaos
+              </Eyebrow>
+              <h2 className="font-display mt-4 text-4xl font-semibold tracking-[-0.045em] text-foreground sm:text-5xl">
+                Pick by capability.
+                <span className="sketch-underline"> Keep the workflow.</span>
+              </h2>
+              <p className="mt-5 max-w-xl text-sm leading-7 text-muted-foreground sm:text-base">
+                Creators discovers enabled models for the task, keeps provider
+                provenance visible, and presents the generation controls that
+                model actually supports. Your project structure does not change
+                just because the model does.
+              </p>
+              <div className="mt-7 flex flex-wrap gap-2">
+                {[
+                  "Aspect-ratio aware",
+                  "Reference aware",
+                  "Resolution aware",
+                  "Provider provenance",
+                  "Quote before submission",
+                ].map((item) => (
                   <span
-                    className={`grid size-12 place-items-center rounded-xl ${format.tone}`}
+                    key={item}
+                    className="rounded-full border border-border bg-card px-3 py-1.5 text-[10px] font-semibold text-muted-foreground"
                   >
-                    <Icon name={format.icon} />
+                    {item}
                   </span>
-                  <span className="font-hand text-xl font-semibold text-subtle-foreground">
-                    0{index + 1}
-                  </span>
-                </div>
-                <p className="mt-10 font-mono text-[10px] font-bold uppercase tracking-[0.17em] text-subtle-foreground">
-                  {format.detail}
+                ))}
+              </div>
+            </div>
+
+            <CreativeSurface
+              variant="sketch"
+              className="relative overflow-hidden p-5 sm:p-7"
+            >
+              <div className="creative-glow absolute inset-0 opacity-65" />
+              <div className="relative">
+                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-primary">
+                  Enabled provider layer
                 </p>
-                <h3 className="font-display mt-2 text-3xl font-semibold tracking-tight text-foreground">
-                  {format.name}
+                <h3 className="font-display mt-3 text-2xl font-semibold text-foreground">
+                  Media generation + creative reasoning
                 </h3>
-                <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                  {format.description}
-                </p>
-                <Link
-                  href="/sign-up"
-                  className="mt-auto flex items-center gap-2 pt-8 text-xs font-semibold text-foreground"
-                >
-                  Try {format.name.toLowerCase()}
-                  <Icon
-                    name="arrow"
-                    className="size-4 transition-transform group-hover:translate-x-1"
-                  />
-                </Link>
-              </CreativeSurface>
-            ))}
+                <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-2xl border border-border bg-card/80 p-5">
+                    <p className="text-xs font-semibold text-foreground">
+                      Media generation
+                    </p>
+                    <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                      BytePlus-backed Seedream, Seedance, Seed Speech, and
+                      OmniHuman workflows power the customer-facing media
+                      studios.
+                    </p>
+                    <div className="mt-4 flex flex-wrap gap-1.5">
+                      {[
+                        "Seedream 5",
+                        "Seedance 2",
+                        "Seed Speech 2",
+                        "OmniHuman 1.5",
+                      ].map((item) => (
+                        <span
+                          key={item}
+                          className="rounded-full bg-primary/10 px-2.5 py-1 text-[9px] font-semibold text-primary"
+                        >
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-border bg-card/80 p-5">
+                    <p className="text-xs font-semibold text-foreground">
+                      Text & reasoning
+                    </p>
+                    <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                      Creative assistance can resolve across enabled reasoning
+                      providers while preserving one-model-per-job provenance.
+                    </p>
+                    <div className="mt-4 flex flex-wrap gap-1.5">
+                      {reasoningProviders.map((provider) => (
+                        <span
+                          key={provider}
+                          className="rounded-full bg-info/10 px-2.5 py-1 text-[9px] font-semibold text-info"
+                        >
+                          {provider}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CreativeSurface>
           </div>
         </div>
       </section>
 
       <section
         id="workflow"
-        className="relative mx-auto grid max-w-7xl gap-12 px-5 py-20 sm:px-7 lg:grid-cols-[.9fr_1.1fr] lg:items-center lg:px-10 lg:py-28"
+        className="relative mx-auto max-w-7xl px-5 py-20 sm:px-7 lg:px-10 lg:py-28"
       >
-        <div className="relative order-2 lg:order-1">
-          <WorkflowSheet />
-        </div>
-        <div className="order-1 lg:order-2">
-          <Eyebrow className="text-info">A simple creative rhythm</Eyebrow>
-          <h2 className="font-display mt-4 text-4xl font-semibold tracking-[-0.045em] text-foreground sm:text-5xl">
-            Brief. Shape. Make.
-            <span className="sketch-underline"> Keep the magic.</span>
-          </h2>
-          <p className="mt-5 max-w-xl text-sm leading-7 text-muted-foreground sm:text-base">
-            The interface gets out of the way while the important choices stay
-            visible: format, model, aspect ratio, expected speed, and credits.
-          </p>
-          <ol className="mt-8 space-y-5">
-            {[
-              [
-                "01",
-                "Describe the idea",
-                "Write naturally or add a visual reference.",
-              ],
-              [
-                "02",
-                "Choose the craft",
-                "Compare the models tuned for your output.",
-              ],
-              [
-                "03",
-                "Review before making",
-                "See the preview settings and indicative cost.",
-              ],
-            ].map(([number, title, detail]) => (
-              <li key={number} className="flex gap-4">
-                <span className="font-hand grid size-10 shrink-0 place-items-center rounded-full border border-primary/25 bg-primary/10 text-lg font-bold text-primary">
-                  {number}
-                </span>
-                <div>
-                  <p className="font-display text-base font-semibold text-foreground">
-                    {title}
-                  </p>
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    {detail}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ol>
-        </div>
-      </section>
-
-      <section id="operations" className="border-t border-border bg-sidebar/65">
-        <div className="mx-auto grid max-w-7xl gap-12 px-5 py-20 sm:px-7 lg:grid-cols-[.8fr_1.2fr] lg:items-center lg:px-10 lg:py-28">
+        <div className="grid gap-10 lg:grid-cols-[.72fr_1.28fr]">
           <div>
-            <Eyebrow className="text-warning">Calm behind the canvas</Eyebrow>
+            <Eyebrow className="text-warning">One connected journey</Eyebrow>
             <h2 className="font-display mt-4 text-4xl font-semibold tracking-[-0.045em] text-foreground sm:text-5xl">
-              Creative freedom. Financial control.
+              Work conversationally.
+              <span className="block text-warning">Ship structurally.</span>
             </h2>
             <p className="mt-5 text-sm leading-7 text-muted-foreground sm:text-base">
-              A playful studio for creators, backed by a disciplined operations
-              console for access, manual OMR payments, credit grants, and model
-              health.
+              The workspace is built around the reality that creative direction
+              changes after the first output. Short follow-ups should continue
+              the work instead of forcing a new form every time.
             </p>
-            <div className="mt-8 flex flex-wrap gap-2">
-              {["Permission-aware", "Ledger-ready", "Organization-scoped"].map(
-                (item) => (
-                  <span
-                    key={item}
-                    className="rounded-full border border-border bg-card px-3 py-1.5 text-[11px] font-semibold text-muted-foreground"
-                  >
-                    {item}
-                  </span>
-                ),
-              )}
+            <div className="mt-7 flex flex-wrap gap-2">
+              {conversationExamples.map((example) => (
+                <span
+                  key={example}
+                  className="rounded-2xl rounded-bl-md border border-border bg-card px-3 py-2 text-[10px] font-medium text-muted-foreground shadow-xs"
+                >
+                  “{example}”
+                </span>
+              ))}
             </div>
           </div>
-          <FinancePreview />
+
+          <div className="space-y-3">
+            {workflowSteps.map((step) => (
+              <CreativeSurface
+                key={step.number}
+                className="grid gap-4 p-5 sm:grid-cols-[auto_1fr_auto] sm:items-center"
+              >
+                <span className="font-hand grid size-12 place-items-center rounded-full border border-primary/25 bg-primary/10 text-xl font-bold text-primary">
+                  {step.number}
+                </span>
+                <div>
+                  <h3 className="font-display text-lg font-semibold text-foreground">
+                    {step.title}
+                  </h3>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    {step.description}
+                  </p>
+                </div>
+                <span className="hidden size-10 place-items-center rounded-xl border border-border bg-surface-sunken text-muted-foreground sm:grid">
+                  <Icon name={step.icon} className="size-4" />
+                </span>
+              </CreativeSurface>
+            ))}
+          </div>
         </div>
       </section>
 
-      <footer className="border-t border-border bg-background/80">
-        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-5 px-5 py-8 sm:flex-row sm:px-7 lg:px-10">
-          <Brand />
-          <div className="flex items-center gap-6 text-xs text-muted-foreground">
+      <section id="teams" className="border-y border-border bg-card/35">
+        <div className="mx-auto max-w-7xl px-5 py-20 sm:px-7 lg:px-10 lg:py-28">
+          <div className="max-w-3xl">
+            <Eyebrow>Built for real teams</Eyebrow>
+            <h2 className="font-display mt-4 text-4xl font-semibold tracking-[-0.045em] text-foreground sm:text-5xl">
+              Creativity on top.
+              <span className="text-gradient block">
+                Production discipline underneath.
+              </span>
+            </h2>
+          </div>
+
+          <div className="mt-10 grid gap-4 md:grid-cols-2">
+            {platformPillars.map((pillar, index) => (
+              <CreativeSurface
+                key={pillar.title}
+                variant={index === 0 ? "sketch" : "plain"}
+                className="p-6 sm:p-7"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <span className="grid size-11 place-items-center rounded-xl border border-border bg-background/65 text-primary">
+                    <Icon name={pillar.icon} className="size-5" />
+                  </span>
+                  <span className="font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-subtle-foreground">
+                    {pillar.eyebrow}
+                  </span>
+                </div>
+                <h3 className="font-display mt-6 text-2xl font-semibold tracking-[-0.03em] text-foreground">
+                  {pillar.title}
+                </h3>
+                <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                  {pillar.description}
+                </p>
+                <ul className="mt-5 grid gap-2 sm:grid-cols-2">
+                  {pillar.bullets.map((bullet) => (
+                    <li
+                      key={bullet}
+                      className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground"
+                    >
+                      <Icon name="check" className="size-3.5 text-success" />
+                      {bullet}
+                    </li>
+                  ))}
+                </ul>
+              </CreativeSurface>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="relative mx-auto max-w-7xl px-5 py-20 sm:px-7 lg:px-10 lg:py-28">
+        <CreativeSurface
+          variant="sketch"
+          className="relative overflow-hidden rounded-[32px] p-7 sm:p-10 lg:p-12"
+        >
+          <div className="creative-glow pointer-events-none absolute inset-0 opacity-75" />
+          <div className="paper-grid pointer-events-none absolute inset-0 opacity-25" />
+          <div className="relative grid gap-10 lg:grid-cols-[1fr_.72fr] lg:items-end">
+            <div>
+              <Eyebrow>Ready when the brief is</Eyebrow>
+              <h2 className="font-display mt-4 max-w-3xl text-balance text-4xl font-semibold tracking-[-0.045em] text-foreground sm:text-6xl">
+                Give the team one place to think, make, refine, and deliver.
+              </h2>
+              <p className="mt-5 max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base">
+                Start with Quick Create, move into specialized studios when you
+                need control, and keep the resulting media connected to the
+                project instead of scattered across isolated AI tools.
+              </p>
+            </div>
+            <div className="flex flex-col gap-3 sm:flex-row lg:justify-end">
+              <Button asChild size="lg">
+                <Link href="/sign-up">
+                  <Icon name="sparkles" className="size-4" />
+                  Start creating
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="secondary">
+                <Link href="/sign-in">Sign in</Link>
+              </Button>
+            </div>
+          </div>
+        </CreativeSurface>
+      </section>
+
+      <section className="border-t border-border bg-sidebar/50">
+        <div className="mx-auto max-w-5xl px-5 py-20 sm:px-7 lg:px-10">
+          <div className="text-center">
+            <Eyebrow>Questions before you create</Eyebrow>
+            <h2 className="font-display mt-4 text-3xl font-semibold tracking-[-0.04em] text-foreground sm:text-4xl">
+              The short version.
+            </h2>
+          </div>
+          <div className="mt-10 grid gap-3">
+            {faq.map((item) => (
+              <details
+                key={item.question}
+                className="group rounded-2xl border border-border bg-card/75 p-5 shadow-xs"
+              >
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-sm font-semibold text-foreground">
+                  {item.question}
+                  <span className="grid size-7 shrink-0 place-items-center rounded-full border border-border bg-background text-muted-foreground transition group-open:rotate-90">
+                    <Icon name="chevron" className="size-3.5" />
+                  </span>
+                </summary>
+                <p className="mt-4 max-w-3xl text-xs leading-6 text-muted-foreground">
+                  {item.answer}
+                </p>
+              </details>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <footer className="border-t border-border bg-background/90">
+        <div className="mx-auto grid max-w-7xl gap-6 px-5 py-9 sm:px-7 md:grid-cols-[1fr_auto] md:items-center lg:px-10">
+          <div>
+            <Brand />
+            <p className="mt-3 max-w-lg text-[11px] leading-5 text-subtle-foreground">
+              Aiwa Creators · AI-assisted creative production for image, video,
+              voice, storytelling, assets, and team workflows.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-xs text-muted-foreground">
             <Link
-              href={"/privacy-policy" as Route}
+              href="/privacy-policy"
               className="transition hover:text-foreground"
             >
               Privacy Policy
             </Link>
             <Link
-              href={"/terms-of-service" as Route}
+              href="/terms-of-service"
               className="transition hover:text-foreground"
             >
               Terms of Service
             </Link>
-            <Link
-              href={"/sign-in" as Route}
-              className="transition hover:text-foreground"
-            >
+            <Link href="/sign-in" className="transition hover:text-foreground">
               Sign In
             </Link>
+            <Link
+              href="/sign-up"
+              className="font-semibold text-primary hover:underline"
+            >
+              Start creating
+            </Link>
           </div>
-          <p className="text-[11px] text-subtle-foreground">
-            Aiwa Media Group · Muscat, Oman · Private platform preview
-          </p>
         </div>
       </footer>
     </main>
-  );
-}
-
-function CreativeBoard() {
-  return (
-    <div className="paper-sheet sketch-frame relative ml-auto mt-10 min-h-[500px] w-[92%] overflow-hidden rounded-[32px] p-5 sm:p-7 lg:mt-0">
-      <div className="paper-grid absolute inset-0 opacity-55" />
-      <div className="relative flex items-center justify-between">
-        <div>
-          <p className="font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-primary">
-            Creation canvas
-          </p>
-          <p className="font-display mt-1 text-xl font-semibold text-foreground">
-            Muscat at golden hour
-          </p>
-        </div>
-        <DemoBadge>Concept</DemoBadge>
-      </div>
-      <div className="relative mt-5 grid grid-cols-3 gap-2 rounded-xl border border-border bg-card/80 p-1.5 shadow-xs backdrop-blur">
-        {["Image", "Video", "Voice"].map((label, index) => (
-          <span
-            key={label}
-            className={`rounded-lg px-2 py-2 text-center text-[10px] font-semibold ${index === 0 ? "bg-foreground text-background shadow-sm" : "text-subtle-foreground"}`}
-          >
-            {label}
-          </span>
-        ))}
-      </div>
-      <div className="relative mt-4 rounded-2xl border border-border bg-card/90 p-4 shadow-sm">
-        <p className="text-[10px] font-semibold text-muted-foreground">
-          Creative prompt
-        </p>
-        <p className="mt-2 text-xs leading-5 text-foreground/80">
-          A premium campaign study inspired by Oman&apos;s coastline, soft
-          mineral colours, sculpted light, editorial photography…
-        </p>
-      </div>
-      <div className="relative mt-4 overflow-hidden rounded-[24px] border border-border bg-[linear-gradient(145deg,oklch(0.2_0.03_270),oklch(0.34_0.13_315)_52%,var(--coral))] p-5 shadow-lg">
-        <div className="absolute -right-10 -top-10 size-40 rounded-full bg-coral/30 blur-3xl" />
-        <div className="absolute inset-x-0 bottom-0 h-1/2 bg-[radial-gradient(ellipse_at_bottom,color-mix(in_oklch,var(--coral)_70%,transparent),transparent_68%)]" />
-        <div className="relative min-h-48 text-on-vivid">
-          <p className="text-[9px] font-bold uppercase tracking-[0.22em] text-on-vivid/65">
-            Generated concept
-          </p>
-          <p className="font-display mt-2 text-3xl font-semibold">
-            Coastal light
-          </p>
-          <div className="absolute bottom-0 left-1/2 h-28 w-16 -translate-x-1/2 rounded-t-[36px] rounded-b-xl border border-on-vivid/20 bg-on-vivid/10 shadow-2xl backdrop-blur-sm" />
-          <span className="absolute bottom-0 right-0 rounded-full bg-card/40 px-2.5 py-1 text-[9px] font-semibold backdrop-blur">
-            28 credits
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function WorkflowSheet() {
-  return (
-    <div className="paper-sheet relative rounded-[28px] p-5 sm:p-7">
-      <Tape className="-top-3 left-1/2 -translate-x-1/2" />
-      <div className="flex items-center justify-between border-b border-border pb-4">
-        <div>
-          <p className="font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-subtle-foreground">
-            Project notebook / 07
-          </p>
-          <p className="font-display mt-1 text-lg font-semibold text-foreground">
-            Launch campaign
-          </p>
-        </div>
-        <StatusDot>Ready</StatusDot>
-      </div>
-      <div className="mt-5 grid gap-3 sm:grid-cols-2">
-        {["Moodboard", "Hero visual", "Launch film", "Arabic narration"].map(
-          (item, index) => (
-            <div
-              key={item}
-              className={`rounded-2xl border border-border p-4 ${index === 1 ? "bg-primary/10" : "bg-surface-sunken/75"}`}
-            >
-              <span className="font-hand text-lg font-semibold text-primary">
-                0{index + 1}
-              </span>
-              <p className="mt-4 text-sm font-semibold text-foreground">
-                {item}
-              </p>
-              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-foreground/[0.07]">
-                <div
-                  className="h-full rounded-full bg-[var(--gradient-spectrum)]"
-                  style={{ width: `${[100, 82, 58, 34][index]}%` }}
-                />
-              </div>
-            </div>
-          ),
-        )}
-      </div>
-      <Annotation className="mt-5 text-lg text-muted-foreground">
-        Every asset stays with its project →
-      </Annotation>
-    </div>
-  );
-}
-
-function FinancePreview() {
-  const values = [36, 54, 44, 70, 60, 84, 68, 94, 76, 88, 70, 92];
-  return (
-    <CreativeSurface className="relative overflow-hidden rounded-[28px] p-5 shadow-md sm:p-7">
-      <div className="absolute -right-20 -top-20 size-56 rounded-full bg-info/10 blur-3xl" />
-      <div className="relative flex items-center justify-between gap-4">
-        <div>
-          <p className="font-display text-lg font-semibold text-foreground">
-            Finance overview
-          </p>
-          <p className="mt-1 text-xs text-subtle-foreground">September 2026</p>
-        </div>
-        <DemoBadge>Illustrative data</DemoBadge>
-      </div>
-      <div className="relative mt-6 grid gap-3 sm:grid-cols-3">
-        {[
-          ["Credits issued", "48,200"],
-          ["Credits used", "31,480"],
-          ["Pending OMR", "275.000"],
-        ].map(([label, value]) => (
-          <div
-            key={label}
-            className="rounded-xl border border-border bg-background/55 p-4"
-          >
-            <p className="text-[10px] text-subtle-foreground">{label}</p>
-            <p className="font-display mt-2 text-xl font-semibold text-foreground">
-              {value}
-            </p>
-          </div>
-        ))}
-      </div>
-      <div className="relative mt-4 rounded-2xl border border-border bg-surface-sunken p-4">
-        <div className="flex h-40 items-end justify-between gap-2">
-          {values.map((height, index) => (
-            <div
-              key={`${height}-${index}`}
-              className="flex h-full flex-1 items-end"
-            >
-              <span
-                className="w-full rounded-t bg-gradient-to-t from-primary/45 to-info/80"
-                style={{ height: `${height}%` }}
-              />
-            </div>
-          ))}
-        </div>
-        <div className="mt-3 flex justify-between font-mono text-[8px] uppercase tracking-wider text-subtle-foreground">
-          <span>Week 1</span>
-          <span>Week 2</span>
-          <span>Week 3</span>
-          <span>Week 4</span>
-        </div>
-      </div>
-    </CreativeSurface>
   );
 }

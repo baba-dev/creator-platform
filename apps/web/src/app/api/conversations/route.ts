@@ -13,6 +13,10 @@ import { rateLimit } from "@/lib/rate-limit";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
 import {
+  decodeTimeIdCursor,
+  encodeTimeIdCursor,
+} from "@/lib/time-id-cursor";
+import {
   deriveDeterministicTitle,
   generateConversationTitle,
 } from "@/lib/conversations/title-generator";
@@ -22,6 +26,11 @@ const generationLimiter = rateLimit({
   max: 10,
   windowMs: 60_000,
   prefix: "generation",
+});
+
+const conversationListSchema = z.object({
+  cursor: z.string().min(1).max(512).optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
 });
 
 const conversationCreateSchema = z.object({
@@ -80,18 +89,39 @@ export async function GET(request: Request) {
     );
   }
 
-  const cursor = url.searchParams.get("cursor");
-  const limit = Math.min(
-    Math.max(1, Number(url.searchParams.get("limit") || 20)),
-    50,
-  );
+  const parsedList = conversationListSchema.safeParse({
+    cursor: url.searchParams.get("cursor") ?? undefined,
+    limit: url.searchParams.get("limit") ?? undefined,
+  });
+  if (!parsedList.success) {
+    return NextResponse.json(
+      { error: "Invalid pagination parameters." },
+      { status: 400 },
+    );
+  }
+  const cursor = parsedList.data.cursor
+    ? decodeTimeIdCursor(parsedList.data.cursor)
+    : null;
+  if (parsedList.data.cursor && !cursor) {
+    return NextResponse.json({ error: "Invalid cursor." }, { status: 400 });
+  }
+  const limit = parsedList.data.limit;
 
   const threads = await db.chatThread.findMany({
     where: {
       organizationId,
       createdById: session.user.id,
       threadType: "CREATIVE",
-      ...(cursor ? { updatedAt: { lt: new Date(cursor) } } : {}),
+      ...(cursor
+        ? cursor.id
+          ? {
+              OR: [
+                { updatedAt: { lt: cursor.at } },
+                { updatedAt: cursor.at, id: { lt: cursor.id } },
+              ],
+            }
+          : { updatedAt: { lt: cursor.at } }
+        : {}),
     },
     select: {
       id: true,
@@ -102,7 +132,7 @@ export async function GET(request: Request) {
       state: true,
       _count: { select: { messages: true } },
     },
-    orderBy: { updatedAt: "desc" },
+    orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
     take: limit + 1,
   });
 
@@ -110,7 +140,9 @@ export async function GET(request: Request) {
   const items = hasMore ? threads.slice(0, limit) : threads;
   const lastItem = items.length > 0 ? items[items.length - 1] : undefined;
   const nextCursor =
-    hasMore && lastItem ? lastItem.updatedAt.toISOString() : null;
+    hasMore && lastItem
+      ? encodeTimeIdCursor(lastItem.updatedAt, lastItem.id)
+      : null;
 
   return NextResponse.json({
     conversations: items,

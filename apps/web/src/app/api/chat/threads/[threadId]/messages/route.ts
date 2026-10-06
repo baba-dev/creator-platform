@@ -14,10 +14,19 @@ import { deterministicUuid } from "@/lib/idempotency";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
 import {
+  decodeTimeIdCursor,
+  encodeTimeIdCursor,
+} from "@/lib/time-id-cursor";
+import {
   assertQuotedTextModel,
   issueTextFeatureQuote,
 } from "@/lib/text-feature-generation";
 import { StudioModelUnavailableError } from "@/lib/studio-model-discovery";
+
+const messageListSchema = z.object({
+  before: z.string().min(1).max(512).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
 
 const chatGenerationSchema = chatMessageCreateSchema
   .extend({
@@ -419,18 +428,39 @@ export async function GET(
     );
   }
 
-  const beforeCursor = url.searchParams.get("before");
-  const limit = Math.min(
-    Math.max(1, Number(url.searchParams.get("limit") || 50)),
-    100,
-  );
+  const parsedList = messageListSchema.safeParse({
+    before: url.searchParams.get("before") ?? undefined,
+    limit: url.searchParams.get("limit") ?? undefined,
+  });
+  if (!parsedList.success) {
+    return NextResponse.json(
+      { error: "Invalid pagination parameters." },
+      { status: 400 },
+    );
+  }
+  const beforeCursor = parsedList.data.before
+    ? decodeTimeIdCursor(parsedList.data.before)
+    : null;
+  if (parsedList.data.before && !beforeCursor) {
+    return NextResponse.json({ error: "Invalid cursor." }, { status: 400 });
+  }
+  const limit = parsedList.data.limit;
 
   const rawMessages = await db.chatMessage.findMany({
     where: {
       threadId,
-      ...(beforeCursor ? { createdAt: { lt: new Date(beforeCursor) } } : {}),
+      ...(beforeCursor
+        ? beforeCursor.id
+          ? {
+              OR: [
+                { createdAt: { lt: beforeCursor.at } },
+                { createdAt: beforeCursor.at, id: { lt: beforeCursor.id } },
+              ],
+            }
+          : { createdAt: { lt: beforeCursor.at } }
+        : {}),
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: limit + 1,
   });
 
@@ -438,7 +468,9 @@ export async function GET(
   const items = hasMore ? rawMessages.slice(0, limit) : rawMessages;
   const lastItem = items.length > 0 ? items[items.length - 1] : undefined;
   const nextCursor =
-    hasMore && lastItem ? lastItem.createdAt.toISOString() : null;
+    hasMore && lastItem
+      ? encodeTimeIdCursor(lastItem.createdAt, lastItem.id)
+      : null;
 
   return NextResponse.json({
     messages: items.reverse(),

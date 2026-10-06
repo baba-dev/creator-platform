@@ -63,6 +63,40 @@ describe("creative available actions", () => {
     ]);
   });
 
+  it("does not advertise variations at an unsupported inherited resolution", () => {
+    const actions = computeAvailableGenerationActions(
+      {
+        id: "job-resolution",
+        status: "SUCCEEDED",
+        requestPayload: { aspectRatio: "1:1", resolution: "1K" },
+        assets: [{ mimeType: "image/png" }],
+        providerModel: {
+          id: "image-pro",
+          providerModelId: "image-pro",
+          mediaKind: "IMAGE",
+          capabilities: {
+            referenceImages: true,
+            "aspectRatio:1:1": true,
+            "resolution:1K": true,
+          },
+        },
+      },
+      [
+        {
+          ...imageModel,
+          id: "image-sequential",
+          providerModelId: "image-sequential",
+          capabilities: {
+            ...imageModel.capabilities,
+            "resolution:2K": true,
+          },
+        },
+      ],
+    );
+
+    expect(actions).not.toContain("variations");
+  });
+
   it("does not expose animate or variations when no capable route exists", () => {
     const actions = computeAvailableGenerationActions(
       {

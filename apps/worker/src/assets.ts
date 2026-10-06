@@ -3,6 +3,7 @@ import {
   completeMediaTask,
   recordMediaOutput,
 } from "./media-tasks";
+import { probeUploadedMedia } from "@aiwa/assets/media-probe";
 import {
   claimExpiredAssetForPurge,
   commitAssetVariantStorage,
@@ -73,6 +74,82 @@ async function saveVariant(input: {
       return;
     throw error;
   }
+}
+
+function metadataExtension(asset: {
+  mediaKind: string;
+  mimeType: string;
+}): string {
+  if (asset.mediaKind === "VIDEO") {
+    return asset.mimeType === "video/quicktime" ? "mov" : "mp4";
+  }
+  if (asset.mimeType === "audio/wav" || asset.mimeType === "audio/x-wav") {
+    return "wav";
+  }
+  if (asset.mimeType === "audio/ogg") return "ogg";
+  return "mp3";
+}
+
+/**
+ * Probe canonical media only on the media worker. Metadata is advisory for UI
+ * and provider validation, so a failed probe never rolls back a READY original.
+ */
+export async function processAssetMetadata(assetId: string): Promise<void> {
+  const asset = await db.asset.findUnique({ where: { id: assetId } });
+  if (!asset || asset.status !== "READY") return;
+  if (!["IMAGE", "VIDEO", "AUDIO"].includes(asset.mediaKind)) return;
+
+  const sourceStorage = await resolveAssetStorageForAsset(db, asset, {
+    storageRoot: env.ASSET_STORAGE_ROOT,
+    encryptionKey: env.STORAGE_ENCRYPTION_KEY,
+    googleClientId: env.GOOGLE_DRIVE_CLIENT_ID,
+    googleClientSecret: env.GOOGLE_DRIVE_CLIENT_SECRET,
+    onedriveClientId: env.ONEDRIVE_CLIENT_ID,
+    onedriveClientSecret: env.ONEDRIVE_CLIENT_SECRET,
+  });
+  const original = await sourceStorage.read(
+    asset.objectKey,
+    asset.externalFileId ?? undefined,
+  );
+
+  let width: number | null = null;
+  let height: number | null = null;
+  let durationMs: number | null = null;
+
+  if (asset.mediaKind === "IMAGE") {
+    const metadata = await sharp(original, { failOn: "error" })
+      .rotate()
+      .metadata();
+    width = metadata.width ?? null;
+    height = metadata.height ?? null;
+    if (!width || !height) throw new Error("Image metadata is unavailable.");
+  } else {
+    const work = await mkdtemp(join(tmpdir(), "aiwa-asset-metadata-"));
+    try {
+      const sourcePath = join(work, `source.${metadataExtension(asset)}`);
+      await writeFile(sourcePath, original, { mode: 0o600 });
+      const probed = await probeUploadedMedia(
+        sourcePath,
+        asset.mediaKind as "VIDEO" | "AUDIO",
+      );
+      width = probed.width;
+      height = probed.height;
+      durationMs = probed.durationMs;
+    } finally {
+      await rm(work, { recursive: true, force: true }).catch(() => undefined);
+    }
+  }
+
+  await db.$transaction(async (tx) => {
+    await assertMediaOwnership(tx);
+    await tx.$queryRaw`SELECT id FROM Asset WHERE id = ${assetId} FOR UPDATE`;
+    const current = await tx.asset.findUnique({ where: { id: assetId } });
+    if (!current || current.status !== "READY") return;
+    await tx.asset.update({
+      where: { id: assetId },
+      data: { width, height, durationMs },
+    });
+  });
 }
 
 /**

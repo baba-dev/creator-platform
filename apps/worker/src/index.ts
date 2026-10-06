@@ -50,6 +50,7 @@ import {
 import Redis from "ioredis";
 import {
   processAssetDerivatives,
+  processAssetMetadata,
   purgeExpiredAssets,
   purgeMediaAttemptOutputs,
 } from "./assets";
@@ -585,6 +586,8 @@ const assetWorker = createWorker(
             await processImageOperation(task.targetId);
           else if (task.kind === "VIDEO_RENDER")
             await processVideoRender(task.targetId);
+          else if (task.kind === "METADATA")
+            await processAssetMetadata(task.targetId);
           else await processAssetDerivatives(task.targetId, task.kind);
         });
         return;
@@ -630,6 +633,17 @@ const assetWorker = createWorker(
           include: { variants: true },
         });
         if (!asset) return;
+        if (needsAssetMetadata(asset)) {
+          const metadataTask = await ensureMediaTask({
+            targetId: asset.id,
+            organizationId: asset.organizationId,
+            kind: "METADATA",
+            legacyAttempts: job.attemptsMade,
+          });
+          await runMediaTask(metadataTask.id, () =>
+            processAssetMetadata(asset.id),
+          );
+        }
         for (const kind of derivativeKinds(asset.mediaKind)) {
           if (asset.variants.some((variant) => variant.kind === kind)) continue;
           const task = await ensureMediaTask({
@@ -657,6 +671,25 @@ assetWorker?.on("failed", (job) => {
     jobId: job?.id,
   });
 });
+function needsAssetMetadata(asset: {
+  mediaKind: string;
+  width: number | null;
+  height: number | null;
+  durationMs: number | null;
+}): boolean {
+  if (asset.mediaKind === "IMAGE") {
+    return asset.width === null || asset.height === null;
+  }
+  if (asset.mediaKind === "VIDEO") {
+    return (
+      asset.width === null ||
+      asset.height === null ||
+      asset.durationMs === null
+    );
+  }
+  return asset.mediaKind === "AUDIO" && asset.durationMs === null;
+}
+
 function derivativeKinds(
   kind: string,
 ): ("THUMBNAIL" | "PREVIEW" | "POSTER" | "STORYBOARD" | "WAVEFORM")[] {
@@ -796,6 +829,8 @@ async function dispatchAssets() {
           {
             mediaKind: "IMAGE",
             OR: [
+              { width: null },
+              { height: null },
               { variants: { none: { kind: "PREVIEW" } } },
               { variants: { none: { kind: "THUMBNAIL" } } },
             ],
@@ -803,11 +838,20 @@ async function dispatchAssets() {
           {
             mediaKind: "VIDEO",
             OR: [
+              { width: null },
+              { height: null },
+              { durationMs: null },
               { variants: { none: { kind: "POSTER" } } },
               { variants: { none: { kind: "STORYBOARD" } } },
             ],
           },
-          { mediaKind: "AUDIO", variants: { none: { kind: "WAVEFORM" } } },
+          {
+            mediaKind: "AUDIO",
+            OR: [
+              { durationMs: null },
+              { variants: { none: { kind: "WAVEFORM" } } },
+            ],
+          },
         ],
       },
       include: { variants: true },
@@ -816,11 +860,15 @@ async function dispatchAssets() {
     });
     assetScanCursor =
       assets.length === 100 ? assets[assets.length - 1]!.id : undefined;
-    for (const asset of assets)
+    for (const asset of assets) {
+      if (needsAssetMetadata(asset)) {
+        await importTask(asset.id, asset.organizationId, "METADATA", asset.id);
+      }
       for (const kind of derivativeKinds(asset.mediaKind)) {
         if (asset.variants.some((variant) => variant.kind === kind)) continue;
         await importTask(asset.id, asset.organizationId, kind, asset.id);
       }
+    }
     const tasks = await db.mediaTask.findMany({
       where: {
         status: { in: ["PENDING", "RETRY_WAIT"] },

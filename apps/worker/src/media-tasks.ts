@@ -4,6 +4,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { db, Prisma } from "@aiwa/db";
 
 export type MediaTaskKind =
+  | "METADATA"
   | "THUMBNAIL"
   | "PREVIEW"
   | "POSTER"

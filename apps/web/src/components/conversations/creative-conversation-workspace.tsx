@@ -55,6 +55,25 @@ interface GenerationJobItem {
   }>;
 }
 
+function retryBoundedDerivative(
+  image: HTMLImageElement,
+  baseUrl: string,
+): void {
+  const attempt = Number(image.dataset.derivativeRetry ?? "0");
+  if (attempt >= 3) {
+    image.dataset.derivativeUnavailable = "true";
+    image.style.visibility = "hidden";
+    return;
+  }
+  const nextAttempt = attempt + 1;
+  image.dataset.derivativeRetry = String(nextAttempt);
+  window.setTimeout(() => {
+    if (!image.isConnected) return;
+    const separator = baseUrl.includes("?") ? "&" : "?";
+    image.src = `${baseUrl}${separator}retry=${nextAttempt}`;
+  }, Math.min(1_000 * 2 ** attempt, 4_000));
+}
+
 export function CreativeConversationWorkspace({
   organizationSlug,
   conversationId,
@@ -754,12 +773,15 @@ export function CreativeConversationWorkspace({
                       `/api/assets/${encodeURIComponent(activeAsset.id)}/variant/preview`
                     }
                     onError={(e) => {
-                      // Fallback to original if preview derivative is still generating
-                      const target = e.currentTarget;
-                      const orig = `/api/assets/${encodeURIComponent(activeAsset.id)}`;
-                      if (target.src !== orig) {
-                        target.src = orig;
-                      }
+                      retryBoundedDerivative(
+                        e.currentTarget,
+                        activeAsset.previewUrl ??
+                          `/api/assets/${encodeURIComponent(activeAsset.id)}/variant/preview`,
+                      );
+                    }}
+                    onLoad={(e) => {
+                      e.currentTarget.dataset.derivativeRetry = "0";
+                      e.currentTarget.style.visibility = "visible";
                     }}
                     alt="Active Creative Canvas"
                     className="w-full max-h-[500px] object-contain rounded-xl"
@@ -879,11 +901,15 @@ export function CreativeConversationWorkspace({
                               `/api/assets/${encodeURIComponent(asset.id)}/variant/thumbnail`
                             }
                             onError={(e) => {
-                              const target = e.currentTarget;
-                              const orig = `/api/assets/${encodeURIComponent(asset.id)}`;
-                              if (target.src !== orig) {
-                                target.src = orig;
-                              }
+                              retryBoundedDerivative(
+                                e.currentTarget,
+                                asset.thumbnailUrl ??
+                                  `/api/assets/${encodeURIComponent(asset.id)}/variant/thumbnail`,
+                              );
+                            }}
+                            onLoad={(e) => {
+                              e.currentTarget.dataset.derivativeRetry = "0";
+                              e.currentTarget.style.visibility = "visible";
                             }}
                             alt={`Output #${outputNum}`}
                             className="size-full object-cover group-hover:scale-102 transition duration-200"

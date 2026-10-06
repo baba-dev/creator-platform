@@ -243,9 +243,6 @@ export async function resolveAvailableGenerationActions(
   });
 
   return new Map(
-    jobs.map((job) => [
-      job.id,
-      computeAvailableGenerationActions(job, models),
-    ]),
+    jobs.map((job) => [job.id, computeAvailableGenerationActions(job, models)]),
   );
 }

@@ -87,7 +87,10 @@ describe("creative available actions", () => {
           id: "image-sequential",
           providerModelId: "image-sequential",
           capabilities: {
-            ...imageModel.capabilities,
+            ...(imageModel.capabilities as Record<
+              string,
+              boolean | number | string
+            >),
             "resolution:2K": true,
           },
         },

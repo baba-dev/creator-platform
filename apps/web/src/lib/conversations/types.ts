@@ -24,6 +24,11 @@ export interface ConversationPendingOperation {
   createdAt: string;
 }
 
+export interface ConversationInFlightTurn {
+  idempotencyKey: string;
+  startedAt: string;
+}
+
 export interface ConversationState {
   activeAssetId?: string | null;
   activeGenerationId?: string | null;
@@ -34,6 +39,7 @@ export interface ConversationState {
   settings: ConversationEffectiveSettings;
   activeOutputs: ActiveOutputItem[];
   pendingOperation?: ConversationPendingOperation | null;
+  inFlightTurn?: ConversationInFlightTurn | null;
   revision?: number;
 }
 

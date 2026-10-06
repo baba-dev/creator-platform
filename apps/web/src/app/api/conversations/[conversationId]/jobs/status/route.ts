@@ -2,6 +2,7 @@ import { db } from "@aiwa/db";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { resolveAvailableGenerationActions } from "@/lib/conversations/available-actions";
 import { serializeGenerationJob } from "@/lib/conversations/serialization";
 import { getRequestSession } from "@/lib/request-auth";
 
@@ -109,15 +110,26 @@ export async function GET(
         select: {
           id: true,
           provider: true,
+          providerModelId: true,
           displayName: true,
           mediaKind: true,
+          capabilities: true,
         },
       },
     },
   });
 
+  const availableActions = await resolveAvailableGenerationActions(jobs);
+
   return NextResponse.json(
-    { jobs: jobs.map(serializeGenerationJob) },
+    {
+      jobs: jobs.map((job) =>
+        serializeGenerationJob({
+          ...job,
+          availableActions: availableActions.get(job.id) ?? [],
+        }),
+      ),
+    },
     { headers: { "Cache-Control": "private, no-store" } },
   );
 }

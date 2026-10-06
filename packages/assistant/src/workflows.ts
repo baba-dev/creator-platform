@@ -136,51 +136,47 @@ export async function preparePixelWorkflow(
         404,
       );
   }
-  const existing = await db.pixelWorkflow.findUnique({
-    where: {
-      threadId_requestKey: {
-        threadId: ctx.threadId,
-        requestKey: ctx.idempotencyKey,
-      },
-    },
-    include: { actions: { orderBy: { position: "asc" } } },
-  });
-  if (existing)
-    return { workflowId: existing.id, title: existing.title, prepared: true };
-  if (
-    (await db.pixelWorkflow.count({
+  return db.$transaction(async (tx) => {
+    // Serialize draft creation and its daily limit within this private thread.
+    await tx.$queryRaw`SELECT id FROM ChatThread WHERE id = ${ctx.threadId} FOR UPDATE`;
+    const existing = await tx.pixelWorkflow.findUnique({
       where: {
-        threadId: ctx.threadId,
-        cancelledAt: null,
-        createdAt: { gte: new Date(Date.now() - 86_400_000) },
+        threadId_requestKey: {
+          threadId: ctx.threadId,
+          requestKey: ctx.idempotencyKey,
+        },
       },
-    })) >= 30
-  )
-    throw new GenerationError(
-      "Too many workflow drafts today. Finish existing work first.",
-      429,
-    );
-  const workflow = await db.pixelWorkflow.upsert({
-    where: {
-      threadId_requestKey: {
+    });
+    if (existing)
+      return { workflowId: existing.id, title: existing.title, prepared: true };
+    if (
+      (await tx.pixelWorkflow.count({
+        where: {
+          threadId: ctx.threadId,
+          cancelledAt: null,
+          createdAt: { gte: new Date(Date.now() - 86_400_000) },
+        },
+      })) >= 30
+    )
+      throw new GenerationError(
+        "Too many workflow drafts today. Finish existing work first.",
+        429,
+      );
+    const workflow = await tx.pixelWorkflow.create({
+      data: {
         threadId: ctx.threadId,
         requestKey: ctx.idempotencyKey,
+        title: plan.title,
+        actions: {
+          create: plan.steps.map((step, index) => ({
+            position: index + 1,
+            payload: step,
+          })),
+        },
       },
-    },
-    update: {},
-    create: {
-      threadId: ctx.threadId,
-      requestKey: ctx.idempotencyKey,
-      title: plan.title,
-      actions: {
-        create: plan.steps.map((step, index) => ({
-          position: index + 1,
-          payload: step,
-        })),
-      },
-    },
+    });
+    return { workflowId: workflow.id, title: workflow.title, prepared: true };
   });
-  return { workflowId: workflow.id, title: workflow.title, prepared: true };
 }
 
 async function actionFor(ctx: AssistantToolContext, actionId: string) {

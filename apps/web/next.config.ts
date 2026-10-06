@@ -19,7 +19,7 @@ const nextConfig: NextConfig = {
   ],
   typedRoutes: true,
   experimental: {
-    ...(process.env.CI ? { cpus: 1 } : {}),
+    ...(process.env.CI ? { cpus: 2 } : {}),
   },
 };
 

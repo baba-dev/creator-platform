@@ -13,8 +13,7 @@
     "UV_THREADPOOL_SIZE",
     "VITEST_MAX_WORKERS",
     "RAYON_NUM_THREADS",
-    "NEXT_TELEMETRY_DISABLED",
-    "TURBO_CACHE_DIR"
+    "NEXT_TELEMETRY_DISABLED"
   ],
   "tasks": {
     "build": {

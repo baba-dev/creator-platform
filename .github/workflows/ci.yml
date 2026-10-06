@@ -9,7 +9,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # Keep hosted runs independent of legacy self-hosted runs still waiting for a runner.
+  group: ci-hosted-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

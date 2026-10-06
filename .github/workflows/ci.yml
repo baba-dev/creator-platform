@@ -68,7 +68,7 @@ jobs:
   test:
     name: test
     runs-on: [self-hosted, Linux, X64, creators-ci]
-    timeout-minutes: 45
+    timeout-minutes: 60
     services:
       mariadb:
         image: mariadb:10.6
@@ -129,7 +129,9 @@ jobs:
         run: pnpm --filter @aiwa/db migrate:deploy
 
       - name: Test
-        run: pnpm test
+        env:
+          VITEST_MAX_WORKERS: "1"
+        run: pnpm exec turbo run test --concurrency=1
 
   build_release:
     name: build-release

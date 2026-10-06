@@ -30,6 +30,7 @@ const generationLimiter = rateLimit({
   windowMs: 60_000,
   prefix: "generation",
 });
+const CONVERSATION_TURN_LEASE_MS = 60_000;
 
 const messageInputSchema = z
   .object({
@@ -50,6 +51,32 @@ const messageInputSchema = z
       });
     }
   });
+
+async function releaseConversationTurnLease(
+  conversationId: string,
+  idempotencyKey: string,
+): Promise<void> {
+  await db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM ChatThread WHERE id = ${conversationId} FOR UPDATE`;
+    const row = await tx.chatThread.findUnique({
+      where: { id: conversationId },
+      select: { state: true },
+    });
+    const state = row?.state as unknown as ConversationState | null;
+    if (!state || state.inFlightTurn?.idempotencyKey !== idempotencyKey) return;
+
+    const nextState = structuredClone(state);
+    nextState.inFlightTurn = null;
+    nextState.revision = Number(state.revision ?? 0) + 1;
+    await tx.chatThread.update({
+      where: { id: conversationId },
+      data: {
+        state: nextState as unknown as object,
+        updatedAt: new Date(),
+      },
+    });
+  });
+}
 
 async function mutateConversationState(
   conversationId: string,
@@ -172,6 +199,7 @@ export async function POST(
   }
 
   let conversationRevisionClaimed = false;
+  let claimedTurnId: string | null = null;
   try {
     const json = await request.json();
     const input = messageInputSchema.parse(json);
@@ -1027,13 +1055,33 @@ export async function POST(
     const rateLimited = await generationLimiter.check(session.user.id);
     if (rateLimited) return rateLimited;
 
+    const leaseStartedAt = new Date();
     const claimedState = await mutateConversationState(
       conversationId,
       currentState,
-      () => undefined,
+      (state) => {
+        const activeLease = state.inFlightTurn;
+        if (
+          activeLease &&
+          activeLease.idempotencyKey !== input.idempotencyKey &&
+          Number.isFinite(Date.parse(activeLease.startedAt)) &&
+          Date.parse(activeLease.startedAt) + CONVERSATION_TURN_LEASE_MS >
+            leaseStartedAt.getTime()
+        ) {
+          throw new GenerationError(
+            "Another conversation turn is still being admitted. Please retry after it finishes.",
+            409,
+          );
+        }
+        state.inFlightTurn = {
+          idempotencyKey: input.idempotencyKey,
+          startedAt: leaseStartedAt.toISOString(),
+        };
+      },
       input.expectedRevision,
     );
     conversationRevisionClaimed = true;
+    claimedTurnId = input.idempotencyKey;
 
     // Create user message only after the revision claim succeeds.
     const userMessage = await upsertUserMessage();
@@ -1175,6 +1223,9 @@ export async function POST(
           speechRate: targetSpeechRate,
         };
         state.pendingOperation = null;
+        if (state.inFlightTurn?.idempotencyKey === input.idempotencyKey) {
+          state.inFlightTurn = null;
+        }
       },
     );
 
@@ -1210,6 +1261,11 @@ export async function POST(
       { status: 202 },
     );
   } catch (error) {
+    if (claimedTurnId) {
+      await releaseConversationTurnLease(conversationId, claimedTurnId).catch(
+        () => undefined,
+      );
+    }
     const correlationId =
       request.headers.get("x-correlation-id") || crypto.randomUUID();
     if (error instanceof z.ZodError) {
@@ -1224,7 +1280,9 @@ export async function POST(
     const code =
       status === 409 && message.startsWith("Conversation state was modified")
         ? "CONVERSATION_CONFLICT"
-        : conversationRevisionClaimed
+        : status === 409 && message.startsWith("Another conversation turn")
+          ? "CONVERSATION_BUSY"
+          : conversationRevisionClaimed
           ? "CONVERSATION_REFRESH_REQUIRED"
           : undefined;
     return NextResponse.json(

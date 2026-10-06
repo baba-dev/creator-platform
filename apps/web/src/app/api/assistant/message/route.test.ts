@@ -4,15 +4,21 @@ const mocks = vi.hoisted(() => ({
   trusted: vi.fn(),
   session: vi.fn(),
   db: {
-    chatThread: { findUnique: vi.fn() },
+    chatThread: { findUnique: vi.fn(), findFirst: vi.fn() },
     membership: { findUnique: vi.fn() },
-    chatMessage: { findMany: vi.fn(), count: vi.fn(), upsert: vi.fn() },
-    generationJob: { count: vi.fn() },
+    chatMessage: {
+      findMany: vi.fn(),
+      count: vi.fn(),
+      upsert: vi.fn(),
+      deleteMany: vi.fn(),
+    },
+    generationJob: { count: vi.fn(), findFirst: vi.fn() },
   },
   settings: vi.fn(),
   buildMessages: vi.fn(),
   complete: vi.fn(),
   local: vi.fn(),
+  requireAccess: vi.fn(),
   issueQuote: vi.fn(),
   assertQuoted: vi.fn(),
   createTextJob: vi.fn(),
@@ -36,6 +42,7 @@ vi.mock("@aiwa/assistant", async () => {
     buildAssistantMessages: mocks.buildMessages,
     completeAssistantResponse: mocks.complete,
     localPixelReply: mocks.local,
+    requirePixelAccess: mocks.requireAccess,
     pixelWorkspaceSchema: { optional: () => z.object({}).optional() },
   };
 });
@@ -58,7 +65,7 @@ vi.mock("@aiwa/generation", () => ({
   textResultFromJob: mocks.textResult,
 }));
 
-import { POST } from "./route";
+import { DELETE, POST } from "./route";
 
 const session = { user: { id: "user-1" } };
 const thread = {
@@ -88,16 +95,30 @@ function request(body: Record<string, unknown>) {
   });
 }
 
+function deleteRequest(threadId = "thread-1") {
+  return new Request(
+    `http://localhost/api/assistant/message?threadId=${encodeURIComponent(threadId)}`,
+    {
+      method: "DELETE",
+      headers: { Origin: "http://localhost" },
+    },
+  );
+}
+
 describe("POST /api/assistant/message", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.trusted.mockReturnValue(true);
     mocks.session.mockResolvedValue(session);
     mocks.db.chatThread.findUnique.mockResolvedValue(thread);
+    mocks.db.chatThread.findFirst.mockResolvedValue(thread);
     mocks.db.membership.findUnique.mockResolvedValue(membership);
     mocks.db.chatMessage.findMany.mockResolvedValue([]);
     mocks.db.chatMessage.count.mockResolvedValue(0);
+    mocks.db.chatMessage.deleteMany.mockResolvedValue({ count: 0 });
     mocks.db.generationJob.count.mockResolvedValue(0);
+    mocks.db.generationJob.findFirst.mockResolvedValue(null);
+    mocks.requireAccess.mockResolvedValue(undefined);
     mocks.local.mockResolvedValue(null);
     mocks.settings.mockResolvedValue({
       id: "default",
@@ -273,5 +294,83 @@ describe("POST /api/assistant/message", () => {
       }),
     );
     expect(response.status).toBe(202);
+  });
+});
+
+describe("DELETE /api/assistant/message", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.trusted.mockReturnValue(true);
+    mocks.session.mockResolvedValue(session);
+    mocks.db.chatThread.findFirst.mockResolvedValue(thread);
+    mocks.db.chatMessage.findMany.mockResolvedValue([]);
+    mocks.db.chatMessage.deleteMany.mockResolvedValue({ count: 4 });
+    mocks.db.generationJob.findFirst.mockResolvedValue(null);
+    mocks.requireAccess.mockResolvedValue(undefined);
+  });
+
+  it("clears only saved Pixel conversation messages", async () => {
+    const response = await DELETE(deleteRequest());
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      cleared: true,
+      deletedCount: 4,
+    });
+    expect(mocks.requireAccess).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "user-1",
+        organizationId: "org-1",
+        threadId: "thread-1",
+      }),
+    );
+    expect(mocks.db.chatMessage.deleteMany).toHaveBeenCalledWith({
+      where: {
+        threadId: "thread-1",
+        role: { in: ["user", "assistant"] },
+        createdAt: { lte: expect.any(Date) },
+      },
+    });
+  });
+
+  it("refuses to clear while a durable Pixel request is still running", async () => {
+    mocks.db.chatMessage.findMany.mockResolvedValue([
+      {
+        id: "pending-user",
+        role: "user",
+        content: "Make a plan",
+        clientRequestId: "11111111-1111-4111-8111-111111111111",
+      },
+    ]);
+    mocks.db.generationJob.findFirst.mockResolvedValue({ status: "RUNNING" });
+
+    const response = await DELETE(deleteRequest());
+
+    expect(response.status).toBe(409);
+    expect(mocks.db.chatMessage.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses to clear a just-started request before its job exists", async () => {
+    mocks.db.chatMessage.findMany.mockResolvedValue([
+      {
+        id: "starting-user",
+        role: "user",
+        content: "Make a plan",
+        clientRequestId: "11111111-1111-4111-8111-111111111111",
+        createdAt: new Date(),
+      },
+    ]);
+
+    const response = await DELETE(deleteRequest());
+
+    expect(response.status).toBe(409);
+    expect(mocks.db.chatMessage.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("rejects untrusted clear requests", async () => {
+    mocks.trusted.mockReturnValue(false);
+
+    expect((await DELETE(deleteRequest())).status).toBe(403);
+    expect(mocks.db.chatMessage.deleteMany).not.toHaveBeenCalled();
   });
 });

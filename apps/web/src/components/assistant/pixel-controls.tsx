@@ -150,7 +150,10 @@ export function PixelControls({
 
   return (
     <div className="space-y-3 text-sm [&_button]:min-h-11 [&_button]:h-auto [&_button]:whitespace-normal [&_button]:py-2">
-      <details className="rounded-xl border border-border bg-background p-3">
+      <details
+        data-pixel-preferences
+        className="rounded-xl border border-border bg-background p-3"
+      >
         <summary className="min-h-10 cursor-pointer font-semibold">
           Pixel preferences &amp; memory
         </summary>

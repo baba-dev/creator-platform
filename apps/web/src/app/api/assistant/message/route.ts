@@ -328,6 +328,117 @@ export async function POST(request: Request) {
   }
 }
 
+export async function DELETE(request: Request) {
+  if (!hasTrustedMutationOrigin(request))
+    return NextResponse.json({ error: "Origin not allowed." }, { status: 403 });
+
+  const session = await getRequestSession(request.headers);
+  if (!session)
+    return NextResponse.json(
+      { error: "Authentication required." },
+      { status: 401 },
+    );
+
+  try {
+    const threadId = z
+      .string()
+      .min(1)
+      .max(100)
+      .parse(new URL(request.url).searchParams.get("threadId"));
+    const thread = await db.chatThread.findFirst({
+      where: { id: threadId, createdById: session.user.id },
+      include: { organization: true },
+    });
+    if (!thread)
+      return NextResponse.json({ error: "Thread not found." }, { status: 404 });
+
+    const ctx = {
+      userId: session.user.id,
+      organizationId: thread.organizationId,
+      organizationSlug: thread.organization.slug,
+      threadId,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    await requirePixelAccess(ctx);
+
+    // Never remove the user message that anchors recovery for a durable text
+    // job. The client also disables Clear chat while pending, but the server
+    // re-checks so stale tabs cannot orphan an accepted request. A cutoff keeps
+    // messages created by a concurrent send in another tab out of this clear.
+    const clearCutoff = new Date();
+    const latest = await db.chatMessage.findMany({
+      where: { threadId },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: 50,
+    });
+    const unresolved = latest
+      .filter(
+        (message) =>
+          message.role === "user" &&
+          message.clientRequestId &&
+          !latest.some(
+            (reply) =>
+              reply.role === "assistant" &&
+              reply.clientRequestId === message.clientRequestId,
+          ),
+      )
+      .slice(0, 5);
+
+    for (const message of unresolved) {
+      const key = createHash("sha256")
+        .update(
+          `${thread.organizationId}:${session.user.id}:${message.clientRequestId}`,
+        )
+        .digest("hex");
+      const job = await db.generationJob.findFirst({
+        where: {
+          idempotencyKey: key,
+          organizationId: thread.organizationId,
+          createdById: session.user.id,
+        },
+        select: { status: true },
+      });
+      const recentlyCreatedWithoutJob =
+        !job && message.createdAt.getTime() > clearCutoff.getTime() - 60_000;
+      if (
+        recentlyCreatedWithoutJob ||
+        (job && !["FAILED", "CANCELLED", "MANUAL_REVIEW"].includes(job.status))
+      )
+        return NextResponse.json(
+          {
+            error:
+              "Pixel is still handling a saved request. Clear chat after it finishes or reaches a final state.",
+          },
+          { status: 409 },
+        );
+    }
+
+    const cleared = await db.chatMessage.deleteMany({
+      where: {
+        threadId,
+        role: { in: ["user", "assistant"] },
+        createdAt: { lte: clearCutoff },
+      },
+    });
+    return NextResponse.json(
+      { cleared: true, deletedCount: cleared.count },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  } catch (error) {
+    if (error instanceof z.ZodError)
+      return NextResponse.json({ error: "Invalid thread." }, { status: 400 });
+    return NextResponse.json(
+      {
+        error:
+          error instanceof GenerationError
+            ? error.message
+            : "Could not clear Pixel chat.",
+      },
+      { status: error instanceof GenerationError ? error.status : 500 },
+    );
+  }
+}
+
 /** Reconcile existing jobs only. Reopening Pixel never submits provider work. */
 export async function GET(request: Request) {
   const session = await getRequestSession(request.headers);

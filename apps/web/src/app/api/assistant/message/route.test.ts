@@ -297,7 +297,6 @@ describe("POST /api/assistant/message", () => {
   });
 });
 
-
 describe("DELETE /api/assistant/message", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -329,6 +328,7 @@ describe("DELETE /api/assistant/message", () => {
       where: {
         threadId: "thread-1",
         role: { in: ["user", "assistant"] },
+        createdAt: { lte: expect.any(Date) },
       },
     });
   });
@@ -343,6 +343,23 @@ describe("DELETE /api/assistant/message", () => {
       },
     ]);
     mocks.db.generationJob.findFirst.mockResolvedValue({ status: "RUNNING" });
+
+    const response = await DELETE(deleteRequest());
+
+    expect(response.status).toBe(409);
+    expect(mocks.db.chatMessage.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses to clear a just-started request before its job exists", async () => {
+    mocks.db.chatMessage.findMany.mockResolvedValue([
+      {
+        id: "starting-user",
+        role: "user",
+        content: "Make a plan",
+        clientRequestId: "11111111-1111-4111-8111-111111111111",
+        createdAt: new Date(),
+      },
+    ]);
 
     const response = await DELETE(deleteRequest());
 

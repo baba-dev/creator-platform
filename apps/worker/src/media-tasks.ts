@@ -23,8 +23,8 @@ export class MediaOwnershipLost extends Error {
   }
 }
 export class MediaPermanentFailure extends Error {
-  constructor() {
-    super("Media input is unavailable or invalid.");
+  constructor(message = "Media input is unavailable or invalid.") {
+    super(message);
     this.name = "MediaPermanentFailure";
   }
 }

@@ -15,7 +15,7 @@ concurrency:
 jobs:
   static:
     name: static
-    runs-on: ubuntu-22.04
+    runs-on: [self-hosted, Linux, X64, creators-ci]
     timeout-minutes: 10
     env:
       DATABASE_URL: mysql://creator:ci-only@127.0.0.1:3306/creator_platform
@@ -67,7 +67,7 @@ jobs:
 
   test:
     name: test
-    runs-on: ubuntu-22.04
+    runs-on: [self-hosted, Linux, X64, creators-ci]
     timeout-minutes: 15
     services:
       mariadb:
@@ -113,65 +113,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --prefer-offline
 
-      - name: Prepare media package cache key
-        id: media-package-cache
+      - name: Verify media tools on self-hosted runner
         shell: bash
         run: |
           set -euo pipefail
-          ffmpeg_version="$(apt-cache policy ffmpeg | awk '/Candidate:/ {print $2; exit}')"
-          noto_version="$(apt-cache policy fonts-noto-core | awk '/Candidate:/ {print $2; exit}')"
-          test -n "$ffmpeg_version"
-          test -n "$noto_version"
-          test "$ffmpeg_version" != "(none)"
-          test "$noto_version" != "(none)"
-          version_key="$(printf '%s-%s' "$ffmpeg_version" "$noto_version" | tr ':~+/' '____')"
-          echo "key=media-debs-${RUNNER_OS}-ubuntu-22.04-${version_key}" >> "$GITHUB_OUTPUT"
-          mkdir -p "$GITHUB_WORKSPACE/.ci-cache/apt-archives/partial"
-
-      - name: Restore media package cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ github.workspace }}/.ci-cache/apt-archives
-          key: ${{ steps.media-package-cache.outputs.key }}
-
-      - name: Install media tools
-        timeout-minutes: 5
-        run: |
-          set -euo pipefail
-          if command -v apt-fast >/dev/null 2>&1; then
-            apt_cmd=apt-fast
-          else
-            apt_cmd=apt-get
-          fi
-
-          apt_archives="$GITHUB_WORKSPACE/.ci-cache/apt-archives"
-          mkdir -p "$apt_archives/partial"
-          sudo chown _apt:root "$apt_archives/partial"
-          sudo chmod 0700 "$apt_archives/partial"
-
-          install_media_tools() {
-            sudo env DEBIAN_FRONTEND=noninteractive "$apt_cmd" \
-              -o Acquire::Retries=3 \
-              -o Dir::Cache::archives="$apt_archives" \
-              install --no-install-recommends -y ffmpeg fonts-noto-core
-          }
-
-          # Hosted runner images already contain a package index from image build
-          # time. Avoid a network-heavy refresh on the normal path; refresh only
-          # when that cached index can no longer resolve/download the packages.
-          if ! install_media_tools; then
-            sudo apt-get -o Acquire::Retries=3 update -qq
-            install_media_tools
-          fi
-
+          command -v ffmpeg >/dev/null
+          command -v fc-match >/dev/null
           ffmpeg -version >/dev/null
-          fc-match "Noto Sans" >/dev/null
-
-          # Cache only immutable package payloads. APT's lock/partial entries are
-          # runtime state and may be root-only, which prevents actions/cache from
-          # archiving the directory during its post-job save.
-          sudo rm -rf "$apt_archives/lock" "$apt_archives/partial"
-          sudo chown -R "$(id -u):$(id -g)" "$apt_archives"
+          fc-match "Noto Sans" | grep -qi "Noto"
 
       - name: Generate Prisma client
         run: pnpm db:generate
@@ -186,7 +135,7 @@ jobs:
     name: build-release
     permissions:
       contents: read
-    runs-on: ubuntu-22.04
+    runs-on: [self-hosted, Linux, X64, creators-ci]
     timeout-minutes: 15
     services:
       mariadb:
@@ -293,7 +242,7 @@ jobs:
     name: quality
     if: always()
     needs: [static, test, build_release]
-    runs-on: ubuntu-22.04
+    runs-on: [self-hosted, Linux, X64, creators-ci]
     timeout-minutes: 2
     steps:
       - name: Require every CI lane to pass

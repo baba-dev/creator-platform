@@ -27,7 +27,7 @@ export const metadata: Metadata = {
     follow: true,
   },
   openGraph: {
-    title: "Aiwa Creators · One AI workspace for the complete creative workflow",
+    title:\n      "Aiwa Creators · One AI workspace for the complete creative workflow",
     description:
       "From first brief to generated media, editing, assets, projects, storage, and team controls.",
     type: "website",
@@ -285,7 +285,7 @@ export default function HomePage() {
               <p className="font-display text-sm font-semibold text-foreground">
                 {title}
               </p>
-              <p className="mt-1 text-[10px] text-subtle-foreground">{detail}</p>
+              <p className="mt-1 text-[10px] text-subtle-foreground">\n                {detail}\n              </p>
             </div>
           ))}
         </div>
@@ -300,7 +300,7 @@ export default function HomePage() {
             <Eyebrow>The whole creative stack</Eyebrow>
             <h2 className="font-display mt-4 text-balance text-4xl font-semibold tracking-[-0.045em] text-foreground sm:text-5xl">
               Not a model playground.
-              <span className="block text-primary">A production workspace.</span>
+              <span className="block text-primary">\n                A production workspace.\n              </span>
             </h2>
           </div>
           <p className="max-w-2xl text-sm leading-7 text-muted-foreground sm:text-base lg:justify-self-end">
@@ -318,7 +318,7 @@ export default function HomePage() {
         <div className="paper-dots mx-auto max-w-7xl px-5 py-20 sm:px-7 lg:px-10 lg:py-28">
           <div className="grid gap-10 lg:grid-cols-[.86fr_1.14fr] lg:items-center">
             <div>
-              <Eyebrow className="text-info">Model choice without model chaos</Eyebrow>
+              <Eyebrow className="text-info">\n                Model choice without model chaos\n              </Eyebrow>
               <h2 className="font-display mt-4 text-4xl font-semibold tracking-[-0.045em] text-foreground sm:text-5xl">
                 Pick by capability.
                 <span className="sketch-underline"> Keep the workflow.</span>
@@ -471,7 +471,7 @@ export default function HomePage() {
             <Eyebrow>Built for real teams</Eyebrow>
             <h2 className="font-display mt-4 text-4xl font-semibold tracking-[-0.045em] text-foreground sm:text-5xl">
               Creativity on top.
-              <span className="text-gradient block">Production discipline underneath.</span>
+              <span className="text-gradient block">\n                Production discipline underneath.\n              </span>
             </h2>
           </div>
 
@@ -586,16 +586,16 @@ export default function HomePage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-xs text-muted-foreground">
-            <Link href="/privacy-policy" className="transition hover:text-foreground">
+            <Link\n              href="/privacy-policy"\n              className="transition hover:text-foreground"\n            >
               Privacy Policy
             </Link>
-            <Link href="/terms-of-service" className="transition hover:text-foreground">
+            <Link\n              href="/terms-of-service"\n              className="transition hover:text-foreground"\n            >
               Terms of Service
             </Link>
             <Link href="/sign-in" className="transition hover:text-foreground">
               Sign In
             </Link>
-            <Link href="/sign-up" className="font-semibold text-primary hover:underline">
+            <Link\n              href="/sign-up"\n              className="font-semibold text-primary hover:underline"\n            >
               Start creating
             </Link>
           </div>

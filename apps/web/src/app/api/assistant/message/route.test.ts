@@ -6,12 +6,13 @@ const mocks = vi.hoisted(() => ({
   db: {
     chatThread: { findUnique: vi.fn() },
     membership: { findUnique: vi.fn() },
-    chatMessage: { findMany: vi.fn(), count: vi.fn() },
+    chatMessage: { findMany: vi.fn(), count: vi.fn(), upsert: vi.fn() },
     generationJob: { count: vi.fn() },
   },
   settings: vi.fn(),
   buildMessages: vi.fn(),
   complete: vi.fn(),
+  local: vi.fn(),
   issueQuote: vi.fn(),
   assertQuoted: vi.fn(),
   createTextJob: vi.fn(),
@@ -28,10 +29,18 @@ vi.mock("@aiwa/db", () => ({ db: mocks.db }));
 vi.mock("@aiwa/authz", () => ({
   hasOrganizationPermission: vi.fn(() => true),
 }));
-vi.mock("@aiwa/assistant", () => ({
-  getAssistantSettings: mocks.settings,
-  buildAssistantMessages: mocks.buildMessages,
-  completeAssistantResponse: mocks.complete,
+vi.mock("@aiwa/assistant", async () => {
+  const { z } = await import("zod");
+  return {
+    getAssistantSettings: mocks.settings,
+    buildAssistantMessages: mocks.buildMessages,
+    completeAssistantResponse: mocks.complete,
+    localPixelReply: mocks.local,
+    pixelWorkspaceSchema: { optional: () => z.object({}).optional() },
+  };
+});
+vi.mock("@/lib/rate-limit", () => ({
+  rateLimit: () => ({ check: vi.fn().mockResolvedValue(null) }),
 }));
 vi.mock("@/lib/text-feature-generation", () => ({
   issueTextFeatureQuote: mocks.issueQuote,
@@ -54,6 +63,7 @@ import { POST } from "./route";
 const session = { user: { id: "user-1" } };
 const thread = {
   id: "thread-1",
+  threadType: "PIXEL",
   createdById: "user-1",
   organizationId: "org-1",
   organization: { id: "org-1", slug: "creative", status: "ACTIVE" },
@@ -88,6 +98,7 @@ describe("POST /api/assistant/message", () => {
     mocks.db.chatMessage.findMany.mockResolvedValue([]);
     mocks.db.chatMessage.count.mockResolvedValue(0);
     mocks.db.generationJob.count.mockResolvedValue(0);
+    mocks.local.mockResolvedValue(null);
     mocks.settings.mockResolvedValue({
       id: "default",
       providerModelRecordId: model.id,
@@ -97,6 +108,26 @@ describe("POST /api/assistant/message", () => {
       enabled: true,
       updatedAt: new Date(),
     });
+  });
+
+  it("serves local help without a model or quote", async () => {
+    mocks.settings.mockResolvedValue({ enabled: true, providerModel: null });
+    mocks.local.mockResolvedValue({ content: "Storage help", toolResults: [] });
+    mocks.complete.mockResolvedValue({
+      content: "Storage help",
+      chargedCredits: 0,
+    });
+    const response = await POST(
+      request({
+        threadId: thread.id,
+        content: "How do I connect OneDrive?",
+        mode: "local",
+        idempotencyKey: "11111111-1111-4111-8111-111111111111",
+      }),
+    );
+    expect(response.status).toBe(201);
+    expect(mocks.createTextJob).not.toHaveBeenCalled();
+    expect(mocks.issueQuote).not.toHaveBeenCalled();
   });
 
   it("rejects untrusted origins", async () => {

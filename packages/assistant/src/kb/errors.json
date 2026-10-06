@@ -3,7 +3,7 @@
     "pattern": "Insufficient credits",
     "title": "Not enough credits",
     "explanation": "Your workspace credit balance is too low to complete this generation. Each generation reserves credits before it starts.",
-    "remediation": "Top up your wallet via Settings → Billing, or ask your workspace admin to add credits.",
+    "remediation": "Top up your wallet via Settings \u2192 Billing, or ask your workspace admin to add credits.",
     "keywords": ["insufficient", "credits", "balance", "low"]
   },
   {
@@ -17,20 +17,20 @@
     "pattern": "provider",
     "title": "Provider error",
     "explanation": "The AI provider (Groq, BytePlus, or NVIDIA) returned an error or is temporarily unavailable.",
-    "remediation": "Wait a few moments and try again. If the error persists, use the support button to escalate to the dev team.",
+    "remediation": "Inspect the job status first. Retry only an explicitly failed or cancelled job; a delayed or manual-review job may already have been accepted.",
     "keywords": ["provider", "byteplus", "groq", "nvidia", "unavailable"]
   },
   {
     "pattern": "timed out",
     "title": "Generation timed out",
-    "explanation": "The generation took longer than expected and timed out. Your credits were automatically released or refunded.",
-    "remediation": "Check the generation log. If the job failed, you can safely retry.",
+    "explanation": "The request took longer than expected. A timeout alone does not establish provider failure or a refund.",
+    "remediation": "Inspect the authoritative job and wallet records. Do not resubmit while provider acceptance or billing is uncertain.",
     "keywords": ["timeout", "timed out", "too long"]
   },
   {
     "pattern": "MANUAL_REVIEW",
     "title": "Job under manual review",
-    "explanation": "This generation was flagged for manual review by the platform. It has not failed — our team will inspect it shortly.",
+    "explanation": "This generation was flagged for manual review by the platform. It has not failed \u2014 our team will inspect it shortly.",
     "remediation": "Please do not resubmit the request. Wait for the review to settle, or contact developer support.",
     "keywords": ["manual review", "MANUAL_REVIEW", "review", "flagged"]
   },
@@ -38,7 +38,7 @@
     "pattern": "upload",
     "title": "Upload failed",
     "explanation": "Your file could not be uploaded. This is usually caused by file size, format mismatch, or a temporary network glitch.",
-    "remediation": "Check that your file is within limits (5 MB for image portraits, 25 MB for audio) and is a supported MIME type (JPEG/PNG, MP3/WAV).",
+    "remediation": "Check the upload screen for current size limits and supported file types. The server verifies file content before accepting it.",
     "keywords": ["upload", "failed", "file"]
   }
 ]

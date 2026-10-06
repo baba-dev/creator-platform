@@ -2,9 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { runQuotedTextFeature } from "@/lib/text-feature-client";
+import {
+  runQuotedTextFeature,
+  type TextFeatureQuote,
+} from "@/lib/text-feature-client";
+import { searchKnowledgebase } from "@aiwa/assistant/knowledge";
+import { PixelControls } from "./pixel-controls";
+import { safePixelRoute } from "./pixel-navigation";
+import { getGenerationErrorPresentation } from "@/lib/generation-error-copy";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -246,7 +253,7 @@ function renderInline(text: string, onNavigate: (route: string) => void) {
       if (linkMatch) {
         const title = linkMatch[1];
         const href = linkMatch[2] ?? "";
-        const isInternal = href.startsWith("/");
+        const isInternal = href.startsWith("/") && !href.startsWith("//");
         parts.push(
           <button
             key={matchStart}
@@ -254,8 +261,6 @@ function renderInline(text: string, onNavigate: (route: string) => void) {
             onClick={() => {
               if (isInternal) {
                 onNavigate(href);
-              } else {
-                window.open(href, "_blank", "noopener,noreferrer");
               }
             }}
             className="inline font-semibold text-primary underline underline-offset-3 hover:text-primary/80 transition-colors cursor-pointer"
@@ -296,7 +301,14 @@ function renderInline(text: string, onNavigate: (route: string) => void) {
 // AssistantWidget Component
 // ---------------------------------------------------------------------------
 
-export function AssistantWidget({
+export function AssistantWidget(props: {
+  organizationId: string;
+  organizationSlug: string;
+}) {
+  return <PixelWidget key={props.organizationId} {...props} />;
+}
+
+function PixelWidget({
   organizationId,
   organizationSlug,
 }: {
@@ -304,6 +316,7 @@ export function AssistantWidget({
   organizationSlug: string;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [showInvite, setShowInvite] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -316,31 +329,59 @@ export function AssistantWidget({
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [pending, setPending] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [reasoningQuote, setReasoningQuote] = useState<TextFeatureQuote | null>(
+    null,
+  );
+  const approveRef = useRef<((approved: boolean) => void) | null>(null);
+  useEffect(() => () => approveRef.current?.(false), [organizationId]);
+  const closePixel = useCallback(() => {
+    setOpen(false);
+    approveRef.current?.(false);
+    triggerRef.current?.focus();
+  }, []);
+  useEffect(() => {
+    if (!open) return;
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closePixel();
+    };
+    window.addEventListener("keydown", keydown);
+    return () => window.removeEventListener("keydown", keydown);
+  }, [open, closePixel]);
 
   // 1. Initialise: get or create the assistant thread
   useEffect(() => {
+    if (!open || thread) return;
+    const controller = new AbortController();
     async function init() {
       try {
         const threadRes = await fetch(
           `/api/assistant/thread?organizationId=${encodeURIComponent(organizationId)}`,
-          { cache: "no-store" },
+          { cache: "no-store", signal: controller.signal },
         );
-        if (!threadRes.ok) return;
+        if (!threadRes.ok)
+          throw new Error(
+            "Pixel could not connect. You can still search offline help.",
+          );
         const threadData = (await threadRes.json()) as {
           thread: AssistantThread;
         };
-        setThread(threadData.thread);
 
         // Fetch message history
         const msgRes = await fetch(
-          `/api/chat/threads/${encodeURIComponent(threadData.thread.id)}`,
-          { cache: "no-store" },
+          `/api/assistant/message?threadId=${encodeURIComponent(threadData.thread.id)}`,
+          { cache: "no-store", signal: controller.signal },
         );
         if (msgRes.ok) {
           const msgData = (await msgRes.json()) as {
-            thread?: { messages?: AssistantMessage[] };
+            messages?: AssistantMessage[];
+            pending?: boolean;
           };
-          const loaded = msgData.thread?.messages ?? [];
+          const loaded = msgData.messages ?? [];
+          setPending(Boolean(msgData.pending));
           setMessages(
             loaded
               .filter((m) => m.role === "user" || m.role === "assistant")
@@ -367,12 +408,50 @@ export function AssistantWidget({
               }),
           );
         }
+        if (!controller.signal.aborted) setThread(threadData.thread);
       } catch {
-        // Non-fatal
+        if (!controller.signal.aborted)
+          setError("Pixel could not connect. Basic offline help is available.");
       }
     }
     void init();
-  }, [organizationId]);
+    return () => controller.abort();
+  }, [organizationId, open, thread]);
+
+  useEffect(() => {
+    if (!open || !thread || !pending || sending) return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void fetch(
+        `/api/assistant/message?threadId=${encodeURIComponent(thread.id)}`,
+        { cache: "no-store" },
+      )
+        .then(async (response) => {
+          if (!response.ok) throw new Error();
+          const data = (await response.json()) as {
+            messages: Array<
+              AssistantMessage & { metadata?: Record<string, unknown> }
+            >;
+            pending: boolean;
+          };
+          setMessages(
+            data.messages.map((message) => ({
+              ...message,
+              toolResults: message.metadata
+                ?.toolResults as AssistantMessage["toolResults"],
+            })),
+          );
+          setPending(data.pending);
+          setRefreshKey((value) => value + 1);
+        })
+        .catch(() =>
+          setError(
+            "Could not refresh the saved request. Check History before resubmitting.",
+          ),
+        );
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [open, thread, pending, sending]);
 
   // 2. Collapse the invitation pill after a short discovery window. The
   // mascot remains available, but the text no longer sits on top of workspace
@@ -445,7 +524,23 @@ export function AssistantWidget({
   const handleSend = useCallback(
     async (messageText?: string) => {
       const text = (messageText ?? input).trim();
-      if (!text || !thread || sending) return;
+      if (!text || sending) return;
+      if (!navigator.onLine || !thread) {
+        const knowledge = searchKnowledgebase(text, 2);
+        setMessages((prev) => [
+          ...prev,
+          { id: crypto.randomUUID(), role: "user", content: text },
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: knowledge.length
+              ? `Offline help — live account information is unavailable.\n\n${knowledge.map((chunk) => `**${chunk.title}**\n${chunk.content}`).join("\n\n")}`
+              : "Offline help could not answer this. Reconnect to look up account information or perform actions.",
+          },
+        ]);
+        setInput("");
+        return;
+      }
 
       setInput("");
       setError(null);
@@ -458,19 +553,65 @@ export function AssistantWidget({
       ]);
 
       try {
-        const result = await runQuotedTextFeature<{
-          content?: string;
-          error?: string;
-          toolResults?: AssistantMessage["toolResults"];
-          navigationRoute?: string;
-          reminderId?: string;
-          ticketRef?: string;
-          assistantMessageId?: string;
-          userMessageId?: string;
-        }>("/api/assistant/message", {
-          threadId: thread.id,
-          content: text,
+        const idempotencyKey = crypto.randomUUID();
+        const params = new URLSearchParams(window.location.search);
+        const page = pathname.split("/")[3] || "home";
+        const workspace = {
+          page,
+          selectedAssetIds: params.get("assetId")
+            ? [params.get("assetId")]
+            : [],
+          ...(page === "conversations"
+            ? { conversationId: pathname.split("/")[4] }
+            : {}),
+        };
+        const localResponse = await fetch("/api/assistant/message", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            threadId: thread.id,
+            content: text,
+            mode: "local",
+            idempotencyKey,
+            workspace,
+          }),
         });
+        const local = (await localResponse.json()) as {
+          local?: boolean;
+          error?: string;
+        };
+        if (!localResponse.ok)
+          throw new Error(local.error ?? "Pixel lookup failed.");
+        const result = local.local
+          ? local
+          : await runQuotedTextFeature<{
+              content?: string;
+              error?: string;
+              toolResults?: AssistantMessage["toolResults"];
+              navigationRoute?: string;
+              reminderId?: string;
+              ticketRef?: string;
+              assistantMessageId?: string;
+              userMessageId?: string;
+            }>(
+              "/api/assistant/message",
+              {
+                threadId: thread.id,
+                content: text,
+                workspace,
+              },
+              {
+                idempotencyKey,
+                approveQuote: async (quote) => {
+                  if (quote.maximumChargeCredits === "0") return true;
+                  setReasoningQuote(quote);
+                  return new Promise<boolean>((resolve) => {
+                    approveRef.current = resolve;
+                  });
+                },
+                statusUrl: `/api/assistant/message?threadId=${encodeURIComponent(thread.id)}&requestId=${encodeURIComponent(idempotencyKey)}`,
+              },
+            );
 
         const typedResult = result as {
           content?: string;
@@ -504,6 +645,7 @@ export function AssistantWidget({
             ticketRef: typedResult.ticketRef,
           },
         ]);
+        setRefreshKey((value) => value + 1);
 
         // Navigation tools render an explicit action card. Pixel never redirects
         // the workspace without a user click.
@@ -514,27 +656,31 @@ export function AssistantWidget({
             ? err.message
             : "Assistant request failed. Please try again.",
         );
+        setInput(text);
+        setPending(true);
       } finally {
         setSending(false);
+        setReasoningQuote(null);
+        approveRef.current = null;
       }
     },
-    [input, thread, sending],
+    [input, thread, sending, pathname],
   );
 
   const handleNavigate = useCallback(
     (route: string) => {
-      const safeRoute = route.startsWith("/app/")
-        ? route
-        : `/app/${encodeURIComponent(organizationSlug)}${
-            route.startsWith("/") ? route : `/${route}`
-          }`;
+      const safeRoute = safePixelRoute(route, organizationSlug);
+      if (!safeRoute) {
+        setError("Pixel cannot open that destination.");
+        return;
+      }
       router.push(safeRoute as Parameters<typeof router.push>[0]);
     },
     [organizationSlug, router],
   );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       void handleSend();
     }
@@ -596,11 +742,15 @@ export function AssistantWidget({
         <div
           role="dialog"
           aria-label="Pixel AI Assistant"
-          aria-modal="true"
+          aria-modal="false"
+          ref={panelRef}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") closePixel();
+          }}
           className={`fixed z-50 flex flex-col rounded-3xl border border-border bg-card shadow-2xl transition-all duration-300 ease-out backdrop-blur-xl ${
             isExpanded
-              ? "bottom-6 right-6 h-[820px] w-[760px] max-h-[calc(100vh-3rem)] max-w-[calc(100vw-3rem)]"
-              : "bottom-[88px] right-6 h-[620px] w-[420px] max-h-[calc(100vh-7rem)] max-w-[calc(100vw-2rem)]"
+              ? "bottom-3 right-3 h-[820px] w-[760px] max-h-[calc(100dvh-1.5rem)] max-w-[calc(100vw-1.5rem)]"
+              : "bottom-[88px] right-3 sm:right-6 h-[620px] w-[420px] max-h-[calc(100dvh-7rem)] max-w-[calc(100vw-1.5rem)]"
           }`}
         >
           {/* Header */}
@@ -651,7 +801,7 @@ export function AssistantWidget({
 
               {/* Close Button */}
               <button
-                onClick={() => setOpen(false)}
+                onClick={closePixel}
                 className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label="Close assistant"
                 title="Close"
@@ -663,9 +813,10 @@ export function AssistantWidget({
 
           {/* Conversation Area */}
           <div
-            className="flex-1 overflow-y-auto px-5 py-4 space-y-4"
+            className="min-h-0 flex-1 overflow-y-auto px-3 sm:px-5 py-4 space-y-4 break-words"
             role="log"
             aria-label="Conversation with Pixel"
+            aria-live="polite"
           >
             {messages.length === 0 && !sending && (
               <EmptyState onQuickAction={(msg) => void handleSend(msg)} />
@@ -686,6 +837,18 @@ export function AssistantWidget({
                 }}
               />
             ))}
+            {thread && (
+              <PixelControls
+                threadId={thread.id}
+                refreshKey={refreshKey}
+                onNavigate={handleNavigate}
+              />
+            )}
+            {pending && (
+              <p role="status" className="text-xs text-muted-foreground">
+                Checking your saved request. Closing Pixel does not cancel it.
+              </p>
+            )}
 
             {/* Thinking / Running State */}
             {sending && (
@@ -739,6 +902,26 @@ export function AssistantWidget({
 
           {/* Compose Footer */}
           <div className="border-t border-border/80 p-4 bg-card/90 rounded-b-3xl">
+            {reasoningQuote && (
+              <div className="mb-3 space-y-2 rounded-xl border border-border bg-background p-3 text-xs">
+                <p>
+                  Pixel reasoning with {reasoningQuote.displayName}: estimated{" "}
+                  {reasoningQuote.estimatedCredits} credits, maximum{" "}
+                  {reasoningQuote.maximumChargeCredits} credits.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={() => approveRef.current?.(true)}>
+                    Approve {reasoningQuote.maximumChargeCredits} credits
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => approveRef.current?.(false)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
             <div className="flex items-end gap-2.5 rounded-2xl border border-border bg-background px-3.5 py-2.5 shadow-2xs focus-within:border-primary/60 focus-within:ring-2 focus-within:ring-primary/20 transition-all">
               <textarea
                 ref={inputRef}
@@ -747,8 +930,9 @@ export function AssistantWidget({
                 onKeyDown={handleKeyDown}
                 placeholder="Ask Pixel anything (balance, errors, reminders, features)…"
                 rows={1}
-                disabled={sending || !thread}
-                className="min-h-[26px] flex-1 resize-none bg-transparent text-xs sm:text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
+                disabled={sending}
+                maxLength={4000}
+                className="min-h-[26px] min-w-0 flex-1 resize-none bg-transparent text-base sm:text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
                 style={{ maxHeight: 120 }}
                 aria-label="Message input"
               />
@@ -758,8 +942,8 @@ export function AssistantWidget({
                 onClick={() => {
                   void handleSend();
                 }}
-                disabled={!input.trim() || sending || !thread}
-                className="shrink-0 size-8 p-0 rounded-xl"
+                disabled={!input.trim() || sending}
+                className="shrink-0 size-11 p-0 rounded-xl"
                 aria-label="Send message"
               >
                 <SendIcon size={14} />
@@ -773,7 +957,7 @@ export function AssistantWidget({
                 </kbd>{" "}
                 to send
               </span>
-              <span className="font-mono text-[10px]">Aiwa Mascot v1.0</span>
+              <span className="text-[10px]">Local help + secure app tools</span>
             </div>
           </div>
         </div>
@@ -805,7 +989,8 @@ export function AssistantWidget({
         )}
 
         <button
-          onClick={open ? () => setOpen(false) : handleOpen}
+          ref={triggerRef}
+          onClick={open ? closePixel : handleOpen}
           className="relative flex size-15 items-center justify-center overflow-hidden rounded-full border-2 border-primary/40 bg-card shadow-xl transition-all duration-200 hover:shadow-2xl hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 cursor-pointer"
           aria-label={open ? "Close Pixel assistant" : "Open Pixel assistant"}
           aria-expanded={open}
@@ -927,7 +1112,7 @@ function MessageBubble({
       )}
 
       <div
-        className={`flex max-w-[85%] flex-col gap-2 ${
+        className={`flex min-w-0 max-w-[85%] flex-col gap-2 ${
           isUser ? "items-end" : "items-start"
         }`}
       >
@@ -1019,10 +1204,10 @@ function ToolCard({
         <div className="mt-2.5 pt-2 border-t border-border/60 flex justify-end">
           <button
             type="button"
-            onClick={() => onNavigate("/settings")}
+            onClick={() => onNavigate("/")}
             className="text-xs font-semibold text-primary hover:underline"
           >
-            Top up or view ledger →
+            Open workspace →
           </button>
         </div>
       </div>
@@ -1038,6 +1223,10 @@ function ToolCard({
       mediaKind: string;
       createdAt: string;
       errorMessage?: string;
+      reservedCredits?: string;
+      chargedCredits?: string;
+      errorCode?: string;
+      walletEntries?: Array<{ type: string; amount: string }>;
     }>;
 
     return (
@@ -1049,7 +1238,7 @@ function ToolCard({
           {jobs.slice(0, 4).map((j) => (
             <div
               key={j.id}
-              className="py-2 flex items-center justify-between gap-2"
+              className="py-2 flex flex-wrap items-center justify-between gap-2"
             >
               <div className="min-w-0 flex items-center gap-2">
                 <span
@@ -1062,20 +1251,52 @@ function ToolCard({
                   }`}
                   aria-label={j.status}
                 />
-                <span className="truncate text-xs font-medium text-foreground">
+                <button
+                  type="button"
+                  className="min-h-11 truncate text-left text-xs font-medium text-primary underline"
+                  onClick={() =>
+                    onNavigate(`/history/${encodeURIComponent(j.id)}`)
+                  }
+                >
                   {j.model}
-                </span>
+                </button>
               </div>
               <span className="font-mono text-[10px] text-muted-foreground uppercase shrink-0">
                 {j.status}
               </span>
+              <span className="text-[10px] text-muted-foreground">
+                Reserved {j.reservedCredits ?? "—"} · Charged{" "}
+                {j.chargedCredits ?? "—"}
+              </span>
+              {getGenerationErrorPresentation({
+                errorCode: j.errorCode,
+                status: j.status,
+              }) && (
+                <p className="w-full text-xs text-muted-foreground">
+                  {
+                    getGenerationErrorPresentation({
+                      errorCode: j.errorCode,
+                      status: j.status,
+                    })?.description
+                  }
+                </p>
+              )}
+              {(j.walletEntries ?? []).slice(0, 4).map((entry, index) => (
+                <p
+                  key={index}
+                  className="w-full text-[10px] text-muted-foreground"
+                >
+                  {entry.type.toLowerCase().replaceAll("_", " ")}:{" "}
+                  {entry.amount} credits
+                </p>
+              ))}
             </div>
           ))}
         </div>
         <div className="pt-1 flex justify-end">
           <button
             type="button"
-            onClick={() => onNavigate("/assets")}
+            onClick={() => onNavigate("/history")}
             className="text-xs font-semibold text-primary hover:underline"
           >
             View all generation logs →
@@ -1111,6 +1332,30 @@ function ToolCard({
               <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
                 {a.kind}
               </span>
+              {(a.kind === "IMAGE" || a.kind === "VIDEO") && (
+                <button
+                  type="button"
+                  className="min-h-11 text-xs text-primary underline"
+                  onClick={() =>
+                    onNavigate(
+                      `/${a.kind === "IMAGE" ? "image" : "video"}?assetId=${encodeURIComponent(a.id)}`,
+                    )
+                  }
+                >
+                  Open {a.kind === "IMAGE" ? "Image" : "Video"}
+                </button>
+              )}
+              {a.kind === "IMAGE" && (
+                <button
+                  type="button"
+                  className="min-h-11 text-xs text-primary underline"
+                  onClick={() =>
+                    onNavigate(`/video?assetId=${encodeURIComponent(a.id)}`)
+                  }
+                >
+                  Animate
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -1153,6 +1398,47 @@ function ToolCard({
       </div>
     );
   }
+
+  if (
+    ["app.getStorage", "app.getMembers", "app.getModels"].includes(
+      toolResult.tool,
+    )
+  ) {
+    const entries = (output.members ?? output.models ?? output.connections) as
+      Array<Record<string, unknown>> | undefined;
+    return (
+      <div className="w-full max-w-sm rounded-xl border border-border bg-card p-3 text-xs">
+        {entries?.map((entry, index) => (
+          <p key={index} className="break-words border-b border-border py-2">
+            {String(entry.name ?? entry.displayName ?? entry.provider)} ·{" "}
+            {String(entry.role ?? entry.mediaKind ?? entry.status)}
+          </p>
+        ))}
+        <button
+          type="button"
+          className="min-h-11 text-primary underline"
+          onClick={() =>
+            onNavigate(
+              toolResult.tool === "app.getMembers"
+                ? "/members"
+                : toolResult.tool === "app.getStorage"
+                  ? "/storage"
+                  : "/image",
+            )
+          }
+        >
+          Open page
+        </button>
+      </div>
+    );
+  }
+
+  if (toolResult.tool === "app.prepareWorkflow")
+    return (
+      <p className="text-xs text-muted-foreground">
+        Saved draft. Review its steps and quotes in Pixel tasks below.
+      </p>
+    );
 
   // 5. Reminder Confirmed Card
   if (toolResult.tool === "app.setReminder") {

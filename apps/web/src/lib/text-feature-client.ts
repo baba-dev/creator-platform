@@ -30,6 +30,7 @@ export async function runQuotedTextFeature<T>(
   payload: Record<string, unknown>,
   options?: {
     onQuote?: (quote: TextFeatureQuote) => void;
+    approveQuote?: (quote: TextFeatureQuote) => Promise<boolean>;
     maxPolls?: number;
     idempotencyKey?: string;
     /**
@@ -62,6 +63,8 @@ export async function runQuotedTextFeature<T>(
   if (!quote?.quoteToken || !quote.quotedModelId || !quote.priceVersionId)
     throw new TextFeatureRequestError("Generation quote is incomplete.", 502);
   options?.onQuote?.(quote);
+  if (options?.approveQuote && !(await options.approveQuote(quote)))
+    throw new TextFeatureRequestError("Generation approval cancelled.", 409);
 
   const generateBody = {
     ...payload,

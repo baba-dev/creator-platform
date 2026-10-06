@@ -1,9 +1,13 @@
+import { createHash } from "node:crypto";
 import { hasOrganizationPermission } from "@aiwa/authz";
 import { db } from "@aiwa/db";
 import {
   buildAssistantMessages,
   completeAssistantResponse,
   getAssistantSettings,
+  localPixelReply,
+  pixelWorkspaceSchema,
+  requirePixelAccess,
 } from "@aiwa/assistant";
 import {
   createTextJob,
@@ -13,6 +17,7 @@ import {
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getRequestSession } from "@/lib/request-auth";
+import { rateLimit } from "@/lib/rate-limit";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
 import {
   assertQuotedTextModel,
@@ -23,11 +28,13 @@ const schema = z.object({
   threadId: z.string().min(1).max(100),
   content: z.string().trim().min(1).max(4000),
   idempotencyKey: z.string().uuid(),
-  mode: z.enum(["quote", "generate"]).default("generate"),
+  mode: z.enum(["local", "quote", "generate"]).default("generate"),
+  workspace: pixelWorkspaceSchema.optional(),
   quoteToken: z.string().min(1).max(2048).optional(),
   quotedModelId: z.string().min(1).max(100).optional(),
   priceVersionId: z.string().min(1).max(100).optional(),
 });
+const limiter = rateLimit({ max: 60, windowMs: 60_000, prefix: "pixel-local" });
 
 export async function POST(request: Request) {
   if (!hasTrustedMutationOrigin(request))
@@ -41,12 +48,26 @@ export async function POST(request: Request) {
     );
 
   try {
-    const input = schema.parse(await request.json());
+    const bodyText = await request.text();
+    if (bodyText.length > 12000)
+      return NextResponse.json(
+        { error: "Request too large." },
+        { status: 413 },
+      );
+    const input = schema.parse(JSON.parse(bodyText));
     const thread = await db.chatThread.findUnique({
       where: { id: input.threadId },
       include: { organization: true },
     });
-    if (!thread || thread.createdById !== session.user.id)
+    if (
+      !thread ||
+      thread.createdById !== session.user.id ||
+      (thread.threadType !== "PIXEL" &&
+        !(await db.persona.findFirst({
+          where: { id: thread.personaId ?? "", tag: "aiwa-pixel-assistant" },
+          select: { id: true },
+        })))
+    )
       return NextResponse.json({ error: "Thread not found." }, { status: 404 });
 
     const membership = await db.membership.findUnique({
@@ -61,10 +82,18 @@ export async function POST(request: Request) {
     if (
       !membership ||
       membership.organization.status !== "ACTIVE" ||
-      !hasOrganizationPermission(membership.role, "generation:create")
+      !hasOrganizationPermission(membership.role, "workspace:view")
     )
       return NextResponse.json({ error: "Access denied." }, { status: 403 });
 
+    const requestFingerprint = createHash("sha256")
+      .update(
+        JSON.stringify({
+          content: input.content,
+          workspace: input.workspace ?? {},
+        }),
+      )
+      .digest("hex");
     const priorMessages = await db.chatMessage.findMany({
       where: {
         threadId: thread.id,
@@ -77,6 +106,17 @@ export async function POST(request: Request) {
     const priorAssistant = priorMessages.find(
       (message) => message.role === "assistant",
     );
+    const priorFingerprint = (
+      priorUser?.metadata as Record<string, unknown> | null
+    )?.requestFingerprint;
+    if (priorFingerprint && priorFingerprint !== requestFingerprint)
+      return NextResponse.json(
+        {
+          error:
+            "This request key was already used for a different workspace context.",
+        },
+        { status: 409 },
+      );
     if (priorUser && priorUser.content !== input.content)
       return NextResponse.json(
         { error: "This request key was already used for different content." },
@@ -124,12 +164,6 @@ export async function POST(request: Request) {
         { error: "The AI Assistant is currently disabled." },
         { status: 403 },
       );
-    if (!settings.providerModel)
-      return NextResponse.json(
-        { error: "Pixel has no available text model." },
-        { status: 409 },
-      );
-
     const runInput = {
       organizationId: thread.organizationId,
       organizationSlug: thread.organization.slug,
@@ -137,7 +171,39 @@ export async function POST(request: Request) {
       threadId: thread.id,
       userMessage: input.content,
       idempotencyKey: input.idempotencyKey,
+      workspace: input.workspace,
     };
+
+    if (input.mode === "local") {
+      const limited = await limiter.check(session.user.id);
+      if (limited) return limited;
+      const reply = await localPixelReply(input.content, {
+        ...runInput,
+        userMessage: input.content,
+      });
+      if (!reply) return NextResponse.json({ local: false });
+      const result = await completeAssistantResponse({
+        ...runInput,
+        rawContent: reply.content,
+        localToolResults: reply.toolResults,
+        modelRecordId: "pixel-local",
+        chargedCredits: 0,
+      });
+      return NextResponse.json({ ...result, local: true }, { status: 201 });
+    }
+    if (!hasOrganizationPermission(membership.role, "generation:create"))
+      return NextResponse.json(
+        { error: "AI generation access denied." },
+        { status: 403 },
+      );
+    if (!settings.providerModel)
+      return NextResponse.json(
+        {
+          error:
+            "AI reasoning is unavailable. Local help and workspace lookups are still available.",
+        },
+        { status: 409 },
+      );
 
     const messages = await buildAssistantMessages(runInput, settings);
     const maxTokens = 1024;
@@ -190,6 +256,28 @@ export async function POST(request: Request) {
         );
     }
 
+    const persistedUser = await db.chatMessage.upsert({
+      where: {
+        threadId_clientRequestId_role: {
+          threadId: thread.id,
+          clientRequestId: input.idempotencyKey,
+          role: "user",
+        },
+      },
+      update: {},
+      create: {
+        threadId: thread.id,
+        clientRequestId: input.idempotencyKey,
+        role: "user",
+        content: input.content,
+        metadata: { workspace: input.workspace ?? {}, requestFingerprint },
+      },
+    });
+    if (persistedUser && persistedUser.content !== input.content)
+      return NextResponse.json(
+        { error: "This request key was already used for different content." },
+        { status: 409 },
+      );
     const job = await createTextJob(
       session.user.id,
       {
@@ -236,6 +324,158 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "Assistant request failed. Please try again." },
       { status: 502 },
+    );
+  }
+}
+
+/** Reconcile existing jobs only. Reopening Pixel never submits provider work. */
+export async function GET(request: Request) {
+  const session = await getRequestSession(request.headers);
+  if (!session)
+    return NextResponse.json(
+      { error: "Authentication required." },
+      { status: 401 },
+    );
+  try {
+    const threadId = z
+      .string()
+      .min(1)
+      .max(100)
+      .parse(new URL(request.url).searchParams.get("threadId"));
+    const thread = await db.chatThread.findFirst({
+      where: { id: threadId, createdById: session.user.id },
+      include: { organization: true },
+    });
+    if (!thread)
+      return NextResponse.json({ error: "Thread not found." }, { status: 404 });
+    const ctx = {
+      userId: session.user.id,
+      organizationId: thread.organizationId,
+      organizationSlug: thread.organization.slug,
+      threadId,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    await requirePixelAccess(ctx);
+    if (!(await getAssistantSettings()).enabled)
+      return NextResponse.json(
+        { error: "Pixel is disabled." },
+        { status: 403 },
+      );
+    const requestId = new URL(request.url).searchParams.get("requestId");
+    if (requestId) z.string().uuid().parse(requestId);
+    const messages = await db.chatMessage.findMany({
+      where: { threadId, ...(requestId ? { clientRequestId: requestId } : {}) },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: 50,
+    });
+    let pending = false;
+    for (const message of messages
+      .filter(
+        (m) =>
+          m.role === "user" &&
+          m.clientRequestId &&
+          !messages.some(
+            (reply) =>
+              reply.role === "assistant" &&
+              reply.clientRequestId === m.clientRequestId,
+          ),
+      )
+      .slice(0, 5)) {
+      const key = createHash("sha256")
+        .update(
+          `${thread.organizationId}:${session.user.id}:${message.clientRequestId}`,
+        )
+        .digest("hex");
+      const job = await db.generationJob.findFirst({
+        where: {
+          idempotencyKey: key,
+          organizationId: thread.organizationId,
+          createdById: session.user.id,
+        },
+      });
+      if (!job) continue;
+      const generated = textResultFromJob(job);
+      if (generated) {
+        const metadata = message.metadata as Record<string, unknown> | null;
+        await completeAssistantResponse({
+          ...ctx,
+          idempotencyKey: message.clientRequestId!,
+          userMessage: message.content,
+          workspace: pixelWorkspaceSchema.safeParse(metadata?.workspace).data,
+          rawContent: generated.content,
+          modelRecordId: job.providerModelId,
+          chargedCredits: generated.chargedCredits,
+          jobId: job.id,
+          providerRequestId: generated.providerRequestId,
+          usage: generated.usage,
+        });
+      } else if (!["FAILED", "CANCELLED", "MANUAL_REVIEW"].includes(job.status))
+        pending = true;
+    }
+    const latest = await db.chatMessage.findMany({
+      where: { threadId, ...(requestId ? { clientRequestId: requestId } : {}) },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: 50,
+    });
+    if (requestId) {
+      z.string().uuid().parse(requestId);
+      const reply = latest.find(
+        (m) => m.role === "assistant" && m.clientRequestId === requestId,
+      );
+      if (reply)
+        return NextResponse.json(
+          {
+            content: reply.content,
+            assistantMessageId: reply.id,
+            userMessageId: latest.find(
+              (m) => m.role === "user" && m.clientRequestId === requestId,
+            )?.id,
+            ...((reply.metadata as Record<string, unknown> | null) ?? {}),
+          },
+          { headers: { "Cache-Control": "no-store" } },
+        );
+      const key = createHash("sha256")
+        .update(`${thread.organizationId}:${session.user.id}:${requestId}`)
+        .digest("hex");
+      const job = await db.generationJob.findFirst({
+        where: {
+          idempotencyKey: key,
+          organizationId: thread.organizationId,
+          createdById: session.user.id,
+        },
+        select: { id: true, status: true },
+      });
+      if (!job)
+        return NextResponse.json(
+          { error: "Pixel request not found." },
+          { status: 404 },
+        );
+      if (["FAILED", "CANCELLED", "MANUAL_REVIEW"].includes(job.status))
+        return NextResponse.json(
+          {
+            error: `Pixel request is ${job.status.toLowerCase().replaceAll("_", " ")}. Inspect History before retrying.`,
+            jobId: job.id,
+          },
+          { status: 409 },
+        );
+      return NextResponse.json(
+        { pending: true, jobId: job.id },
+        { status: 202, headers: { "Cache-Control": "no-store" } },
+      );
+    }
+    return NextResponse.json(
+      { messages: latest.reverse(), pending },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error:
+          error instanceof GenerationError
+            ? error.message
+            : "Could not refresh Pixel history.",
+      },
+      { status: error instanceof GenerationError ? error.status : 500 },
     );
   }
 }

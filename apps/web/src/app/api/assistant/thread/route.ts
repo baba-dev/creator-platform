@@ -30,7 +30,7 @@ export async function GET(request: Request) {
   if (
     !membership ||
     membership.organization.status !== "ACTIVE" ||
-    !hasOrganizationPermission(membership.role, "generation:create")
+    !hasOrganizationPermission(membership.role, "workspace:view")
   )
     return NextResponse.json(
       { error: "Workspace access denied." },

@@ -391,8 +391,59 @@ export async function GET(
     if (jobId) {
       const job = await db.generationJob.findUnique({
         where: { id: jobId },
-        select: { status: true, errorCode: true, errorMessage: true },
+        select: {
+          status: true,
+          errorCode: true,
+          errorMessage: true,
+          outputPayload: true,
+          chargedCredits: true,
+          completedAt: true,
+        },
       });
+      if (job?.status === "SUCCEEDED") {
+        const output =
+          job.outputPayload &&
+          typeof job.outputPayload === "object" &&
+          !Array.isArray(job.outputPayload)
+            ? (job.outputPayload as Record<string, unknown>)
+            : {};
+        const content =
+          typeof output.content === "string" ? output.content : null;
+        if (content) {
+          const rawUsage =
+            output.usage &&
+            typeof output.usage === "object" &&
+            !Array.isArray(output.usage)
+              ? (output.usage as Record<string, unknown>)
+              : {};
+          const totalTokens =
+            typeof rawUsage.totalTokens === "number"
+              ? rawUsage.totalTokens
+              : null;
+          return NextResponse.json({
+            status: "SUCCEEDED",
+            complete: true,
+            projectionPending: true,
+            userMessage,
+            message: {
+              id: `generation-${jobId}-assistant`,
+              threadId,
+              clientRequestId,
+              role: "assistant",
+              content,
+              tokensUsed: totalTokens,
+              metadata: {
+                generationJobId: jobId,
+                chargedCredits: Number(job.chargedCredits),
+                ...(output.usage ? { usage: output.usage } : {}),
+                projectionPending: true,
+              },
+              createdAt: (job.completedAt ?? new Date()).toISOString(),
+            },
+          });
+        }
+      }
+
       if (
         job?.status === "FAILED" ||
         job?.status === "CANCELLED" ||

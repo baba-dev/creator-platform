@@ -13,28 +13,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  quality:
-    name: quality
+  static:
+    name: static
     runs-on: ubuntu-22.04
-    timeout-minutes: 90
-    services:
-      mariadb:
-        image: mariadb:10.6
-        env:
-          MARIADB_ROOT_PASSWORD: ci-root-only
-          MARIADB_DATABASE: creator_platform
-          MARIADB_USER: creator
-          MARIADB_PASSWORD: ci-only
-        ports: ["127.0.0.1:3306:3306"]
-        options: >-
-          --health-cmd="healthcheck.sh --connect --innodb_initialized"
-          --health-interval=5s --health-timeout=5s --health-retries=20
-      redis:
-        image: redis:7
-        ports: ["127.0.0.1:6379:6379"]
-        options: >-
-          --health-cmd="redis-cli ping" --health-interval=5s --health-timeout=5s
-          --health-retries=20
+    timeout-minutes: 30
     env:
       AUTH_SECRET: ci-only-auth-secret-at-least-32-characters-long
       DATABASE_URL: mysql://creator:ci-only@127.0.0.1:3306/creator_platform
@@ -95,6 +77,63 @@ jobs:
       - name: Type-check
         run: pnpm exec turbo run typecheck --concurrency=2
 
+  test:
+    name: test
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    services:
+      mariadb:
+        image: mariadb:10.6
+        env:
+          MARIADB_ROOT_PASSWORD: ci-root-only
+          MARIADB_DATABASE: creator_platform
+          MARIADB_USER: creator
+          MARIADB_PASSWORD: ci-only
+        ports: ["127.0.0.1:3306:3306"]
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+      redis:
+        image: redis:7
+        ports: ["127.0.0.1:6379:6379"]
+        options: >-
+          --health-cmd="redis-cli ping" --health-interval=5s --health-timeout=5s
+          --health-retries=20
+    env:
+      AUTH_SECRET: ci-only-auth-secret-at-least-32-characters-long
+      DATABASE_URL: mysql://creator:ci-only@127.0.0.1:3306/creator_platform
+      APP_ENV: staging
+      APP_URL: http://localhost:3000
+      APP_VERSION: ${{ github.sha }}
+      SIGNUPS_ENABLED: "true"
+      GENERATION_INTEGRATION_TEST: "true"
+      PRISMA_CLI_BINARY_TARGETS: debian-openssl-1.1.x,debian-openssl-3.0.x
+      NODE_OPTIONS: --max-old-space-size=4096
+      UV_THREADPOOL_SIZE: "2"
+      VITEST_MAX_WORKERS: "1"
+      RAYON_NUM_THREADS: "2"
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.19.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
       - name: Install integration-test media tools
         run: |
           sudo apt-get update
@@ -116,6 +155,66 @@ jobs:
         env:
           VITEST_MAX_WORKERS: "1"
         run: pnpm exec turbo run test --concurrency=1
+
+  build_release:
+    name: build-release
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    services:
+      mariadb:
+        image: mariadb:10.6
+        env:
+          MARIADB_ROOT_PASSWORD: ci-root-only
+          MARIADB_DATABASE: creator_platform
+          MARIADB_USER: creator
+          MARIADB_PASSWORD: ci-only
+        ports: ["127.0.0.1:3306:3306"]
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+      redis:
+        image: redis:7
+        ports: ["127.0.0.1:6379:6379"]
+        options: >-
+          --health-cmd="redis-cli ping" --health-interval=5s --health-timeout=5s
+          --health-retries=20
+    env:
+      AUTH_SECRET: ci-only-auth-secret-at-least-32-characters-long
+      DATABASE_URL: mysql://creator:ci-only@127.0.0.1:3306/creator_platform
+      APP_ENV: staging
+      APP_URL: http://localhost:3000
+      APP_VERSION: ${{ github.sha }}
+      SIGNUPS_ENABLED: "true"
+      GENERATION_INTEGRATION_TEST: "false"
+      PRISMA_CLI_BINARY_TARGETS: debian-openssl-1.1.x,debian-openssl-3.0.x
+      NODE_OPTIONS: --max-old-space-size=4096
+      UV_THREADPOOL_SIZE: "2"
+      VITEST_MAX_WORKERS: "1"
+      RAYON_NUM_THREADS: "2"
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.19.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Apply database migrations for build validation
+        run: pnpm --filter @aiwa/db migrate:deploy
 
       - name: Build
         run: pnpm exec turbo run build --concurrency=2
@@ -169,3 +268,20 @@ jobs:
           compression-level: 0
           retention-days: 3
           if-no-files-found: error
+
+  quality:
+    name: quality
+    if: always()
+    needs: [static, test, build_release]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every CI lane to pass
+        env:
+          STATIC_RESULT: ${{ needs.static.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+          BUILD_RESULT: ${{ needs.build_release.result }}
+        run: |
+          test "$STATIC_RESULT" = "success"
+          test "$TEST_RESULT" = "success"
+          test "$BUILD_RESULT" = "success"

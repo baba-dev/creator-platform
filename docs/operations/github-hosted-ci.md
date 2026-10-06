@@ -7,12 +7,22 @@ paid, and normal job, concurrency and storage limits still apply.
 
 ## Quality validation
 
-One `quality` job installs dependencies and generates Prisma once, then runs
-formatting, lint, type checking, migrated-database integration tests, the
-application build and worker smoke validation. MariaDB and Redis containers are
-ephemeral and bind their host ports to loopback. FFmpeg, fontconfig and Noto
-fonts are installed explicitly instead of relying on a manually provisioned
-host.
+Three independent jobs start in parallel on separate hosted machines:
+
+- `static`: formatting, deployment shell syntax, lint and type checking.
+- `test`: migrated-database/Redis integration tests with media tools installed.
+- `build-release`: production build, worker smoke checks and main-push release
+  packaging/upload.
+
+The lightweight `quality` job runs after all three lanes, even if a lane fails
+or is cancelled, and requires every lane to succeed. Deployment still requires
+the entire CI workflow to succeed; an artifact uploaded by the build lane cannot
+bypass failed static checks or tests.
+
+Each machine installs dependencies using the pnpm cache and generates Prisma.
+The test and build machines each have isolated MariaDB/Redis service containers
+bound to loopback, so their databases and ports do not compete. FFmpeg,
+fontconfig and Noto fonts are installed explicitly in the test lane.
 
 Node processes have a 4096 MiB heap ceiling. Turbo lint, type checking and build
 tasks run with concurrency two; tests retain one package and Vitest worker for
@@ -51,6 +61,6 @@ would restore the plan's private-repository minute allowance.
 
 ## Required check
 
-The required check is `quality`. If branch protection elsewhere requires the old
-`static`, `test` or `build-release` names, update it to `quality`; those checks
-are now steps within the single job.
+The required aggregate check remains `quality`. The `static`, `test` and
+`build-release` checks are also available individually. No deployment or
+required aggregate-check name changes are needed for the parallel layout.

@@ -1,8 +1,4 @@
-export type LandingStudioModeId =
-  | "image"
-  | "video"
-  | "voice"
-  | "spokesperson";
+export type LandingStudioModeId = "image" | "video" | "voice" | "spokesperson";
 
 export type LandingModel = {
   id: string;
@@ -192,11 +188,7 @@ export const landingStudioModes: readonly LandingStudioMode[] = [
   },
 ] as const;
 
-export type LandingFeatureGroupId =
-  | "create"
-  | "think"
-  | "organize"
-  | "control";
+export type LandingFeatureGroupId = "create" | "think" | "organize" | "control";
 
 export type LandingFeature = {
   title: string;

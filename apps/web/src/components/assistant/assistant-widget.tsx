@@ -119,6 +119,27 @@ function SendIcon({ size = 14 }: { size?: number }) {
   );
 }
 
+function ClearChatIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg
+      aria-hidden="true"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 6h18" />
+      <path d="M8 6V4h8v2" />
+      <path d="m19 6-1 14H6L5 6" />
+      <path d="M10 11v5M14 11v5" />
+    </svg>
+  );
+}
+
 function MaximizeIcon({ size = 14 }: { size?: number }) {
   return (
     <svg
@@ -320,6 +341,8 @@ function PixelWidget({
   const [open, setOpen] = useState(false);
   const [showInvite, setShowInvite] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const [thread, setThread] = useState<AssistantThread | null>(null);
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [input, setInput] = useState("");
@@ -340,6 +363,8 @@ function PixelWidget({
   useEffect(() => () => approveRef.current?.(false), [organizationId]);
   const closePixel = useCallback(() => {
     setOpen(false);
+    setIsExpanded(false);
+    setConfirmClear(false);
     approveRef.current?.(false);
     triggerRef.current?.focus();
   }, []);
@@ -351,6 +376,15 @@ function PixelWidget({
     window.addEventListener("keydown", keydown);
     return () => window.removeEventListener("keydown", keydown);
   }, [open, closePixel]);
+
+  useEffect(() => {
+    if (!open || !isExpanded) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open, isExpanded]);
 
   // 1. Initialise: get or create the assistant thread
   useEffect(() => {
@@ -679,6 +713,51 @@ function PixelWidget({
     [organizationSlug, router],
   );
 
+  const handleClearChat = useCallback(async () => {
+    if (!thread || sending || pending || clearing) return;
+
+    setClearing(true);
+    setError(null);
+    try {
+      const response = await fetch(
+        `/api/assistant/message?threadId=${encodeURIComponent(thread.id)}`,
+        { method: "DELETE" },
+      );
+      const data = (await response.json()) as {
+        cleared?: boolean;
+        error?: string;
+      };
+      if (!response.ok || !data.cleared)
+        throw new Error(data.error ?? "Could not clear Pixel chat.");
+
+      setMessages([]);
+      setInput("");
+      setPending(false);
+      setConfirmClear(false);
+      setRefreshKey((value) => value + 1);
+      window.setTimeout(() => inputRef.current?.focus(), 0);
+    } catch (clearError) {
+      setConfirmClear(false);
+      setError(
+        clearError instanceof Error
+          ? clearError.message
+          : "Could not clear Pixel chat.",
+      );
+    } finally {
+      setClearing(false);
+    }
+  }, [thread, sending, pending, clearing]);
+
+  const openPixelPreferences = useCallback(() => {
+    const details = panelRef.current?.querySelector<HTMLDetailsElement>(
+      "[data-pixel-preferences]",
+    );
+    if (!details) return;
+    details.open = true;
+    details.scrollIntoView({ block: "center" });
+    details.querySelector<HTMLElement>("summary")?.focus({ preventScroll: true });
+  }, []);
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
@@ -737,19 +816,27 @@ function PixelWidget({
         </div>
       )}
 
-      {/* Main Chat Panel (Drawer / Popup) */}
+      {/* Main Chat Panel (Drawer / Modal Popup) */}
       {open && (
-        <div
+        <>
+          {isExpanded && (
+            <div
+              className="fixed inset-0 z-40 bg-background/70 backdrop-blur-sm"
+              aria-hidden="true"
+              onClick={() => setIsExpanded(false)}
+            />
+          )}
+          <div
           role="dialog"
           aria-label="Pixel AI Assistant"
-          aria-modal="false"
+          aria-modal={isExpanded}
           ref={panelRef}
           onKeyDown={(event) => {
             if (event.key === "Escape") closePixel();
           }}
           className={`fixed z-50 flex flex-col rounded-3xl border border-border bg-card shadow-2xl transition-all duration-300 ease-out backdrop-blur-xl ${
             isExpanded
-              ? "bottom-3 right-3 h-[820px] w-[760px] max-h-[calc(100dvh-1.5rem)] max-w-[calc(100vw-1.5rem)]"
+              ? "left-1/2 top-1/2 h-[min(820px,calc(100dvh-2rem))] w-[min(760px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2"
               : "bottom-[88px] right-3 sm:right-6 h-[620px] w-[420px] max-h-[calc(100dvh-7rem)] max-w-[calc(100vw-1.5rem)]"
           }`}
         >
@@ -781,7 +868,29 @@ function PixelWidget({
             </div>
 
             <div className="flex items-center gap-1.5">
-              {/* Expand / Minimize Size Toggle */}
+              <button
+                type="button"
+                onClick={() => setConfirmClear(true)}
+                disabled={
+                  messages.length === 0 || sending || pending || clearing
+                }
+                className="inline-flex size-10 items-center justify-center gap-2 rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-40"
+                aria-label="Clear chat"
+                title={
+                  pending
+                    ? "Clear chat is unavailable while a saved request is pending"
+                    : "Clear chat"
+                }
+              >
+                <ClearChatIcon size={15} />
+                {isExpanded && (
+                  <span className="hidden text-xs font-semibold sm:inline">
+                    Clear chat
+                  </span>
+                )}
+              </button>
+
+              {/* Open / close modal popup */}
               <button
                 onClick={() => setIsExpanded(!isExpanded)}
                 className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -790,7 +899,7 @@ function PixelWidget({
                     ? "Collapse to compact panel"
                     : "Expand to larger popup"
                 }
-                title={isExpanded ? "Collapse" : "Expand"}
+                title={isExpanded ? "Return to compact view" : "Open popup"}
               >
                 {isExpanded ? (
                   <MinimizeIcon size={15} />
@@ -810,6 +919,39 @@ function PixelWidget({
               </button>
             </div>
           </div>
+
+          {confirmClear && (
+            <div
+              className="border-b border-border bg-muted/50 px-4 py-3 sm:px-5"
+              role="status"
+            >
+              <p className="text-sm font-semibold text-foreground">
+                Clear this Pixel chat?
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Saved chat messages will be removed. Jobs, workflows, reminders,
+                and Pixel preferences stay available.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={clearing}
+                  onClick={() => setConfirmClear(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={clearing}
+                  onClick={() => void handleClearChat()}
+                >
+                  {clearing ? "Clearing…" : "Clear chat"}
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Conversation Area */}
           <div
@@ -928,7 +1070,6 @@ function PixelWidget({
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask Pixel anything (balance, errors, reminders, features)…"
                 rows={1}
                 disabled={sending}
                 maxLength={4000}
@@ -957,10 +1098,18 @@ function PixelWidget({
                 </kbd>{" "}
                 to send
               </span>
-              <span className="text-[10px]">Local help + secure app tools</span>
+              <button
+                type="button"
+                onClick={openPixelPreferences}
+                disabled={!thread}
+                className="inline-flex min-h-10 items-center rounded-lg px-1 text-[10px] font-semibold text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Pixel preferences &amp; memory
+              </button>
             </div>
           </div>
         </div>
+        </>
       )}
 
       {/* Floating Mascot Trigger Button */}

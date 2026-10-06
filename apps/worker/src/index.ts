@@ -124,7 +124,9 @@ async function ensureTextChatAutoVoice(jobId: string): Promise<void> {
       ? (job.outputPayload as Record<string, unknown>)
       : {};
   const content =
-    typeof outputPayload.content === "string" ? outputPayload.content.trim() : "";
+    typeof outputPayload.content === "string"
+      ? outputPayload.content.trim()
+      : "";
   if (!content) return;
 
   const clientRequestId =
@@ -682,9 +684,7 @@ function needsAssetMetadata(asset: {
   }
   if (asset.mediaKind === "VIDEO") {
     return (
-      asset.width === null ||
-      asset.height === null ||
-      asset.durationMs === null
+      asset.width === null || asset.height === null || asset.durationMs === null
     );
   }
   return asset.mediaKind === "AUDIO" && asset.durationMs === null;

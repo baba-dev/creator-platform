@@ -363,7 +363,9 @@ export async function DELETE(request: Request) {
 
     // Never remove the user message that anchors recovery for a durable text
     // job. The client also disables Clear chat while pending, but the server
-    // re-checks so stale tabs cannot orphan an accepted request.
+    // re-checks so stale tabs cannot orphan an accepted request. A cutoff keeps
+    // messages created by a concurrent send in another tab out of this clear.
+    const clearCutoff = new Date();
     const latest = await db.chatMessage.findMany({
       where: { threadId },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -396,11 +398,13 @@ export async function DELETE(request: Request) {
         },
         select: { status: true },
       });
+      const recentlyCreatedWithoutJob =
+        !job &&
+        message.createdAt.getTime() > clearCutoff.getTime() - 60_000;
       if (
-        job &&
-        !["FAILED", "CANCELLED", "MANUAL_REVIEW", "SUCCEEDED"].includes(
-          job.status,
-        )
+        recentlyCreatedWithoutJob ||
+        (job &&
+          !["FAILED", "CANCELLED", "MANUAL_REVIEW"].includes(job.status))
       )
         return NextResponse.json(
           {
@@ -412,7 +416,11 @@ export async function DELETE(request: Request) {
     }
 
     const cleared = await db.chatMessage.deleteMany({
-      where: { threadId, role: { in: ["user", "assistant"] } },
+      where: {
+        threadId,
+        role: { in: ["user", "assistant"] },
+        createdAt: { lte: clearCutoff },
+      },
     });
     return NextResponse.json(
       { cleared: true, deletedCount: cleared.count },
@@ -420,10 +428,7 @@ export async function DELETE(request: Request) {
     );
   } catch (error) {
     if (error instanceof z.ZodError)
-      return NextResponse.json(
-        { error: "Invalid thread." },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "Invalid thread." }, { status: 400 });
     return NextResponse.json(
       {
         error:

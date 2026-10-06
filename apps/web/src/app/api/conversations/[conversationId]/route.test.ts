@@ -4,6 +4,9 @@ const mocks = vi.hoisted(() => ({
   trusted: vi.fn(),
   session: vi.fn(),
   db: {
+    providerModel: {
+      findMany: vi.fn(),
+    },
     membership: {
       findUnique: vi.fn(),
     },
@@ -47,6 +50,7 @@ const fakeMembership = {
 describe("GET /api/conversations/[conversationId]", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.db.providerModel.findMany.mockResolvedValue([]);
     mocks.trusted.mockReturnValue(true);
     mocks.session.mockResolvedValue({ user: fakeUser });
     mocks.db.membership.findUnique.mockResolvedValue(fakeMembership);
@@ -152,6 +156,7 @@ describe("GET /api/conversations/[conversationId]", () => {
     expect(body.conversation).toBeDefined();
     expect(body.conversation.id).toBe("conv_123");
     expect(body.conversation.generationJobs).toHaveLength(2);
+    expect(mocks.db.providerModel.findMany).toHaveBeenCalledTimes(1);
 
     const succeededJob = body.conversation.generationJobs[0];
     expect(succeededJob.id).toBe("job_succeeded");

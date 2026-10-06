@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 permissions:
-  actions: write
+  actions: read
   contents: read
 
 concurrency:
@@ -18,32 +18,26 @@ jobs:
   deploy:
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push'
-    runs-on: [self-hosted, Linux, X64, creators-ci]
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-22.04
     timeout-minutes: 45
     environment:
       name: staging
       url: https://creator.aiwamediagroup.com
     env:
       RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
-      AUTH_SECRET: staging-build-only-auth-secret-at-least-32-characters-long
-      DATABASE_URL: mysql://creator:staging-build-only@127.0.0.1:3306/creator_platform
-      APP_ENV: staging
-      APP_URL: https://creator.aiwamediagroup.com
-      APP_VERSION: ${{ github.event.workflow_run.head_sha }}
-      SIGNUPS_ENABLED: "true"
-      GENERATION_INTEGRATION_TEST: "false"
-      PRISMA_CLI_BINARY_TARGETS: debian-openssl-1.1.x,debian-openssl-3.0.x
     steps:
       - name: Check out successful CI revision
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Download CI release artifact
         id: ci_artifact
-        continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           name: creator-platform-${{ env.RELEASE_SHA }}
@@ -51,38 +45,10 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: Verify promoted CI artifact digest
-        if: steps.ci_artifact.outcome == 'success'
         run: |
           set -Eeuo pipefail
           test -f "creator-platform-${RELEASE_SHA}.tar.gz"
           test -f "creator-platform-${RELEASE_SHA}.tar.gz.sha256"
-          sha256sum --check --strict "creator-platform-${RELEASE_SHA}.tar.gz.sha256"
-
-      - name: Install pnpm for deterministic fallback build
-        if: steps.ci_artifact.outcome != 'success'
-        uses: pnpm/action-setup@v6
-        with:
-          version: 11.19.0
-
-      - name: Set up Node.js for deterministic fallback build
-        if: steps.ci_artifact.outcome != 'success'
-        uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Rebuild exact successful CI revision when artifact storage is unavailable
-        if: steps.ci_artifact.outcome != 'success'
-        run: |
-          set -Eeuo pipefail
-          echo "::warning::CI release artifact was unavailable; rebuilding the exact successful CI SHA for staging."
-          test -n "$RELEASE_SHA"
-          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
-          pnpm install --frozen-lockfile --prefer-offline
-          pnpm db:generate
-          pnpm build
-          bash infra/deploy/package-release.sh "$RELEASE_SHA"
-          sha256sum "creator-platform-${RELEASE_SHA}.tar.gz" > "creator-platform-${RELEASE_SHA}.tar.gz.sha256"
           sha256sum --check --strict "creator-platform-${RELEASE_SHA}.tar.gz.sha256"
 
       - name: Validate release artifact structure
@@ -99,6 +65,7 @@ jobs:
             tar -xzf "$archive" -C "$validation_dir"
           fi
           test "$(cat "$validation_dir/RELEASE_LAYOUT")" = "3"
+          test "$(cat "$validation_dir/RELEASE_SHA")" = "$RELEASE_SHA"
           (
             cd "$validation_dir"
             sha256sum --check --strict ops/control-plane.sha256
@@ -265,7 +232,7 @@ jobs:
 
       - name: Retain deployment artifact for rollback provenance
         run: |
-          echo "Release artifact creator-platform-${RELEASE_SHA}.tar.gz retained in CI run for audit and instant rollback."
+          echo "Release artifact creator-platform-${RELEASE_SHA}.tar.gz retained in the successful CI run and on the deployment server for rollback."
 
       - name: Clean up staging SSH material
         if: always()

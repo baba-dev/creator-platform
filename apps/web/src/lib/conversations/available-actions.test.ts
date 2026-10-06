@@ -148,7 +148,7 @@ describe("creative available actions", () => {
         },
         [videoModel],
       ),
-    ).toEqual(["extend", "switch_model"]);
+    ).toEqual(["switch_model", "extend"]);
   });
 
   it("requires an explicit speech-rate capability for voice actions", () => {

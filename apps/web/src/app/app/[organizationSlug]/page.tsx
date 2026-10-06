@@ -381,8 +381,8 @@ export default async function OrganizationWorkspacePage({
               </div>
             ) : (
               <p className="mt-5 rounded-xl border border-border bg-surface-sunken p-5 text-sm text-muted-foreground">
-                Your first media generation will appear here. Start with Quick create
-                above.
+                Your first media generation will appear here. Start with Quick
+                create above.
               </p>
             )}
           </div>

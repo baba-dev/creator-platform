@@ -940,8 +940,8 @@ function PixelWidget({
                   Clear this Pixel chat?
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Saved chat messages will be removed. Jobs, workflows, reminders,
-                  and Pixel preferences stay available.
+                  Saved chat messages will be removed. Jobs, workflows,
+                  reminders, and Pixel preferences stay available.
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button

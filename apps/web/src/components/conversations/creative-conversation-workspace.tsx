@@ -420,6 +420,7 @@ export function CreativeConversationWorkspace({
       if (!res.ok) {
         const needsRefresh =
           data.code === "CONVERSATION_CONFLICT" ||
+          data.code === "CONVERSATION_BUSY" ||
           data.code === "CONVERSATION_REFRESH_REQUIRED";
         if (
           res.status >= 400 &&

@@ -11,6 +11,30 @@ The staging environment runs directly on Ubuntu without Docker:
   keys, SHA-256 validation, and an atomic `.part` rename before invoking the
   root-owned deployment command.
 
+## Automatic deployment and retry
+
+The three hosted CI lanes run in parallel. A successful `main` push creates the
+release artifact and starts **Deploy staging** automatically. The hosted CI
+concurrency group is separate from legacy self-hosted runs, so an unavailable
+old runner cannot hold new builds in its queue.
+
+Deployment downloads that exact CI artifact; it never installs dependencies or
+rebuilds the application. It verifies the archive digest and
+release/control-plane metadata, uploads it, checks the remote digest before
+renaming the partial upload, and invokes the existing server deployer. Uploads
+have a five-minute limit; the deploy job has a thirty-minute limit including
+database backup, migration, worker draining, activation and health checks. These
+limits bound stalled operations; normal deployment duration depends on archive
+size, server load and worker drain.
+
+If deployment fails after CI passes, rerun the deploy workflow, or use **Run
+workflow** on **Deploy staging** and supply the successful main push CI run ID.
+The source run is revalidated before environment secrets are available. Its
+artifact must still be within the three-day CI retention window. If CI failed or
+was cancelled, rerun CI first: rerunning deployment alone cannot repair that
+source result. The source verification job explains in its summary why an
+automatic deployment was skipped; invalid manual requests fail explicitly.
+
 ## Release layout
 
 ```text

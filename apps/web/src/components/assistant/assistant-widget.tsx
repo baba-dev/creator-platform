@@ -762,7 +762,9 @@ function PixelWidget({
     if (!details) return;
     details.open = true;
     details.scrollIntoView({ block: "center" });
-    details.querySelector<HTMLElement>("summary")?.focus({ preventScroll: true });
+    details
+      .querySelector<HTMLElement>("summary")
+      ?.focus({ preventScroll: true });
   }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -834,290 +836,290 @@ function PixelWidget({
             />
           )}
           <div
-          role="dialog"
-          aria-label="Pixel AI Assistant"
-          aria-modal={isExpanded}
-          ref={panelRef}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") closePixel();
-          }}
-          className={`fixed z-50 flex flex-col rounded-3xl border border-border bg-card shadow-2xl transition-all duration-300 ease-out backdrop-blur-xl ${
-            isExpanded
-              ? "left-1/2 top-1/2 h-[min(820px,calc(100dvh-2rem))] w-[min(760px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2"
-              : "bottom-[88px] right-3 sm:right-6 h-[620px] w-[420px] max-h-[calc(100dvh-7rem)] max-w-[calc(100vw-1.5rem)]"
-          }`}
-        >
-          {/* Header */}
-          <div className="flex items-center justify-between border-b border-border/80 px-5 py-3.5 bg-card/90 rounded-t-3xl">
-            <div className="flex items-center gap-3">
-              <div className="relative size-10 shrink-0 overflow-hidden rounded-full border border-border bg-muted/60 p-0.5 shadow-2xs">
-                <Image
-                  src={MASCOT_WORKING}
-                  alt="Pixel Mascot"
-                  fill
-                  unoptimized
-                  className="object-contain p-0.5"
-                />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="font-hand text-xl font-bold leading-none text-foreground tracking-wide">
-                    Pixel
-                  </h3>
-                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                    AI Assistant
-                  </span>
-                </div>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  Aiwa Creator companion
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setConfirmClear(true)}
-                disabled={
-                  messages.length === 0 || sending || pending || clearing
-                }
-                className={`inline-flex h-10 items-center justify-center gap-2 rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-40 ${
-                  isExpanded ? "px-3" : "w-10"
-                }`}
-                aria-label="Clear chat"
-                title={
-                  pending
-                    ? "Clear chat is unavailable while a saved request is pending"
-                    : "Clear chat"
-                }
-              >
-                <ClearChatIcon size={15} />
-                {isExpanded && (
-                  <span className="hidden text-xs font-semibold sm:inline">
-                    Clear chat
-                  </span>
-                )}
-              </button>
-
-              {/* Open / close modal popup */}
-              <button
-                onClick={() => setIsExpanded(!isExpanded)}
-                className="inline-flex size-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label={
-                  isExpanded
-                    ? "Return Pixel to compact panel"
-                    : "Open Pixel in popup modal"
-                }
-                title={isExpanded ? "Return to compact view" : "Open popup"}
-              >
-                {isExpanded ? (
-                  <MinimizeIcon size={15} />
-                ) : (
-                  <MaximizeIcon size={15} />
-                )}
-              </button>
-
-              {/* Close Button */}
-              <button
-                onClick={closePixel}
-                className="inline-flex size-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label="Close assistant"
-                title="Close"
-              >
-                <XIcon size={16} />
-              </button>
-            </div>
-          </div>
-
-          {confirmClear && (
-            <div
-              className="border-b border-border bg-muted/50 px-4 py-3 sm:px-5"
-              role="status"
-            >
-              <p className="text-sm font-semibold text-foreground">
-                Clear this Pixel chat?
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Saved chat messages will be removed. Jobs, workflows, reminders,
-                and Pixel preferences stay available.
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={clearing}
-                  onClick={() => setConfirmClear(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  disabled={clearing}
-                  onClick={() => void handleClearChat()}
-                >
-                  {clearing ? "Clearing…" : "Clear chat"}
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Conversation Area */}
-          <div
-            className="min-h-0 flex-1 overflow-y-auto px-3 sm:px-5 py-4 space-y-4 break-words"
-            role="log"
-            aria-label="Conversation with Pixel"
-            aria-live="polite"
+            role="dialog"
+            aria-label="Pixel AI Assistant"
+            aria-modal={isExpanded}
+            ref={panelRef}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") closePixel();
+            }}
+            className={`fixed z-50 flex flex-col rounded-3xl border border-border bg-card shadow-2xl transition-all duration-300 ease-out backdrop-blur-xl ${
+              isExpanded
+                ? "left-1/2 top-1/2 h-[min(820px,calc(100dvh-2rem))] w-[min(760px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2"
+                : "bottom-[88px] right-3 sm:right-6 h-[620px] w-[420px] max-h-[calc(100dvh-7rem)] max-w-[calc(100vw-1.5rem)]"
+            }`}
           >
-            {messages.length === 0 && !sending && (
-              <EmptyState onQuickAction={(msg) => void handleSend(msg)} />
-            )}
-
-            {messages.map((msg) => (
-              <MessageBubble
-                key={msg.id}
-                message={msg}
-                onNavigate={handleNavigate}
-                onCancelReminder={(reminderId) => {
-                  fetch(
-                    `/api/assistant/reminders?id=${encodeURIComponent(reminderId)}`,
-                    {
-                      method: "DELETE",
-                    },
-                  ).catch(() => undefined);
-                }}
-              />
-            ))}
-            {thread && (
-              <PixelControls
-                threadId={thread.id}
-                refreshKey={refreshKey}
-                onNavigate={handleNavigate}
-              />
-            )}
-            {pending && (
-              <p role="status" className="text-xs text-muted-foreground">
-                Checking your saved request. Closing Pixel does not cancel it.
-              </p>
-            )}
-
-            {/* Thinking / Running State */}
-            {sending && (
-              <div className="flex items-start gap-3 my-2 animate-in fade-in-50">
-                <div className="relative size-7 shrink-0 overflow-hidden rounded-full border border-border bg-muted p-0.5">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-border/80 px-5 py-3.5 bg-card/90 rounded-t-3xl">
+              <div className="flex items-center gap-3">
+                <div className="relative size-10 shrink-0 overflow-hidden rounded-full border border-border bg-muted/60 p-0.5 shadow-2xs">
                   <Image
-                    src={MASCOT_RUNNING}
-                    alt=""
+                    src={MASCOT_WORKING}
+                    alt="Pixel Mascot"
                     fill
                     unoptimized
-                    className="object-contain"
-                    aria-hidden="true"
+                    className="object-contain p-0.5"
                   />
                 </div>
-                <div className="rounded-2xl rounded-tl-xs bg-muted/80 px-4 py-3 shadow-2xs border border-border/40">
+                <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground font-medium">
-                      Pixel is thinking…
+                    <h3 className="font-hand text-xl font-bold leading-none text-foreground tracking-wide">
+                      Pixel
+                    </h3>
+                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                      AI Assistant
                     </span>
-                    <div className="flex gap-1">
-                      <span className="size-1.5 animate-bounce rounded-full bg-primary [animation-delay:0ms]" />
-                      <span className="size-1.5 animate-bounce rounded-full bg-primary [animation-delay:150ms]" />
-                      <span className="size-1.5 animate-bounce rounded-full bg-primary [animation-delay:300ms]" />
-                    </div>
                   </div>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    Aiwa Creator companion
+                  </p>
                 </div>
               </div>
-            )}
 
-            {/* Error display */}
-            {error && (
-              <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3.5 text-xs text-destructive flex items-start gap-2.5">
-                <div className="relative size-5 shrink-0 overflow-hidden">
-                  <Image
-                    src={MASCOT_CONFUSED}
-                    alt=""
-                    fill
-                    unoptimized
-                    className="object-contain"
-                  />
-                </div>
-                <div className="flex-1 leading-relaxed">
-                  <p className="font-semibold">Generation notice</p>
-                  <p className="mt-0.5 text-destructive/90">{error}</p>
-                </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setConfirmClear(true)}
+                  disabled={
+                    messages.length === 0 || sending || pending || clearing
+                  }
+                  className={`inline-flex h-10 items-center justify-center gap-2 rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-40 ${
+                    isExpanded ? "px-3" : "w-10"
+                  }`}
+                  aria-label="Clear chat"
+                  title={
+                    pending
+                      ? "Clear chat is unavailable while a saved request is pending"
+                      : "Clear chat"
+                  }
+                >
+                  <ClearChatIcon size={15} />
+                  {isExpanded && (
+                    <span className="hidden text-xs font-semibold sm:inline">
+                      Clear chat
+                    </span>
+                  )}
+                </button>
+
+                {/* Open / close modal popup */}
+                <button
+                  onClick={() => setIsExpanded(!isExpanded)}
+                  className="inline-flex size-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label={
+                    isExpanded
+                      ? "Return Pixel to compact panel"
+                      : "Open Pixel in popup modal"
+                  }
+                  title={isExpanded ? "Return to compact view" : "Open popup"}
+                >
+                  {isExpanded ? (
+                    <MinimizeIcon size={15} />
+                  ) : (
+                    <MaximizeIcon size={15} />
+                  )}
+                </button>
+
+                {/* Close Button */}
+                <button
+                  onClick={closePixel}
+                  className="inline-flex size-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label="Close assistant"
+                  title="Close"
+                >
+                  <XIcon size={16} />
+                </button>
               </div>
-            )}
+            </div>
 
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Compose Footer */}
-          <div className="border-t border-border/80 p-4 bg-card/90 rounded-b-3xl">
-            {reasoningQuote && (
-              <div className="mb-3 space-y-2 rounded-xl border border-border bg-background p-3 text-xs">
-                <p>
-                  Pixel reasoning with {reasoningQuote.displayName}: estimated{" "}
-                  {reasoningQuote.estimatedCredits} credits, maximum{" "}
-                  {reasoningQuote.maximumChargeCredits} credits.
+            {confirmClear && (
+              <div
+                className="border-b border-border bg-muted/50 px-4 py-3 sm:px-5"
+                role="status"
+              >
+                <p className="text-sm font-semibold text-foreground">
+                  Clear this Pixel chat?
                 </p>
-                <div className="flex flex-wrap gap-2">
-                  <Button onClick={() => approveRef.current?.(true)}>
-                    Approve {reasoningQuote.maximumChargeCredits} credits
-                  </Button>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Saved chat messages will be removed. Jobs, workflows, reminders,
+                  and Pixel preferences stay available.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
                   <Button
+                    size="sm"
                     variant="secondary"
-                    onClick={() => approveRef.current?.(false)}
+                    disabled={clearing}
+                    onClick={() => setConfirmClear(false)}
                   >
                     Cancel
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    disabled={clearing}
+                    onClick={() => void handleClearChat()}
+                  >
+                    {clearing ? "Clearing…" : "Clear chat"}
+                  </Button>
                 </div>
               </div>
             )}
-            <div className="flex items-end gap-2.5 rounded-2xl border border-border bg-background px-3.5 py-2.5 shadow-2xs focus-within:border-primary/60 focus-within:ring-2 focus-within:ring-primary/20 transition-all">
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                rows={1}
-                disabled={sending}
-                maxLength={4000}
-                className="min-h-[26px] min-w-0 flex-1 resize-none bg-transparent text-base sm:text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
-                style={{ maxHeight: 120 }}
-                aria-label="Message input"
-              />
-              <Button
-                size="sm"
-                variant="default"
-                onClick={() => {
-                  void handleSend();
-                }}
-                disabled={!input.trim() || sending}
-                className="shrink-0 size-11 p-0 rounded-xl"
-                aria-label="Send message"
-              >
-                <SendIcon size={14} />
-              </Button>
+
+            {/* Conversation Area */}
+            <div
+              className="min-h-0 flex-1 overflow-y-auto px-3 sm:px-5 py-4 space-y-4 break-words"
+              role="log"
+              aria-label="Conversation with Pixel"
+              aria-live="polite"
+            >
+              {messages.length === 0 && !sending && (
+                <EmptyState onQuickAction={(msg) => void handleSend(msg)} />
+              )}
+
+              {messages.map((msg) => (
+                <MessageBubble
+                  key={msg.id}
+                  message={msg}
+                  onNavigate={handleNavigate}
+                  onCancelReminder={(reminderId) => {
+                    fetch(
+                      `/api/assistant/reminders?id=${encodeURIComponent(reminderId)}`,
+                      {
+                        method: "DELETE",
+                      },
+                    ).catch(() => undefined);
+                  }}
+                />
+              ))}
+              {thread && (
+                <PixelControls
+                  threadId={thread.id}
+                  refreshKey={refreshKey}
+                  onNavigate={handleNavigate}
+                />
+              )}
+              {pending && (
+                <p role="status" className="text-xs text-muted-foreground">
+                  Checking your saved request. Closing Pixel does not cancel it.
+                </p>
+              )}
+
+              {/* Thinking / Running State */}
+              {sending && (
+                <div className="flex items-start gap-3 my-2 animate-in fade-in-50">
+                  <div className="relative size-7 shrink-0 overflow-hidden rounded-full border border-border bg-muted p-0.5">
+                    <Image
+                      src={MASCOT_RUNNING}
+                      alt=""
+                      fill
+                      unoptimized
+                      className="object-contain"
+                      aria-hidden="true"
+                    />
+                  </div>
+                  <div className="rounded-2xl rounded-tl-xs bg-muted/80 px-4 py-3 shadow-2xs border border-border/40">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground font-medium">
+                        Pixel is thinking…
+                      </span>
+                      <div className="flex gap-1">
+                        <span className="size-1.5 animate-bounce rounded-full bg-primary [animation-delay:0ms]" />
+                        <span className="size-1.5 animate-bounce rounded-full bg-primary [animation-delay:150ms]" />
+                        <span className="size-1.5 animate-bounce rounded-full bg-primary [animation-delay:300ms]" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Error display */}
+              {error && (
+                <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3.5 text-xs text-destructive flex items-start gap-2.5">
+                  <div className="relative size-5 shrink-0 overflow-hidden">
+                    <Image
+                      src={MASCOT_CONFUSED}
+                      alt=""
+                      fill
+                      unoptimized
+                      className="object-contain"
+                    />
+                  </div>
+                  <div className="flex-1 leading-relaxed">
+                    <p className="font-semibold">Generation notice</p>
+                    <p className="mt-0.5 text-destructive/90">{error}</p>
+                  </div>
+                </div>
+              )}
+
+              <div ref={messagesEndRef} />
             </div>
-            <div className="mt-2 flex items-center justify-between px-1 text-[11px] text-muted-foreground">
-              <span>
-                Press{" "}
-                <kbd className="font-mono bg-muted px-1 py-0.5 rounded text-[10px]">
-                  Enter
-                </kbd>{" "}
-                to send
-              </span>
-              <button
-                type="button"
-                onClick={openPixelPreferences}
-                disabled={!thread}
-                className="inline-flex min-h-10 items-center rounded-lg px-1 text-[10px] font-semibold text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Pixel preferences &amp; memory
-              </button>
+
+            {/* Compose Footer */}
+            <div className="border-t border-border/80 p-4 bg-card/90 rounded-b-3xl">
+              {reasoningQuote && (
+                <div className="mb-3 space-y-2 rounded-xl border border-border bg-background p-3 text-xs">
+                  <p>
+                    Pixel reasoning with {reasoningQuote.displayName}: estimated{" "}
+                    {reasoningQuote.estimatedCredits} credits, maximum{" "}
+                    {reasoningQuote.maximumChargeCredits} credits.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button onClick={() => approveRef.current?.(true)}>
+                      Approve {reasoningQuote.maximumChargeCredits} credits
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      onClick={() => approveRef.current?.(false)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+              <div className="flex items-end gap-2.5 rounded-2xl border border-border bg-background px-3.5 py-2.5 shadow-2xs focus-within:border-primary/60 focus-within:ring-2 focus-within:ring-primary/20 transition-all">
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  rows={1}
+                  disabled={sending}
+                  maxLength={4000}
+                  className="min-h-[26px] min-w-0 flex-1 resize-none bg-transparent text-base sm:text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
+                  style={{ maxHeight: 120 }}
+                  aria-label="Message input"
+                />
+                <Button
+                  size="sm"
+                  variant="default"
+                  onClick={() => {
+                    void handleSend();
+                  }}
+                  disabled={!input.trim() || sending}
+                  className="shrink-0 size-11 p-0 rounded-xl"
+                  aria-label="Send message"
+                >
+                  <SendIcon size={14} />
+                </Button>
+              </div>
+              <div className="mt-2 flex items-center justify-between px-1 text-[11px] text-muted-foreground">
+                <span>
+                  Press{" "}
+                  <kbd className="font-mono bg-muted px-1 py-0.5 rounded text-[10px]">
+                    Enter
+                  </kbd>{" "}
+                  to send
+                </span>
+                <button
+                  type="button"
+                  onClick={openPixelPreferences}
+                  disabled={!thread}
+                  className="inline-flex min-h-10 items-center rounded-lg px-1 text-[10px] font-semibold text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Pixel preferences &amp; memory
+                </button>
+              </div>
             </div>
           </div>
-        </div>
         </>
       )}
 

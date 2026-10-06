@@ -3,9 +3,9 @@ import Link from "next/link";
 
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Brand } from "@/components/ui/brand";
-import { CreativeSurface, Eyebrow } from "@/components/ui/creative";
-import { Icon } from "@/components/ui/icon";
-import { StatusDot, Tape } from "@/components/ui/sketch";
+import { CreativeSurface, Eyebrow, Annotation } from "@/components/ui/creative";
+import { Icon, type IconName } from "@/components/ui/icon";
+import { DemoBadge, StatusDot, Tape } from "@/components/ui/sketch";
 
 export const metadata: Metadata = {
   title: "Privacy Policy · Aiwa Creators",
@@ -13,27 +13,59 @@ export const metadata: Metadata = {
     "Official Privacy Policy and Data Protection Notice for Aiwa Creators by Aiwa Media Group LLC.",
 };
 
-const sections = [
-  { id: "overview", title: "1. Overview & Data Controller" },
-  { id: "information-collected", title: "2. Information We Collect" },
-  { id: "ai-processing", title: "3. AI Processing & All-Truth Disclosure" },
-  { id: "asset-lifecycle", title: "4. Asset Storage & 30-Day Lifecycle" },
-  { id: "financial-ledger", title: "5. Financial Ledger & Credit Reservation" },
-  { id: "legal-bases", title: "6. Legal Bases for Processing" },
-  { id: "data-sharing", title: "7. Third-Party Sharing & Transfers" },
-  { id: "security", title: "8. Technical & Organizational Security" },
-  { id: "user-rights", title: "9. Your Rights & Data Subject Controls" },
-  { id: "cookies", title: "10. Cookies & Local Storage" },
-  { id: "children", title: "11. Children's Privacy" },
-  { id: "updates-contact", title: "12. Policy Updates & Contact" },
+const sections: readonly { id: string; title: string; icon: IconName }[] = [
+  { id: "overview", title: "1. Overview & Data Controller", icon: "shield" },
+  {
+    id: "information-collected",
+    title: "2. Information We Collect",
+    icon: "assets",
+  },
+  {
+    id: "ai-processing",
+    title: "3. AI Processing & All-Truth Disclosure",
+    icon: "bot",
+  },
+  {
+    id: "asset-lifecycle",
+    title: "4. Asset Storage & 30-Day Lifecycle",
+    icon: "trash",
+  },
+  {
+    id: "financial-ledger",
+    title: "5. Financial Ledger & Credit Reservation",
+    icon: "credits",
+  },
+  { id: "legal-bases", title: "6. Legal Bases for Processing", icon: "script" },
+  {
+    id: "data-sharing",
+    title: "7. Third-Party Sharing & Transfers",
+    icon: "globe",
+  },
+  {
+    id: "security",
+    title: "8. Technical & Organizational Security",
+    icon: "admin",
+  },
+  {
+    id: "user-rights",
+    title: "9. Your Rights & Data Subject Controls",
+    icon: "user",
+  },
+  { id: "cookies", title: "10. Cookies & Local Storage", icon: "settings" },
+  { id: "children", title: "11. Children's Privacy", icon: "brand" },
+  {
+    id: "updates-contact",
+    title: "12. Policy Updates & Contact",
+    icon: "chat",
+  },
 ];
 
 export default function PrivacyPolicyPage() {
   return (
     <main className="min-h-screen overflow-hidden bg-background text-foreground">
       {/* Background atmosphere */}
-      <div className="creative-glow pointer-events-none absolute inset-x-0 top-0 h-[640px]" />
-      <div className="paper-grid pointer-events-none absolute inset-x-0 top-0 h-[600px] opacity-45 [mask-image:linear-gradient(to_bottom,black,transparent)]" />
+      <div className="creative-glow pointer-events-none absolute inset-x-0 top-0 h-[720px]" />
+      <div className="paper-grid pointer-events-none absolute inset-x-0 top-0 h-[680px] opacity-45 [mask-image:linear-gradient(to_bottom,black,transparent)]" />
 
       {/* Header Chrome */}
       <header className="relative z-30 mx-auto flex min-h-20 max-w-7xl items-center justify-between gap-4 px-5 sm:px-7 lg:px-10">
@@ -78,27 +110,37 @@ export default function PrivacyPolicyPage() {
         </div>
       </header>
 
-      {/* Hero Section */}
+      {/* Hero Section with Visual Badges */}
       <section className="relative mx-auto max-w-7xl px-5 pt-10 sm:px-7 lg:px-10 lg:pt-14">
-        <div className="max-w-3xl">
-          <StatusDot tone="primary">Legal & Transparency</StatusDot>
-          <h1 className="font-display mt-4 text-4xl font-semibold tracking-[-0.04em] text-foreground sm:text-5xl lg:text-6xl">
-            Privacy Policy & Data Notice
-          </h1>
-          <p className="mt-4 text-base leading-relaxed text-muted-foreground sm:text-lg">
-            Complete transparency regarding how Aiwa Media Group collects,
-            processes, secures, and disposes of your personal information and
-            creative assets across the Aiwa Creators platform.
-          </p>
-          <div className="mt-6 flex flex-wrap items-center gap-4 text-xs text-subtle-foreground">
-            <span className="inline-flex items-center gap-1.5 font-mono">
-              <Icon name="sparkles" className="size-3.5 text-primary" />
-              Effective: October 6, 2026
-            </span>
-            <span className="hidden sm:inline">·</span>
-            <span className="font-mono">
-              Jurisdiction: Sultanate of Oman (PDPL Royal Decree 6/2022)
-            </span>
+        <div className="grid gap-8 lg:grid-cols-[1.1fr_.9fr] lg:items-center">
+          <div className="max-w-2xl">
+            <div className="flex items-center gap-2">
+              <StatusDot tone="primary">Legal & Privacy Safeguards</StatusDot>
+              <DemoBadge>Sultanate of Oman</DemoBadge>
+            </div>
+            <h1 className="font-display mt-4 text-4xl font-semibold tracking-[-0.04em] text-foreground sm:text-5xl lg:text-6xl">
+              Privacy Policy & Data Notice
+            </h1>
+            <p className="mt-4 text-base leading-relaxed text-muted-foreground sm:text-lg">
+              Complete transparency regarding how Aiwa Media Group collects,
+              processes, secures, and disposes of your personal information and
+              creative assets across the Aiwa Creators platform.
+            </p>
+            <div className="mt-6 flex flex-wrap items-center gap-4 text-xs text-subtle-foreground">
+              <span className="inline-flex items-center gap-1.5 font-mono">
+                <Icon name="sparkles" className="size-3.5 text-primary" />
+                Effective: October 6, 2026
+              </span>
+              <span className="hidden sm:inline">·</span>
+              <span className="font-mono">
+                Jurisdiction: Sultanate of Oman (PDPL Royal Decree 6/2022)
+              </span>
+            </div>
+          </div>
+
+          {/* SVG Vector Graphic Card for Hero */}
+          <div className="relative">
+            <DataProtectionHeroGraphic />
           </div>
         </div>
       </section>
@@ -113,16 +155,20 @@ export default function PrivacyPolicyPage() {
                 On This Page
               </p>
               <nav
-                className="mt-3 space-y-1.5 text-xs font-medium text-muted-foreground"
+                className="mt-3 space-y-1 text-xs font-medium text-muted-foreground"
                 aria-label="Table of Contents"
               >
                 {sections.map((s) => (
                   <a
                     key={s.id}
                     href={`#${s.id}`}
-                    className="block rounded-lg px-2.5 py-1.5 transition hover:bg-secondary hover:text-foreground"
+                    className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 transition hover:bg-secondary hover:text-foreground"
                   >
-                    {s.title}
+                    <Icon
+                      name={s.icon}
+                      className="size-3.5 text-subtle-foreground"
+                    />
+                    <span className="truncate">{s.title}</span>
                   </a>
                 ))}
               </nav>
@@ -135,17 +181,20 @@ export default function PrivacyPolicyPage() {
                 We never sell your prompt history or generated media to
                 third-party advertisers.
               </p>
+              <Annotation className="mt-3 text-sm">
+                100% Zero-Selling Guarantee →
+              </Annotation>
             </CreativeSurface>
           </div>
         </aside>
 
-        {/* Legal Text Body */}
+        {/* Legal Text Body with Vector Graphics & Cards */}
         <article className="max-w-3xl space-y-12 text-sm leading-relaxed text-foreground/90 sm:text-base">
           {/* Quick Summary Banner */}
           <CreativeSurface variant="sketch" className="p-6 sm:p-8">
             <div className="flex items-start gap-4">
-              <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
-                <Icon name="sparkles" className="size-5" />
+              <div className="grid size-12 shrink-0 place-items-center rounded-2xl bg-primary/10 text-primary shadow-xs">
+                <Icon name="shield" className="size-6" />
               </div>
               <div>
                 <h2 className="font-display text-lg font-semibold text-foreground">
@@ -166,7 +215,12 @@ export default function PrivacyPolicyPage() {
             id="overview"
             className="scroll-mt-12 space-y-4 border-b border-border pb-10"
           >
-            <Eyebrow>Section 1</Eyebrow>
+            <div className="flex items-center gap-3">
+              <span className="grid size-8 place-items-center rounded-lg bg-primary/10 text-primary">
+                <Icon name="shield" className="size-4" />
+              </span>
+              <Eyebrow>Section 1</Eyebrow>
+            </div>
             <h2 className="font-display text-2xl font-semibold text-foreground sm:text-3xl">
               1. Overview & Data Controller
             </h2>
@@ -189,15 +243,18 @@ export default function PrivacyPolicyPage() {
               customer-uploaded media assets and generative AI workspace
               workloads.
             </p>
-            <p>
-              We comply with the{" "}
-              <strong>
-                Oman Personal Data Protection Law (PDPL, Royal Decree 6/2022)
-              </strong>{" "}
-              and align with international standards including the EU General
-              Data Protection Regulation (GDPR) and California Consumer Privacy
-              Act (CCPA/CPRA) for international customers.
-            </p>
+
+            <div className="mt-4 rounded-xl border border-border bg-card/50 p-4 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <span className="size-2 rounded-full bg-success" />
+                <span className="text-xs font-semibold text-foreground">
+                  Royal Decree 6/2022 Verified
+                </span>
+              </div>
+              <span className="font-mono text-[10px] uppercase text-subtle-foreground">
+                Muscat, Oman
+              </span>
+            </div>
           </section>
 
           {/* Section 2: Information Collected */}
@@ -205,7 +262,12 @@ export default function PrivacyPolicyPage() {
             id="information-collected"
             className="scroll-mt-12 space-y-4 border-b border-border pb-10"
           >
-            <Eyebrow>Section 2</Eyebrow>
+            <div className="flex items-center gap-3">
+              <span className="grid size-8 place-items-center rounded-lg bg-primary/10 text-primary">
+                <Icon name="assets" className="size-4" />
+              </span>
+              <Eyebrow>Section 2</Eyebrow>
+            </div>
             <h2 className="font-display text-2xl font-semibold text-foreground sm:text-3xl">
               2. Information We Collect
             </h2>
@@ -214,40 +276,55 @@ export default function PrivacyPolicyPage() {
               categories of information:
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="rounded-xl border border-border bg-card/60 p-4">
-                <h3 className="font-display text-sm font-semibold text-foreground">
-                  Account & Organization Identity
-                </h3>
-                <p className="mt-1.5 text-xs text-muted-foreground">
+              <div className="rounded-xl border border-border bg-card/60 p-4 space-y-2">
+                <div className="flex items-center gap-2 text-primary">
+                  <Icon name="user" className="size-4" />
+                  <h3 className="font-display text-sm font-semibold text-foreground">
+                    Account & Organization Identity
+                  </h3>
+                </div>
+                <p className="text-xs text-muted-foreground">
                   Full name, work email address, password hashes,
                   tenant/organization affiliation, avatar, and assigned
                   administrative permissions.
                 </p>
               </div>
-              <div className="rounded-xl border border-border bg-card/60 p-4">
-                <h3 className="font-display text-sm font-semibold text-foreground">
-                  Generative Prompts & Uploaded Media
-                </h3>
-                <p className="mt-1.5 text-xs text-muted-foreground">
+
+              <div className="rounded-xl border border-border bg-card/60 p-4 space-y-2">
+                <div className="flex items-center gap-2 text-info">
+                  <Icon name="assets" className="size-4" />
+                  <h3 className="font-display text-sm font-semibold text-foreground">
+                    Generative Prompts & Uploaded Media
+                  </h3>
+                </div>
+                <p className="text-xs text-muted-foreground">
                   Text briefs, prompt parameters, style guidelines, and source
                   reference image/audio assets submitted for processing.
                 </p>
               </div>
-              <div className="rounded-xl border border-border bg-card/60 p-4">
-                <h3 className="font-display text-sm font-semibold text-foreground">
-                  Generated Asset Provenance
-                </h3>
-                <p className="mt-1.5 text-xs text-muted-foreground">
+
+              <div className="rounded-xl border border-border bg-card/60 p-4 space-y-2">
+                <div className="flex items-center gap-2 text-warning">
+                  <Icon name="sparkles" className="size-4" />
+                  <h3 className="font-display text-sm font-semibold text-foreground">
+                    Generated Asset Provenance
+                  </h3>
+                </div>
+                <p className="text-xs text-muted-foreground">
                   Generated images, videos, narration audio clips, job status
                   logs, model identifiers, seed parameters, and creation
                   timestamps.
                 </p>
               </div>
-              <div className="rounded-xl border border-border bg-card/60 p-4">
-                <h3 className="font-display text-sm font-semibold text-foreground">
-                  Financial & Credit Ledger Logs
-                </h3>
-                <p className="mt-1.5 text-xs text-muted-foreground">
+
+              <div className="rounded-xl border border-border bg-card/60 p-4 space-y-2">
+                <div className="flex items-center gap-2 text-success">
+                  <Icon name="credits" className="size-4" />
+                  <h3 className="font-display text-sm font-semibold text-foreground">
+                    Financial & Credit Ledger Logs
+                  </h3>
+                </div>
+                <p className="text-xs text-muted-foreground">
                   Platform credit balances, reservation tokens, micro-USD
                   provider cost entries, OMR baisa ledger records, and billing
                   metadata.
@@ -256,12 +333,17 @@ export default function PrivacyPolicyPage() {
             </div>
           </section>
 
-          {/* Section 3: AI Processing */}
+          {/* Section 3: AI Processing & Coded SVG Diagram */}
           <section
             id="ai-processing"
             className="scroll-mt-12 space-y-4 border-b border-border pb-10"
           >
-            <Eyebrow>Section 3</Eyebrow>
+            <div className="flex items-center gap-3">
+              <span className="grid size-8 place-items-center rounded-lg bg-primary/10 text-primary">
+                <Icon name="bot" className="size-4" />
+              </span>
+              <Eyebrow>Section 3</Eyebrow>
+            </div>
             <h2 className="font-display text-2xl font-semibold text-foreground sm:text-3xl">
               3. AI Provider Processing & All-Truth Disclosure
             </h2>
@@ -275,33 +357,12 @@ export default function PrivacyPolicyPage() {
               </code>
               ).
             </p>
-            <div className="rounded-2xl border border-border bg-card p-5 space-y-4">
-              <div className="flex items-center gap-3">
-                <span className="rounded-lg bg-primary/10 px-2.5 py-1 font-mono text-xs font-bold text-primary">
-                  BytePlus & NVIDIA Adapters
-                </span>
-                <span className="text-xs text-subtle-foreground">
-                  Isolated provider boundary
-                </span>
-              </div>
-              <ul className="space-y-2.5 text-xs text-muted-foreground sm:text-sm">
-                <li className="flex items-start gap-2">
-                  <span className="mt-1 size-1.5 shrink-0 rounded-full bg-primary" />
-                  <span>
-                    <strong>BytePlus (Volcengine):</strong> Powers image
-                    (Seedream), video (Seedance), and speech synthesis (Seed
-                    Speech) generation models.
-                  </span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="mt-1 size-1.5 shrink-0 rounded-full bg-primary" />
-                  <span>
-                    <strong>NVIDIA NIM:</strong> Powers accelerated visual
-                    inference microservices and specialized model processing.
-                  </span>
-                </li>
-              </ul>
+
+            {/* AI Provider Vector Diagram Graphic */}
+            <div className="my-6">
+              <AIProviderPipelineGraphic />
             </div>
+
             <div className="space-y-3 pt-2">
               <h3 className="font-display text-lg font-semibold text-foreground">
                 Model Training & Commercial Usage Protections
@@ -327,12 +388,17 @@ export default function PrivacyPolicyPage() {
             </div>
           </section>
 
-          {/* Section 4: Asset Storage */}
+          {/* Section 4: Asset Storage & Lifecycle Graphic */}
           <section
             id="asset-lifecycle"
             className="scroll-mt-12 space-y-4 border-b border-border pb-10"
           >
-            <Eyebrow>Section 4</Eyebrow>
+            <div className="flex items-center gap-3">
+              <span className="grid size-8 place-items-center rounded-lg bg-primary/10 text-primary">
+                <Icon name="trash" className="size-4" />
+              </span>
+              <Eyebrow>Section 4</Eyebrow>
+            </div>
             <h2 className="font-display text-2xl font-semibold text-foreground sm:text-3xl">
               4. Asset Storage & 30-Day Lifecycle
             </h2>
@@ -346,6 +412,12 @@ export default function PrivacyPolicyPage() {
               metadata, while storage object keys are opaque, server-generated,
               and tenant-isolated.
             </p>
+
+            {/* SVG Timeline Graphic for 30-Day Trash Lifecycle */}
+            <div className="my-6">
+              <AssetLifecycleGraphic />
+            </div>
+
             <ul className="space-y-3 pl-4 text-xs text-muted-foreground sm:text-sm list-disc">
               <li>
                 <strong>Original Media Privacy:</strong> Full-resolution
@@ -373,7 +445,12 @@ export default function PrivacyPolicyPage() {
             id="financial-ledger"
             className="scroll-mt-12 space-y-4 border-b border-border pb-10"
           >
-            <Eyebrow>Section 5</Eyebrow>
+            <div className="flex items-center gap-3">
+              <span className="grid size-8 place-items-center rounded-lg bg-primary/10 text-primary">
+                <Icon name="credits" className="size-4" />
+              </span>
+              <Eyebrow>Section 5</Eyebrow>
+            </div>
             <h2 className="font-display text-2xl font-semibold text-foreground sm:text-3xl">
               5. Financial Ledger & Credit Reservation
             </h2>
@@ -426,7 +503,12 @@ export default function PrivacyPolicyPage() {
             id="legal-bases"
             className="scroll-mt-12 space-y-4 border-b border-border pb-10"
           >
-            <Eyebrow>Section 6</Eyebrow>
+            <div className="flex items-center gap-3">
+              <span className="grid size-8 place-items-center rounded-lg bg-primary/10 text-primary">
+                <Icon name="script" className="size-4" />
+              </span>
+              <Eyebrow>Section 6</Eyebrow>
+            </div>
             <h2 className="font-display text-2xl font-semibold text-foreground sm:text-3xl">
               6. Legal Bases for Processing
             </h2>
@@ -463,7 +545,12 @@ export default function PrivacyPolicyPage() {
             id="data-sharing"
             className="scroll-mt-12 space-y-4 border-b border-border pb-10"
           >
-            <Eyebrow>Section 7</Eyebrow>
+            <div className="flex items-center gap-3">
+              <span className="grid size-8 place-items-center rounded-lg bg-primary/10 text-primary">
+                <Icon name="globe" className="size-4" />
+              </span>
+              <Eyebrow>Section 7</Eyebrow>
+            </div>
             <h2 className="font-display text-2xl font-semibold text-foreground sm:text-3xl">
               7. Third-Party Sharing & Transfers
             </h2>
@@ -495,7 +582,12 @@ export default function PrivacyPolicyPage() {
             id="security"
             className="scroll-mt-12 space-y-4 border-b border-border pb-10"
           >
-            <Eyebrow>Section 8</Eyebrow>
+            <div className="flex items-center gap-3">
+              <span className="grid size-8 place-items-center rounded-lg bg-primary/10 text-primary">
+                <Icon name="admin" className="size-4" />
+              </span>
+              <Eyebrow>Section 8</Eyebrow>
+            </div>
             <h2 className="font-display text-2xl font-semibold text-foreground sm:text-3xl">
               8. Technical & Organizational Security
             </h2>
@@ -543,12 +635,17 @@ export default function PrivacyPolicyPage() {
             </div>
           </section>
 
-          {/* Section 9: Your Rights */}
+          {/* Section 9: Your Rights Cards */}
           <section
             id="user-rights"
             className="scroll-mt-12 space-y-4 border-b border-border pb-10"
           >
-            <Eyebrow>Section 9</Eyebrow>
+            <div className="flex items-center gap-3">
+              <span className="grid size-8 place-items-center rounded-lg bg-primary/10 text-primary">
+                <Icon name="user" className="size-4" />
+              </span>
+              <Eyebrow>Section 9</Eyebrow>
+            </div>
             <h2 className="font-display text-2xl font-semibold text-foreground sm:text-3xl">
               9. Your Rights & Data Subject Controls
             </h2>
@@ -556,37 +653,45 @@ export default function PrivacyPolicyPage() {
               Under Omani PDPL and international privacy laws, you possess the
               following rights regarding your personal data:
             </p>
-            <div className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               {[
-                [
-                  "Right of Access",
-                  "Request a copy of the personal data and asset metadata held about your account.",
-                ],
-                [
-                  "Right to Rectification",
-                  "Correct inaccurate profile data, organization details, or billing contact info.",
-                ],
-                [
-                  "Right to Erasure (&quot;Right to be Forgotten&quot;)",
-                  "Request permanent deletion of your account, workspace assets, and associated generation records.",
-                ],
-                [
-                  "Right to Restriction & Object",
-                  "Object to specific non-essential processing activities or withdraw consent at any time.",
-                ],
-                [
-                  "Right to Data Portability",
-                  "Export your generated assets and metadata in standard file formats.",
-                ],
-              ].map(([title, desc]) => (
+                {
+                  title: "Right of Access",
+                  desc: "Request a copy of the personal data and asset metadata held about your account.",
+                  icon: "search" as const,
+                },
+                {
+                  title: "Right to Rectification",
+                  desc: "Correct inaccurate profile data, organization details, or billing contact info.",
+                  icon: "edit" as const,
+                },
+                {
+                  title: "Right to Erasure",
+                  desc: "Request permanent deletion of your account, workspace assets, and generation records.",
+                  icon: "trash" as const,
+                },
+                {
+                  title: "Right to Restriction",
+                  desc: "Object to specific non-essential processing activities or withdraw consent at any time.",
+                  icon: "shield" as const,
+                },
+                {
+                  title: "Right to Portability",
+                  desc: "Export your generated assets and metadata in standard file formats.",
+                  icon: "upload" as const,
+                },
+              ].map((item) => (
                 <div
-                  key={title}
-                  className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-3 rounded-lg border border-border/70 bg-card/40 p-3 text-xs"
+                  key={item.title}
+                  className="rounded-xl border border-border bg-card/60 p-4 space-y-1.5"
                 >
-                  <span className="font-semibold text-foreground sm:w-48 shrink-0">
-                    {title}
-                  </span>
-                  <span className="text-muted-foreground">{desc}</span>
+                  <div className="flex items-center gap-2 text-primary">
+                    <Icon name={item.icon} className="size-4" />
+                    <span className="font-semibold text-foreground text-xs">
+                      {item.title}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{item.desc}</p>
                 </div>
               ))}
             </div>
@@ -608,7 +713,12 @@ export default function PrivacyPolicyPage() {
             id="cookies"
             className="scroll-mt-12 space-y-4 border-b border-border pb-10"
           >
-            <Eyebrow>Section 10</Eyebrow>
+            <div className="flex items-center gap-3">
+              <span className="grid size-8 place-items-center rounded-lg bg-primary/10 text-primary">
+                <Icon name="settings" className="size-4" />
+              </span>
+              <Eyebrow>Section 10</Eyebrow>
+            </div>
             <h2 className="font-display text-2xl font-semibold text-foreground sm:text-3xl">
               10. Cookies & Local Storage
             </h2>
@@ -645,7 +755,12 @@ export default function PrivacyPolicyPage() {
             id="children"
             className="scroll-mt-12 space-y-4 border-b border-border pb-10"
           >
-            <Eyebrow>Section 11</Eyebrow>
+            <div className="flex items-center gap-3">
+              <span className="grid size-8 place-items-center rounded-lg bg-primary/10 text-primary">
+                <Icon name="brand" className="size-4" />
+              </span>
+              <Eyebrow>Section 11</Eyebrow>
+            </div>
             <h2 className="font-display text-2xl font-semibold text-foreground sm:text-3xl">
               11. Children&apos;s Privacy
             </h2>
@@ -661,7 +776,12 @@ export default function PrivacyPolicyPage() {
 
           {/* Section 12: Updates & Contact */}
           <section id="updates-contact" className="scroll-mt-12 space-y-6">
-            <Eyebrow>Section 12</Eyebrow>
+            <div className="flex items-center gap-3">
+              <span className="grid size-8 place-items-center rounded-lg bg-primary/10 text-primary">
+                <Icon name="chat" className="size-4" />
+              </span>
+              <Eyebrow>Section 12</Eyebrow>
+            </div>
             <h2 className="font-display text-2xl font-semibold text-foreground sm:text-3xl">
               12. Policy Updates & Contact Information
             </h2>
@@ -736,5 +856,266 @@ export default function PrivacyPolicyPage() {
         </div>
       </footer>
     </main>
+  );
+}
+
+{
+  /* Visual Vector Graphics Components */
+}
+
+function DataProtectionHeroGraphic() {
+  return (
+    <CreativeSurface className="relative overflow-hidden rounded-[28px] p-6 shadow-md">
+      <div className="absolute -right-16 -top-16 size-48 rounded-full bg-primary/15 blur-3xl" />
+      <div className="relative space-y-4">
+        <div className="flex items-center justify-between border-b border-border pb-3">
+          <div className="flex items-center gap-2">
+            <span className="size-2 rounded-full bg-success" />
+            <span className="font-mono text-xs font-bold uppercase tracking-wider text-foreground">
+              Data Security Architecture
+            </span>
+          </div>
+          <span className="rounded-md border border-border bg-muted px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
+            TLS 1.3 · AES-256
+          </span>
+        </div>
+
+        {/* Coded SVG Diagram */}
+        <div className="relative py-2">
+          <svg
+            className="w-full text-foreground"
+            viewBox="0 0 340 140"
+            fill="none"
+          >
+            {/* Background Grid */}
+            <pattern
+              id="grid"
+              width="20"
+              height="20"
+              patternUnits="userSpaceOnUse"
+            >
+              <path
+                d="M 20 0 L 0 0 0 20"
+                fill="none"
+                stroke="currentColor"
+                strokeOpacity="0.06"
+                strokeWidth="1"
+              />
+            </pattern>
+            <rect width="340" height="140" fill="url(#grid)" rx="12" />
+
+            {/* Nodes */}
+            <g transform="translate(15, 45)">
+              <rect
+                width="80"
+                height="50"
+                rx="8"
+                fill="var(--card)"
+                stroke="var(--border)"
+                strokeWidth="1.5"
+              />
+              <text
+                x="40"
+                y="22"
+                textAnchor="middle"
+                fill="currentColor"
+                fontSize="10"
+                fontWeight="600"
+              >
+                Client UI
+              </text>
+              <text
+                x="40"
+                y="36"
+                textAnchor="middle"
+                fill="var(--muted-foreground)"
+                fontSize="8"
+              >
+                Tenant Scope
+              </text>
+            </g>
+
+            <g transform="translate(130, 45)">
+              <rect
+                width="80"
+                height="50"
+                rx="8"
+                fill="var(--card)"
+                stroke="var(--primary)"
+                strokeWidth="2"
+              />
+              <text
+                x="40"
+                y="22"
+                textAnchor="middle"
+                fill="currentColor"
+                fontSize="10"
+                fontWeight="700"
+              >
+                @aiwa/providers
+              </text>
+              <text
+                x="40"
+                y="36"
+                textAnchor="middle"
+                fill="var(--primary)"
+                fontSize="8"
+              >
+                Isolated Adapter
+              </text>
+            </g>
+
+            <g transform="translate(245, 45)">
+              <rect
+                width="80"
+                height="50"
+                rx="8"
+                fill="var(--card)"
+                stroke="var(--border)"
+                strokeWidth="1.5"
+              />
+              <text
+                x="40"
+                y="22"
+                textAnchor="middle"
+                fill="currentColor"
+                fontSize="10"
+                fontWeight="600"
+              >
+                BytePlus / NVIDIA
+              </text>
+              <text
+                x="40"
+                y="36"
+                textAnchor="middle"
+                fill="var(--muted-foreground)"
+                fontSize="8"
+              >
+                Private Job
+              </text>
+            </g>
+
+            {/* Connection Lines */}
+            <path
+              d="M 95 70 L 130 70"
+              stroke="var(--primary)"
+              strokeWidth="1.5"
+              strokeDasharray="3 3"
+            />
+            <path
+              d="M 210 70 L 245 70"
+              stroke="var(--primary)"
+              strokeWidth="1.5"
+              strokeDasharray="3 3"
+            />
+          </svg>
+        </div>
+
+        <div className="flex items-center justify-between text-[11px] text-subtle-foreground">
+          <span>Zero third-party advertising</span>
+          <span className="font-mono">Audited Omani Compliance</span>
+        </div>
+      </div>
+    </CreativeSurface>
+  );
+}
+
+function AIProviderPipelineGraphic() {
+  return (
+    <div className="rounded-2xl border border-border bg-card/70 p-5 shadow-xs">
+      <div className="flex items-center justify-between border-b border-border pb-3">
+        <p className="font-mono text-xs font-bold uppercase tracking-wider text-primary">
+          AI Generation Data Pipeline
+        </p>
+        <span className="font-mono text-[10px] text-subtle-foreground">
+          Private Sandbox
+        </span>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border border-border bg-background/60 p-3">
+          <div className="flex items-center gap-2 text-primary">
+            <Icon name="edit" className="size-4" />
+            <span className="font-semibold text-xs text-foreground">
+              Input Brief
+            </span>
+          </div>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            User prompt & reference asset ID
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-primary/30 bg-primary/10 p-3">
+          <div className="flex items-center gap-2 text-primary">
+            <Icon name="bot" className="size-4" />
+            <span className="font-semibold text-xs text-foreground">
+              Secure Adapter
+            </span>
+          </div>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Zod validation & API credential filter
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-border bg-background/60 p-3">
+          <div className="flex items-center gap-2 text-success">
+            <Icon name="check" className="size-4" />
+            <span className="font-semibold text-xs text-foreground">
+              Private Asset
+            </span>
+          </div>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Immutable provenance output
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AssetLifecycleGraphic() {
+  return (
+    <div className="rounded-2xl border border-border bg-card/70 p-5 shadow-xs">
+      <div className="flex items-center justify-between border-b border-border pb-3">
+        <p className="font-mono text-xs font-bold uppercase tracking-wider text-foreground">
+          30-Day Asset Lifecycle Timeline
+        </p>
+        <span className="font-mono text-[10px] text-warning font-semibold">
+          Recoverable State
+        </span>
+      </div>
+
+      <div className="relative mt-5 grid grid-cols-3 gap-2 text-center text-xs">
+        <div className="rounded-xl border border-border bg-background/60 p-3">
+          <span className="font-mono text-[10px] font-bold uppercase text-success">
+            Stage 1
+          </span>
+          <p className="mt-1 font-semibold text-foreground">Active Asset</p>
+          <p className="mt-0.5 text-[10px] text-muted-foreground">
+            Full workspace availability
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-warning/30 bg-warning/10 p-3">
+          <span className="font-mono text-[10px] font-bold uppercase text-warning">
+            Stage 2
+          </span>
+          <p className="mt-1 font-semibold text-foreground">30-Day Trash</p>
+          <p className="mt-0.5 text-[10px] text-muted-foreground">
+            Recoverable by tenant
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3">
+          <span className="font-mono text-[10px] font-bold uppercase text-destructive">
+            Stage 3
+          </span>
+          <p className="mt-1 font-semibold text-foreground">Permanent Purge</p>
+          <p className="mt-0.5 text-[10px] text-muted-foreground">
+            Byte & derivative deletion
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }

@@ -42,17 +42,47 @@ jobs:
           fetch-depth: 1
 
       - name: Download CI release artifact
+        id: ci_artifact
+        continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           name: creator-platform-${{ env.RELEASE_SHA }}
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ github.token }}
 
-      - name: Verify release artifact digest
+      - name: Verify promoted CI artifact digest
+        if: steps.ci_artifact.outcome == 'success'
         run: |
           set -Eeuo pipefail
           test -f "creator-platform-${RELEASE_SHA}.tar.gz"
           test -f "creator-platform-${RELEASE_SHA}.tar.gz.sha256"
+          sha256sum --check --strict "creator-platform-${RELEASE_SHA}.tar.gz.sha256"
+
+      - name: Install pnpm for deterministic fallback build
+        if: steps.ci_artifact.outcome != 'success'
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.19.0
+
+      - name: Set up Node.js for deterministic fallback build
+        if: steps.ci_artifact.outcome != 'success'
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Rebuild exact successful CI revision when artifact storage is unavailable
+        if: steps.ci_artifact.outcome != 'success'
+        run: |
+          set -Eeuo pipefail
+          echo "::warning::CI release artifact was unavailable; rebuilding the exact successful CI SHA for staging."
+          test -n "$RELEASE_SHA"
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          pnpm install --frozen-lockfile --prefer-offline
+          pnpm db:generate
+          pnpm build
+          bash infra/deploy/package-release.sh "$RELEASE_SHA"
+          sha256sum "creator-platform-${RELEASE_SHA}.tar.gz" > "creator-platform-${RELEASE_SHA}.tar.gz.sha256"
           sha256sum --check --strict "creator-platform-${RELEASE_SHA}.tar.gz.sha256"
 
       - name: Validate release artifact structure

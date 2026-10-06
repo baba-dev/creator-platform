@@ -278,13 +278,15 @@ jobs:
           sha256sum "creator-platform-${GITHUB_SHA}.tar.gz" > "creator-platform-${GITHUB_SHA}.tar.gz.sha256"
 
       - name: Upload release artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: creator-platform-${{ github.sha }}
           path: |
             creator-platform-${{ github.sha }}.tar.gz
             creator-platform-${{ github.sha }}.tar.gz.sha256
-          retention-days: 30
+          retention-days: 3
           if-no-files-found: error
 
   quality:

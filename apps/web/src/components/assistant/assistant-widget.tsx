@@ -714,10 +714,17 @@ function PixelWidget({
   );
 
   const handleClearChat = useCallback(async () => {
-    if (!thread || sending || pending || clearing) return;
+    if (sending || pending || clearing) return;
+
+    setError(null);
+    if (!thread) {
+      setMessages([]);
+      setInput("");
+      setConfirmClear(false);
+      return;
+    }
 
     setClearing(true);
-    setError(null);
     try {
       const response = await fetch(
         `/api/assistant/message?threadId=${encodeURIComponent(thread.id)}`,
@@ -874,7 +881,9 @@ function PixelWidget({
                 disabled={
                   messages.length === 0 || sending || pending || clearing
                 }
-                className="inline-flex size-10 items-center justify-center gap-2 rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-40"
+                className={`inline-flex h-10 items-center justify-center gap-2 rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-40 ${
+                  isExpanded ? "px-3" : "w-10"
+                }`}
                 aria-label="Clear chat"
                 title={
                   pending
@@ -893,11 +902,11 @@ function PixelWidget({
               {/* Open / close modal popup */}
               <button
                 onClick={() => setIsExpanded(!isExpanded)}
-                className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex size-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label={
                   isExpanded
-                    ? "Collapse to compact panel"
-                    : "Expand to larger popup"
+                    ? "Return Pixel to compact panel"
+                    : "Open Pixel in popup modal"
                 }
                 title={isExpanded ? "Return to compact view" : "Open popup"}
               >
@@ -911,7 +920,7 @@ function PixelWidget({
               {/* Close Button */}
               <button
                 onClick={closePixel}
-                className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex size-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label="Close assistant"
                 title="Close"
               >

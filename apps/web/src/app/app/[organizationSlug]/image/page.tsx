@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { GenerationWorkspace } from "@/components/studio/generation-workspace";
 export default async function ImagePage({
   params,
@@ -8,11 +9,10 @@ export default async function ImagePage({
 }) {
   const { organizationSlug } = await params;
   const { assetId } = await searchParams;
-  return (
-    <GenerationWorkspace
-      slug={organizationSlug}
-      kind="image"
-      initialAssetId={assetId}
-    />
-  );
+  if (assetId) {
+    redirect(
+      `/app/${encodeURIComponent(organizationSlug)}/image/precision?assetId=${encodeURIComponent(assetId)}`,
+    );
+  }
+  return <GenerationWorkspace slug={organizationSlug} kind="image" />;
 }

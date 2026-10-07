@@ -1805,19 +1805,19 @@ export function createBytePlusProvider(
                           start_time: z.number().int().nonnegative(),
                           end_time: z.number().int().nonnegative(),
                           text: z.string().max(3_000),
+                          words: z
+                            .array(
+                              z.object({
+                                start_time: z.number().int().nonnegative(),
+                                end_time: z.number().int().nonnegative(),
+                                text: z.string().max(500),
+                              }),
+                            )
+                            .max(20_000)
+                            .optional(),
                         }),
                       )
                       .max(2_000)
-                      .optional(),
-                    words: z
-                      .array(
-                        z.object({
-                          start_time: z.number().int().nonnegative(),
-                          end_time: z.number().int().nonnegative(),
-                          text: z.string().max(500),
-                        }),
-                      )
-                      .max(20_000)
                       .optional(),
                   })
                   .optional(),
@@ -1851,11 +1851,14 @@ export function createBytePlusProvider(
                       text: sentence.text,
                     }),
                   ),
-                  words: (parsed.data.subtitle.words ?? []).map((word) => ({
-                    startMs: word.start_time,
-                    endMs: word.end_time,
-                    text: word.text,
-                  })),
+                  words: (parsed.data.subtitle.sentences ?? []).flatMap(
+                    (sentence) =>
+                      (sentence.words ?? []).map((word) => ({
+                        startMs: word.start_time,
+                        endMs: word.end_time,
+                        text: word.text,
+                      })),
+                  ),
                 }
               : null;
             return {

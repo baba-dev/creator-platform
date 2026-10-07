@@ -1096,11 +1096,15 @@ describe("BytePlus provider adapter", () => {
           subtitle: {
             text: "Welcome home",
             sentences: [
-              { start_time: 0, end_time: 1250, text: "Welcome home" },
-            ],
-            words: [
-              { start_time: 0, end_time: 600, text: "Welcome" },
-              { start_time: 610, end_time: 1250, text: "home" },
+              {
+                start_time: 0,
+                end_time: 1250,
+                text: "Welcome home",
+                words: [
+                  { start_time: 0, end_time: 600, text: "Welcome" },
+                  { start_time: 610, end_time: 1250, text: "home" },
+                ],
+              },
             ],
           },
         }),

@@ -78,7 +78,7 @@ export default async function Team({
           ← Workspace
         </Link>
         <h1 className="font-display mt-4 text-4xl font-semibold">
-          Team members
+          Team & Members
         </h1>
         <p className="mb-6 mt-2 text-sm text-muted-foreground">
           People with access to {membership.organization.name}.

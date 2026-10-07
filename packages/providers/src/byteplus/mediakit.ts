@@ -79,6 +79,25 @@ export const BYTEPLUS_MEDIAKIT_TOOLS: readonly ProviderToolDescriptor[] = [
     capabilities: { videoInput: true, analysisOutput: true },
   },
   {
+    id: "enhance-video-smoothness",
+    provider: "byteplus-mediakit",
+    displayName: "Video Smoothness Enhancement",
+    description:
+      "Detect and repair periodic stutter and duplicate frames while preserving OmniHuman timing.",
+    category: "video",
+    executionMode: "async",
+    endpoint: "/api/v1/tools/enhance-video-smoothness",
+    pricingMetric: "INPUT_SECOND",
+    capabilities: {
+      videoInput: true,
+      outputVideo: true,
+      analysisOutput: true,
+      maxRepairDurationSeconds: 35,
+      variableBilling: "output-presence",
+      defaultRepair: true,
+    },
+  },
+  {
     id: "text-to-scrolling-video",
     provider: "byteplus-mediakit",
     displayName: "Text to Scrolling Video",
@@ -186,6 +205,47 @@ const configSchema = z.object({
 });
 
 const objectSchema = z.record(z.string(), z.unknown());
+const providerVideoUrlSchema = z
+  .url()
+  .refine((value) => new URL(value).protocol === "https:", "HTTPS URL required");
+
+const portraitMattingInputSchema = z
+  .object({
+    video_url: providerVideoUrlSchema,
+    format: z.enum(["WEBM", "MP4"]).default("WEBM"),
+    background_color: z.enum(["black", "white", "green"]).optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.format !== "MP4" && value.background_color !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["background_color"],
+        message: "background_color is only supported for MP4 matting output",
+      });
+    }
+  });
+
+const videoQualityInputSchema = z
+  .object({ video_url: providerVideoUrlSchema })
+  .strict();
+
+const videoSmoothnessInputSchema = z
+  .object({
+    video_url: providerVideoUrlSchema,
+    periodic_stutter_detect: z
+      .object({
+        periodic_stutter_repair: z.boolean().default(true),
+        align_source_fps: z.boolean().default(true),
+      })
+      .strict()
+      .optional(),
+    duplicate_frame_detect: z
+      .object({ duplicate_frame_repair: z.boolean().default(true) })
+      .strict()
+      .optional(),
+  })
+  .strict();
 const asyncSubmitSchema = z
   .object({
     success: z.boolean(),
@@ -256,6 +316,7 @@ function normalizeStatus(value: string | undefined): ProviderToolStatus {
 }
 
 function sanitizeInput(
+  toolId: string,
   input: Readonly<Record<string, unknown>>,
 ): Record<string, unknown> {
   const parsed = objectSchema.parse(input);
@@ -268,7 +329,25 @@ function sanitizeInput(
       );
     }
   }
-  return { ...parsed };
+
+  const schema =
+    toolId === "matte-portrait-video"
+      ? portraitMattingInputSchema
+      : toolId === "assess-video-quality"
+        ? videoQualityInputSchema
+        : toolId === "enhance-video-smoothness"
+          ? videoSmoothnessInputSchema
+          : null;
+  if (!schema) return { ...parsed };
+
+  const result = schema.safeParse(parsed);
+  if (!result.success) {
+    throw new ProviderRequestError("Invalid MediaKit tool input", false, {
+      code: "INVALID_TOOL_INPUT",
+      stage: "dispatch",
+    });
+  }
+  return result.data;
 }
 
 export function isBytePlusMediaKitConfigured(
@@ -388,7 +467,7 @@ export function createBytePlusMediaKitProvider(
       const payload = await request(tool.endpoint, {
         method: "POST",
         body: JSON.stringify({
-          ...sanitizeInput(submission.input),
+          ...sanitizeInput(tool.id, submission.input),
           client_token: clientToken(submission.idempotencyKey),
         }),
       });

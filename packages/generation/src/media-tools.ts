@@ -454,6 +454,11 @@ export async function createProviderToolExecution(
           mediaKind: string;
           mimeType: string;
           durationMs: number | null;
+          generationJob: {
+            status: string;
+            requestPayload: unknown;
+            providerModel: { providerModelId: string };
+          } | null;
         }
       | null = null;
     if (firstVideoTool(tool.providerToolId)) {
@@ -482,6 +487,13 @@ export async function createProviderToolExecution(
           mediaKind: true,
           mimeType: true,
           durationMs: true,
+          generationJob: {
+            select: {
+              status: true,
+              requestPayload: true,
+              providerModel: { select: { providerModelId: true } },
+            },
+          },
         },
       });
       if (
@@ -490,16 +502,34 @@ export async function createProviderToolExecution(
         sourceAsset.mediaKind !== "VIDEO" ||
         (sourceAsset.purpose === "REFERENCE_INPUT" &&
           sourceAsset.storageOwnerUserId !== userId) ||
-        sourceAsset.durationMs === null ||
-        !Number.isSafeInteger(sourceAsset.durationMs) ||
-        sourceAsset.durationMs <= 0
+      ) {
+        throw new ProviderToolExecutionError("Source video is unavailable.", 409);
+      }
+      const generationPayload = toolResultRecord(
+        sourceAsset.generationJob?.requestPayload,
+      );
+      const legacyOmniHumanDuration =
+        sourceAsset.generationJob?.status === "SUCCEEDED" &&
+        sourceAsset.generationJob.providerModel.providerModelId ===
+          "omnihuman-1.5" &&
+        typeof generationPayload.trustedDrivingAudioDurationMs === "number" &&
+        Number.isSafeInteger(generationPayload.trustedDrivingAudioDurationMs) &&
+        generationPayload.trustedDrivingAudioDurationMs > 0
+          ? generationPayload.trustedDrivingAudioDurationMs
+          : null;
+      const trustedDurationMs =
+        sourceAsset.durationMs ?? legacyOmniHumanDuration;
+      if (
+        trustedDurationMs === null ||
+        !Number.isSafeInteger(trustedDurationMs) ||
+        trustedDurationMs <= 0
       ) {
         throw new ProviderToolExecutionError(
-          "Source video is unavailable or missing trusted duration metadata.",
+          "Source video is missing trusted duration metadata.",
           409,
         );
       }
-      const trustedQuantity = Math.ceil(sourceAsset.durationMs / 1000);
+      const trustedQuantity = Math.ceil(trustedDurationMs / 1000);
       if (trustedQuantity !== input.quotedQuantity) {
         throw new ProviderToolExecutionError(
           "MediaKit quote is stale. Refresh the video and try again.",
@@ -508,7 +538,7 @@ export async function createProviderToolExecution(
       }
       if (
         tool.providerToolId === "enhance-video-smoothness" &&
-        sourceAsset.durationMs > 35_000
+        trustedDurationMs > 35_000
       ) {
         throw new ProviderToolExecutionError(
           "Smoothness repair supports source videos up to 35 seconds.",
@@ -754,6 +784,21 @@ export function providerToolActualQuantity(
   return Math.ceil(duration);
 }
 
+function providerToolDurationMs(
+  result: Readonly<Record<string, unknown>>,
+): number | null {
+  const raw = result.duration;
+  const duration =
+    typeof raw === "number"
+      ? raw
+      : typeof raw === "string" && /^\d+(?:\.\d+)?$/.test(raw)
+        ? Number(raw)
+        : Number.NaN;
+  if (!Number.isFinite(duration) || duration <= 0 || duration > 86_400)
+    return null;
+  return Math.round(duration * 1000);
+}
+
 async function deferOutputRecovery(
   executionId: string,
   errorCode: string,
@@ -968,6 +1013,7 @@ async function finalizeSucceededExecution(executionId: string): Promise<void> {
         data: {
           ...stored,
           status: "READY",
+          durationMs: providerToolDurationMs(result),
         },
       });
       readyOutputAssetId = ready.id;

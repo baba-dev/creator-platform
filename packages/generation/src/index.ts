@@ -180,6 +180,14 @@ export const seedAudioRequestSchema = z
           "Enable long-form production for prompts or durations beyond Seed Audio's native limit.",
       });
     }
+    if (input.longForm && input.format === "pcm") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["format"],
+        message:
+          "Raw PCM is available for native Seed Audio, but stitched long-form requires WAV, MP3, or OGG Opus.",
+      });
+    }
     if (input.longForm && input.referenceImageAssetId) {
       ctx.addIssue({
         code: "custom",

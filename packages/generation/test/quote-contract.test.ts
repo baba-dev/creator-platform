@@ -122,12 +122,30 @@ describe("accepted generation quotes", () => {
       }),
     ).toEqual({
       task: "seed-audio",
+      longForm: false,
       textHash: expect.any(String),
       estimatedDurationSeconds: 30,
       referenceAudioAssetIds: [],
       referenceVoiceKeys: ["russell", "joanne"],
       referenceImageAssetId: null,
     });
+  });
+
+  it("binds long-form mode into the signed Seed Audio quote", () => {
+    const native = quoteParameters("VOICE", {
+      task: "seed-audio",
+      text: "Narration",
+      estimatedDurationSeconds: 120,
+    });
+    const longForm = quoteParameters("VOICE", {
+      task: "seed-audio",
+      longForm: true,
+      text: "Narration",
+      estimatedDurationSeconds: 180,
+    });
+    expect(native.longForm).toBe(false);
+    expect(longForm.longForm).toBe(true);
+    expect(longForm).not.toEqual(native);
   });
 
   it("keeps omitted last-frame defaults consistent between legacy and V2 video quotes", () => {

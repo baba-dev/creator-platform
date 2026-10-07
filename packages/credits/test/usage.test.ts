@@ -156,6 +156,37 @@ describe("generation pricing policies", () => {
         .billableQuantity,
     ).toBe(11);
   });
+  it("reserves Seed Audio against the declared multi-segment envelope", () => {
+    const seedAudioPrice: PriceSnapshot = {
+      ...price,
+      pricingDimension: "SECOND",
+      providerCostMicroUsd: 18_000n,
+      unitQuantity: 1,
+      usageRates: undefined,
+    };
+    const native = estimateGeneration({
+      price: seedAudioPrice,
+      mediaKind: "VOICE",
+      providerModelId: "seed-audio-1.0",
+      durationSeconds: 90,
+      billableQuantity: 90,
+    });
+    const longForm = estimateGeneration({
+      price: seedAudioPrice,
+      mediaKind: "VOICE",
+      providerModelId: "seed-audio-1.0",
+      durationSeconds: 240,
+      billableQuantity: 240,
+      reservationBillableQuantity: 360,
+    });
+    expect(native.reservation.providerCostMicroUsd).toBe(18_000n * 120n);
+    expect(longForm.quote.providerCostMicroUsd).toBe(18_000n * 240n);
+    expect(longForm.reservation.providerCostMicroUsd).toBe(18_000n * 360n);
+    expect(longForm.reservation.customerCredits).toBeGreaterThan(
+      longForm.quote.customerCredits,
+    );
+  });
+
   it("supports v2 rate tables and prices aggregate reference-video duration", () => {
     const v2Rates = { ...usageRates, estimator: "byteplus-video-v2" as const };
     expect(parseUsageRates(v2Rates).estimator).toBe("byteplus-video-v2");

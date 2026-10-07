@@ -38,12 +38,7 @@ interface ExecutionResponse {
   error?: string;
 }
 
-const TERMINAL = new Set([
-  "SUCCEEDED",
-  "FAILED",
-  "CANCELLED",
-  "MANUAL_REVIEW",
-]);
+const TERMINAL = new Set(["SUCCEEDED", "FAILED", "CANCELLED", "MANUAL_REVIEW"]);
 
 export function SpokespersonMediaKitTools({
   organizationId,
@@ -79,8 +74,11 @@ export function SpokespersonMediaKitTools({
       { cache: "no-store", signal: controller.signal },
     )
       .then(async (response) => {
-        const body = (await response.json().catch(() => ({}))) as ToolCatalogResponse;
-        if (!response.ok) throw new Error(body.error ?? "MediaKit tools are unavailable.");
+        const body = (await response
+          .json()
+          .catch(() => ({}))) as ToolCatalogResponse;
+        if (!response.ok)
+          throw new Error(body.error ?? "MediaKit tools are unavailable.");
         return body;
       })
       .then((body) => {
@@ -89,7 +87,11 @@ export function SpokespersonMediaKitTools({
       .catch((error: unknown) => {
         if (!active || controller.signal.aborted) return;
         setCatalog(null);
-        setMessage(error instanceof Error ? error.message : "MediaKit tools are unavailable.");
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : "MediaKit tools are unavailable.",
+        );
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -115,7 +117,9 @@ export function SpokespersonMediaKitTools({
         `/api/spokesperson/tools/${encodeURIComponent(executionId)}`,
         { cache: "no-store" },
       );
-      const body = (await response.json().catch(() => ({}))) as ExecutionResponse;
+      const body = (await response
+        .json()
+        .catch(() => ({}))) as ExecutionResponse;
       if (!response.ok || !body.execution) {
         throw new Error(body.error ?? "Unable to read MediaKit status.");
       }
@@ -128,7 +132,11 @@ export function SpokespersonMediaKitTools({
         );
       }
 
-      if (tool === "quality" && body.execution.vqScore !== null && body.execution.vqScore !== undefined) {
+      if (
+        tool === "quality" &&
+        body.execution.vqScore !== null &&
+        body.execution.vqScore !== undefined
+      ) {
         setQualityScore(body.execution.vqScore);
         const band =
           body.execution.vqScore >= 70
@@ -185,7 +193,9 @@ export function SpokespersonMediaKitTools({
             : {}),
         }),
       });
-      const body = (await response.json().catch(() => ({}))) as ExecutionResponse;
+      const body = (await response
+        .json()
+        .catch(() => ({}))) as ExecutionResponse;
       if (!response.ok || !body.execution?.id) {
         throw new Error(body.error ?? "Unable to start MediaKit processing.");
       }
@@ -214,8 +224,8 @@ export function SpokespersonMediaKitTools({
             OmniHuman finishing tools
           </p>
           <p className="mt-1 max-w-xl text-xs leading-5 text-muted-foreground">
-            Run BytePlus MediaKit directly on this OmniHuman render. Source media
-            stays private and is exposed to the provider only through a
+            Run BytePlus MediaKit directly on this OmniHuman render. Source
+            media stays private and is exposed to the provider only through a
             short-lived execution-bound URL.
           </p>
         </div>
@@ -307,7 +317,9 @@ export function SpokespersonMediaKitTools({
             className="mt-3 w-full"
             size="sm"
             variant="secondary"
-            disabled={loading || running !== null || !canGenerate || !matting?.available}
+            disabled={
+              loading || running !== null || !canGenerate || !matting?.available
+            }
             onClick={() => void run("matting")}
           >
             {running === "matting" ? "Matting…" : "Remove background"}
@@ -315,7 +327,7 @@ export function SpokespersonMediaKitTools({
           <p className="mt-2 text-[10px] text-muted-foreground">
             {matting?.estimatedCredits
               ? `Up to ${matting.estimatedCredits} credits`
-              : matting?.reason ?? "Loading price…"}
+              : (matting?.reason ?? "Loading price…")}
           </p>
         </div>
 
@@ -331,7 +343,9 @@ export function SpokespersonMediaKitTools({
             className="mt-12 w-full"
             size="sm"
             variant="secondary"
-            disabled={loading || running !== null || !canGenerate || !quality?.available}
+            disabled={
+              loading || running !== null || !canGenerate || !quality?.available
+            }
             onClick={() => void run("quality")}
           >
             {running === "quality" ? "Assessing…" : "Assess quality"}
@@ -339,7 +353,7 @@ export function SpokespersonMediaKitTools({
           <p className="mt-2 text-[10px] text-muted-foreground">
             {quality?.estimatedCredits
               ? `${quality.estimatedCredits} credits`
-              : quality?.reason ?? "Loading price…"}
+              : (quality?.reason ?? "Loading price…")}
           </p>
         </div>
 
@@ -369,7 +383,7 @@ export function SpokespersonMediaKitTools({
           <p className="mt-2 text-[10px] text-muted-foreground">
             {smoothness?.estimatedCredits
               ? `Up to ${smoothness.estimatedCredits} credits; ${smoothness.detectionOnlyCredits ?? "—"} if no repair is needed`
-              : smoothness?.reason ?? "Loading price…"}
+              : (smoothness?.reason ?? "Loading price…")}
           </p>
         </div>
       </div>

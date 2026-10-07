@@ -49,6 +49,24 @@ type ReferenceMode = "CLIPS" | "VOICES";
 type AudioFormat = "wav" | "mp3" | "pcm" | "ogg_opus";
 type SampleRate = 8000 | 16000 | 24000 | 32000 | 44100 | 48000;
 
+export type SeedAudioInitialTake = {
+  sourceText: string;
+  workflow: Mode;
+  duration: number;
+  speechRate: number;
+  loudnessRate: number;
+  pitch: number;
+  subtitles: boolean;
+  language: (typeof LANGUAGES)[number][0];
+  directorPreset: string;
+  format: AudioFormat;
+  sampleRate: SampleRate;
+  referenceAudioAssetIds: string[];
+  referenceVoiceKeys: string[];
+  referenceImageAssetId: string;
+  parentGenerationId: string;
+};
+
 const WORKFLOWS: readonly {
   value: Mode;
   title: string;
@@ -82,7 +100,7 @@ const WORKFLOWS: readonly {
     value: "LONG",
     title: "Long-form narrator",
     detail:
-      "Build polished narration with the model's native 120-second window.",
+      "Produce up to five minutes with automatic continuity, normalization and seamless stitching.",
     icon: "story",
     badge: "Long form",
   },
@@ -226,31 +244,50 @@ export function SeedAudioStudio({
   organizationId,
   organizationSlug,
   canGenerate,
+  initialTake,
 }: {
   organizationId: string;
   organizationSlug: string;
   canGenerate: boolean;
+  initialTake?: SeedAudioInitialTake | null;
 }) {
   const [model, setModel] = useState<Model | null>(null);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [voices, setVoices] = useState<PresetVoice[]>([]);
-  const [script, setScript] = useState("");
-  const [mode, setMode] = useState<Mode>("CREATE");
-  const [referenceMode, setReferenceMode] = useState<ReferenceMode>("CLIPS");
-  const [audioIds, setAudioIds] = useState<string[]>([]);
-  const [referenceVoiceKeys, setReferenceVoiceKeys] = useState<string[]>([]);
-  const [imageId, setImageId] = useState("");
-  const [duration, setDuration] = useState(30);
-  const [speechRate, setSpeechRate] = useState(1);
-  const [loudnessRate, setLoudnessRate] = useState(1);
-  const [pitch, setPitch] = useState(0);
-  const [subtitles, setSubtitles] = useState(true);
-  const [language, setLanguage] =
-    useState<(typeof LANGUAGES)[number][0]>("auto");
-  const [directorPreset, setDirectorPreset] = useState("documentary");
+  const [script, setScript] = useState(initialTake?.sourceText ?? "");
+  const [mode, setMode] = useState<Mode>(initialTake?.workflow ?? "CREATE");
+  const [referenceMode, setReferenceMode] = useState<ReferenceMode>(
+    initialTake?.referenceVoiceKeys.length ? "VOICES" : "CLIPS",
+  );
+  const [audioIds, setAudioIds] = useState<string[]>(
+    initialTake?.referenceAudioAssetIds ?? [],
+  );
+  const [referenceVoiceKeys, setReferenceVoiceKeys] = useState<string[]>(
+    initialTake?.referenceVoiceKeys ?? [],
+  );
+  const [imageId, setImageId] = useState(
+    initialTake?.referenceImageAssetId ?? "",
+  );
+  const [duration, setDuration] = useState(initialTake?.duration ?? 30);
+  const [speechRate, setSpeechRate] = useState(initialTake?.speechRate ?? 1);
+  const [loudnessRate, setLoudnessRate] = useState(
+    initialTake?.loudnessRate ?? 1,
+  );
+  const [pitch, setPitch] = useState(initialTake?.pitch ?? 0);
+  const [subtitles, setSubtitles] = useState(initialTake?.subtitles ?? true);
+  const [language, setLanguage] = useState<(typeof LANGUAGES)[number][0]>(
+    initialTake?.language ?? "auto",
+  );
+  const [directorPreset, setDirectorPreset] = useState(
+    initialTake?.directorPreset ?? "documentary",
+  );
   const [outputProfile, setOutputProfile] = useState("web");
-  const [format, setFormat] = useState<AudioFormat>("mp3");
-  const [sampleRate, setSampleRate] = useState<SampleRate>(44100);
+  const [format, setFormat] = useState<AudioFormat>(
+    initialTake?.format ?? "mp3",
+  );
+  const [sampleRate, setSampleRate] = useState<SampleRate>(
+    initialTake?.sampleRate ?? 44100,
+  );
   const [assetQuery, setAssetQuery] = useState("");
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteKey, setQuoteKey] = useState<string | null>(null);
@@ -329,9 +366,13 @@ export function SeedAudioStudio({
     const languageDirection =
       language === "auto" ? "" : ` Perform in ${language}.`;
     const referenceCount =
-      referenceMode === "CLIPS" ? audioIds.length : referenceVoiceKeys.length;
+      mode === "LONG"
+        ? referenceVoiceKeys.length
+        : referenceMode === "CLIPS"
+          ? audioIds.length
+          : referenceVoiceKeys.length;
     const referenceDirection =
-      mode === "MATCH" && referenceCount > 0
+      (mode === "MATCH" || mode === "LONG") && referenceCount > 0
         ? ` Use ${Array.from(
             { length: referenceCount },
             (_, index) => `@Audio${index + 1}`,
@@ -355,9 +396,14 @@ export function SeedAudioStudio({
     referenceVoiceKeys.length,
   ]);
 
-  const promptTooLong = providerPrompt.length > 3000;
+  const promptLimit = mode === "LONG" ? 7_500 : 3_000;
+  const promptTooLong = providerPrompt.length > promptLimit;
   const activeAudioReferenceCount =
-    referenceMode === "CLIPS" ? audioIds.length : referenceVoiceKeys.length;
+    mode === "LONG"
+      ? referenceVoiceKeys.length
+      : referenceMode === "CLIPS"
+        ? audioIds.length
+        : referenceVoiceKeys.length;
   const referenceReady = mode !== "MATCH" || activeAudioReferenceCount > 0;
   const imageReady = mode !== "IMAGE" || Boolean(imageId);
 
@@ -366,14 +412,17 @@ export function SeedAudioStudio({
       organizationId,
       modelId: model?.id,
       task: "seed-audio" as const,
+      longForm: mode === "LONG",
       text: providerPrompt,
       estimatedDurationSeconds: duration,
       referenceAudioAssetIds:
         mode === "MATCH" && referenceMode === "CLIPS" ? audioIds : [],
       referenceVoiceKeys:
-        mode === "MATCH" && referenceMode === "VOICES"
-          ? referenceVoiceKeys
-          : [],
+        mode === "LONG"
+          ? referenceVoiceKeys.slice(0, 1)
+          : mode === "MATCH" && referenceMode === "VOICES"
+            ? referenceVoiceKeys
+            : [],
       referenceImageAssetId:
         mode === "IMAGE" ? imageId || undefined : undefined,
     }),
@@ -475,6 +524,14 @@ export function SeedAudioStudio({
     );
   }
 
+  function toggleLongVoice(key: string) {
+    setAudioIds([]);
+    setReferenceMode("VOICES");
+    setReferenceVoiceKeys((current) =>
+      current[0] === key ? [] : [key],
+    );
+  }
+
   function applyOutputProfile(profile: (typeof OUTPUT_PROFILES)[number]) {
     setOutputProfile(profile.id);
     setFormat(profile.format);
@@ -503,14 +560,22 @@ export function SeedAudioStudio({
           organizationId,
           modelId: model.id,
           task: "seed-audio",
+          longForm: mode === "LONG",
+          workflow: mode,
+          sourceText: script.trim(),
+          directorPreset,
+          language,
+          parentGenerationId: initialTake?.parentGenerationId || undefined,
           textPrompt: providerPrompt,
           estimatedDurationSeconds: duration,
           referenceAudioAssetIds:
             mode === "MATCH" && referenceMode === "CLIPS" ? audioIds : [],
           referenceVoiceKeys:
-            mode === "MATCH" && referenceMode === "VOICES"
-              ? referenceVoiceKeys
-              : [],
+            mode === "LONG"
+              ? referenceVoiceKeys.slice(0, 1)
+              : mode === "MATCH" && referenceMode === "VOICES"
+                ? referenceVoiceKeys
+                : [],
           referenceImageAssetId:
             mode === "IMAGE" ? imageId || undefined : undefined,
           priceVersionId: model.priceVersionId,
@@ -768,6 +833,117 @@ export function SeedAudioStudio({
             </div>
           </div>
         )}
+
+        {mode === "LONG" ? (
+          <div className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-7">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="max-w-2xl">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">
+                  Long-form Producer
+                </p>
+                <h2 className="font-display mt-1 text-xl font-semibold">
+                  One voice, multiple seamless chapters
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  Creator keeps the same direction across native Seed Audio
+                  calls, loudness-normalizes each chapter, then joins them into
+                  one master with a short crossfade.
+                </p>
+              </div>
+              <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary">
+                <Icon name="story" className="size-4" />
+                Up to 5 minutes
+              </span>
+            </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-3">
+              {Array.from(
+                {
+                  length:
+                    duration <= 120
+                      ? 1
+                      : Math.min(3, Math.ceil(duration / 105)),
+                },
+                (_, index) => (
+                  <div
+                    key={index}
+                    className="relative min-h-28 overflow-hidden rounded-2xl border border-primary/20 bg-primary/[0.06] p-4"
+                  >
+                    <Icon
+                      name="voice"
+                      className="absolute -bottom-4 -right-2 size-20 text-primary/[0.05]"
+                    />
+                    <span className="grid size-9 place-items-center rounded-xl bg-primary text-xs font-bold text-primary-foreground">
+                      {index + 1}
+                    </span>
+                    <p className="mt-3 text-sm font-semibold">
+                      {index === 0
+                        ? "Establish voice"
+                        : index === 2
+                          ? "Finish naturally"
+                          : "Continue seamlessly"}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Native Seed Audio chapter
+                    </p>
+                  </div>
+                ),
+              )}
+            </div>
+
+            <div className="mt-5 border-t border-border pt-5">
+              <div className="flex items-center gap-3">
+                <span className="grid size-10 place-items-center rounded-2xl bg-muted text-primary">
+                  <Icon name="voice" className="size-5" />
+                </span>
+                <div>
+                  <p className="text-sm font-semibold">
+                    Optional voice continuity anchor
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Choose one verified voice to keep identity stable across
+                    chapters, or leave blank for prompt-directed narration.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                {voices.slice(0, 8).map((voice) => {
+                  const selected = referenceVoiceKeys[0] === voice.key;
+                  return (
+                    <button
+                      key={voice.key}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => toggleLongVoice(voice.key)}
+                      className={`relative overflow-hidden rounded-2xl border p-3 text-left transition focus-visible:outline-2 focus-visible:outline-ring ${
+                        selected
+                          ? "border-primary bg-primary/10"
+                          : "border-border bg-background hover:border-primary/40"
+                      }`}
+                    >
+                      <Icon
+                        name="voice"
+                        className="absolute -bottom-3 -right-2 size-14 text-primary/[0.05]"
+                      />
+                      <span className="block truncate text-sm font-semibold">
+                        {voice.displayName}
+                      </span>
+                      <span className="mt-1 block truncate text-xs text-muted-foreground">
+                        {voice.style || voice.language}
+                      </span>
+                      {selected ? (
+                        <span className="mt-2 inline-flex items-center gap-1 text-[0.68rem] font-semibold text-primary">
+                          <Icon name="check" className="size-3.5" />
+                          Continuity anchor
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {mode === "MATCH" ? (
           <div className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-7">
@@ -1067,8 +1243,8 @@ export function SeedAudioStudio({
             id="seed-audio-script"
             value={script}
             onChange={(event) => setScript(event.target.value)}
-            maxLength={3000}
-            rows={mode === "LONG" ? 14 : 10}
+            maxLength={mode === "LONG" ? 7_000 : 3_000}
+            rows={mode === "LONG" ? 16 : 10}
             placeholder={
               mode === "IMAGE"
                 ? "Type only the words the character should speak…"
@@ -1088,7 +1264,8 @@ export function SeedAudioStudio({
                   : "text-muted-foreground"
               }
             >
-              Provider prompt: {providerPrompt.length.toLocaleString()} / 3,000
+              Provider prompt: {providerPrompt.length.toLocaleString()} /{" "}
+              {promptLimit.toLocaleString()}
             </span>
             {mode !== "IMAGE" ? (
               <span className="text-muted-foreground">
@@ -1189,7 +1366,10 @@ export function SeedAudioStudio({
             <div className="sm:col-span-2">
               <p className="text-sm font-semibold">Target duration</p>
               <div className="mt-2 grid grid-cols-5 gap-2">
-                {[15, 30, 60, 90, 120].map((seconds) => (
+                {(mode === "LONG"
+                  ? [60, 120, 180, 240, 300]
+                  : [15, 30, 60, 90, 120]
+                ).map((seconds) => (
                   <button
                     key={seconds}
                     type="button"
@@ -1200,7 +1380,7 @@ export function SeedAudioStudio({
                         : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground"
                     }`}
                   >
-                    {seconds}s
+                    {seconds >= 60 ? `${seconds / 60}m` : `${seconds}s`}
                   </button>
                 ))}
               </div>
@@ -1341,7 +1521,11 @@ export function SeedAudioStudio({
             <dd className="font-semibold">
               {mode === "MATCH"
                 ? activeAudioReferenceCount
-                : mode === "IMAGE"
+                : mode === "LONG"
+                  ? referenceVoiceKeys.length
+                    ? "1 voice"
+                    : "Prompt only"
+                  : mode === "IMAGE"
                   ? imageId
                     ? "1 image"
                     : "None"

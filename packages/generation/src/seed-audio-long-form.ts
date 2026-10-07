@@ -153,9 +153,10 @@ export function planSeedAudioLongForm(
     "Maintain the exact same vocal identity, timbre, pace, recording perspective, and emotional direction as the surrounding segments.";
   const overhead = direction.length + continuity.length + 120;
   const maxScriptChars = Math.max(900, 3_000 - overhead);
-  const byDuration = Math.ceil(
-    estimatedDurationSeconds / SEED_AUDIO_SEGMENT_TARGET_SECONDS,
-  );
+  const byDuration =
+    estimatedDurationSeconds <= SEED_AUDIO_NATIVE_MAX_SECONDS
+      ? 1
+      : Math.ceil(estimatedDurationSeconds / SEED_AUDIO_SEGMENT_TARGET_SECONDS);
   const byChars = Math.ceil(spokenText.length / maxScriptChars);
   const requestedSegments = Math.max(1, byDuration, byChars);
   if (requestedSegments > SEED_AUDIO_LONG_FORM_MAX_SEGMENTS)

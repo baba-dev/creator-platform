@@ -158,6 +158,25 @@ describe("private image storage", () => {
     await expect(downloadVideo(url)).rejects.toThrow("untrusted video host");
   });
 
+  it("accepts WebM object keys for MediaKit-derived video assets", async () => {
+    const root = await mkdtemp(join(tmpdir(), "creator-webm-storage-"));
+    vi.stubEnv("ASSET_STORAGE_ROOT", root);
+    try {
+      const bytes = Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x42, 0x86, 0x81]);
+      const result = await storeVideo(
+        "tool-output.webm",
+        bytes,
+        undefined,
+        undefined,
+        "video/webm",
+      );
+      expect(result.byteSize).toBe(BigInt(bytes.length));
+      expect(await readStoredAsset("tool-output.webm")).toEqual(bytes);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("writes and reads a private MP4 object", async () => {
     const root = await mkdtemp(join(tmpdir(), "creator-video-storage-"));
     vi.stubEnv("ASSET_STORAGE_ROOT", root);

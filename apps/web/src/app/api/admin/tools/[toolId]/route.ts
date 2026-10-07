@@ -143,7 +143,10 @@ export async function PATCH(
     input.providerCostNoOutputMicroUsd > input.providerCostMicroUsd
   ) {
     return NextResponse.json(
-      { error: "Detection-only provider cost cannot exceed the maximum provider cost." },
+      {
+        error:
+          "Detection-only provider cost cannot exceed the maximum provider cost.",
+      },
       { status: 400 },
     );
   }

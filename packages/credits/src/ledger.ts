@@ -626,3 +626,259 @@ export async function getWalletBalance(
   if (!wallet) throw new WalletNotFoundError(walletId);
   return wallet.balanceCache;
 }
+
+export interface ReferenceCreditMutationParams {
+  walletId: string;
+  amountCredits: bigint;
+  idempotencyKey: string;
+  referenceType: string;
+  referenceId: string;
+  description?: string;
+  metadata?: Prisma.InputJsonValue;
+}
+
+function assertLedgerReference(value: string, field: string): void {
+  if (!value || value.length > 191) {
+    throw new InvalidAmountError(
+      `${field} must be between 1 and 191 characters`,
+    );
+  }
+}
+
+export async function reserveCreditsForReference(
+  tx: Prisma.TransactionClient,
+  params: ReferenceCreditMutationParams,
+): Promise<LedgerEntry> {
+  const amount = requireNonNegativeInteger(
+    params.amountCredits,
+    "amountCredits",
+  );
+  if (amount === 0n)
+    throw new InvalidAmountError(
+      "Reservation amount must be greater than zero",
+    );
+  assertLedgerReference(params.referenceType, "referenceType");
+  assertLedgerReference(params.referenceId, "referenceId");
+
+  const existing = await tx.ledgerEntry.findUnique({
+    where: { idempotencyKey: params.idempotencyKey },
+  });
+  if (existing) {
+    if (
+      existing.walletId === params.walletId &&
+      existing.type === "RESERVATION" &&
+      existing.referenceType === params.referenceType &&
+      existing.referenceId === params.referenceId &&
+      existing.amountCredits === amount
+    )
+      return existing;
+    throw new IdempotencyConflictError(params.idempotencyKey);
+  }
+
+  const wallet = await lockAndGetWallet(tx, params.walletId);
+  if (wallet.balanceCache < amount) {
+    throw new InsufficientCreditsError(wallet.balanceCache, amount);
+  }
+  const balanceAfter = wallet.balanceCache - amount;
+  const entry = await tx.ledgerEntry.create({
+    data: {
+      walletId: params.walletId,
+      type: "RESERVATION",
+      amountCredits: amount,
+      balanceAfter,
+      idempotencyKey: params.idempotencyKey,
+      referenceType: params.referenceType,
+      referenceId: params.referenceId,
+      description: params.description,
+      metadata: params.metadata,
+    },
+  });
+  await tx.wallet.update({
+    where: { id: params.walletId },
+    data: { balanceCache: balanceAfter, version: { increment: 1 } },
+  });
+  return entry;
+}
+
+export async function captureCreditsForReference(
+  tx: Prisma.TransactionClient,
+  params: ReferenceCreditMutationParams,
+): Promise<LedgerEntry> {
+  const amount = requireNonNegativeInteger(
+    params.amountCredits,
+    "amountCredits",
+  );
+  assertLedgerReference(params.referenceType, "referenceType");
+  assertLedgerReference(params.referenceId, "referenceId");
+
+  const existing = await tx.ledgerEntry.findUnique({
+    where: { idempotencyKey: params.idempotencyKey },
+  });
+  if (existing) {
+    if (
+      existing.walletId === params.walletId &&
+      existing.type === "CAPTURE" &&
+      existing.referenceType === params.referenceType &&
+      existing.referenceId === params.referenceId &&
+      existing.amountCredits === amount
+    )
+      return existing;
+    throw new IdempotencyConflictError(params.idempotencyKey);
+  }
+
+  const wallet = await lockAndGetWallet(tx, params.walletId);
+  const reservation = await tx.ledgerEntry.findFirst({
+    where: {
+      walletId: params.walletId,
+      referenceType: params.referenceType,
+      referenceId: params.referenceId,
+      type: "RESERVATION",
+    },
+    include: { reversals: true },
+  });
+  if (!reservation) {
+    throw new LedgerDomainError(
+      "RESERVATION_NOT_FOUND",
+      "No active credit reservation was found.",
+    );
+  }
+  const capture = await tx.ledgerEntry.findFirst({
+    where: {
+      walletId: params.walletId,
+      referenceType: params.referenceType,
+      referenceId: params.referenceId,
+      type: "CAPTURE",
+    },
+  });
+  if (capture || reservation.reversals.length > 0) {
+    throw new LedgerDomainError(
+      "RESERVATION_ALREADY_SETTLED",
+      "The credit reservation is already settled.",
+    );
+  }
+  if (amount > reservation.amountCredits) {
+    throw new InvalidAmountError(
+      "Capture cannot exceed the amount reserved before provider submission",
+    );
+  }
+
+  const balanceAfter =
+    wallet.balanceCache + (reservation.amountCredits - amount);
+  const metadata =
+    params.metadata && typeof params.metadata === "object"
+      ? (params.metadata as Record<string, unknown>)
+      : {};
+  const entry = await tx.ledgerEntry.create({
+    data: {
+      walletId: params.walletId,
+      type: "CAPTURE",
+      amountCredits: amount,
+      balanceAfter,
+      idempotencyKey: params.idempotencyKey,
+      referenceType: params.referenceType,
+      referenceId: params.referenceId,
+      description: params.description,
+      metadata: {
+        ...metadata,
+        reservationEntryId: reservation.id,
+        reservedCredits: reservation.amountCredits.toString(),
+      },
+    },
+  });
+  if (balanceAfter !== wallet.balanceCache) {
+    await tx.wallet.update({
+      where: { id: params.walletId },
+      data: { balanceCache: balanceAfter, version: { increment: 1 } },
+    });
+  }
+  return entry;
+}
+
+export async function releaseCreditsForReference(
+  tx: Prisma.TransactionClient,
+  params: ReferenceCreditMutationParams,
+): Promise<LedgerEntry> {
+  const requested = requireNonNegativeInteger(
+    params.amountCredits,
+    "amountCredits",
+  );
+  assertLedgerReference(params.referenceType, "referenceType");
+  assertLedgerReference(params.referenceId, "referenceId");
+
+  const existing = await tx.ledgerEntry.findUnique({
+    where: { idempotencyKey: params.idempotencyKey },
+  });
+  if (existing) {
+    if (
+      existing.walletId === params.walletId &&
+      existing.type === "RELEASE" &&
+      existing.referenceType === params.referenceType &&
+      existing.referenceId === params.referenceId &&
+      existing.amountCredits === requested
+    )
+      return existing;
+    throw new IdempotencyConflictError(params.idempotencyKey);
+  }
+
+  const wallet = await lockAndGetWallet(tx, params.walletId);
+  const capture = await tx.ledgerEntry.findFirst({
+    where: {
+      walletId: params.walletId,
+      referenceType: params.referenceType,
+      referenceId: params.referenceId,
+      type: "CAPTURE",
+    },
+  });
+  if (capture) {
+    throw new LedgerDomainError(
+      "RESERVATION_ALREADY_SETTLED",
+      "The credit reservation was already captured.",
+    );
+  }
+  const reservation = await tx.ledgerEntry.findFirst({
+    where: {
+      walletId: params.walletId,
+      referenceType: params.referenceType,
+      referenceId: params.referenceId,
+      type: "RESERVATION",
+    },
+    include: { reversals: true },
+  });
+  if (!reservation) {
+    throw new LedgerDomainError(
+      "RESERVATION_NOT_FOUND",
+      "No active credit reservation was found.",
+    );
+  }
+  if (reservation.reversals.length > 0) {
+    throw new LedgerDomainError(
+      "RESERVATION_ALREADY_SETTLED",
+      "The credit reservation is already settled.",
+    );
+  }
+  if (requested !== reservation.amountCredits) {
+    throw new InvalidAmountError(
+      "Release must equal the full reservation amount",
+    );
+  }
+  const balanceAfter = wallet.balanceCache + requested;
+  const entry = await tx.ledgerEntry.create({
+    data: {
+      walletId: params.walletId,
+      type: "RELEASE",
+      amountCredits: requested,
+      balanceAfter,
+      idempotencyKey: params.idempotencyKey,
+      referenceType: params.referenceType,
+      referenceId: params.referenceId,
+      reversalOfId: reservation.id,
+      description: params.description,
+      metadata: params.metadata,
+    },
+  });
+  await tx.wallet.update({
+    where: { id: params.walletId },
+    data: { balanceCache: balanceAfter, version: { increment: 1 } },
+  });
+  return entry;
+}

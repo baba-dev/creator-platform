@@ -36,6 +36,7 @@ export * from "./text";
 export * from "./speech-trial";
 export * from "./video-contract";
 export * from "./transcription";
+export * from "./media-tools";
 import { verifyGenerationQuote, quoteParameters } from "./quote-contract";
 
 export const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
@@ -344,30 +345,53 @@ export async function assertWithinMonthlySpendingCap(
   if (params.cap === null) return;
 
   const { start, end } = muscatCalendarMonth(params.now ?? new Date());
-  const [succeededAgg, inFlightAgg] = await Promise.all([
-    tx.generationJob.aggregate({
-      where: {
-        organizationId: params.organizationId,
-        createdById: params.userId,
-        createdAt: { gte: start, lt: end },
-        status: "SUCCEEDED",
-      },
-      _sum: { chargedCredits: true },
-    }),
-    tx.generationJob.aggregate({
-      where: {
-        organizationId: params.organizationId,
-        createdById: params.userId,
-        createdAt: { gte: start, lt: end },
-        status: { notIn: ["CANCELLED", "FAILED", "DRAFT", "SUCCEEDED"] },
-      },
-      _sum: { reservedCredits: true },
-    }),
-  ]);
+  const [succeededAgg, inFlightAgg, toolSucceededAgg, toolInFlightAgg] =
+    await Promise.all([
+      tx.generationJob.aggregate({
+        where: {
+          organizationId: params.organizationId,
+          createdById: params.userId,
+          createdAt: { gte: start, lt: end },
+          status: "SUCCEEDED",
+        },
+        _sum: { chargedCredits: true },
+      }),
+      tx.generationJob.aggregate({
+        where: {
+          organizationId: params.organizationId,
+          createdById: params.userId,
+          createdAt: { gte: start, lt: end },
+          status: { notIn: ["CANCELLED", "FAILED", "DRAFT", "SUCCEEDED"] },
+        },
+        _sum: { reservedCredits: true },
+      }),
+      tx.providerToolExecution.aggregate({
+        where: {
+          organizationId: params.organizationId,
+          createdById: params.userId,
+          createdAt: { gte: start, lt: end },
+          status: "SUCCEEDED",
+        },
+        _sum: { chargedCredits: true },
+      }),
+      tx.providerToolExecution.aggregate({
+        where: {
+          organizationId: params.organizationId,
+          createdById: params.userId,
+          createdAt: { gte: start, lt: end },
+          status: {
+            in: ["QUEUED", "SUBMITTING", "PROCESSING", "MANUAL_REVIEW"],
+          },
+        },
+        _sum: { reservedCredits: true },
+      }),
+    ]);
 
   const spent =
     (succeededAgg._sum.chargedCredits ?? 0n) +
-    (inFlightAgg._sum.reservedCredits ?? 0n);
+    (inFlightAgg._sum.reservedCredits ?? 0n) +
+    (toolSucceededAgg._sum.chargedCredits ?? 0n) +
+    (toolInFlightAgg._sum.reservedCredits ?? 0n);
 
   if (spent + params.additionalCredits > params.cap) {
     throw new GenerationError("Monthly spending cap exceeded.");

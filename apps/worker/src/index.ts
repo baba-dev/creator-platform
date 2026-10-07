@@ -30,13 +30,17 @@ import {
   processTranscriptionJob,
   projectTextJobToChat,
 } from "@aiwa/generation";
+import { processProviderToolExecution } from "@aiwa/generation/media-tools";
 import { mailJobId } from "@aiwa/mail";
 import {
   closeSmtpTransport,
   processMailMessage,
   recoverStaleMailDeliveries,
 } from "@aiwa/mail/transport";
-import { createBytePlusProvider } from "@aiwa/providers/byteplus";
+import {
+  createBytePlusMediaKitProvider,
+  createBytePlusProvider,
+} from "@aiwa/providers/byteplus";
 import { createNvidiaProvider } from "@aiwa/providers/nvidia";
 import { createGroqProvider } from "@aiwa/providers/groq";
 import { createGeminiProvider } from "@aiwa/providers/gemini";
@@ -353,6 +357,41 @@ mailWorker?.on("failed", (job, error) =>
     attemptsMade: job?.attemptsMade,
     errorName: error.name,
     errorMessage: error.message,
+  }),
+);
+
+const providerToolQueue = createQueue("provider-tools");
+const mediaKitProvider =
+  owns("provider-tools") && env.BYTEPLUS_MEDIAKIT_API_KEY
+    ? createBytePlusMediaKitProvider({
+        apiKey: env.BYTEPLUS_MEDIAKIT_API_KEY,
+        baseUrl: env.BYTEPLUS_MEDIAKIT_BASE_URL,
+        requestTimeoutMs: env.BYTEPLUS_MEDIAKIT_REQUEST_TIMEOUT_MS,
+        idleTimeoutMs: env.BYTEPLUS_MEDIAKIT_IDLE_TIMEOUT_MS,
+      })
+    : null;
+
+const providerToolWorker = createWorker(
+  "provider-tools",
+  async (job) => {
+    if (
+      typeof job.data.executionId !== "string" ||
+      job.data.executionId !== job.id
+    ) {
+      throw new Error("Invalid provider-tool queue payload");
+    }
+    if (!mediaKitProvider) {
+      throw new Error("BytePlus MediaKit provider is not configured");
+    }
+    await processProviderToolExecution(job.data.executionId, mediaKitProvider);
+  },
+  { connection: redis, prefix: "aiwa", concurrency: 2 },
+);
+
+providerToolWorker?.on("failed", (job, error) =>
+  log("error", "Provider-tool delivery failed; database state retained", {
+    executionId: job?.data?.executionId,
+    errorName: error.name,
   }),
 );
 
@@ -1034,6 +1073,74 @@ async function dispatchMail() {
   }
 }
 
+let providerToolDispatching = false;
+async function dispatchProviderTools() {
+  if (
+    isShuttingDown ||
+    providerToolDispatching ||
+    !providerToolQueue ||
+    !mediaKitProvider
+  )
+    return;
+
+  providerToolDispatching = true;
+  try {
+    const now = new Date();
+    const staleSubmittingBefore = new Date(now.getTime() - 60_000);
+    const rows = await db.providerToolExecution.findMany({
+      where: {
+        OR: [
+          {
+            status: "QUEUED",
+            OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }],
+          },
+          {
+            status: "SUBMITTING",
+            updatedAt: { lt: staleSubmittingBefore },
+          },
+          {
+            status: "PROCESSING",
+            OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }],
+          },
+        ],
+      },
+      select: { id: true, organizationId: true, status: true },
+      orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
+      take: 100,
+    });
+
+    for (const execution of applyTenantFairness(rows)) {
+      if (isShuttingDown) break;
+      const existing = await providerToolQueue.getJob(execution.id);
+      if (existing) {
+        const state = await existing.getState();
+        if (["failed", "completed"].includes(state)) await existing.remove();
+        else continue;
+      }
+      await providerToolQueue.add(
+        execution.status === "PROCESSING" ? "poll" : "submit",
+        { executionId: execution.id },
+        {
+          jobId: execution.id,
+          attempts: 1,
+          removeOnComplete: true,
+          removeOnFail: 100,
+        },
+      );
+    }
+  } catch (error) {
+    log(
+      "error",
+      "Provider-tool dispatch unavailable; database executions retained",
+      {
+        errorName: error instanceof Error ? error.name : "UnknownError",
+      },
+    );
+  } finally {
+    providerToolDispatching = false;
+  }
+}
+
 let generationDispatching = false;
 let generationSubmitCursor: string | null = null;
 let generationPollCursor: string | null = null;
@@ -1304,6 +1411,7 @@ function schedule(
 }
 schedule("mail", dispatchMail, 5_000);
 schedule("generation", dispatchGeneration, 10_000);
+schedule("provider-tools", dispatchProviderTools, 5_000);
 schedule("reasoning", dispatchReasoning, 2_000);
 schedule("asset-ingestion", dispatchAssets, 15_000);
 schedule("asset-ingestion", dispatchGarbageCollection, 60_000);
@@ -1372,6 +1480,7 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   // maximum valid configuration as well as today's defaults.
   const providerDeadlineMs = Math.max(
     env.BYTEPLUS_REQUEST_TIMEOUT_MS ?? 180_000,
+    env.BYTEPLUS_MEDIAKIT_REQUEST_TIMEOUT_MS ?? 180_000,
     env.NVIDIA_REQUEST_TIMEOUT_MS ?? 60_000,
     env.GROQ_REQUEST_TIMEOUT_MS ?? 45_000,
     env.GEMINI_REQUEST_TIMEOUT_MS ?? 45_000,
@@ -1434,6 +1543,7 @@ log("info", "worker started", {
   queues: selectedQueues,
   environment: env.APP_ENV,
   bytePlusConfigured: Boolean(bytePlusProvider),
+  mediaKitConfigured: Boolean(mediaKitProvider),
   nvidiaConfigured: Boolean(nvidiaProvider),
   mailEnabled: env.MAIL_ENABLED,
   mediaEnabled: env.MEDIA_PROCESSING_ENABLED,

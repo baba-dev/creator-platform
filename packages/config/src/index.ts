@@ -117,6 +117,12 @@ export const serverEnvSchema = z.object({
   BYTEPLUS_SPEECH_API_KEY: optionalString,
   BYTEPLUS_SPEECH_APP_KEY: optionalString,
   BYTEPLUS_SPEECH_BASE_URL: optionalHttpsUrl,
+  BYTEPLUS_MEDIAKIT_API_KEY: optionalString,
+  BYTEPLUS_MEDIAKIT_BASE_URL: optionalHttpsUrl.default(
+    "https://mediakit.ap-southeast-1.bytepluses.com",
+  ),
+  BYTEPLUS_MEDIAKIT_REQUEST_TIMEOUT_MS: optionalPositiveInteger,
+  BYTEPLUS_MEDIAKIT_IDLE_TIMEOUT_MS: optionalPositiveInteger,
   BYTEPLUS_REQUEST_TIMEOUT_MS: optionalPositiveInteger,
   BYTEPLUS_IDLE_TIMEOUT_MS: optionalPositiveInteger,
   BYTEPLUS_LIVE_SMOKE_ACK: optionalSmokeAcknowledgement,

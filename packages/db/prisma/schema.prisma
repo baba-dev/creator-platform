@@ -83,6 +83,27 @@ enum PricingDimension {
   SECOND
 }
 
+enum ProviderToolExecutionMode {
+  ASYNC
+  SYNC
+}
+
+enum ProviderToolPricingMetric {
+  REQUEST
+  INPUT_SECOND
+  OUTPUT_SECOND
+}
+
+enum ProviderToolExecutionStatus {
+  QUEUED
+  SUBMITTING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  MANUAL_REVIEW
+}
+
 enum GenerationJobStatus {
   DRAFT
   QUOTED
@@ -183,6 +204,8 @@ model User {
   createdPayments        ManualPayment[]          @relation("PaymentCreatedBy")
   confirmedPayments      ManualPayment[]          @relation("PaymentConfirmedBy")
   priceVersions          ModelPriceVersion[]      @relation("PriceVersionCreatedBy")
+  providerToolPrices     ProviderToolPriceVersion[] @relation("ProviderToolPriceCreatedBy")
+  providerToolExecutions ProviderToolExecution[]   @relation("ProviderToolExecutionCreatedBy")
   generationJobs         GenerationJob[]          @relation("GenerationCreatedBy")
   reasoningJobs          ReasoningJob[]           @relation("ReasoningCreatedBy")
   ownedOrganizations     Organization[]           @relation("OrganizationOwner")
@@ -303,6 +326,7 @@ model Organization {
   payments               ManualPayment[]
   projects               Project[]
   generationJobs         GenerationJob[]
+  providerToolExecutions ProviderToolExecution[]
   reasoningJobs          ReasoningJob[]
   auditEvents            AuditEvent[]
   assets                 Asset[]
@@ -477,6 +501,91 @@ model ModelPriceVersion {
 
   @@index([providerModelId, effectiveFrom])
   @@index([effectiveFrom, effectiveTo])
+}
+
+
+model ProviderTool {
+  id            String                    @id @default(cuid())
+  provider      ModelProvider
+  providerToolId String
+  displayName   String
+  description   String                    @db.Text
+  category      String                    @db.VarChar(32)
+  executionMode ProviderToolExecutionMode
+  pricingMetric ProviderToolPricingMetric
+  capabilities  Json
+  enabled       Boolean                   @default(false)
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+  priceVersions ProviderToolPriceVersion[]
+  executions    ProviderToolExecution[]
+
+  @@unique([provider, providerToolId])
+  @@index([enabled, category])
+}
+
+model ProviderToolPriceVersion {
+  id                    String                    @id @default(cuid())
+  providerToolId        String
+  publicationKey        String?                   @unique @db.VarChar(36)
+  publicationHash       String?                   @db.VarChar(64)
+  providerCostMicroUsd  BigInt
+  customerCredits       BigInt
+  fxBaisaNumerator      BigInt
+  fxBaisaDenominator    BigInt
+  targetMarginBps       Int
+  pricingMetric         ProviderToolPricingMetric
+  unitQuantity          Int                       @default(1)
+  creditsPerBaisa       BigInt                    @default(1)
+  providerCostBasisNote String?                    @db.VarChar(255)
+  effectiveFrom         DateTime
+  effectiveTo           DateTime?
+  createdById           String
+  createdAt             DateTime                  @default(now())
+  providerTool          ProviderTool              @relation(fields: [providerToolId], references: [id], onDelete: Restrict)
+  createdBy             User                      @relation("ProviderToolPriceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  executions            ProviderToolExecution[]
+
+  @@index([providerToolId, effectiveFrom])
+  @@index([effectiveFrom, effectiveTo])
+}
+
+model ProviderToolExecution {
+  id                         String                      @id @default(cuid())
+  organizationId             String
+  createdById                String
+  providerToolId             String
+  priceVersionId             String
+  status                     ProviderToolExecutionStatus @default(QUEUED)
+  idempotencyKey             String                      @unique @db.VarChar(64)
+  requestHash                String                      @db.VarChar(64)
+  requestPayload             Json
+  resultPayload              Json?
+  providerTaskId             String?                     @db.VarChar(191)
+  providerRequestId          String?                     @db.VarChar(191)
+  quotedQuantity             Int
+  actualQuantity             Int?
+  reservedCredits            BigInt                      @default(0)
+  chargedCredits             BigInt                      @default(0)
+  actualProviderCostMicroUsd BigInt?
+  retryCount                 Int                         @default(0)
+  maxAttempts                Int                         @default(8)
+  nextAttemptAt              DateTime?
+  errorCode                  String?                     @db.VarChar(128)
+  errorMessage               String?                     @db.Text
+  submittedAt                DateTime?
+  completedAt                DateTime?
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
+  organization               Organization                @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  createdBy                  User                        @relation("ProviderToolExecutionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  providerTool               ProviderTool                @relation(fields: [providerToolId], references: [id], onDelete: Restrict)
+  priceVersion               ProviderToolPriceVersion    @relation(fields: [priceVersionId], references: [id], onDelete: Restrict)
+
+  @@unique([providerToolId, providerTaskId])
+  @@index([status, nextAttemptAt, updatedAt])
+  @@index([organizationId, createdAt])
+  @@index([createdById, createdAt])
 }
 
 model GenerationJob {

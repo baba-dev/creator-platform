@@ -42,6 +42,18 @@ async function apiPatch(toolId: string, body: unknown) {
   return payload;
 }
 
+function readPositiveMicroUsd(
+  data: FormData,
+  field: "providerCostMicroUsd" | "providerCostNoOutputMicroUsd",
+  label: string,
+): string {
+  const value = String(data.get(field) ?? "").trim();
+  if (!/^[1-9]\d*$/.test(value)) {
+    throw new Error(`${label} must be a positive whole number of micro-USD.`);
+  }
+  return value;
+}
+
 export function ProviderToolCatalog({
   initialRows,
   canManage,
@@ -104,11 +116,17 @@ export function ProviderToolCatalog({
     try {
       const payload = await apiPatch(pricingTool.id, {
         idempotencyKey: crypto.randomUUID(),
-        providerCostMicroUsd: String(data.get("providerCostMicroUsd") ?? ""),
+        providerCostMicroUsd: readPositiveMicroUsd(
+          data,
+          "providerCostMicroUsd",
+          "Provider cost",
+        ),
         ...(pricingTool.capabilities.variableBilling === "output-presence"
           ? {
-              providerCostNoOutputMicroUsd: String(
-                data.get("providerCostNoOutputMicroUsd") ?? "",
+              providerCostNoOutputMicroUsd: readPositiveMicroUsd(
+                data,
+                "providerCostNoOutputMicroUsd",
+                "Detection-only cost",
               ),
             }
           : {}),
@@ -283,7 +301,6 @@ export function ProviderToolCatalog({
                   name="providerCostMicroUsd"
                   required
                   inputMode="numeric"
-                  pattern="[1-9][0-9]*"
                   defaultValue={pricingTool.price?.providerCostMicroUsd ?? ""}
                   className="mt-1 h-10 w-full rounded-xl border border-input bg-background px-3 font-mono font-normal"
                 />
@@ -296,7 +313,6 @@ export function ProviderToolCatalog({
                     name="providerCostNoOutputMicroUsd"
                     required
                     inputMode="numeric"
-                    pattern="[1-9][0-9]*"
                     defaultValue={
                       pricingTool.price?.providerCostNoOutputMicroUsd ?? ""
                     }

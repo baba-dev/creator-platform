@@ -47,9 +47,11 @@ export function PrimaryMenu({ slug }: { slug: string }) {
     };
   }, []);
 
-  useEffect(() => {
+  const [previousPathname, setPreviousPathname] = useState(pathname);
+  if (previousPathname !== pathname) {
+    setPreviousPathname(pathname);
     setOpenCategory(null);
-  }, [pathname]);
+  }
 
   return (
     <div

@@ -4,11 +4,11 @@ import { assertWithinMonthlySpendingCap } from "../src/index";
 
 describe("assertWithinMonthlySpendingCap", () => {
   it("skips all database aggregation and checks when cap is null", async () => {
-    const aggregateMock = vi.fn();
+    const generationAggregate = vi.fn();
+    const toolAggregate = vi.fn();
     const mockTx = {
-      generationJob: {
-        aggregate: aggregateMock,
-      },
+      generationJob: { aggregate: generationAggregate },
+      providerToolExecution: { aggregate: toolAggregate },
     } as unknown as Prisma.TransactionClient;
 
     await expect(
@@ -20,19 +20,23 @@ describe("assertWithinMonthlySpendingCap", () => {
       }),
     ).resolves.toBeUndefined();
 
-    expect(aggregateMock).not.toHaveBeenCalled();
+    expect(generationAggregate).not.toHaveBeenCalled();
+    expect(toolAggregate).not.toHaveBeenCalled();
   });
 
-  it("allows generation when spent plus additional credits is within cap", async () => {
-    const aggregateMock = vi
+  it("allows generation when combined generation and provider-tool spend stays within cap", async () => {
+    const generationAggregate = vi
       .fn()
-      .mockResolvedValueOnce({ _sum: { chargedCredits: 300n } }) // SUCCEEDED
-      .mockResolvedValueOnce({ _sum: { reservedCredits: 100n } }); // IN-FLIGHT
+      .mockResolvedValueOnce({ _sum: { chargedCredits: 250n } })
+      .mockResolvedValueOnce({ _sum: { reservedCredits: 50n } });
+    const toolAggregate = vi
+      .fn()
+      .mockResolvedValueOnce({ _sum: { chargedCredits: 40n } })
+      .mockResolvedValueOnce({ _sum: { reservedCredits: 60n } });
 
     const mockTx = {
-      generationJob: {
-        aggregate: aggregateMock,
-      },
+      generationJob: { aggregate: generationAggregate },
+      providerToolExecution: { aggregate: toolAggregate },
     } as unknown as Prisma.TransactionClient;
 
     await expect(
@@ -44,19 +48,23 @@ describe("assertWithinMonthlySpendingCap", () => {
       }),
     ).resolves.toBeUndefined();
 
-    expect(aggregateMock).toHaveBeenCalledTimes(2);
+    expect(generationAggregate).toHaveBeenCalledTimes(2);
+    expect(toolAggregate).toHaveBeenCalledTimes(2);
   });
 
-  it("throws GenerationError when spent plus additional credits exceeds cap", async () => {
-    const aggregateMock = vi
+  it("throws GenerationError when provider-tool reservations push total spend over cap", async () => {
+    const generationAggregate = vi
       .fn()
-      .mockResolvedValueOnce({ _sum: { chargedCredits: 400n } })
+      .mockResolvedValueOnce({ _sum: { chargedCredits: 350n } })
+      .mockResolvedValueOnce({ _sum: { reservedCredits: 25n } });
+    const toolAggregate = vi
+      .fn()
+      .mockResolvedValueOnce({ _sum: { chargedCredits: 25n } })
       .mockResolvedValueOnce({ _sum: { reservedCredits: 50n } });
 
     const mockTx = {
-      generationJob: {
-        aggregate: aggregateMock,
-      },
+      generationJob: { aggregate: generationAggregate },
+      providerToolExecution: { aggregate: toolAggregate },
     } as unknown as Prisma.TransactionClient;
 
     await expect(
@@ -68,6 +76,7 @@ describe("assertWithinMonthlySpendingCap", () => {
       }),
     ).rejects.toThrow("Monthly spending cap exceeded.");
 
-    expect(aggregateMock).toHaveBeenCalledTimes(2);
+    expect(generationAggregate).toHaveBeenCalledTimes(2);
+    expect(toolAggregate).toHaveBeenCalledTimes(2);
   });
 });

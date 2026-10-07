@@ -343,6 +343,7 @@ function PixelWidget({
   const [isExpanded, setIsExpanded] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [showPreferences, setShowPreferences] = useState(false);
   const [thread, setThread] = useState<AssistantThread | null>(null);
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [input, setInput] = useState("");
@@ -365,6 +366,7 @@ function PixelWidget({
     setOpen(false);
     setIsExpanded(false);
     setConfirmClear(false);
+    setShowPreferences(false);
     approveRef.current?.(false);
     triggerRef.current?.focus();
   }, []);
@@ -756,15 +758,12 @@ function PixelWidget({
   }, [thread, sending, pending, clearing]);
 
   const openPixelPreferences = useCallback(() => {
-    const details = panelRef.current?.querySelector<HTMLDetailsElement>(
-      "[data-pixel-preferences]",
-    );
-    if (!details) return;
-    details.open = true;
-    details.scrollIntoView({ block: "center" });
-    details
-      .querySelector<HTMLElement>("summary")
-      ?.focus({ preventScroll: true });
+    setShowPreferences(true);
+    window.setTimeout(() => {
+      panelRef.current
+        ?.querySelector<HTMLElement>("[data-pixel-preferences]")
+        ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }, 0);
   }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -995,6 +994,8 @@ function PixelWidget({
                   threadId={thread.id}
                   refreshKey={refreshKey}
                   onNavigate={handleNavigate}
+                  showPreferences={showPreferences}
+                  onClosePreferences={() => setShowPreferences(false)}
                 />
               )}
               {pending && (

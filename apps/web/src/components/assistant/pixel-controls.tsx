@@ -55,10 +55,14 @@ export function PixelControls({
   threadId,
   refreshKey,
   onNavigate,
+  showPreferences,
+  onClosePreferences,
 }: {
   threadId: string;
   refreshKey: number;
   onNavigate: (route: string) => void;
+  showPreferences: boolean;
+  onClosePreferences: () => void;
 }) {
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [preferences, setPreferences] = useState<Preferences>(defaults);
@@ -152,6 +156,11 @@ export function PixelControls({
     <div className="space-y-3 text-sm [&_button]:min-h-11 [&_button]:h-auto [&_button]:whitespace-normal [&_button]:py-2">
       <details
         data-pixel-preferences
+        hidden={!showPreferences}
+        open={showPreferences}
+        onToggle={(event) => {
+          if (!event.currentTarget.open) onClosePreferences();
+        }}
         className="rounded-xl border border-border bg-background p-3"
       >
         <summary className="min-h-10 cursor-pointer font-semibold">

@@ -192,6 +192,7 @@ function parseStructuredContent(content: string): unknown {
 }
 
 export interface GeminiProvider extends ReasoningProvider {
+  listModels(): Promise<readonly string[]>;
   chat(input: TextChatRequest): Promise<TextChatResult>;
   embed(
     texts: readonly string[],
@@ -222,6 +223,49 @@ export function createGeminiProvider(
 
   return {
     name: "gemini",
+
+    async listModels(): Promise<readonly string[]> {
+      const response = await safeFetch(
+        fetchClient,
+        `${baseUrl}/models`,
+        {
+          headers: {
+            Authorization: `Bearer ${config.apiKey}`,
+            Accept: "application/json",
+          },
+        },
+        timeoutMs,
+        idleTimeoutMs,
+      );
+      await assertSuccessfulResponse(response);
+      const text = await readResponseText(response, MAX_JSON_RESPONSE_BYTES);
+      try {
+        const result = z
+          .object({
+            data: z
+              .array(
+                z.object({
+                  id: z
+                    .string()
+                    .max(256)
+                    .regex(/^[a-zA-Z0-9._/-]+$/),
+                }),
+              )
+              .max(1000),
+          })
+          .parse(JSON.parse(text));
+        return result.data.map((model) => model.id);
+      } catch {
+        throw new ProviderRequestError(
+          "Gemini model listing was invalid",
+          false,
+          {
+            code: "INVALID_PROVIDER_RESPONSE",
+            stage: "parsing",
+          },
+        );
+      }
+    },
 
     async complete(input: ReasoningRequest): Promise<ReasoningResult> {
       const modelId = input.modelId || defaultModel;

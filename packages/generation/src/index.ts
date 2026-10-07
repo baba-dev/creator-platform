@@ -1489,8 +1489,7 @@ async function createSeedAudioJob(userId: string, raw: unknown) {
               id: { in: referenceAssetIds },
               organizationId: input.organizationId,
               status: "READY",
-              storageProvider: "LOCAL",
-              OR: [
+                            OR: [
                 { purpose: "GENERAL" },
                 { purpose: "REFERENCE_INPUT", storageOwnerUserId: userId },
               ],

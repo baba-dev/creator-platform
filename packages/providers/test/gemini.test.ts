@@ -39,6 +39,35 @@ describe("createGeminiProvider", () => {
     ).toThrowError(ProviderConfigurationError);
   });
 
+  it("lists account models without submitting generation", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: [{ id: "gemini-3.5-flash-lite" }],
+        }),
+      ),
+    );
+    const provider = createGeminiProvider({ ...validConfig, fetch: fetchMock });
+    expect(await provider.listModels()).toEqual(["gemini-3.5-flash-lite"]);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(`${validConfig.baseUrl}/models`);
+    expect(fetchMock.mock.calls[0]?.[1]?.body).toBeUndefined();
+  });
+
+  it("does not expose provider error bodies from model listing", async () => {
+    const provider = createGeminiProvider({
+      ...validConfig,
+      fetch: vi
+        .fn()
+        .mockResolvedValue(
+          new Response("secret-provider-body", { status: 404 }),
+        ),
+    });
+    await expect(provider.listModels()).rejects.toThrow(
+      "Gemini request failed with status 404",
+    );
+  });
+
   it("completes a chat request", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(

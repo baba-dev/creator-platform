@@ -10,6 +10,7 @@
     "lint": "eslint src scripts test --max-warnings=0",
     "smoke:byteplus": "node --env-file-if-exists=../../.env --import tsx scripts/byteplus-smoke.ts",
     "smoke:byteplus:voice": "node --env-file-if-exists=../../.env --import tsx scripts/byteplus-voice-smoke.ts",
+    "smoke:byteplus:voice:ab": "node --env-file-if-exists=../../.env --import tsx scripts/byteplus-voice-smoke.ts --ab",
     "start": "node dist/index.cjs",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit"

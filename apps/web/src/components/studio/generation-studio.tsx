@@ -149,7 +149,7 @@ export function GenerationStudio({
   initialMode = "IMAGE",
   promptEnhancementModels = [],
   promptEnhancementDefaultModelId = null,
-  initialVoiceKey = "jasper",
+  initialVoiceKey = "russell",
   initialSpeechRate = 1.0,
 }: {
   canGenerate: boolean;
@@ -171,6 +171,9 @@ export function GenerationStudio({
   const [voiceText, setVoiceText] = useState("");
   const [voiceKey, setVoiceKey] = useState(initialVoiceKey);
   const [speechRate, setSpeechRate] = useState(initialSpeechRate);
+  const [voiceLoudnessRate, setVoiceLoudnessRate] = useState(1.0);
+  const [voicePitch, setVoicePitch] = useState(0);
+  const [voiceStylePrompt, setVoiceStylePrompt] = useState("");
   const [quoteState, setQuoteState] = useState<{
     key: string;
     quote: StudioQuote;
@@ -1191,6 +1194,11 @@ export function GenerationStudio({
         text: voiceText.trim(),
         voiceKey: selectedVoiceKey,
         speechRate,
+        ...(voiceLoudnessRate !== 1 ? { loudnessRate: voiceLoudnessRate } : {}),
+        ...(voicePitch !== 0 ? { pitch: voicePitch } : {}),
+        ...(voiceStylePrompt.trim()
+          ? { stylePrompt: voiceStylePrompt.trim() }
+          : {}),
         format: "mp3",
         ...(templateContext ? { templateId: templateContext.id } : {}),
       };
@@ -1860,6 +1868,110 @@ export function GenerationStudio({
                   >
                     {speechRate.toFixed(1)}×
                   </output>
+                </div>
+
+                <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                  <div className="mb-3">
+                    <p className="text-sm font-semibold text-foreground">
+                      Expression
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      Seed Speech TTS 2.0 follows this delivery direction
+                      without reading the instruction aloud.
+                    </p>
+                  </div>
+
+                  <label
+                    htmlFor="voice-style-prompt"
+                    className="block text-xs font-semibold text-foreground"
+                  >
+                    Delivery instruction
+                  </label>
+                  <input
+                    id="voice-style-prompt"
+                    type="text"
+                    value={voiceStylePrompt}
+                    onChange={(e) => setVoiceStylePrompt(e.target.value)}
+                    maxLength={300}
+                    disabled={busy}
+                    placeholder="Warm, confident commercial narration with natural pauses"
+                    className="mt-1 min-h-11 w-full rounded-xl border border-input bg-card px-3 text-sm text-foreground placeholder:text-muted-foreground"
+                  />
+                  <p className="mt-1 text-xs text-subtle-foreground">
+                    Optional · {voiceStylePrompt.length} / 300
+                  </p>
+
+                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <label
+                        htmlFor="voice-loudness"
+                        className="block text-xs font-semibold text-foreground"
+                      >
+                        Loudness
+                      </label>
+                      <div className="mt-1 flex items-center gap-3">
+                        <input
+                          id="voice-loudness"
+                          type="range"
+                          min="0.5"
+                          max="2"
+                          step="0.1"
+                          value={voiceLoudnessRate}
+                          onChange={(e) =>
+                            setVoiceLoudnessRate(
+                              Number.parseFloat(e.target.value),
+                            )
+                          }
+                          disabled={busy}
+                          aria-valuetext={`${voiceLoudnessRate.toFixed(1)} times loudness`}
+                          className="min-h-11 w-full accent-primary"
+                        />
+                        <output
+                          htmlFor="voice-loudness"
+                          className="min-w-12 text-right text-xs font-semibold tabular-nums text-foreground"
+                        >
+                          {voiceLoudnessRate.toFixed(1)}×
+                        </output>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="voice-pitch"
+                        className="block text-xs font-semibold text-foreground"
+                      >
+                        Pitch
+                      </label>
+                      <div className="mt-1 flex items-center gap-3">
+                        <input
+                          id="voice-pitch"
+                          type="range"
+                          min="-12"
+                          max="12"
+                          step="1"
+                          value={voicePitch}
+                          onChange={(e) =>
+                            setVoicePitch(Number.parseInt(e.target.value, 10))
+                          }
+                          disabled={busy}
+                          aria-valuetext={`${voicePitch} semitones`}
+                          className="min-h-11 w-full accent-primary"
+                        />
+                        <output
+                          htmlFor="voice-pitch"
+                          className="min-w-12 text-right text-xs font-semibold tabular-nums text-foreground"
+                        >
+                          {voicePitch > 0 ? "+" : ""}
+                          {voicePitch}
+                        </output>
+                      </div>
+                    </div>
+                  </div>
+
+                  <p className="mt-3 text-xs text-subtle-foreground">
+                    Output quality is fixed server-side at 24 kHz / 128 kbps
+                    MP3 for consistent production results.
+                  </p>
                 </div>
               </div>
             </>

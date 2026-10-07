@@ -75,8 +75,6 @@ describe("provider tool media grants", () => {
         token,
       }),
     ).toBe(false);
-    expect(
-      verifyProviderMediaGrant({ ...context, token }),
-    ).toBe(false);
+    expect(verifyProviderMediaGrant({ ...context, token })).toBe(false);
   });
 });

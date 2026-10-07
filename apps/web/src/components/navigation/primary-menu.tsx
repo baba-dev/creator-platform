@@ -82,9 +82,7 @@ export function PrimaryMenu({ slug }: { slug: string }) {
           <div key={category.key} className="relative">
             <button
               type="button"
-              onClick={() =>
-                setOpenCategory(isOpen ? null : category.key)
-              }
+              onClick={() => setOpenCategory(isOpen ? null : category.key)}
               aria-expanded={isOpen}
               aria-haspopup="true"
               className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold transition focus-visible:outline-2 focus-visible:outline-ring ${

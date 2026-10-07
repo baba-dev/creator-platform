@@ -861,6 +861,7 @@ export const publishProviderToolPriceVersionSchema = z
   .object({
     idempotencyKey: z.uuid(),
     providerCostMicroUsd: positiveDatabaseBigIntSchema,
+    providerCostNoOutputMicroUsd: positiveDatabaseBigIntSchema.optional(),
     targetMarginBps: z.number().int().min(0).max(9999),
     unitQuantity: z.coerce.number().int().positive().max(86_400).default(1),
     fxBaisaNumerator: positiveDatabaseBigIntSchema.optional(),

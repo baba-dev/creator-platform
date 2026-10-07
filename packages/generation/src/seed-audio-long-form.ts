@@ -141,10 +141,7 @@ export function planSeedAudioLongForm(
   )
     throw new RangeError("Long-form duration is outside the supported range.");
   const normalized = textPrompt.trim();
-  if (
-    !normalized ||
-    normalized.length > SEED_AUDIO_LONG_FORM_MAX_PROMPT_CHARS
-  )
+  if (!normalized || normalized.length > SEED_AUDIO_LONG_FORM_MAX_PROMPT_CHARS)
     throw new RangeError("Long-form script is outside the supported size.");
   const { direction, spokenText } = splitDirection(normalized);
   if (!spokenText) throw new RangeError("Long-form narration is empty.");
@@ -352,8 +349,7 @@ export async function stitchSeedAudioSegments(input: {
       args.push("-c:a", "pcm_s16le", "-f", "wav");
     else if (input.format === "pcm")
       args.push("-c:a", "pcm_s16le", "-f", "s16le");
-    else
-      args.push("-c:a", "libopus", "-b:a", "160k", "-f", "ogg");
+    else args.push("-c:a", "libopus", "-b:a", "160k", "-f", "ogg");
     args.push("-y", output);
     await runFfmpeg(args);
     const bytes = await readFile(output);

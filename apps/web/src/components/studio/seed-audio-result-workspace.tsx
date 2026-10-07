@@ -252,9 +252,7 @@ export function SeedAudioResultWorkspace({
                       >
                         {clock(sentence.startMs)}
                       </span>
-                      <span className="text-sm leading-6">
-                        {sentence.text}
-                      </span>
+                      <span className="text-sm leading-6">{sentence.text}</span>
                     </button>
                   );
                 })}

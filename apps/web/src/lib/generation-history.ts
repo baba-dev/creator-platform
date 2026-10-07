@@ -2,7 +2,6 @@ import { hasOrganizationPermission } from "@aiwa/authz";
 import { db, type Prisma } from "@aiwa/db";
 import { z } from "zod";
 
-
 type SeedAudioTimedItem = {
   startMs: number;
   endMs: number;

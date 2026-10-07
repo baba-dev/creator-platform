@@ -45,7 +45,8 @@ export default async function CustomerJobPage({
     request.task === "seed-audio" && job.providerModelKey === "seed-audio-1.0";
   const seedAudioAsset = isSeedAudio
     ? job.assets.find(
-        (asset) => asset.status === "READY" && asset.mimeType.startsWith("audio/"),
+        (asset) =>
+          asset.status === "READY" && asset.mimeType.startsWith("audio/"),
       )
     : null;
   const displayKind =
@@ -143,9 +144,7 @@ export default async function CustomerJobPage({
             </div>
           ) : null}
         </section>
-        {isSeedAudio &&
-        seedAudioAsset &&
-        job.status === "SUCCEEDED" ? (
+        {isSeedAudio && seedAudioAsset && job.status === "SUCCEEDED" ? (
           <SeedAudioResultWorkspace
             organizationSlug={organizationSlug}
             jobId={job.id}
@@ -167,7 +166,8 @@ export default async function CustomerJobPage({
                   : null,
               language:
                 typeof request.language === "string" ? request.language : null,
-              format: typeof request.format === "string" ? request.format : null,
+              format:
+                typeof request.format === "string" ? request.format : null,
               sampleRate:
                 typeof request.sampleRate === "number"
                   ? request.sampleRate
@@ -176,10 +176,7 @@ export default async function CustomerJobPage({
             result={job.audioResult}
             canCreateTake={
               job.creator.id === session.user.id &&
-              hasOrganizationPermission(
-                membership.role,
-                "generation:create",
-              )
+              hasOrganizationPermission(membership.role, "generation:create")
             }
             takes={job.takes.map((take) => ({
               id: take.id,

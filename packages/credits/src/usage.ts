@@ -643,8 +643,7 @@ export function estimateGeneration(params: {
       params.providerModelId === "seed-audio-1.0" &&
       price.pricingDimension === "SECOND"
     ) {
-      const reservationQuantity =
-        params.reservationBillableQuantity ?? 120;
+      const reservationQuantity = params.reservationBillableQuantity ?? 120;
       if (
         !Number.isSafeInteger(reservationQuantity) ||
         reservationQuantity < billableQuantity ||

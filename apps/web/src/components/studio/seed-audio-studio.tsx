@@ -542,9 +542,7 @@ export function SeedAudioStudio({
   function toggleLongVoice(key: string) {
     setAudioIds([]);
     setReferenceMode("VOICES");
-    setReferenceVoiceKeys((current) =>
-      current[0] === key ? [] : [key],
-    );
+    setReferenceVoiceKeys((current) => (current[0] === key ? [] : [key]));
   }
 
   function applyOutputProfile(profile: (typeof OUTPUT_PROFILES)[number]) {
@@ -1544,10 +1542,10 @@ export function SeedAudioStudio({
                     ? "1 voice"
                     : "Prompt only"
                   : mode === "IMAGE"
-                  ? imageId
-                    ? "1 image"
-                    : "None"
-                  : "Prompt only"}
+                    ? imageId
+                      ? "1 image"
+                      : "None"
+                    : "Prompt only"}
             </dd>
           </div>
           <div className="flex items-center justify-between gap-3">

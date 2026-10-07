@@ -449,14 +449,16 @@ export const quoteRequestSchema = z
         context.addIssue({
           code: "custom",
           path: ["text"],
-          message: "Standard Seed Audio prompts cannot exceed 3,000 characters.",
+          message:
+            "Standard Seed Audio prompts cannot exceed 3,000 characters.",
         });
       }
       if (value.longForm && textLength > 7_500) {
         context.addIssue({
           code: "custom",
           path: ["text"],
-          message: "Long-form Seed Audio prompts cannot exceed 7,500 characters.",
+          message:
+            "Long-form Seed Audio prompts cannot exceed 7,500 characters.",
         });
       }
       if (value.longForm && value.referenceImageAssetId) {

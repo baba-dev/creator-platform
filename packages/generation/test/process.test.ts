@@ -1292,7 +1292,6 @@ describe("voice processing", () => {
     expect(mocks.release).not.toHaveBeenCalled();
   });
 
-
   it("stores and settles a stitched long-form Seed Audio master", async () => {
     const p = provider();
     const longJob = {

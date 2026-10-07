@@ -8,12 +8,7 @@ import { Icon, type IconName } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 
 export type SettingsTab =
-  | "profile"
-  | "organization"
-  | "team"
-  | "security"
-  | "chatbot"
-  | "locale";
+  "profile" | "organization" | "team" | "security" | "chatbot" | "locale";
 
 interface SettingsModalProps {
   isOpen: boolean;

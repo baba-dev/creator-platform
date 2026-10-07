@@ -10,11 +10,17 @@ export async function GET(
 ) {
   const session = await getRequestSession(request.headers);
   if (!session)
-    return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+    return NextResponse.json(
+      { error: "Authentication required." },
+      { status: 401 },
+    );
 
   const { executionId } = await params;
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(executionId))
-    return NextResponse.json({ error: "Execution not found." }, { status: 404 });
+    return NextResponse.json(
+      { error: "Execution not found." },
+      { status: 404 },
+    );
 
   const execution = await db.providerToolExecution.findUnique({
     where: { id: executionId },
@@ -28,7 +34,10 @@ export async function GET(
     },
   });
   if (!execution)
-    return NextResponse.json({ error: "Execution not found." }, { status: 404 });
+    return NextResponse.json(
+      { error: "Execution not found." },
+      { status: 404 },
+    );
 
   try {
     await requireMembership(
@@ -38,7 +47,10 @@ export async function GET(
       false,
     );
   } catch {
-    return NextResponse.json({ error: "Execution not found." }, { status: 404 });
+    return NextResponse.json(
+      { error: "Execution not found." },
+      { status: 404 },
+    );
   }
 
   const result =

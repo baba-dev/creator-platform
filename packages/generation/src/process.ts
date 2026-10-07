@@ -529,13 +529,20 @@ export async function processVideoPollJob(
   let result;
   try {
     result = await provider.getJob(job.providerRequestId);
-  } catch {
+  } catch (error) {
+    const outcomeUnknown =
+      error instanceof ProviderRequestError &&
+      error.code === "PROVIDER_OUTCOME_UNKNOWN";
     await db.generationJob.updateMany({
       where: { id, status: "PROCESSING" },
       data: {
-        errorCode: "PROVIDER_POLL_FAILED",
-        errorMessage:
-          "Video status is temporarily unavailable. Credits remain reserved while recovery retries.",
+        ...(outcomeUnknown ? { status: "MANUAL_REVIEW" as const } : {}),
+        errorCode: outcomeUnknown
+          ? "PROVIDER_OUTCOME_UNKNOWN"
+          : "PROVIDER_POLL_FAILED",
+        errorMessage: outcomeUnknown
+          ? "Provider result is no longer available. Credits remain reserved for review; no automatic resubmission."
+          : "Video status is temporarily unavailable. Credits remain reserved while recovery retries.",
       },
     });
     return;

@@ -1,4 +1,4 @@
-import { createHash, createHmac } from "node:crypto";
+import { createHash, createHmac, randomUUID } from "node:crypto";
 
 import { z } from "zod";
 
@@ -44,7 +44,7 @@ const visionEnvelopeSchema = z
   .passthrough();
 
 const submitDataSchema = z.object({
-  task_id: z.string().min(1).max(200),
+  task_id: z.string().regex(/^[A-Za-z0-9._-]{1,200}$/),
 });
 
 const resultDataSchema = z.object({
@@ -242,7 +242,7 @@ async function visionRequest(
   } catch (error) {
     throw new ProviderRequestError(
       "BytePlus Vision returned invalid JSON",
-      response.status >= 500,
+      true,
       { cause: error, code: "INVALID_PROVIDER_RESPONSE" },
     );
   }
@@ -251,7 +251,7 @@ async function visionRequest(
   if (!parsed.success) {
     throw new ProviderRequestError(
       "BytePlus Vision returned an invalid response shape",
-      response.status >= 500,
+      true,
       { code: "INVALID_PROVIDER_RESPONSE" },
     );
   }
@@ -374,12 +374,12 @@ export async function getOmniHumanVisionJob(
     };
   }
   if (data.data.status === "not_found" || data.data.status === "expired") {
-    return {
-      providerRequestId,
-      status: "failed",
-      errorCode:
-        data.data.status === "expired" ? "TASK_EXPIRED" : "TASK_NOT_FOUND",
-    };
+    // Missing result retention is not evidence of an unbilled failure.
+    throw new ProviderRequestError(
+      "OmniHuman result is no longer available; provider outcome needs review",
+      false,
+      { code: "PROVIDER_OUTCOME_UNKNOWN" },
+    );
   }
 
   let resultValue: unknown = data.data.resp_data;
@@ -418,4 +418,53 @@ export async function cancelOmniHumanVisionJob(
     req_key: OMNIHUMAN_REQ_KEY,
     task_id: taskId,
   });
+}
+
+/** Read-only authentication probe. Never submits or cancels a generation. */
+export async function diagnoseOmniHumanVision(config: BytePlusVisionConfig) {
+  const connection = {
+    service: VISION_SERVICE,
+    region: VISION_REGION,
+    version: VISION_VERSION,
+  };
+  if (!config.accessKeyId?.trim() || !config.secretAccessKey?.trim()) {
+    return {
+      ...connection,
+      status: "missing_credentials" as const,
+      message:
+        "Set BYTEPLUS_VISION_ACCESS_KEY_ID and BYTEPLUS_VISION_SECRET_ACCESS_KEY on the web and worker services, then restart them.",
+    };
+  }
+  try {
+    const response = await visionRequest(config, "CVGetResult", {
+      req_key: OMNIHUMAN_REQ_KEY,
+      task_id: (
+        BigInt(`0x${randomUUID().replaceAll("-", "").slice(0, 15)}`) + 1n
+      ).toString(),
+    });
+    const data = resultDataSchema.safeParse(response.data);
+    if (!data.success || data.data.status !== "not_found") {
+      return {
+        ...connection,
+        status: "unverified" as const,
+        message:
+          "The provider returned an unexpected diagnostic result. Generation availability is unverified.",
+      };
+    }
+    return {
+      ...connection,
+      status: "verified" as const,
+      message:
+        "Signed OmniHuman result API accepted the credentials. Model submission entitlement still requires a controlled generation test.",
+    };
+  } catch (error) {
+    const code = error instanceof ProviderRequestError ? error.code : undefined;
+    return {
+      ...connection,
+      status: "unverified" as const,
+      code,
+      message:
+        "OmniHuman API verification failed. Check Vision IAM permissions, service activation, credentials and server clock; no generation was submitted.",
+    };
+  }
 }

@@ -1848,3 +1848,5 @@ export function createBytePlusProvider(
     },
   };
 }
+
+export { diagnoseOmniHumanVision } from "./vision";

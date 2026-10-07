@@ -1,3 +1,4 @@
+import type { MediaGenerationProvider } from "@aiwa/providers";
 import type * as CreditsModule from "@aiwa/credits";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -355,6 +356,47 @@ describe("Generation Job Reconciliation", () => {
           data: expect.objectContaining({ action: "generation.recovered" }),
         }),
       );
+    });
+
+    it("refreshes an expired OmniHuman link from the same task during immediate recovery", async () => {
+      const job = {
+        ...baseJob,
+        providerRequestId: "vision:omnihuman:123",
+        requestPayload: { schemaVersion: 2, workflow: "TALKING_AVATAR" },
+        providerModel: {
+          ...baseJob.providerModel,
+          mediaKind: "VIDEO",
+          providerModelId: "omnihuman-1.5",
+        },
+        outputPayload: { url: "https://trusted.bytepluscdn.com/expired.mp4" },
+      };
+      mocks.db.generationJob.findUnique.mockResolvedValue(job);
+      mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue(job);
+      const provider = {
+        name: "byteplus",
+        listModels: vi.fn(),
+        submit: vi.fn(),
+        cancel: vi.fn(),
+        getJob: vi.fn().mockResolvedValue({
+          status: "succeeded",
+          providerRequestId: "vision:omnihuman:123",
+          outputUrls: ["https://trusted.bytepluscdn.com/fresh.mp4"],
+        }),
+      } satisfies MediaGenerationProvider;
+      await recoverGeneratedOutput({
+        jobId: "job-123",
+        actorUserId: "operator-1",
+        reason: "Recover saved result",
+        mode: "immediate",
+        idempotencyKey: "omni-recovery",
+        provider,
+      });
+      expect(provider.getJob).toHaveBeenCalledWith("vision:omnihuman:123");
+      expect(mocks.downloadVideo).toHaveBeenCalledWith(
+        "https://trusted.bytepluscdn.com/fresh.mp4",
+      );
+      expect(provider.submit).not.toHaveBeenCalled();
+      expect(mocks.capture).toHaveBeenCalledTimes(1);
     });
 
     it.each([true, false])(

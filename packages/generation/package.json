@@ -8,7 +8,8 @@
     "./process": "./src/process.ts",
     "./storage": "./src/storage.ts",
     "./provider-media-grant": "./src/provider-media-grant.ts",
-    "./reconciliation": "./src/reconciliation.ts"
+    "./reconciliation": "./src/reconciliation.ts",
+    "./media-tools": "./src/media-tools.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",

@@ -846,3 +846,26 @@ export const storyPlanCreateSchema = z
 export const storyPlanUpdateSchema = storyPlanCreateSchema
   .partial()
   .omit({ organizationId: true });
+
+export const providerToolRecordIdSchema = z
+  .string()
+  .min(1)
+  .max(191)
+  .regex(/^[a-z0-9][a-z0-9_-]*$/);
+
+export const toggleProviderToolEnabledSchema = z
+  .object({ enabled: z.boolean() })
+  .strict();
+
+export const publishProviderToolPriceVersionSchema = z
+  .object({
+    idempotencyKey: z.uuid(),
+    providerCostMicroUsd: positiveDatabaseBigIntSchema,
+    targetMarginBps: z.number().int().min(0).max(9999),
+    unitQuantity: z.coerce.number().int().positive().max(86_400).default(1),
+    fxBaisaNumerator: positiveDatabaseBigIntSchema.optional(),
+    fxBaisaDenominator: positiveDatabaseBigIntSchema.optional(),
+    creditsPerBaisa: positiveDatabaseBigIntSchema.optional(),
+    providerCostBasisNote: z.string().trim().max(255).optional(),
+  })
+  .strict();

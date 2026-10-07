@@ -44,6 +44,12 @@ const navigation: readonly (AdminNavigationItem & {
     permission: "models:read",
   },
   {
+    href: "/admin/tools",
+    label: "MediaKit tools",
+    icon: "wand",
+    permission: "models:read",
+  },
+  {
     href: "/admin/assistant",
     label: "AI Assistant",
     icon: "sparkles",

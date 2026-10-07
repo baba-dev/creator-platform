@@ -787,23 +787,6 @@ export async function createImageJob(userId: string, raw: unknown) {
       });
       if (!wallet)
         throw new GenerationError("Workspace wallet is unavailable.");
-      if (input.parentGenerationId) {
-        const parent = await tx.generationJob.findFirst({
-          where: {
-            id: input.parentGenerationId,
-            organizationId: input.organizationId,
-            createdById: userId,
-            status: "SUCCEEDED",
-            providerModel: { providerModelId: "seed-audio-1.0" },
-          },
-          select: { id: true },
-        });
-        if (!parent)
-          throw new GenerationError(
-            "The source take is unavailable for regeneration.",
-            404,
-          );
-      }
       const job = await tx.generationJob.create({
         data: {
           organizationId: input.organizationId,
@@ -813,7 +796,6 @@ export async function createImageJob(userId: string, raw: unknown) {
           providerModelId: model.id,
           priceVersionId: price.id,
           idempotencyKey: key,
-          parentGenerationId: input.parentGenerationId ?? null,
           requestPayload: payload,
           status: "QUOTED",
           quotedUnits: input.outputCount,

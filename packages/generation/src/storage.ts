@@ -924,11 +924,7 @@ export function validateMp3Bytes(bytes: Buffer): { durationMs: number | null } {
       "Generated audio was empty.",
     );
   }
-  if (
-    !Number.isSafeInteger(maxBytes) ||
-    maxBytes < 1 ||
-    bytes.length > maxBytes
-  ) {
+  if (bytes.length > MAX_AUDIO_BYTES) {
     throw new ImageStorageError(
       "AUDIO_OUTPUT_TOO_LARGE",
       "Generated audio exceeded the storage size limit.",
@@ -1013,7 +1009,11 @@ export function validateAudioBytes(
       "Generated audio was empty.",
     );
   }
-  if (bytes.length > MAX_AUDIO_BYTES) {
+  if (
+    !Number.isSafeInteger(maxBytes) ||
+    maxBytes < 1 ||
+    bytes.length > maxBytes
+  ) {
     throw new ImageStorageError(
       "AUDIO_OUTPUT_TOO_LARGE",
       "Generated audio exceeded the storage size limit.",

@@ -1632,7 +1632,10 @@ export async function processVoiceJob(
         { code: "INVALID_PROVIDER_RESPONSE" },
       );
     }
-    const rawOriginalDuration = result.rawUsage?.generatedSeconds;
+    const rawUsage = result.rawUsage as
+      | Readonly<Record<string, unknown>>
+      | undefined;
+    const rawOriginalDuration = rawUsage?.generatedSeconds;
     if (
       typeof rawOriginalDuration === "number" &&
       Number.isFinite(rawOriginalDuration) &&
@@ -1643,7 +1646,7 @@ export async function processVoiceJob(
       originalDurationSeconds = rawOriginalDuration;
       playbackDurationSeconds ??= rawOriginalDuration;
     }
-    const rawSubtitle = result.rawUsage?.subtitle;
+    const rawSubtitle = rawUsage?.subtitle;
     if (
       rawSubtitle &&
       typeof rawSubtitle === "object" &&
@@ -1651,6 +1654,24 @@ export async function processVoiceJob(
     )
       seedAudioSubtitle = rawSubtitle as Prisma.InputJsonObject;
   } catch (error) {
+    if (error instanceof SeedAudioPartialGenerationError) {
+      await db.generationJob.updateMany({
+        where: { id, status: "SUBMITTED" },
+        data: {
+          status: "MANUAL_REVIEW",
+          providerRequestId: error.providerRequestIds[0] ?? null,
+          outputPayload: {
+            longForm: {
+              completedSegments: error.completedSegments,
+              providerRequestIds: error.providerRequestIds,
+            },
+          },
+          errorCode: error.code,
+          errorMessage: error.message,
+        },
+      });
+      return;
+    }
     if (
       error instanceof ProviderConfigurationError ||
       (error instanceof ProviderRequestError && !error.retryable)

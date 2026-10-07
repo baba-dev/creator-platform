@@ -38,6 +38,7 @@ export type SeedAudioResultWorkspaceProps = {
       crossfadeMs: number;
     } | null;
   } | null;
+  canCreateTake: boolean;
   takes: Array<{
     id: string;
     status: string;
@@ -92,6 +93,7 @@ export function SeedAudioResultWorkspace({
   asset,
   request,
   result,
+  canCreateTake,
   takes,
 }: SeedAudioResultWorkspaceProps) {
   const [seekNonce, setSeekNonce] = useState(0);
@@ -176,13 +178,15 @@ export function SeedAudioResultWorkspace({
               <Icon name="upload" className="size-4 rotate-180" />
               Download master
             </a>
-            <Link
-              href={`/app/${encodeURIComponent(organizationSlug)}/audio?sourceJobId=${encodeURIComponent(jobId)}`}
-              className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-border bg-background px-3.5 text-xs font-semibold transition hover:border-primary/40"
-            >
-              <Icon name="sparkles" className="size-4 text-primary" />
-              New take
-            </Link>
+            {canCreateTake ? (
+              <Link
+                href={`/app/${encodeURIComponent(organizationSlug)}/audio?sourceJobId=${encodeURIComponent(jobId)}`}
+                className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-border bg-background px-3.5 text-xs font-semibold transition hover:border-primary/40"
+              >
+                <Icon name="sparkles" className="size-4 text-primary" />
+                New take
+              </Link>
+            ) : null}
           </div>
         </div>
       </div>

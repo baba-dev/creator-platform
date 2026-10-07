@@ -1,3 +1,4 @@
+import { hasOrganizationPermission } from "@aiwa/authz";
 import { formatBaisa } from "@/lib/format-baisa";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -173,6 +174,13 @@ export default async function CustomerJobPage({
                   : null,
             }}
             result={job.audioResult}
+            canCreateTake={
+              job.creator.id === session.user.id &&
+              hasOrganizationPermission(
+                membership.role,
+                "generation:create",
+              )
+            }
             takes={job.takes.map((take) => ({
               id: take.id,
               status: take.status,

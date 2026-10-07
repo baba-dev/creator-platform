@@ -281,7 +281,15 @@ export function SeedAudioStudio({
   const [directorPreset, setDirectorPreset] = useState(
     initialTake?.directorPreset ?? "documentary",
   );
-  const [outputProfile, setOutputProfile] = useState("web");
+  const [outputProfile, setOutputProfile] = useState(
+    initialTake
+      ? (OUTPUT_PROFILES.find(
+          (profile) =>
+            profile.format === initialTake.format &&
+            profile.sampleRate === initialTake.sampleRate,
+        )?.id ?? "custom")
+      : "web",
+  );
   const [format, setFormat] = useState<AudioFormat>(
     initialTake?.format ?? "mp3",
   );

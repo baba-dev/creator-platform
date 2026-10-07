@@ -106,6 +106,7 @@ export function quoteParameters(
     sourceAssetId?: string;
     task?: "seed-audio";
     referenceAudioAssetIds?: string[];
+    referenceVoiceKeys?: string[];
     referenceImageAssetId?: string;
     estimatedDurationSeconds?: number;
     language?: string;
@@ -175,6 +176,9 @@ export function quoteParameters(
         estimatedDurationSeconds:
           input.estimatedDurationSeconds ?? input.billableQuantity ?? null,
         referenceAudioAssetIds: input.referenceAudioAssetIds ?? [],
+        referenceVoiceKeys: (input.referenceVoiceKeys ?? []).map((key) =>
+          key.trim().toLowerCase(),
+        ),
         referenceImageAssetId: input.referenceImageAssetId ?? null,
       };
     else

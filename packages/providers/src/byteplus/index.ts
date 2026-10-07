@@ -327,10 +327,21 @@ export const bytePlusSeedAudioInputSchema = z
     task: z.literal("seed-audio"),
     textPrompt: z.string().trim().min(1).max(3000),
     referenceAudioUrls: z.array(httpsUrlSchema).max(3).default([]),
+    referenceSpeakerIds: z
+      .array(z.string().trim().min(1).max(200))
+      .max(3)
+      .default([]),
     referenceImageUrl: httpsUrlSchema.optional(),
-    format: z.literal("mp3").default("mp3"),
+    format: z.enum(["wav", "mp3", "pcm", "ogg_opus"]).default("mp3"),
     sampleRate: z
-      .union([z.literal(24_000), z.literal(44_100), z.literal(48_000)])
+      .union([
+        z.literal(8_000),
+        z.literal(16_000),
+        z.literal(24_000),
+        z.literal(32_000),
+        z.literal(44_100),
+        z.literal(48_000),
+      ])
       .default(44_100),
     speechRate: z.number().min(0.5).max(2).default(1),
     loudnessRate: z.number().min(0.5).max(2).default(1),
@@ -340,11 +351,20 @@ export const bytePlusSeedAudioInputSchema = z
   })
   .strict()
   .superRefine((input, ctx) => {
-    if (input.referenceImageUrl && input.referenceAudioUrls.length) {
+    const audioReferenceCount =
+      input.referenceAudioUrls.length + input.referenceSpeakerIds.length;
+    if (input.referenceImageUrl && audioReferenceCount > 0) {
       ctx.addIssue({
         code: "custom",
         path: ["referenceImageUrl"],
-        message: "Image and audio references cannot be combined.",
+        message: "Image and audio/speaker references cannot be combined.",
+      });
+    }
+    if (audioReferenceCount > 3) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["referenceSpeakerIds"],
+        message: "Seed Audio supports at most three audio references.",
       });
     }
   });
@@ -693,6 +713,7 @@ export const VERIFIED_BYTEPLUS_MODELS: readonly ProviderModelDescriptor[] = [
       audioGeneration: true,
       promptDirected: true,
       referenceAudio: true,
+      referenceSpeaker: true,
       maxReferenceAudio: 3,
       referenceImage: true,
       imageAudioExclusive: true,
@@ -704,6 +725,12 @@ export const VERIFIED_BYTEPLUS_MODELS: readonly ProviderModelDescriptor[] = [
       "format:wav": true,
       "format:pcm": true,
       "format:ogg_opus": true,
+      "sampleRate:8000": true,
+      "sampleRate:16000": true,
+      "sampleRate:24000": true,
+      "sampleRate:32000": true,
+      "sampleRate:44100": true,
+      "sampleRate:48000": true,
     },
   },
   {
@@ -1709,13 +1736,17 @@ export function createBytePlusProvider(
                 body: JSON.stringify({
                   model: SEED_AUDIO_MODEL_ID,
                   text_prompt: input.data.textPrompt,
-                  ...(input.data.referenceAudioUrls.length
+                  ...(input.data.referenceAudioUrls.length ||
+                  input.data.referenceSpeakerIds.length
                     ? {
-                        references: input.data.referenceAudioUrls.map(
-                          (audio_url) => ({
+                        references: [
+                          ...input.data.referenceAudioUrls.map((audio_url) => ({
                             audio_url,
-                          }),
-                        ),
+                          })),
+                          ...input.data.referenceSpeakerIds.map((speaker) => ({
+                            speaker,
+                          })),
+                        ],
                       }
                     : {}),
                   ...(input.data.referenceImageUrl
@@ -1765,6 +1796,31 @@ export function createBytePlusProvider(
                 audio: z.string().min(1),
                 duration: z.number().positive().max(120).optional(),
                 original_duration: z.number().positive().max(120),
+                subtitle: z
+                  .object({
+                    text: z.string().max(12_000),
+                    sentences: z
+                      .array(
+                        z.object({
+                          start_time: z.number().int().nonnegative(),
+                          end_time: z.number().int().nonnegative(),
+                          text: z.string().max(3_000),
+                          words: z
+                            .array(
+                              z.object({
+                                start_time: z.number().int().nonnegative(),
+                                end_time: z.number().int().nonnegative(),
+                                text: z.string().max(500),
+                              }),
+                            )
+                            .max(20_000)
+                            .optional(),
+                        }),
+                      )
+                      .max(2_000)
+                      .optional(),
+                  })
+                  .optional(),
               })
               .safeParse(data);
             if (
@@ -1779,17 +1835,42 @@ export function createBytePlusProvider(
             const requestId = providerIdentifierSchema.safeParse(
               response.headers?.get("x-tt-logid"),
             );
+            const mediaType = {
+              mp3: "audio/mpeg",
+              wav: "audio/wav",
+              pcm: "audio/L16",
+              ogg_opus: "audio/ogg",
+            }[input.data.format];
+            const subtitle = parsed.data.subtitle
+              ? {
+                  text: parsed.data.subtitle.text,
+                  sentences: (parsed.data.subtitle.sentences ?? []).map(
+                    (sentence) => ({
+                      startMs: sentence.start_time,
+                      endMs: sentence.end_time,
+                      text: sentence.text,
+                    }),
+                  ),
+                  words: (parsed.data.subtitle.sentences ?? []).flatMap(
+                    (sentence) =>
+                      (sentence.words ?? []).map((word) => ({
+                        startMs: word.start_time,
+                        endMs: word.end_time,
+                        text: word.text,
+                      })),
+                  ),
+                }
+              : null;
             return {
               providerRequestId: requestId.success
                 ? requestId.data
                 : stableRequestId("seed-audio", submission.idempotencyKey),
               status: "succeeded",
-              inlineOutputs: [
-                { mediaType: "audio/mpeg", dataBase64: parsed.data.audio },
-              ],
+              inlineOutputs: [{ mediaType, dataBase64: parsed.data.audio }],
               rawUsage: {
                 generatedSeconds: parsed.data.original_duration,
                 durationSeconds: parsed.data.duration ?? null,
+                subtitle,
               },
             };
           }

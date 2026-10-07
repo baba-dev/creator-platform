@@ -19,6 +19,7 @@ import {
   type MediaGenerationProvider,
 } from "@aiwa/providers";
 import { requireMembership } from "./index";
+import { resolvePresetVoice } from "./voices";
 import { issueProviderMediaGrant } from "./provider-media-grant";
 import {
   calculateSpeechTrialUsage,
@@ -1364,12 +1365,21 @@ export async function processVoiceJob(
       inputAssets: { include: { asset: true }, orderBy: { position: "asc" } },
     },
   });
+  const voiceOutputAsset = await db.asset.findFirstOrThrow({
+    where: {
+      generationJobId: id,
+      mediaKind: "AUDIO",
+      sourceType: "GENERATED",
+    },
+    select: { id: true, objectKey: true, mimeType: true },
+  });
   if (job.status === "PROCESSING") {
     const output = job.outputPayload as {
       stored?: unknown;
       byteSize?: unknown;
       sha256?: unknown;
       originalDurationSeconds?: unknown;
+      subtitle?: Prisma.JsonValue;
     } | null;
     if (
       output?.stored !== true ||
@@ -1391,7 +1401,7 @@ export async function processVoiceJob(
       return;
     }
     try {
-      const byteSize = await storedAssetSize(`${id}.mp3`);
+      const byteSize = await storedAssetSize(voiceOutputAsset.objectKey);
       if (byteSize !== output.byteSize) {
         throw new Error("Stored audio size does not match its metadata");
       }
@@ -1403,11 +1413,15 @@ export async function processVoiceJob(
       id,
       job,
       { byteSize: BigInt(output.byteSize), sha256: output.sha256 },
+      voiceOutputAsset.id,
       typeof output.originalDurationSeconds === "number" &&
         Number.isFinite(output.originalDurationSeconds) &&
         output.originalDurationSeconds > 0 &&
         output.originalDurationSeconds <= 120
         ? output.originalDurationSeconds
+        : undefined,
+      output.subtitle && typeof output.subtitle === "object"
+        ? (output.subtitle as Prisma.InputJsonValue)
         : undefined,
     );
     return;
@@ -1444,6 +1458,7 @@ export async function processVoiceJob(
 
   let result;
   let originalDurationSeconds: number | undefined;
+  let seedAudioSubtitle: Prisma.InputJsonValue | undefined;
   try {
     const payload = job.requestPayload as Record<string, unknown>;
     let providerInput: Record<string, unknown> = payload;
@@ -1487,10 +1502,36 @@ export async function processVoiceJob(
         if (input.role === "REFERENCE_AUDIO") audioUrls.push(url.toString());
         else if (input.role === "REFERENCE_IMAGE") imageUrl = url.toString();
       }
+      const referenceVoiceKeys = Array.isArray(payload.referenceVoiceKeys)
+        ? payload.referenceVoiceKeys.filter(
+            (key): key is string => typeof key === "string",
+          )
+        : [];
+      let referenceSpeakerIds: string[];
+      try {
+        referenceSpeakerIds = referenceVoiceKeys.map(
+          (key) => resolvePresetVoice(key, "seed-audio-1.0").speakerId,
+        );
+      } catch {
+        throw new ProviderRequestError(
+          "A saved voice reference is no longer available",
+          false,
+          { code: "REFERENCE_VOICE_UNAVAILABLE" },
+        );
+      }
       providerInput = {
-        ...payload,
+        task: "seed-audio",
+        textPrompt: payload.textPrompt,
         referenceAudioUrls: audioUrls,
+        referenceSpeakerIds,
         ...(imageUrl ? { referenceImageUrl: imageUrl } : {}),
+        format: payload.format,
+        sampleRate: payload.sampleRate,
+        speechRate: payload.speechRate,
+        loudnessRate: payload.loudnessRate,
+        pitch: payload.pitch,
+        enableSubtitles: payload.enableSubtitles,
+        watermark: payload.watermark,
       };
     }
     result = await provider.submit({
@@ -1502,7 +1543,7 @@ export async function processVoiceJob(
     if (
       result.status !== "succeeded" ||
       result.inlineOutputs?.length !== 1 ||
-      result.inlineOutputs[0]?.mediaType !== "audio/mpeg"
+      result.inlineOutputs[0]?.mediaType !== voiceOutputAsset.mimeType
     ) {
       throw new ProviderRequestError(
         "BytePlus returned an unexpected voice result",
@@ -1518,6 +1559,13 @@ export async function processVoiceJob(
       rawOriginalDuration <= 120
     )
       originalDurationSeconds = rawOriginalDuration;
+    const rawSubtitle = result.rawUsage?.subtitle;
+    if (
+      rawSubtitle &&
+      typeof rawSubtitle === "object" &&
+      !Array.isArray(rawSubtitle)
+    )
+      seedAudioSubtitle = rawSubtitle as Prisma.InputJsonObject;
   } catch (error) {
     if (
       error instanceof ProviderConfigurationError ||
@@ -1579,22 +1627,15 @@ export async function processVoiceJob(
   }
   let stored: Awaited<ReturnType<typeof storeAudio>> | null = null;
   let lastStorageError: unknown = null;
-  const voiceAssetForStorage = await db.asset.findFirstOrThrow({
-    where: {
-      generationJobId: id,
-      objectKey: `${id}.mp3`,
-      mediaKind: "AUDIO",
-    },
-    select: { id: true },
-  });
-
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       stored = await storeAudio(
-        `${id}.mp3`,
+        voiceOutputAsset.objectKey,
         audioBytes,
         job.organizationId,
-        voiceAssetForStorage.id,
+        voiceOutputAsset.id,
+        voiceOutputAsset.mimeType as
+          "audio/mpeg" | "audio/wav" | "audio/ogg" | "audio/L16",
       );
       break;
     } catch (error) {
@@ -1633,6 +1674,7 @@ export async function processVoiceJob(
         byteSize: Number(stored.byteSize),
         sha256: stored.sha256,
         ...(originalDurationSeconds ? { originalDurationSeconds } : {}),
+        ...(seedAudioSubtitle ? { subtitle: seedAudioSubtitle } : {}),
       },
       errorCode: null,
       errorMessage: null,
@@ -1640,7 +1682,14 @@ export async function processVoiceJob(
   });
   if (!persisted.count) return;
 
-  await finalizeVoiceJob(id, job, stored, originalDurationSeconds);
+  await finalizeVoiceJob(
+    id,
+    job,
+    stored,
+    voiceOutputAsset.id,
+    originalDurationSeconds,
+    seedAudioSubtitle,
+  );
 }
 
 async function finalizeVoiceJob(
@@ -1658,7 +1707,9 @@ async function finalizeVoiceJob(
     };
   },
   stored: Awaited<ReturnType<typeof storeAudio>>,
+  outputAssetId: string,
   originalDurationSeconds?: number,
+  seedAudioSubtitle?: Prisma.InputJsonValue,
 ) {
   let finalBillableQuantity: number | null = null;
   await db.$transaction(async (tx) => {
@@ -1704,7 +1755,7 @@ async function finalizeVoiceJob(
       idempotencyKey: `generation-capture-${id}`,
     });
     const pendingAsset = await tx.asset.findUniqueOrThrow({
-      where: { objectKey: `${id}.mp3` },
+      where: { id: outputAssetId },
       select: { byteSize: true, status: true },
     });
     if (pendingAsset.status === "PENDING") {
@@ -1715,7 +1766,7 @@ async function finalizeVoiceJob(
       });
     }
     const asset = await tx.asset.update({
-      where: { objectKey: `${id}.mp3` },
+      where: { id: outputAssetId },
       data: { ...stored, status: "READY" },
     });
     await tx.generationJob.update({
@@ -1741,6 +1792,8 @@ async function finalizeVoiceJob(
           stored: true,
           byteSize: Number(stored.byteSize),
           sha256: stored.sha256,
+          ...(originalDurationSeconds ? { originalDurationSeconds } : {}),
+          ...(seedAudioSubtitle ? { subtitle: seedAudioSubtitle } : {}),
         },
         errorCode: null,
         errorMessage: null,

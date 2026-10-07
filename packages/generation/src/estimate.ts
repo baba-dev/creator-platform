@@ -7,6 +7,7 @@ import {
   type VideoSource,
 } from "./video-contract";
 import { inspectTalkingAvatarSources } from "./talking-avatar";
+import { resolvePresetVoice, VoiceResolutionError } from "./voices";
 
 export class QuoteValidationError extends Error {
   constructor(
@@ -39,6 +40,7 @@ interface QuoteInput {
   extensionDirection?: "BEFORE" | "AFTER";
   task?: "seed-audio";
   referenceAudioAssetIds?: string[];
+  referenceVoiceKeys?: string[];
   referenceImageAssetId?: string;
   estimatedDurationSeconds?: number;
 }
@@ -109,22 +111,36 @@ export async function estimateAuthorizedGeneration(
         400,
       );
     const audioIds = input.referenceAudioAssetIds ?? [];
+    const voiceKeys = input.referenceVoiceKeys ?? [];
+    if (audioIds.length + voiceKeys.length > 3)
+      throw new QuoteValidationError(
+        "Seed Audio supports at most three audio references.",
+        400,
+      );
+    if (input.referenceImageAssetId && audioIds.length + voiceKeys.length > 0)
+      throw new QuoteValidationError(
+        "Image and audio/saved-voice references cannot be combined.",
+        400,
+      );
+    for (const voiceKey of voiceKeys) {
+      try {
+        resolvePresetVoice(voiceKey, "seed-audio-1.0");
+      } catch (error) {
+        if (error instanceof VoiceResolutionError)
+          throw new QuoteValidationError(error.message, 400);
+        throw error;
+      }
+    }
     const sourceIds = [
       ...audioIds,
       ...(input.referenceImageAssetId ? [input.referenceImageAssetId] : []),
     ];
-    if (input.referenceImageAssetId && audioIds.length)
-      throw new QuoteValidationError(
-        "Image and audio references cannot be combined.",
-        400,
-      );
     if (sourceIds.length) {
       const assets = await db.asset.findMany({
         where: {
           id: { in: sourceIds },
           organizationId,
           status: "READY",
-          storageProvider: "LOCAL",
           OR: [
             { purpose: "GENERAL" },
             { purpose: "REFERENCE_INPUT", storageOwnerUserId: userId },

@@ -377,6 +377,10 @@ export const quoteRequestSchema = z
     text: z.string().max(120_000).optional(),
     task: z.literal("seed-audio").optional(),
     referenceAudioAssetIds: z.array(cuidSchema).max(3).optional(),
+    referenceVoiceKeys: z
+      .array(z.string().trim().min(1).max(100))
+      .max(3)
+      .optional(),
     referenceImageAssetId: cuidSchema.optional(),
     estimatedDurationSeconds: z.coerce
       .number()
@@ -428,16 +432,42 @@ export const quoteRequestSchema = z
     extensionDirection: z.enum(["BEFORE", "AFTER"]).optional(),
   })
   .superRefine((value, context) => {
-    if (
-      value.task === "seed-audio" &&
-      value.referenceImageAssetId &&
-      (value.referenceAudioAssetIds?.length ?? 0) > 0
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["referenceImageAssetId"],
-        message: "Seed Audio image and audio references cannot be combined.",
-      });
+    if (value.task === "seed-audio") {
+      const audioIds = value.referenceAudioAssetIds ?? [];
+      const voiceKeys = value.referenceVoiceKeys ?? [];
+      if (
+        value.referenceImageAssetId &&
+        audioIds.length + voiceKeys.length > 0
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["referenceImageAssetId"],
+          message:
+            "Seed Audio image and audio/saved-voice references cannot be combined.",
+        });
+      }
+      if (audioIds.length + voiceKeys.length > 3) {
+        context.addIssue({
+          code: "custom",
+          path: ["referenceVoiceKeys"],
+          message: "Seed Audio supports at most three audio references.",
+        });
+      }
+      if (new Set(audioIds).size !== audioIds.length) {
+        context.addIssue({
+          code: "custom",
+          path: ["referenceAudioAssetIds"],
+          message: "Seed Audio reference assets must be unique.",
+        });
+      }
+      const normalizedVoiceKeys = voiceKeys.map((key) => key.toLowerCase());
+      if (new Set(normalizedVoiceKeys).size !== normalizedVoiceKeys.length) {
+        context.addIssue({
+          code: "custom",
+          path: ["referenceVoiceKeys"],
+          message: "Seed Audio saved voices must be unique.",
+        });
+      }
     }
     const sources = value.sources ?? [];
     if (

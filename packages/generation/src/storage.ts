@@ -89,6 +89,7 @@ export type ImageStorageErrorCode =
   | "VIDEO_OUTPUT_INVALID_MP4"
   | "VIDEO_OUTPUT_DOWNLOAD_FAILED"
   | "AUDIO_OUTPUT_INVALID_MP3"
+  | "AUDIO_OUTPUT_INVALID_FORMAT"
   | "AUDIO_OUTPUT_TOO_LARGE"
   | "AUDIO_OUTPUT_EMPTY"
   | "STORAGE_WRITE_FAILED";
@@ -314,7 +315,7 @@ export const MAX_REFERENCE_IMAGE_BYTES = 30 * 1024 * 1024;
 export const MAX_REFERENCE_IMAGE_PIXELS = 36_000_000;
 
 export function storagePath(key: string) {
-  if (!/^[a-zA-Z0-9_-]+\.(png|jpg|webp|mp4|webm|mp3)$/.test(key))
+  if (!/^[a-zA-Z0-9_-]+\.(png|jpg|webp|mp4|webm|mp3|wav|ogg|pcm)$/.test(key))
     throw new Error("Invalid storage key");
   const root =
     process.env.ASSET_STORAGE_ROOT ?? "/var/www/creator-platform/shared/assets";
@@ -994,13 +995,66 @@ export function validateMp3Bytes(bytes: Buffer): { durationMs: number | null } {
   return { durationMs: null };
 }
 
+export type StoredAudioMimeType =
+  "audio/mpeg" | "audio/wav" | "audio/ogg" | "audio/L16";
+
+export function validateAudioBytes(
+  bytes: Buffer,
+  mimeType: StoredAudioMimeType,
+): void {
+  if (bytes.length === 0) {
+    throw new ImageStorageError(
+      "AUDIO_OUTPUT_EMPTY",
+      "Generated audio was empty.",
+    );
+  }
+  if (bytes.length > MAX_AUDIO_BYTES) {
+    throw new ImageStorageError(
+      "AUDIO_OUTPUT_TOO_LARGE",
+      "Generated audio exceeded the storage size limit.",
+    );
+  }
+  if (mimeType === "audio/mpeg") {
+    validateMp3Bytes(bytes);
+    return;
+  }
+  if (mimeType === "audio/wav") {
+    if (
+      bytes.length < 12 ||
+      bytes.subarray(0, 4).toString("ascii") !== "RIFF" ||
+      bytes.subarray(8, 12).toString("ascii") !== "WAVE"
+    )
+      throw new ImageStorageError(
+        "AUDIO_OUTPUT_INVALID_FORMAT",
+        "Generated audio failed WAV validation.",
+      );
+    return;
+  }
+  if (mimeType === "audio/ogg") {
+    if (bytes.length < 27 || bytes.subarray(0, 4).toString("ascii") !== "OggS")
+      throw new ImageStorageError(
+        "AUDIO_OUTPUT_INVALID_FORMAT",
+        "Generated audio failed OGG validation.",
+      );
+    return;
+  }
+  // Raw PCM has no container signature. It is still bounded above and served
+  // as a non-executable audio media type; require enough bytes for a sample.
+  if (bytes.length < 2)
+    throw new ImageStorageError(
+      "AUDIO_OUTPUT_INVALID_FORMAT",
+      "Generated audio failed PCM validation.",
+    );
+}
+
 export async function storeAudio(
   key: string,
   bytes: Buffer,
   organizationId?: string,
   assetId?: string,
+  mimeType: StoredAudioMimeType = "audio/mpeg",
 ) {
-  validateMp3Bytes(bytes);
+  validateAudioBytes(bytes, mimeType);
   if (organizationId) {
     if (!assetId) {
       throw new ImageStorageError(
@@ -1013,7 +1067,7 @@ export async function storeAudio(
       assetId,
       objectKey: key,
       bytes,
-      mimeType: "audio/mpeg",
+      mimeType,
       mediaKind: "AUDIO",
     });
   }

@@ -41,7 +41,7 @@ export const VERIFIED_PRESET_VOICES: readonly PresetVoice[] = [
     scenario: "General",
     style: "Natural, sincere & approachable",
     gender: "male",
-    supportedModels: ["seed-tts-2.0"],
+    supportedModels: ["seed-tts-2.0", "seed-audio-1.0"],
     enabled: true,
   },
   {
@@ -53,7 +53,7 @@ export const VERIFIED_PRESET_VOICES: readonly PresetVoice[] = [
     scenario: "General",
     style: "Clear, versatile & friendly",
     gender: "male",
-    supportedModels: ["seed-tts-2.0"],
+    supportedModels: ["seed-tts-2.0", "seed-audio-1.0"],
     enabled: true,
   },
   {
@@ -65,7 +65,7 @@ export const VERIFIED_PRESET_VOICES: readonly PresetVoice[] = [
     scenario: "General",
     style: "Crisp, confident & engaging",
     gender: "female",
-    supportedModels: ["seed-tts-2.0"],
+    supportedModels: ["seed-tts-2.0", "seed-audio-1.0"],
     enabled: true,
   },
   {
@@ -77,7 +77,7 @@ export const VERIFIED_PRESET_VOICES: readonly PresetVoice[] = [
     scenario: "General",
     style: "Natural, lively & conversational",
     gender: "female",
-    supportedModels: ["seed-tts-2.0"],
+    supportedModels: ["seed-tts-2.0", "seed-audio-1.0"],
     enabled: true,
   },
   {
@@ -89,7 +89,7 @@ export const VERIFIED_PRESET_VOICES: readonly PresetVoice[] = [
     scenario: "General",
     style: "Clear, candid & sincere",
     gender: "female",
-    supportedModels: ["seed-tts-2.0"],
+    supportedModels: ["seed-tts-2.0", "seed-audio-1.0"],
     enabled: true,
   },
   {
@@ -101,7 +101,7 @@ export const VERIFIED_PRESET_VOICES: readonly PresetVoice[] = [
     scenario: "General",
     style: "Natural, smooth & easygoing",
     gender: "male",
-    supportedModels: ["seed-tts-2.0"],
+    supportedModels: ["seed-tts-2.0", "seed-audio-1.0"],
     enabled: true,
   },
   {
@@ -113,7 +113,7 @@ export const VERIFIED_PRESET_VOICES: readonly PresetVoice[] = [
     scenario: "General",
     style: "Composed, restrained & level-headed",
     gender: "male",
-    supportedModels: ["seed-tts-2.0"],
+    supportedModels: ["seed-tts-2.0", "seed-audio-1.0"],
     enabled: true,
   },
   {
@@ -125,7 +125,7 @@ export const VERIFIED_PRESET_VOICES: readonly PresetVoice[] = [
     scenario: "General",
     style: "Warm, clear & composed",
     gender: "male",
-    supportedModels: ["seed-tts-2.0"],
+    supportedModels: ["seed-tts-2.0", "seed-audio-1.0"],
     enabled: true,
   },
   {
@@ -137,7 +137,7 @@ export const VERIFIED_PRESET_VOICES: readonly PresetVoice[] = [
     scenario: "General",
     style: "Gentle, sincere & unhurried",
     gender: "female",
-    supportedModels: ["seed-tts-2.0"],
+    supportedModels: ["seed-tts-2.0", "seed-audio-1.0"],
     enabled: true,
   },
   {
@@ -149,7 +149,7 @@ export const VERIFIED_PRESET_VOICES: readonly PresetVoice[] = [
     scenario: "General",
     style: "Mellow, deep & narrative",
     gender: "male",
-    supportedModels: ["seed-tts-2.0"],
+    supportedModels: ["seed-tts-2.0", "seed-audio-1.0"],
     enabled: true,
   },
   {
@@ -161,7 +161,7 @@ export const VERIFIED_PRESET_VOICES: readonly PresetVoice[] = [
     scenario: "Entertainment",
     style: "Passionate & high-spirited",
     gender: "male",
-    supportedModels: ["seed-tts-2.0"],
+    supportedModels: ["seed-tts-2.0", "seed-audio-1.0"],
     enabled: true,
   },
   {
@@ -173,7 +173,7 @@ export const VERIFIED_PRESET_VOICES: readonly PresetVoice[] = [
     scenario: "Education",
     style: "Bright & crisp",
     gender: "female",
-    supportedModels: ["seed-tts-2.0"],
+    supportedModels: ["seed-tts-2.0", "seed-audio-1.0"],
     enabled: true,
   },
   {
@@ -185,7 +185,7 @@ export const VERIFIED_PRESET_VOICES: readonly PresetVoice[] = [
     scenario: "Role play",
     style: "Enthusiastic & outgoing",
     gender: "female",
-    supportedModels: ["seed-tts-2.0"],
+    supportedModels: ["seed-tts-2.0", "seed-audio-1.0"],
     enabled: true,
   },
   {
@@ -197,7 +197,7 @@ export const VERIFIED_PRESET_VOICES: readonly PresetVoice[] = [
     scenario: "Education",
     style: "Crisp & lively",
     gender: "female",
-    supportedModels: ["seed-tts-2.0"],
+    supportedModels: ["seed-tts-2.0", "seed-audio-1.0"],
     enabled: true,
   },
   {
@@ -209,7 +209,7 @@ export const VERIFIED_PRESET_VOICES: readonly PresetVoice[] = [
     scenario: "Education",
     style: "Relaxed & approachable",
     gender: "female",
-    supportedModels: ["seed-tts-2.0"],
+    supportedModels: ["seed-tts-2.0", "seed-audio-1.0"],
     enabled: true,
   },
   {
@@ -221,7 +221,7 @@ export const VERIFIED_PRESET_VOICES: readonly PresetVoice[] = [
     scenario: "Narration",
     style: "Gentle & calm",
     gender: "female",
-    supportedModels: ["seed-tts-2.0"],
+    supportedModels: ["seed-tts-2.0", "seed-audio-1.0"],
     enabled: true,
   },
   {
@@ -233,7 +233,7 @@ export const VERIFIED_PRESET_VOICES: readonly PresetVoice[] = [
     scenario: "General",
     style: "Warm, lively & conversational",
     gender: "female",
-    supportedModels: ["seed-tts-2.0"],
+    supportedModels: ["seed-tts-2.0", "seed-audio-1.0"],
     enabled: true,
   },
   {
@@ -245,7 +245,7 @@ export const VERIFIED_PRESET_VOICES: readonly PresetVoice[] = [
     scenario: "General",
     style: "Calm, easygoing & intimate",
     gender: "male",
-    supportedModels: ["seed-tts-2.0"],
+    supportedModels: ["seed-tts-2.0", "seed-audio-1.0"],
     enabled: true,
   },
   {
@@ -257,7 +257,7 @@ export const VERIFIED_PRESET_VOICES: readonly PresetVoice[] = [
     scenario: "General",
     style: "Youthful & vibrant",
     gender: "female",
-    supportedModels: ["seed-tts-2.0"],
+    supportedModels: ["seed-tts-2.0", "seed-audio-1.0"],
     enabled: true,
   },
   {
@@ -269,7 +269,7 @@ export const VERIFIED_PRESET_VOICES: readonly PresetVoice[] = [
     scenario: "General",
     style: "Warm & natural",
     gender: "female",
-    supportedModels: ["seed-tts-2.0"],
+    supportedModels: ["seed-tts-2.0", "seed-audio-1.0"],
     enabled: true,
   },
 ] as const;

@@ -112,6 +112,24 @@ describe("accepted generation quotes", () => {
     ).toThrow();
   });
 
+  it("binds Seed Audio quotes to saved voice references without exposing speaker IDs", () => {
+    expect(
+      quoteParameters("VOICE", {
+        task: "seed-audio",
+        text: "  Hello from Seed Audio  ",
+        estimatedDurationSeconds: 30,
+        referenceVoiceKeys: ["  RUSSELL  ", "Joanne"],
+      }),
+    ).toEqual({
+      task: "seed-audio",
+      textHash: expect.any(String),
+      estimatedDurationSeconds: 30,
+      referenceAudioAssetIds: [],
+      referenceVoiceKeys: ["russell", "joanne"],
+      referenceImageAssetId: null,
+    });
+  });
+
   it("keeps omitted last-frame defaults consistent between legacy and V2 video quotes", () => {
     expect(
       quoteParameters("VIDEO", {

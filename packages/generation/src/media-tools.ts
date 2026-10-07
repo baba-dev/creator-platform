@@ -523,6 +523,12 @@ export async function createProviderToolExecution(
           409,
         );
       }
+      if (!["video/mp4", "video/quicktime"].includes(sourceAsset.mimeType)) {
+        throw new ProviderToolExecutionError(
+          "This MediaKit tool does not support the source video format.",
+          400,
+        );
+      }
       const generationPayload = toolResultRecord(
         sourceAsset.generationJob?.requestPayload,
       );

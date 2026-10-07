@@ -41,23 +41,12 @@ export function PrimaryMenu({ slug }: { slug: string }) {
           icon: "image",
         },
         {
-          title: "AI Retouch & Canvas",
-          description: "Smart inpainting, outpainting, and canvas expansion",
-          href: `${base}/image?tab=ai`,
+          title: "Precision Image Studio",
+          description:
+            "AI retouching, layered PSD composition, crop, resize & transforms",
+          href: `${base}/image/precision`,
           icon: "wand",
-          badge: "AI",
-        },
-        {
-          title: "PSD Multi-Layer Studio",
-          description: "Composite and export layered Photoshop files",
-          href: `${base}/image?tab=layers`,
-          icon: "assets",
-        },
-        {
-          title: "Pixel Editor",
-          description: "High-precision crop, aspect scaling, and transforms",
-          href: `${base}/image?tab=pixel`,
-          icon: "dashboard",
+          badge: "Edit",
         },
       ],
     },
@@ -81,9 +70,9 @@ export function PrimaryMenu({ slug }: { slug: string }) {
           badge: "New",
         },
         {
-          title: "Multi-Clip Video Editor",
-          description: "Trim, reorder, mute clips, and render final sequences",
-          href: `${base}/video?tab=editor`,
+          title: "Video Editing Desk",
+          description: "Trim, reorder, frame, caption, mix, and export videos",
+          href: `${base}/video/editor`,
           icon: "director",
         },
       ],
@@ -94,15 +83,21 @@ export function PrimaryMenu({ slug }: { slug: string }) {
       icon: "voice",
       items: [
         {
-          title: "Voice & Speech Studio",
+          title: "Voice Studio",
           description: "Neural voice narration and multilingual synthesis",
           href: `${base}/speech`,
           icon: "voice",
         },
         {
+          title: "Speech / Transcription",
+          description: "Transcribe audio or video and export SRT/VTT subtitles",
+          href: `${base}/speech/transcription`,
+          icon: "script",
+        },
+        {
           title: "Voice Casting Booth",
-          description: "Audition and calibrate verified voice actors",
-          href: `${base}/speech#booth`,
+          description: "Audition, compare, and cast verified voices",
+          href: `${base}/speech/voices`,
           icon: "sparkles",
         },
         {

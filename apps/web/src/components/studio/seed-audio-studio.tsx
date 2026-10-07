@@ -497,7 +497,14 @@ export function SeedAudioStudio({
     setReferenceVoiceKeys([]);
     setImageId("");
     setAssetQuery("");
-    if (next === "LONG") setDuration((current) => Math.max(current, 60));
+    if (next === "LONG") {
+      setDuration((current) => Math.max(current, 60));
+      if (format === "pcm") {
+        setFormat("wav");
+        setSampleRate(48_000);
+        setOutputProfile("studio");
+      }
+    }
   }
 
   function toggleAudio(id: string) {
@@ -1299,11 +1306,12 @@ export function SeedAudioStudio({
                   type="button"
                   aria-pressed={selected}
                   onClick={() => applyOutputProfile(profile)}
+                  disabled={mode === "LONG" && profile.format === "pcm"}
                   className={`rounded-2xl border p-4 text-left transition focus-visible:outline-2 focus-visible:outline-ring ${
                     selected
                       ? "border-primary bg-primary/10"
                       : "border-border bg-background hover:border-primary/40"
-                  }`}
+                  } disabled:cursor-not-allowed disabled:opacity-40`}
                 >
                   <span
                     className={`grid size-10 place-items-center rounded-xl ${
@@ -1339,7 +1347,9 @@ export function SeedAudioStudio({
                 <option value="mp3">MP3</option>
                 <option value="wav">WAV</option>
                 <option value="ogg_opus">OGG Opus</option>
-                <option value="pcm">PCM</option>
+                <option value="pcm" disabled={mode === "LONG"}>
+                  PCM{mode === "LONG" ? " · native mode only" : ""}
+                </option>
               </select>
             </label>
 

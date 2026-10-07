@@ -1389,6 +1389,7 @@ async function createSeedAudioJob(userId: string, raw: unknown) {
       });
       if (existing) {
         if (
+          existing.projectId !== (input.projectId ?? null) ||
           existing.providerModelId !== input.modelId ||
           existing.priceVersionId !== input.priceVersionId ||
           JSON.stringify(existing.requestPayload) !== JSON.stringify(payload)

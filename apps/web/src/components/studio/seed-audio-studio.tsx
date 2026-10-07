@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import type { Route } from "next";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 
@@ -21,14 +23,16 @@ type Asset = {
 type Quote = {
   quoteToken: string;
   reservationCredits: string;
-  estimatedOmr: string;
+  estimatedCredits: string;
   priceVersionId: string;
 };
 
 export function SeedAudioStudio({
   organizationId,
+  organizationSlug,
 }: {
   organizationId: string;
+  organizationSlug: string;
 }) {
   const [model, setModel] = useState<Model | null>(null);
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -44,7 +48,9 @@ export function SeedAudioStudio({
   const [pitch, setPitch] = useState(0);
   const [subtitles, setSubtitles] = useState(false);
   const [quote, setQuote] = useState<Quote | null>(null);
+  const [quoteKey, setQuoteKey] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [lastJobId, setLastJobId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -86,6 +92,8 @@ export function SeedAudioStudio({
     }),
     [organizationId, model?.id, script, duration, mode, audioIds, imageId],
   );
+  const requestKey = JSON.stringify(request);
+  const activeQuote = quoteKey === requestKey ? quote : null;
 
   useEffect(() => {
     if (!model || !script.trim()) {
@@ -97,7 +105,7 @@ export function SeedAudioStudio({
         void fetch("/api/quotes", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(request),
+          body: requestKey,
           signal: controller.signal,
         })
           .then(async (response) => {
@@ -105,11 +113,13 @@ export function SeedAudioStudio({
             if (!response.ok)
               throw new Error(data.error ?? "Quote unavailable.");
             setQuote(data.quote);
+            setQuoteKey(requestKey);
             setMessage(null);
           })
           .catch((error) => {
             if (!controller.signal.aborted) {
               setQuote(null);
+              setQuoteKey(null);
               setMessage(
                 error instanceof Error ? error.message : "Quote unavailable.",
               );
@@ -121,7 +131,7 @@ export function SeedAudioStudio({
       controller.abort();
       clearTimeout(timer);
     };
-  }, [model, request, script]);
+  }, [model, requestKey, script]);
 
   function toggleAudio(id: string) {
     setAudioIds((current) =>
@@ -133,7 +143,7 @@ export function SeedAudioStudio({
     );
   }
   async function generate() {
-    if (!model || !quote || busy) return;
+    if (!model || !activeQuote || busy) return;
     setBusy(true);
     setMessage(null);
     try {
@@ -144,7 +154,7 @@ export function SeedAudioStudio({
           ...request,
           textPrompt: script,
           priceVersionId: model.priceVersionId,
-          quoteToken: quote.quoteToken,
+          quoteToken: activeQuote.quoteToken,
           idempotencyKey: crypto.randomUUID(),
           format: "mp3",
           sampleRate: 44100,
@@ -158,6 +168,7 @@ export function SeedAudioStudio({
       const data = await response.json();
       if (!response.ok)
         throw new Error(data.error ?? "Audio generation could not start.");
+      setLastJobId(typeof data.jobId === "string" ? data.jobId : null);
       setMessage(
         "Seed Audio is generating in the background. You can keep working while it finishes.",
       );
@@ -267,6 +278,12 @@ export function SeedAudioStudio({
                 </p>
               )}
             </div>
+            <p className="mt-3 text-xs leading-5 text-muted-foreground">
+              Mention <span className="font-mono text-foreground">@Audio1</span>
+              , <span className="font-mono text-foreground">@Audio2</span>, or{" "}
+              <span className="font-mono text-foreground">@Audio3</span> in the
+              direction to use each selected reference in order.
+            </p>
           </div>
         ) : null}
         {mode === "IMAGE" ? (
@@ -379,11 +396,11 @@ export function SeedAudioStudio({
         <div className="mt-6 rounded-2xl bg-muted p-4">
           <p className="text-xs text-muted-foreground">Estimated reservation</p>
           <p className="mt-1 text-2xl font-semibold tabular-nums">
-            {quote ? `${quote.reservationCredits} credits` : "—"}
+            {activeQuote ? `${activeQuote.reservationCredits} credits` : "—"}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {quote
-              ? `Estimated ${quote.estimatedOmr} OMR`
+            {activeQuote
+              ? `${activeQuote.estimatedCredits} credits estimated; up to ${activeQuote.reservationCredits} credits reserved for 120 seconds.`
               : "Enter a script to calculate a quote."}
           </p>
         </div>
@@ -391,7 +408,7 @@ export function SeedAudioStudio({
           className="mt-5 w-full"
           disabled={
             !model ||
-            !quote ||
+            !activeQuote ||
             busy ||
             !script.trim() ||
             (mode === "MATCH" && !audioIds.length) ||
@@ -402,9 +419,19 @@ export function SeedAudioStudio({
           {busy ? "Starting generation…" : "Generate audio"}
         </Button>
         {message ? (
-          <p className="mt-4 text-sm text-muted-foreground" role="status">
-            {message}
-          </p>
+          <div className="mt-4 space-y-2" role="status">
+            <p className="text-sm text-muted-foreground">{message}</p>
+            {lastJobId ? (
+              <Link
+                href={
+                  `/app/${encodeURIComponent(organizationSlug)}/history/${encodeURIComponent(lastJobId)}` as Route
+                }
+                className="inline-flex min-h-10 items-center text-sm font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+              >
+                Follow this generation
+              </Link>
+            ) : null}
+          </div>
         ) : null}
       </aside>
     </div>

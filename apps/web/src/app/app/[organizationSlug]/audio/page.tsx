@@ -33,7 +33,10 @@ export default async function AudioPage({
             private asset library.
           </p>
         </div>
-        <SeedAudioStudio organizationId={membership.organizationId} />
+        <SeedAudioStudio
+          organizationId={membership.organizationId}
+          organizationSlug={organizationSlug}
+        />
       </div>
     </main>
   );

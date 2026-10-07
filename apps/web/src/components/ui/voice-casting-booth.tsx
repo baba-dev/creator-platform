@@ -17,13 +17,103 @@ export interface VoiceOption {
 
 export const VERIFIED_VOICES: readonly VoiceOption[] = [
   {
+    key: "russell",
+    name: "Russell",
+    lang: "English (US)",
+    gender: "male",
+    locale: "en-US",
+    style: "Natural, sincere & approachable",
+    archetype: "General · Neutral",
+  },
+  {
+    key: "tim",
+    name: "Tim",
+    lang: "English (US)",
+    gender: "male",
+    locale: "en-US",
+    style: "Clear, versatile & friendly",
+    archetype: "General · Friendly",
+  },
+  {
+    key: "dacey",
+    name: "Dacey",
+    lang: "English (US)",
+    gender: "female",
+    locale: "en-US",
+    style: "Crisp, confident & engaging",
+    archetype: "General · Confident",
+  },
+  {
+    key: "joanne",
+    name: "Joanne",
+    lang: "English (US)",
+    gender: "female",
+    locale: "en-US",
+    style: "Natural, lively & conversational",
+    archetype: "General · Conversational",
+  },
+  {
+    key: "skye",
+    name: "Skye",
+    lang: "English (US)",
+    gender: "female",
+    locale: "en-US",
+    style: "Clear, candid & sincere",
+    archetype: "General · Sincere",
+  },
+  {
+    key: "jimmy",
+    name: "Jimmy",
+    lang: "English (US)",
+    gender: "male",
+    locale: "en-US",
+    style: "Natural, smooth & easygoing",
+    archetype: "General · Easygoing",
+  },
+  {
+    key: "adrian",
+    name: "Adrian",
+    lang: "English (US)",
+    gender: "male",
+    locale: "en-US",
+    style: "Composed, restrained & level-headed",
+    archetype: "General · Composed",
+  },
+  {
+    key: "alex",
+    name: "Alex",
+    lang: "English (US)",
+    gender: "male",
+    locale: "en-US",
+    style: "Warm, clear & composed",
+    archetype: "General · Warm",
+  },
+  {
+    key: "margaret",
+    name: "Margaret",
+    lang: "English (US)",
+    gender: "female",
+    locale: "en-US",
+    style: "Gentle, sincere & unhurried",
+    archetype: "General · Gentle",
+  },
+  {
+    key: "marcus",
+    name: "Marcus",
+    lang: "English (US)",
+    gender: "male",
+    locale: "en-US",
+    style: "Mellow, deep & narrative",
+    archetype: "General · Narrative",
+  },
+  {
     key: "jasper",
     name: "Jasper",
     lang: "English (US)",
     gender: "male",
     locale: "en-US",
     style: "Passionate & high-spirited",
-    archetype: "Dynamic & Bold",
+    archetype: "Entertainment · Dynamic",
   },
   {
     key: "charlotte",
@@ -32,7 +122,7 @@ export const VERIFIED_VOICES: readonly VoiceOption[] = [
     gender: "female",
     locale: "en-GB",
     style: "Bright & crisp",
-    archetype: "Authoritative & Crisp",
+    archetype: "Education · Crisp",
   },
   {
     key: "kayla",
@@ -41,7 +131,7 @@ export const VERIFIED_VOICES: readonly VoiceOption[] = [
     gender: "female",
     locale: "en-US",
     style: "Enthusiastic & outgoing",
-    archetype: "Commercial & Outgoing",
+    archetype: "Role play · Outgoing",
   },
   {
     key: "sunny",
@@ -50,7 +140,7 @@ export const VERIFIED_VOICES: readonly VoiceOption[] = [
     gender: "female",
     locale: "en-US",
     style: "Crisp & lively",
-    archetype: "Youthful & Friendly",
+    archetype: "Education · Friendly",
   },
   {
     key: "zendaya",
@@ -59,7 +149,7 @@ export const VERIFIED_VOICES: readonly VoiceOption[] = [
     gender: "female",
     locale: "en-US",
     style: "Relaxed & approachable",
-    archetype: "Conversational & Warm",
+    archetype: "Education · Warm",
   },
   {
     key: "sharron",
@@ -68,7 +158,25 @@ export const VERIFIED_VOICES: readonly VoiceOption[] = [
     gender: "female",
     locale: "en-US",
     style: "Gentle & calm",
-    archetype: "Storyteller & Calm",
+    archetype: "Narration · Calm",
+  },
+  {
+    key: "dina",
+    name: "Dina",
+    lang: "Arabic (Egyptian)",
+    gender: "female",
+    locale: "ar-EG",
+    style: "Warm, lively & conversational",
+    archetype: "General · Arabic",
+  },
+  {
+    key: "youssef",
+    name: "Youssef",
+    lang: "Arabic (Egyptian)",
+    gender: "male",
+    locale: "ar-EG",
+    style: "Calm, easygoing & intimate",
+    archetype: "General · Arabic",
   },
   {
     key: "vivi",
@@ -77,7 +185,7 @@ export const VERIFIED_VOICES: readonly VoiceOption[] = [
     gender: "female",
     locale: "zh-CN",
     style: "Youthful & vibrant",
-    archetype: "Vibrant & Expressive",
+    archetype: "General · Vibrant",
   },
   {
     key: "xiaohe",
@@ -86,7 +194,7 @@ export const VERIFIED_VOICES: readonly VoiceOption[] = [
     gender: "female",
     locale: "zh-CN",
     style: "Warm & natural",
-    archetype: "Warm & Documentary",
+    archetype: "General · Documentary",
   },
 ];
 
@@ -105,7 +213,7 @@ export function VoiceCastingBooth({
   isOpen,
   onClose,
   onSelectVoice,
-  currentVoiceKey = "jasper",
+  currentVoiceKey = "russell",
   organizationId,
   initialTestPhrase = "",
   characterName,
@@ -426,6 +534,17 @@ export function VoiceCastingBooth({
               }`}
             >
               Chinese
+            </button>
+            <button
+              type="button"
+              onClick={() => setLocaleFilter("ar-EG")}
+              className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition ${
+                localeFilter === "ar-EG"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Arabic
             </button>
           </div>
         </div>

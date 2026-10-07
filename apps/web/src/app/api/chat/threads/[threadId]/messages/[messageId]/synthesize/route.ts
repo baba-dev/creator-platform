@@ -2,6 +2,7 @@ import { hasOrganizationPermission } from "@aiwa/authz";
 import { db } from "@aiwa/db";
 import {
   createVoiceJob,
+  DEFAULT_PRESET_VOICE_KEY,
   resolvePresetVoice,
   VoiceResolutionError,
 } from "@aiwa/generation";
@@ -86,7 +87,7 @@ export async function POST(
     const input = synthesizeChatVoiceSchema.parse(body);
 
     const voiceKeyToUse =
-      input.voiceKey || thread.persona?.voiceKey || "jasper";
+      input.voiceKey || thread.persona?.voiceKey || DEFAULT_PRESET_VOICE_KEY;
 
     // Verify voice existence
     try {

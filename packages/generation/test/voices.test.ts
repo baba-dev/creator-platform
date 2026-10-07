@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_PRESET_VOICE_KEY,
   listPublicPresetVoices,
   resolvePresetVoice,
   VERIFIED_PRESET_VOICES,
@@ -7,6 +8,13 @@ import {
 } from "../src/voices";
 
 describe("preset voice catalogue", () => {
+  it("uses a neutral general-purpose voice as the platform fallback", () => {
+    expect(DEFAULT_PRESET_VOICE_KEY).toBe("russell");
+    const voice = resolvePresetVoice(DEFAULT_PRESET_VOICE_KEY, "seed-tts-2.0");
+    expect(voice.speakerId).toBe("en_male_russell_uranus_bigtts");
+    expect(voice.scenario).toBe("General");
+  });
+
   it("resolves verified preset voice keys to provider speaker IDs", () => {
     const voice = resolvePresetVoice("jasper", "seed-tts-2.0");
     expect(voice.key).toBe("jasper");
@@ -30,14 +38,15 @@ describe("preset voice catalogue", () => {
   });
 
   it("rejects voices for incompatible models", () => {
-    expect(() => resolvePresetVoice("jasper", "incompatible-model")).toThrow(
+    expect(() => resolvePresetVoice("russell", "incompatible-model")).toThrow(
       VoiceResolutionError,
     );
   });
 
   it("lists public preset voices without exposing raw speaker IDs", () => {
     const publicVoices = listPublicPresetVoices("seed-tts-2.0");
-    expect(publicVoices.length).toBeGreaterThan(0);
+    expect(publicVoices.length).toBeGreaterThanOrEqual(20);
+    expect(publicVoices[0]?.key).toBe("russell");
     for (const voice of publicVoices) {
       expect(voice).toHaveProperty("key");
       expect(voice).toHaveProperty("displayName");
@@ -46,15 +55,27 @@ describe("preset voice catalogue", () => {
     }
   });
 
-  it("contains all verified default presets", () => {
-    const keys = VERIFIED_PRESET_VOICES.map((v) => v.key);
-    expect(keys).toContain("jasper");
-    expect(keys).toContain("charlotte");
-    expect(keys).toContain("kayla");
-    expect(keys).toContain("sunny");
-    expect(keys).toContain("zendaya");
-    expect(keys).toContain("sharron");
-    expect(keys).toContain("vivi");
-    expect(keys).toContain("xiaohe");
+  it("includes expanded neutral, Arabic, and existing presets", () => {
+    const keys = VERIFIED_PRESET_VOICES.map((voice) => voice.key);
+    for (const key of [
+      "russell",
+      "tim",
+      "dacey",
+      "joanne",
+      "skye",
+      "jimmy",
+      "dina",
+      "youssef",
+      "jasper",
+      "charlotte",
+      "kayla",
+      "sunny",
+      "zendaya",
+      "sharron",
+      "vivi",
+      "xiaohe",
+    ]) {
+      expect(keys).toContain(key);
+    }
   });
 });

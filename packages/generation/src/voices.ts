@@ -1,9 +1,12 @@
+export const DEFAULT_PRESET_VOICE_KEY = "russell";
+
 export interface PresetVoice {
   readonly key: string;
   readonly speakerId: string;
   readonly displayName: string;
-  readonly locale: string; // BCP 47 (e.g. en-US, en-GB, zh-CN)
+  readonly locale: string;
   readonly language: string;
+  readonly scenario?: string;
   readonly style?: string;
   readonly gender?: "female" | "male";
   readonly supportedModels: readonly string[];
@@ -16,6 +19,7 @@ export interface PublicVoiceMetadata {
   readonly displayName: string;
   readonly locale: string;
   readonly language: string;
+  readonly scenario?: string;
   readonly style?: string;
   readonly gender?: "female" | "male";
   readonly supportedModels: readonly string[];
@@ -24,16 +28,137 @@ export interface PublicVoiceMetadata {
 
 /**
  * Server-owned catalogue of verified BytePlus Seed-TTS 2.0 preset voices.
- * Verified against official BytePlus Seed Speech documentation and speaker IDs.
- * Never expose raw speaker IDs to browser bundles or client requests.
+ * Keep neutral general-purpose voices first so fallback selection is predictable.
+ * Never expose raw provider speaker IDs to browser bundles or client requests.
  */
 export const VERIFIED_PRESET_VOICES: readonly PresetVoice[] = [
+  {
+    key: "russell",
+    speakerId: "en_male_russell_uranus_bigtts",
+    displayName: "Russell",
+    locale: "en-US",
+    language: "English (US)",
+    scenario: "General",
+    style: "Natural, sincere & approachable",
+    gender: "male",
+    supportedModels: ["seed-tts-2.0"],
+    enabled: true,
+  },
+  {
+    key: "tim",
+    speakerId: "en_male_tim_uranus_bigtts",
+    displayName: "Tim",
+    locale: "en-US",
+    language: "English (US)",
+    scenario: "General",
+    style: "Clear, versatile & friendly",
+    gender: "male",
+    supportedModels: ["seed-tts-2.0"],
+    enabled: true,
+  },
+  {
+    key: "dacey",
+    speakerId: "en_female_dacey_uranus_bigtts",
+    displayName: "Dacey",
+    locale: "en-US",
+    language: "English (US)",
+    scenario: "General",
+    style: "Crisp, confident & engaging",
+    gender: "female",
+    supportedModels: ["seed-tts-2.0"],
+    enabled: true,
+  },
+  {
+    key: "joanne",
+    speakerId: "en_female_joanne_uranus_bigtts",
+    displayName: "Joanne",
+    locale: "en-US",
+    language: "English (US)",
+    scenario: "General",
+    style: "Natural, lively & conversational",
+    gender: "female",
+    supportedModels: ["seed-tts-2.0"],
+    enabled: true,
+  },
+  {
+    key: "skye",
+    speakerId: "en_female_skye_uranus_bigtts",
+    displayName: "Skye",
+    locale: "en-US",
+    language: "English (US)",
+    scenario: "General",
+    style: "Clear, candid & sincere",
+    gender: "female",
+    supportedModels: ["seed-tts-2.0"],
+    enabled: true,
+  },
+  {
+    key: "jimmy",
+    speakerId: "en_male_jimmy_uranus_bigtts",
+    displayName: "Jimmy",
+    locale: "en-US",
+    language: "English (US)",
+    scenario: "General",
+    style: "Natural, smooth & easygoing",
+    gender: "male",
+    supportedModels: ["seed-tts-2.0"],
+    enabled: true,
+  },
+  {
+    key: "adrian",
+    speakerId: "en_male_bruce_uranus_bigtts",
+    displayName: "Adrian",
+    locale: "en-US",
+    language: "English (US)",
+    scenario: "General",
+    style: "Composed, restrained & level-headed",
+    gender: "male",
+    supportedModels: ["seed-tts-2.0"],
+    enabled: true,
+  },
+  {
+    key: "alex",
+    speakerId: "en_male_alex_uranus_bigtts",
+    displayName: "Alex",
+    locale: "en-US",
+    language: "English (US)",
+    scenario: "General",
+    style: "Warm, clear & composed",
+    gender: "male",
+    supportedModels: ["seed-tts-2.0"],
+    enabled: true,
+  },
+  {
+    key: "margaret",
+    speakerId: "en_female_authoritative-informative_uranus_bigtts",
+    displayName: "Margaret",
+    locale: "en-US",
+    language: "English (US)",
+    scenario: "General",
+    style: "Gentle, sincere & unhurried",
+    gender: "female",
+    supportedModels: ["seed-tts-2.0"],
+    enabled: true,
+  },
+  {
+    key: "marcus",
+    speakerId: "en_male_marcus_uranus_bigtts",
+    displayName: "Marcus",
+    locale: "en-US",
+    language: "English (US)",
+    scenario: "General",
+    style: "Mellow, deep & narrative",
+    gender: "male",
+    supportedModels: ["seed-tts-2.0"],
+    enabled: true,
+  },
   {
     key: "jasper",
     speakerId: "en_male_excited-male-voice_uranus_bigtts",
     displayName: "Jasper",
     locale: "en-US",
     language: "English (US)",
+    scenario: "Entertainment",
     style: "Passionate & high-spirited",
     gender: "male",
     supportedModels: ["seed-tts-2.0"],
@@ -45,6 +170,7 @@ export const VERIFIED_PRESET_VOICES: readonly PresetVoice[] = [
     displayName: "Charlotte",
     locale: "en-GB",
     language: "English (UK)",
+    scenario: "Education",
     style: "Bright & crisp",
     gender: "female",
     supportedModels: ["seed-tts-2.0"],
@@ -56,6 +182,7 @@ export const VERIFIED_PRESET_VOICES: readonly PresetVoice[] = [
     displayName: "Kayla",
     locale: "en-US",
     language: "English (US)",
+    scenario: "Role play",
     style: "Enthusiastic & outgoing",
     gender: "female",
     supportedModels: ["seed-tts-2.0"],
@@ -67,6 +194,7 @@ export const VERIFIED_PRESET_VOICES: readonly PresetVoice[] = [
     displayName: "Sunny",
     locale: "en-US",
     language: "English (US)",
+    scenario: "Education",
     style: "Crisp & lively",
     gender: "female",
     supportedModels: ["seed-tts-2.0"],
@@ -78,6 +206,7 @@ export const VERIFIED_PRESET_VOICES: readonly PresetVoice[] = [
     displayName: "Zendaya",
     locale: "en-US",
     language: "English (US)",
+    scenario: "Education",
     style: "Relaxed & approachable",
     gender: "female",
     supportedModels: ["seed-tts-2.0"],
@@ -89,8 +218,33 @@ export const VERIFIED_PRESET_VOICES: readonly PresetVoice[] = [
     displayName: "Sharron",
     locale: "en-US",
     language: "English (US)",
+    scenario: "Narration",
     style: "Gentle & calm",
     gender: "female",
+    supportedModels: ["seed-tts-2.0"],
+    enabled: true,
+  },
+  {
+    key: "dina",
+    speakerId: "ar_female_dina_uranus_bigtts",
+    displayName: "Dina",
+    locale: "ar-EG",
+    language: "Arabic (Egyptian)",
+    scenario: "General",
+    style: "Warm, lively & conversational",
+    gender: "female",
+    supportedModels: ["seed-tts-2.0"],
+    enabled: true,
+  },
+  {
+    key: "youssef",
+    speakerId: "ar_male_youssef_uranus_bigtts",
+    displayName: "Youssef",
+    locale: "ar-EG",
+    language: "Arabic (Egyptian)",
+    scenario: "General",
+    style: "Calm, easygoing & intimate",
+    gender: "male",
     supportedModels: ["seed-tts-2.0"],
     enabled: true,
   },
@@ -100,6 +254,7 @@ export const VERIFIED_PRESET_VOICES: readonly PresetVoice[] = [
     displayName: "Vivi",
     locale: "zh-CN",
     language: "Chinese (Mandarin)",
+    scenario: "General",
     style: "Youthful & vibrant",
     gender: "female",
     supportedModels: ["seed-tts-2.0"],
@@ -111,6 +266,7 @@ export const VERIFIED_PRESET_VOICES: readonly PresetVoice[] = [
     displayName: "Xiaohe",
     locale: "zh-CN",
     language: "Chinese (Mandarin)",
+    scenario: "General",
     style: "Warm & natural",
     gender: "female",
     supportedModels: ["seed-tts-2.0"],
@@ -128,10 +284,6 @@ export class VoiceResolutionError extends Error {
   }
 }
 
-/**
- * Resolves a client-supplied voice key to its verified provider speaker ID.
- * Ensures the voice exists, is enabled, and is compatible with the requested model.
- */
 export function resolvePresetVoice(
   voiceKey: string,
   modelId?: string,
@@ -158,10 +310,6 @@ export function resolvePresetVoice(
   return voice;
 }
 
-/**
- * Returns safe metadata for all enabled voices, filterable by model.
- * Safe for client-facing serialization (no raw speaker IDs).
- */
 export function listPublicPresetVoices(
   modelId?: string,
 ): readonly PublicVoiceMetadata[] {
@@ -173,6 +321,7 @@ export function listPublicPresetVoices(
     displayName: voice.displayName,
     locale: voice.locale,
     language: voice.language,
+    scenario: voice.scenario,
     style: voice.style,
     gender: voice.gender,
     supportedModels: voice.supportedModels,

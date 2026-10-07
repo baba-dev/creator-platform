@@ -1,0 +1,71 @@
+name: BytePlus live voice A/B smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      billing_acknowledgement:
+        description:
+          Type I_UNDERSTAND_THIS_IS_BILLABLE to run two live Seed Speech TTS 2.0
+          generations
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: byteplus-live-voice-ab-smoke
+  cancel-in-progress: false
+
+jobs:
+  seed-speech-tts-2-ab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BYTEPLUS_SPEECH_API_KEY: ${{ secrets.BYTEPLUS_SPEECH_API_KEY }}
+      BYTEPLUS_SPEECH_APP_KEY: ${{ vars.BYTEPLUS_SPEECH_APP_KEY }}
+      BYTEPLUS_SPEECH_BASE_URL: ${{ vars.BYTEPLUS_SPEECH_BASE_URL }}
+      BYTEPLUS_REGION: ap-southeast-1
+      BYTEPLUS_LIVE_SMOKE_ACK: ${{ inputs.billing_acknowledgement }}
+      BYTEPLUS_SMOKE_OUTPUT_DIR: ${{ runner.temp }}/byteplus-voice-ab
+
+    steps:
+      - name: Verify explicit billing acknowledgement
+        shell: bash
+        run: |
+          if [ "$BYTEPLUS_LIVE_SMOKE_ACK" != "I_UNDERSTAND_THIS_IS_BILLABLE" ]; then
+            echo "Live smoke cancelled: billing acknowledgement did not match." >&2
+            exit 1
+          fi
+          if [ -z "$BYTEPLUS_SPEECH_API_KEY" ]; then
+            echo "Live smoke unavailable: repository secret BYTEPLUS_SPEECH_API_KEY is not configured." >&2
+            exit 1
+          fi
+
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.19.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate legacy and production comparison audio
+        run: pnpm --filter @aiwa/worker smoke:byteplus:voice:ab
+
+      - name: Upload A/B listening samples
+        uses: actions/upload-artifact@v6
+        with:
+          name: byteplus-seed-tts-2-ab
+          path: ${{ runner.temp }}/byteplus-voice-ab
+          if-no-files-found: error
+          retention-days: 7

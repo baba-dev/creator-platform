@@ -124,9 +124,7 @@ export default async function AudioPage({
             : "documentary",
         format,
         sampleRate,
-        referenceAudioAssetIds: Array.isArray(
-          request.referenceAudioAssetIds,
-        )
+        referenceAudioAssetIds: Array.isArray(request.referenceAudioAssetIds)
           ? request.referenceAudioAssetIds.filter(
               (id): id is string => typeof id === "string",
             )

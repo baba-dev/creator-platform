@@ -1633,8 +1633,7 @@ export async function processVoiceJob(
       );
     }
     const rawUsage = result.rawUsage as
-      | Readonly<Record<string, unknown>>
-      | undefined;
+      Readonly<Record<string, unknown>> | undefined;
     const rawOriginalDuration = rawUsage?.generatedSeconds;
     if (
       typeof rawOriginalDuration === "number" &&
@@ -1738,10 +1737,7 @@ export async function processVoiceJob(
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       const mimeType = voiceOutputAsset.mimeType as
-        | "audio/mpeg"
-        | "audio/wav"
-        | "audio/ogg"
-        | "audio/L16";
+        "audio/mpeg" | "audio/wav" | "audio/ogg" | "audio/L16";
       stored = longFormOutput
         ? await storeAudio(
             voiceOutputAsset.objectKey,

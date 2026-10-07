@@ -120,9 +120,7 @@ export const seedAudioRequestSchema = z
       .min(1)
       .max(SEED_AUDIO_LONG_FORM_MAX_PROMPT_CHARS),
     longForm: z.boolean().default(false),
-    workflow: z
-      .enum(["CREATE", "MATCH", "IMAGE", "LONG"])
-      .default("CREATE"),
+    workflow: z.enum(["CREATE", "MATCH", "IMAGE", "LONG"]).default("CREATE"),
     sourceText: z
       .string()
       .trim()
@@ -1452,10 +1450,7 @@ async function createSeedAudioJob(userId: string, raw: unknown) {
     }
   });
   const longFormPlan = input.longForm
-    ? planSeedAudioLongForm(
-        input.textPrompt,
-        input.estimatedDurationSeconds,
-      )
+    ? planSeedAudioLongForm(input.textPrompt, input.estimatedDurationSeconds)
     : null;
   const output = {
     mp3: { extension: "mp3", mimeType: "audio/mpeg" },

@@ -30,9 +30,11 @@ type Quote = {
 export function SeedAudioStudio({
   organizationId,
   organizationSlug,
+  canGenerate,
 }: {
   organizationId: string;
   organizationSlug: string;
+  canGenerate: boolean;
 }) {
   const [model, setModel] = useState<Model | null>(null);
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -52,6 +54,7 @@ export function SeedAudioStudio({
   const [message, setMessage] = useState<string | null>(null);
   const [lastJobId, setLastJobId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [assetQuery, setAssetQuery] = useState("");
 
   useEffect(() => {
     void Promise.all([
@@ -184,26 +187,81 @@ export function SeedAudioStudio({
   }
   const audioAssets = assets.filter((asset) => asset.mediaKind === "AUDIO");
   const imageAssets = assets.filter((asset) => asset.mediaKind === "IMAGE");
+  const normalizedAssetQuery = assetQuery.trim().toLowerCase();
+  const visibleAudioAssets = audioAssets.filter((asset) =>
+    (asset.name ?? "audio asset").toLowerCase().includes(normalizedAssetQuery),
+  );
   const modes = [
-    ["CREATE", "Create audio", "Prompt-directed performance"],
-    ["MATCH", "Match a voice", "Up to three audio references"],
-    ["IMAGE", "Image to voice", "One visual delivery reference"],
-    ["LONG", "Long-form voiceover", "Narration up to 120 seconds"],
+    ["CREATE", "Create audio", "Direct a fresh voice from text"],
+    ["MATCH", "Match a voice", "Blend up to three audio references"],
+    ["IMAGE", "Image to voice", "Guide character from one visual reference"],
+    ["LONG", "Long-form voiceover", "Extended narration up to 120 seconds"],
   ] as const;
+  const promptStarters =
+    mode === "MATCH"
+      ? [
+          "Use @Audio1 as the primary voice identity. Keep the delivery natural and conversational. Speak:",
+          "Blend @Audio1 for timbre and @Audio2 for pacing. Speak:",
+        ]
+      : mode === "IMAGE"
+        ? [
+            "Infer a natural voice and delivery from the visual reference. Speak:",
+            "Match the visual mood with a cinematic but believable performance. Speak:",
+          ]
+        : mode === "LONG"
+          ? [
+              "Narrate this as a polished documentary voiceover with steady pacing:",
+              "Read this as a warm long-form explainer with clear paragraph breaks:",
+            ]
+          : [
+              "Warm documentary delivery with a confident, intimate timbre. Speak:",
+              "Bright commercial voice with crisp pacing and a friendly smile. Speak:",
+            ];
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
       <section className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-7">
+        <div className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-border/70 pb-5">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">
+              Choose a workflow
+            </p>
+            <p className="mt-1 text-sm text-foreground">
+              One model, four focused ways to direct the performance.
+            </p>
+          </div>
+          <span
+            className={
+              model
+                ? "inline-flex min-h-8 items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 text-xs font-semibold text-primary"
+                : "inline-flex min-h-8 items-center gap-2 rounded-full border border-border bg-muted px-3 text-xs font-semibold text-muted-foreground"
+            }
+          >
+            <span
+              className={
+                model
+                  ? "size-2 rounded-full bg-primary"
+                  : "size-2 rounded-full bg-muted-foreground/40"
+              }
+            />
+            {model ? "Seed Audio ready" : "Checking model"}
+          </span>
+        </div>
         <div className="grid gap-3 sm:grid-cols-2">
           {modes.map(([value, title, detail]) => (
             <button
               key={value}
               type="button"
+              aria-pressed={mode === value}
               onClick={() => {
                 setMode(value);
                 setAudioIds([]);
                 setImageId("");
+                setAssetQuery("");
+                if (value === "LONG") {
+                  setDuration((current) => Math.max(current, 60));
+                }
               }}
-              className={`min-h-24 rounded-2xl border p-4 text-left transition-colors focus-visible:outline-2 focus-visible:outline-ring ${mode === value ? "border-primary bg-primary/10" : "border-border hover:border-primary/40"}`}
+              className={`min-h-28 rounded-2xl border p-4 text-left transition-colors focus-visible:outline-2 focus-visible:outline-ring ${mode === value ? "border-primary bg-primary/10 shadow-xs" : "border-border bg-background/60 hover:border-primary/40 hover:bg-muted/30"}`}
             >
               <span className="flex items-center gap-2 font-semibold">
                 <Icon
@@ -239,9 +297,29 @@ export function SeedAudioStudio({
           placeholder="Describe the performance, timbre, pacing, and the words to speak…"
           className="mt-2 w-full rounded-2xl border border-input bg-background p-4 text-sm outline-none focus:ring-2 focus:ring-ring"
         />
-        <p className="mt-2 text-xs text-subtle-foreground">
-          {script.length.toLocaleString()} / 3,000 characters
-        </p>
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-subtle-foreground">
+            {script.length.toLocaleString()} / 3,000 characters
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {promptStarters.map((starter, index) => (
+              <button
+                key={starter}
+                type="button"
+                onClick={() =>
+                  setScript((current) =>
+                    current.trim()
+                      ? `${current.trim()}\n\n${starter}`
+                      : starter,
+                  )
+                }
+                className="min-h-8 rounded-full border border-border bg-background px-3 text-[0.6875rem] font-semibold text-muted-foreground transition hover:border-primary/40 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+              >
+                {index === 0 ? "Add direction" : "Add alternate style"}
+              </button>
+            ))}
+          </div>
+        </div>
         {mode === "MATCH" ? (
           <div className="mt-6">
             <h2 className="text-sm font-semibold">
@@ -250,9 +328,21 @@ export function SeedAudioStudio({
                 ({audioIds.length}/3)
               </span>
             </h2>
+            <div className="relative mt-3">
+              <Icon
+                name="search"
+                className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+              />
+              <input
+                value={assetQuery}
+                onChange={(event) => setAssetQuery(event.target.value)}
+                placeholder="Search reference audio"
+                className="min-h-10 w-full rounded-xl border border-input bg-background pl-10 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
             <div className="mt-3 grid gap-2">
-              {audioAssets.length ? (
-                audioAssets.map((asset) => (
+              {visibleAudioAssets.length ? (
+                visibleAudioAssets.slice(0, 8).map((asset) => (
                   <label
                     key={asset.id}
                     className="flex cursor-pointer items-center gap-3 rounded-xl border border-border p-3 hover:border-primary/40"
@@ -309,7 +399,37 @@ export function SeedAudioStudio({
             </select>
           </div>
         ) : null}
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-6 rounded-2xl border border-border bg-muted/20 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">Delivery presets</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Start with a balanced profile, then fine-tune pace, pitch, and volume below.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {[
+                ["Natural", 1, 1, 0],
+                ["Intimate", 0.9, 0.9, -1],
+                ["Energetic", 1.15, 1.1, 1],
+              ].map(([label, pace, volume, nextPitch]) => (
+                <button
+                  key={String(label)}
+                  type="button"
+                  onClick={() => {
+                    setSpeechRate(Number(pace));
+                    setLoudnessRate(Number(volume));
+                    setPitch(Number(nextPitch));
+                  }}
+                  className="min-h-9 rounded-xl border border-border bg-background px-3 text-xs font-semibold text-muted-foreground transition hover:border-primary/40 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                >
+                  {String(label)}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <label className="text-sm font-semibold">
             Duration{" "}
             <select
@@ -393,20 +513,45 @@ export function SeedAudioStudio({
           Prompt-directed speech, sound design, and long-form narration in one
           protected generation workflow.
         </p>
-        <div className="mt-6 rounded-2xl bg-muted p-4">
-          <p className="text-xs text-muted-foreground">Estimated reservation</p>
+        <div className="mt-6 rounded-2xl border border-border bg-muted/30 p-4">
+          <p className="text-xs text-muted-foreground">Estimated credits</p>
           <p className="mt-1 text-2xl font-semibold tabular-nums">
-            {activeQuote ? `${activeQuote.reservationCredits} credits` : "—"}
+            {activeQuote ? activeQuote.estimatedCredits : "—"}
           </p>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
             {activeQuote
-              ? `${activeQuote.estimatedCredits} credits estimated; up to ${activeQuote.reservationCredits} credits reserved for 120 seconds.`
-              : "Enter a script to calculate a quote."}
+              ? `Up to ${activeQuote.reservationCredits} credits may be held while the job runs. Billing settles from actual provider-reported duration.`
+              : "Enter a script to calculate the current quote."}
           </p>
         </div>
+        <dl className="mt-5 space-y-2 text-sm">
+          <div className="flex items-center justify-between gap-3">
+            <dt className="text-muted-foreground">Workflow</dt>
+            <dd className="font-semibold">
+              {modes.find(([value]) => value === mode)?.[1] ?? "Create audio"}
+            </dd>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <dt className="text-muted-foreground">Target duration</dt>
+            <dd className="font-semibold">{duration}s</dd>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <dt className="text-muted-foreground">Output</dt>
+            <dd className="font-semibold">MP3 · 44.1 kHz</dd>
+          </div>
+        </dl>
+        {!canGenerate ? (
+          <div className="mt-5 rounded-xl border border-warning/20 bg-warning/5 p-3">
+            <p className="text-xs font-semibold text-foreground">View-only access</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              Your workspace role does not include permission to create generations.
+            </p>
+          </div>
+        ) : null}
         <Button
           className="mt-5 w-full"
           disabled={
+            !canGenerate ||
             !model ||
             !activeQuote ||
             busy ||
@@ -416,8 +561,13 @@ export function SeedAudioStudio({
           }
           onClick={() => void generate()}
         >
-          {busy ? "Starting generation…" : "Generate audio"}
+          {busy ? "Starting generation…" : "Generate with Seed Audio"}
         </Button>
+        {!canGenerate ? (
+          <p className="mt-2 text-center text-xs leading-5 text-muted-foreground">
+            Ask a workspace owner to grant generation access.
+          </p>
+        ) : null}
         {message ? (
           <div className="mt-4 space-y-2" role="status">
             <p className="text-sm text-muted-foreground">{message}</p>

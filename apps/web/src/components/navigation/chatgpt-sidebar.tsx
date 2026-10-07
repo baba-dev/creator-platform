@@ -364,9 +364,7 @@ export function ChatGPTAppSidebar({
               onClick={onItemClick}
               title={connectionsItem.title}
               className={`grid size-9 place-items-center rounded-xl transition ${
-                pathname.startsWith(
-                  getWorkspaceItemHref(base, connectionsItem),
-                )
+                pathname.startsWith(getWorkspaceItemHref(base, connectionsItem))
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:bg-card hover:text-foreground"
               }`}
@@ -486,9 +484,7 @@ export function ChatGPTAppSidebar({
             href={getWorkspaceItemHref(base, connectionsItem) as Route}
             onClick={onItemClick}
             className={`flex h-9 items-center gap-3 rounded-xl px-3 text-xs font-semibold transition focus-visible:outline-2 focus-visible:outline-ring ${
-              pathname.startsWith(
-                getWorkspaceItemHref(base, connectionsItem),
-              )
+              pathname.startsWith(getWorkspaceItemHref(base, connectionsItem))
                 ? "bg-primary/10 text-primary"
                 : "text-muted-foreground hover:bg-card hover:text-foreground"
             }`}

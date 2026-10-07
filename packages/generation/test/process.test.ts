@@ -174,6 +174,33 @@ beforeEach(() => {
 });
 
 describe("video processing", () => {
+  it("holds credits and requires review when OmniHuman result retention expires", async () => {
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+      ...base,
+      status: "PROCESSING",
+      providerRequestId: "vision:omnihuman:123",
+    });
+    const p = provider();
+    vi.mocked(p.getJob).mockRejectedValue(
+      new ProviderRequestError("Result expired", false, {
+        code: "PROVIDER_OUTCOME_UNKNOWN",
+      }),
+    );
+    await processVideoPollJob("job1", p);
+    expect(mocks.db.generationJob.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "job1", status: "PROCESSING" },
+        data: expect.objectContaining({
+          status: "MANUAL_REVIEW",
+          errorCode: "PROVIDER_OUTCOME_UNKNOWN",
+        }),
+      }),
+    );
+    expect(mocks.release).not.toHaveBeenCalled();
+    expect(mocks.capture).not.toHaveBeenCalled();
+    expect(p.submit).not.toHaveBeenCalled();
+  });
+
   it("does not release credits when an operator moved a stale failure into review", async () => {
     const tx = transaction("MANUAL_REVIEW");
     await failJob("job1", "Provider rejected the request.", "PROCESSING");

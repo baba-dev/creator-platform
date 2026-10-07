@@ -2322,16 +2322,18 @@ export function GenerationStudio({
                     <div className="space-y-3 rounded-xl border border-primary/20 bg-primary/[0.05] p-3">
                       <div>
                         <p className="text-xs font-semibold text-foreground">
-                          Talking-avatar sources
+                          Create a spokesperson video
                         </p>
                         <p className="mt-1 text-[11px] text-muted-foreground">
-                          Choose one portrait and one speech track. Duration and
-                          billing are derived from the stored audio metadata.
+                          Add a clear portrait, choose the spoken audio, then
+                          select 720p or 1080p. The speech track determines the
+                          video length. Motion direction is optional; spoken
+                          words come from the audio.
                         </p>
                       </div>
                       <div className="grid gap-3 sm:grid-cols-2">
                         <label className="grid gap-2 text-xs font-semibold">
-                          Avatar portrait
+                          1. Portrait
                           <select
                             value={avatarImageId}
                             onChange={(event) =>
@@ -2348,7 +2350,7 @@ export function GenerationStudio({
                           </select>
                         </label>
                         <label className="grid gap-2 text-xs font-semibold">
-                          Driving speech audio
+                          2. Speech track
                           <select
                             value={drivingAudioId}
                             onChange={(event) =>
@@ -2400,7 +2402,10 @@ export function GenerationStudio({
                       </div>
                       <p className="text-[11px] text-muted-foreground">
                         Portrait: JPEG/PNG under 5 MB and below 4096×4096.
-                        Driving audio: under 60 seconds.
+                        Audio: MP3 / WAV, up to 25 MiB, shorter than 60 seconds.
+                        Billing uses the stored audio duration rounded up to
+                        whole seconds. Review the credit quote before
+                        generating.
                       </p>
                     </div>
                   ) : null}
@@ -2807,7 +2812,7 @@ export function GenerationStudio({
               : `Generate ${
                   activeMode === "VIDEO"
                     ? videoWorkflow === "TALKING_AVATAR"
-                      ? "avatar"
+                      ? "spokesperson video"
                       : "video"
                     : activeMode === "VOICE"
                       ? "speech"

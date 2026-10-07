@@ -20,6 +20,7 @@ import {
   Pagination,
   StatusBadge,
 } from "@/components/admin/primitives";
+import { OmniHumanDiagnostics } from "@/components/admin/omnihuman-diagnostics";
 import { SyncModelsButton } from "@/components/admin/sync-models-button";
 import { Button } from "@/components/ui/button";
 import { Eyebrow } from "@/components/ui/creative";
@@ -112,7 +113,10 @@ export default async function AdminSectionPage({
         </div>
         {sectionName === "models" &&
         hasPlatformPermission(session.user.platformRole, "models:manage") ? (
-          <SyncModelsButton />
+          <div className="flex flex-wrap gap-3">
+            <SyncModelsButton />
+            <OmniHumanDiagnostics />
+          </div>
         ) : null}
       </div>
       <AdminFilters section={sectionName} filters={filters} />

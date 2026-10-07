@@ -769,7 +769,11 @@ export async function recoverGeneratedOutput(
     outputUrl =
       outputUrl || (typeof output?.url === "string" ? output.url : undefined);
 
-    if (!outputUrl && job.providerRequestId) {
+    const refreshOmniHuman =
+      job.providerModel.providerModelId === "omnihuman-1.5" &&
+      !params.outputUrl;
+    if (refreshOmniHuman) outputUrl = undefined;
+    if ((!outputUrl || refreshOmniHuman) && job.providerRequestId) {
       const provider = params.provider ?? getDefaultGenerationProvider();
       if (provider) {
         try {

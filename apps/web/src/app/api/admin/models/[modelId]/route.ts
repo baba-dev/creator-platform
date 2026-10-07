@@ -15,12 +15,12 @@ import {
   publishPriceVersionSchema,
   toggleModelEnabledSchema,
 } from "@aiwa/validation";
+import { assertVoicePricingDimensionMatchesCapabilities } from "@aiwa/validation/voice-pricing";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
-import { assertVoicePricingDimensionMatchesCapabilities } from "@aiwa/validation/voice-pricing";
 
 function priceVersionResponse(price: ModelPriceVersion) {
   return {

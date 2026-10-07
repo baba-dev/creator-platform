@@ -154,15 +154,15 @@ export function PixelControls({
 
   return (
     <div className="space-y-3 text-sm [&_button]:min-h-11 [&_button]:h-auto [&_button]:whitespace-normal [&_button]:py-2">
-      {showPreferences && (
-        <details
-          open
-          data-pixel-preferences
-          onToggle={(event) => {
-            if (!event.currentTarget.open) onClosePreferences();
-          }}
-          className="rounded-xl border border-border bg-background p-3"
-        >
+      <details
+        data-pixel-preferences
+        hidden={!showPreferences}
+        open={showPreferences}
+        onToggle={(event) => {
+          if (!event.currentTarget.open) onClosePreferences();
+        }}
+        className="rounded-xl border border-border bg-background p-3"
+      >
         <summary className="min-h-10 cursor-pointer font-semibold">
           Pixel preferences &amp; memory
         </summary>
@@ -269,8 +269,7 @@ export function PixelControls({
             Forget preferences
           </Button>
         </div>
-        </details>
-      )}
+      </details>
       {workflows.map((workflow) => (
         <details
           key={workflow.id}

@@ -272,7 +272,7 @@ function sanitizeInput(
 }
 
 export function isBytePlusMediaKitConfigured(
-  environment: { BYTEPLUS_MEDIAKIT_API_KEY?: string } = process.env,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
 ): boolean {
   return Boolean(environment.BYTEPLUS_MEDIAKIT_API_KEY?.trim());
 }

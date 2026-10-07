@@ -255,7 +255,11 @@ async function assertToolSpendingCap(
 function outputReservationForTool(
   providerToolId: string,
   input: Readonly<Record<string, unknown>>,
-): { extension: "mp4" | "webm"; mimeType: "video/mp4" | "video/webm"; name: string } | null {
+): {
+  extension: "mp4" | "webm";
+  mimeType: "video/mp4" | "video/webm";
+  name: string;
+} | null {
   if (providerToolId === "matte-portrait-video") {
     const format = input.format === "MP4" ? "MP4" : "WEBM";
     return format === "MP4"
@@ -298,7 +302,12 @@ function resultVideoUrl(result: Record<string, unknown>): string | null {
 
 function validQualityScore(result: Record<string, unknown>): boolean {
   const score = result.vq_score;
-  return typeof score === "number" && Number.isFinite(score) && score >= 0 && score <= 100;
+  return (
+    typeof score === "number" &&
+    Number.isFinite(score) &&
+    score >= 0 &&
+    score <= 100
+  );
 }
 
 async function materializeProviderInput(execution: {
@@ -324,10 +333,14 @@ async function materializeProviderInput(execution: {
   if (!firstVideoTool(execution.providerTool.providerToolId)) return semantic;
 
   if (execution.inputAssets.length !== 1) {
-    throw new ProviderRequestError("MediaKit source snapshot is invalid", false, {
-      code: "REFERENCE_MEDIA_UNAVAILABLE",
-      stage: "dispatch",
-    });
+    throw new ProviderRequestError(
+      "MediaKit source snapshot is invalid",
+      false,
+      {
+        code: "REFERENCE_MEDIA_UNAVAILABLE",
+        stage: "dispatch",
+      },
+    );
   }
   const input = execution.inputAssets[0]!;
   const asset = input.asset;
@@ -340,10 +353,14 @@ async function materializeProviderInput(execution: {
     (asset.purpose === "REFERENCE_INPUT" &&
       asset.storageOwnerUserId !== execution.createdById)
   ) {
-    throw new ProviderRequestError("MediaKit source video is unavailable", false, {
-      code: "REFERENCE_MEDIA_UNAVAILABLE",
-      stage: "dispatch",
-    });
+    throw new ProviderRequestError(
+      "MediaKit source video is unavailable",
+      false,
+      {
+        code: "REFERENCE_MEDIA_UNAVAILABLE",
+        stage: "dispatch",
+      },
+    );
   }
 
   const env = parseServerEnv();
@@ -443,24 +460,22 @@ export async function createProviderToolExecution(
         409,
       );
     }
-    let sourceAsset:
-      | {
-          id: string;
-          organizationId: string;
-          projectId: string | null;
-          status: string;
-          purpose: string;
-          storageOwnerUserId: string | null;
-          mediaKind: string;
-          mimeType: string;
-          durationMs: number | null;
-          generationJob: {
-            status: string;
-            requestPayload: unknown;
-            providerModel: { providerModelId: string };
-          } | null;
-        }
-      | null = null;
+    let sourceAsset: {
+      id: string;
+      organizationId: string;
+      projectId: string | null;
+      status: string;
+      purpose: string;
+      storageOwnerUserId: string | null;
+      mediaKind: string;
+      mimeType: string;
+      durationMs: number | null;
+      generationJob: {
+        status: string;
+        requestPayload: unknown;
+        providerModel: { providerModelId: string };
+      } | null;
+    } | null = null;
     if (firstVideoTool(tool.providerToolId)) {
       if (
         input.sourceAssets.length !== 1 ||
@@ -503,7 +518,10 @@ export async function createProviderToolExecution(
         (sourceAsset.purpose === "REFERENCE_INPUT" &&
           sourceAsset.storageOwnerUserId !== userId)
       ) {
-        throw new ProviderToolExecutionError("Source video is unavailable.", 409);
+        throw new ProviderToolExecutionError(
+          "Source video is unavailable.",
+          409,
+        );
       }
       const generationPayload = toolResultRecord(
         sourceAsset.generationJob?.requestPayload,
@@ -862,7 +880,11 @@ async function finalizeSucceededExecution(executionId: string): Promise<void> {
       outputAssets: { orderBy: { providerToolOutputIndex: "asc" } },
     },
   });
-  if (!execution || execution.status !== "PROCESSING" || !execution.resultPayload)
+  if (
+    !execution ||
+    execution.status !== "PROCESSING" ||
+    !execution.resultPayload
+  )
     return;
 
   const result = toolResultRecord(execution.resultPayload);
@@ -922,7 +944,8 @@ async function finalizeSucceededExecution(executionId: string): Promise<void> {
 
   if (outputUrl && outputAsset?.status === "PENDING") {
     try {
-      const expectedFormat = outputAsset.mimeType === "video/webm" ? "webm" : "mp4";
+      const expectedFormat =
+        outputAsset.mimeType === "video/webm" ? "webm" : "mp4";
       const bytes = await downloadVideo(outputUrl, expectedFormat);
       stored = await storeVideo(
         outputAsset.objectKey,
@@ -949,10 +972,9 @@ async function finalizeSucceededExecution(executionId: string): Promise<void> {
     return;
   }
 
-  const effectiveProviderCost =
-    detectionOnly
-      ? execution.priceVersion.providerCostNoOutputMicroUsd
-      : execution.priceVersion.providerCostMicroUsd;
+  const effectiveProviderCost = detectionOnly
+    ? execution.priceVersion.providerCostNoOutputMicroUsd
+    : execution.priceVersion.providerCostMicroUsd;
   if (effectiveProviderCost === null) {
     await db.providerToolExecution.updateMany({
       where: { id: execution.id, status: "PROCESSING" },

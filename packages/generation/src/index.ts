@@ -1489,7 +1489,7 @@ async function createSeedAudioJob(userId: string, raw: unknown) {
               id: { in: referenceAssetIds },
               organizationId: input.organizationId,
               status: "READY",
-                            OR: [
+              OR: [
                 { purpose: "GENERAL" },
                 { purpose: "REFERENCE_INPUT", storageOwnerUserId: userId },
               ],
@@ -1657,8 +1657,7 @@ async function createSeedAudioJob(userId: string, raw: unknown) {
           targetId: job.id,
           metadata: {
             task: "seed-audio",
-            referenceCount:
-              referenceAssetIds.length + referenceVoices.length,
+            referenceCount: referenceAssetIds.length + referenceVoices.length,
             referenceAssetCount: referenceAssetIds.length,
             referenceVoiceCount: referenceVoices.length,
             outputFormat: input.format,

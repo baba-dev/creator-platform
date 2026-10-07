@@ -59,7 +59,8 @@ const WORKFLOWS: readonly {
   {
     value: "CREATE",
     title: "Audio Director",
-    detail: "Direct voice, mood, timbre and atmosphere from one creative brief.",
+    detail:
+      "Direct voice, mood, timbre and atmosphere from one creative brief.",
     icon: "wand",
     badge: "Prompt-led",
   },
@@ -80,7 +81,8 @@ const WORKFLOWS: readonly {
   {
     value: "LONG",
     title: "Long-form narrator",
-    detail: "Build polished narration with the model's native 120-second window.",
+    detail:
+      "Build polished narration with the model's native 120-second window.",
     icon: "story",
     badge: "Long form",
   },
@@ -243,7 +245,8 @@ export function SeedAudioStudio({
   const [loudnessRate, setLoudnessRate] = useState(1);
   const [pitch, setPitch] = useState(0);
   const [subtitles, setSubtitles] = useState(true);
-  const [language, setLanguage] = useState<(typeof LANGUAGES)[number][0]>("auto");
+  const [language, setLanguage] =
+    useState<(typeof LANGUAGES)[number][0]>("auto");
   const [directorPreset, setDirectorPreset] = useState("documentary");
   const [outputProfile, setOutputProfile] = useState("web");
   const [format, setFormat] = useState<AudioFormat>("mp3");
@@ -355,8 +358,7 @@ export function SeedAudioStudio({
   const promptTooLong = providerPrompt.length > 3000;
   const activeAudioReferenceCount =
     referenceMode === "CLIPS" ? audioIds.length : referenceVoiceKeys.length;
-  const referenceReady =
-    mode !== "MATCH" || activeAudioReferenceCount > 0;
+  const referenceReady = mode !== "MATCH" || activeAudioReferenceCount > 0;
   const imageReady = mode !== "IMAGE" || Boolean(imageId);
 
   const quoteRequest = useMemo(
@@ -712,8 +714,7 @@ export function SeedAudioStudio({
                       value={language}
                       onChange={(event) =>
                         setLanguage(
-                          event.target
-                            .value as (typeof LANGUAGES)[number][0],
+                          event.target.value as (typeof LANGUAGES)[number][0],
                         )
                       }
                       className="mt-3 min-h-11 w-full rounded-xl border border-input bg-background px-3 text-sm"
@@ -908,8 +909,7 @@ export function SeedAudioStudio({
               <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {voices.map((voice) => {
                   const selected = referenceVoiceKeys.includes(voice.key);
-                  const disabled =
-                    !selected && referenceVoiceKeys.length >= 3;
+                  const disabled = !selected && referenceVoiceKeys.length >= 3;
                   return (
                     <button
                       key={voice.key}
@@ -929,7 +929,9 @@ export function SeedAudioStudio({
                       <span className="flex items-start gap-3">
                         <span className="grid size-11 shrink-0 place-items-center rounded-full bg-muted text-primary">
                           <Icon
-                            name={voice.gender === "female" ? "sparkles" : "user"}
+                            name={
+                              voice.gender === "female" ? "sparkles" : "user"
+                            }
                             className="size-5"
                           />
                         </span>
@@ -1047,7 +1049,10 @@ export function SeedAudioStudio({
         <div className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-7">
           <div className="flex items-start gap-3">
             <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-primary/10 text-primary">
-              <Icon name={mode === "IMAGE" ? "script" : "voice"} className="size-5" />
+              <Icon
+                name={mode === "IMAGE" ? "script" : "voice"}
+                className="size-5"
+              />
             </span>
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">
@@ -1245,7 +1250,9 @@ export function SeedAudioStudio({
                 max="2"
                 step="0.1"
                 value={loudnessRate}
-                onChange={(event) => setLoudnessRate(Number(event.target.value))}
+                onChange={(event) =>
+                  setLoudnessRate(Number(event.target.value))
+                }
                 className="mt-4 w-full"
               />
               <span className="text-xs text-muted-foreground">
@@ -1352,9 +1359,7 @@ export function SeedAudioStudio({
             <dt className="text-muted-foreground">Output</dt>
             <dd className="text-right font-semibold">
               {FORMAT_LABELS[format]} ·{" "}
-              {sampleRate === 44100
-                ? "44.1"
-                : Math.round(sampleRate / 1000)}{" "}
+              {sampleRate === 44100 ? "44.1" : Math.round(sampleRate / 1000)}{" "}
               kHz
             </dd>
           </div>

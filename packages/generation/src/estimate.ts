@@ -141,7 +141,7 @@ export async function estimateAuthorizedGeneration(
           id: { in: sourceIds },
           organizationId,
           status: "READY",
-                    OR: [
+          OR: [
             { purpose: "GENERAL" },
             { purpose: "REFERENCE_INPUT", storageOwnerUserId: userId },
           ],

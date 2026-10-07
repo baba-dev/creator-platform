@@ -1866,9 +1866,7 @@ export function createBytePlusProvider(
                 ? requestId.data
                 : stableRequestId("seed-audio", submission.idempotencyKey),
               status: "succeeded",
-              inlineOutputs: [
-                { mediaType, dataBase64: parsed.data.audio },
-              ],
+              inlineOutputs: [{ mediaType, dataBase64: parsed.data.audio }],
               rawUsage: {
                 generatedSeconds: parsed.data.original_duration,
                 durationSeconds: parsed.data.duration ?? null,

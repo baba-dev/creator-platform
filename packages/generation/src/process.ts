@@ -1635,10 +1635,7 @@ export async function processVoiceJob(
         job.organizationId,
         voiceOutputAsset.id,
         voiceOutputAsset.mimeType as
-          | "audio/mpeg"
-          | "audio/wav"
-          | "audio/ogg"
-          | "audio/L16",
+          "audio/mpeg" | "audio/wav" | "audio/ogg" | "audio/L16",
       );
       break;
     } catch (error) {

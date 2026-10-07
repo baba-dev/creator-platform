@@ -54,8 +54,7 @@ export async function GET(
           ? "wav"
           : asset.mimeType === "audio/ogg"
             ? "ogg"
-            : asset.mimeType === "audio/L16" ||
-                asset.mimeType === "audio/pcm"
+            : asset.mimeType === "audio/L16" || asset.mimeType === "audio/pcm"
               ? "pcm"
               : "mp3"
         : asset.mimeType === "image/jpeg"

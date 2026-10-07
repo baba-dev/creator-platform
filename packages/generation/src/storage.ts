@@ -996,10 +996,7 @@ export function validateMp3Bytes(bytes: Buffer): { durationMs: number | null } {
 }
 
 export type StoredAudioMimeType =
-  | "audio/mpeg"
-  | "audio/wav"
-  | "audio/ogg"
-  | "audio/L16";
+  "audio/mpeg" | "audio/wav" | "audio/ogg" | "audio/L16";
 
 export function validateAudioBytes(
   bytes: Buffer,
@@ -1034,10 +1031,7 @@ export function validateAudioBytes(
     return;
   }
   if (mimeType === "audio/ogg") {
-    if (
-      bytes.length < 27 ||
-      bytes.subarray(0, 4).toString("ascii") !== "OggS"
-    )
+    if (bytes.length < 27 || bytes.subarray(0, 4).toString("ascii") !== "OggS")
       throw new ImageStorageError(
         "AUDIO_OUTPUT_INVALID_FORMAT",
         "Generated audio failed OGG validation.",

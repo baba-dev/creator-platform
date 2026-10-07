@@ -25,6 +25,7 @@ import {
 } from "@aiwa/generation/process";
 import {
   createVoiceJob,
+  DEFAULT_PRESET_VOICE_KEY,
   processTextJob,
   recoverReservedTextJobs,
   processTranscriptionJob,
@@ -194,7 +195,9 @@ async function ensureTextChatAutoVoice(jobId: string): Promise<void> {
   if (!voiceModel || !price) return;
 
   const voiceKey =
-    typeof chatOptions.voiceKey === "string" ? chatOptions.voiceKey : "jasper";
+    typeof chatOptions.voiceKey === "string"
+      ? chatOptions.voiceKey
+      : DEFAULT_PRESET_VOICE_KEY;
   const speechRate =
     typeof chatOptions.speechRate === "number" &&
     chatOptions.speechRate >= 0.5 &&

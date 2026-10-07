@@ -284,16 +284,42 @@ export const bytePlusVideoInputSchema = z
     }
   });
 
-export const bytePlusVoiceInputSchema = z.object({
-  text: z.string().trim().min(1),
-  speaker: z.string().trim().min(1),
-  format: z.enum(["mp3", "ogg_opus", "pcm"]).default("mp3"),
-  sampleRate: z
-    .union([z.literal(8_000), z.literal(16_000), z.literal(24_000)])
-    .default(24_000),
-  // Application-facing multiplier. BytePlus receives an integer percentage.
-  speechRate: z.number().min(0.5).max(2).default(1),
-});
+export const bytePlusVoiceInputSchema = z
+  .object({
+    text: z.string().trim().min(1),
+    speaker: z.string().trim().min(1),
+    format: z.enum(["mp3", "ogg_opus", "pcm"]).default("mp3"),
+    sampleRate: z
+      .union([z.literal(8_000), z.literal(16_000), z.literal(24_000)])
+      .default(24_000),
+    // BytePlus recommends explicitly setting MP3/OGG bitrate. Production
+    // defaults to 128 kbps; provider-default is for controlled A/B diagnostics.
+    bitRate: z.number().int().min(64_000).max(320_000).default(128_000),
+    qualityProfile: z
+      .enum(["production", "provider-default"])
+      .default("production"),
+    // Application-facing multipliers. BytePlus receives integer percentages.
+    speechRate: z.number().min(0.5).max(2).default(1),
+    loudnessRate: z.number().min(0.5).max(2).default(1),
+    pitch: z.number().int().min(-12).max(12).default(0),
+    stylePrompt: z.string().trim().min(1).max(300).optional(),
+  })
+  .superRefine((input, ctx) => {
+    if (
+      input.qualityProfile === "provider-default" &&
+      (input.stylePrompt ||
+        input.loudnessRate !== 1 ||
+        input.pitch !== 0 ||
+        input.bitRate !== 128_000)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["qualityProfile"],
+        message:
+          "provider-default is reserved for legacy A/B diagnostics without expression overrides.",
+      });
+    }
+  });
 
 export function speechRateMultiplierToPercentage(multiplier: number): number {
   const parsed = z.number().min(0.5).max(2).safeParse(multiplier);
@@ -619,6 +645,10 @@ export const VERIFIED_BYTEPLUS_MODELS: readonly ProviderModelDescriptor[] = [
     capabilities: {
       streaming: true,
       speechRate: true,
+      loudnessRate: true,
+      pitch: true,
+      contextPrompt: true,
+      explicitBitRate: true,
       "format:mp3": true,
       "format:ogg_opus": true,
       "format:pcm": true,
@@ -1637,10 +1667,29 @@ export function createBytePlusProvider(
                   audio_params: {
                     format: input.data.format,
                     sample_rate: input.data.sampleRate,
+                    ...(input.data.qualityProfile === "production" &&
+                    input.data.format !== "pcm"
+                      ? { bit_rate: input.data.bitRate }
+                      : {}),
                     speech_rate: speechRateMultiplierToPercentage(
                       input.data.speechRate,
                     ),
+                    loudness_rate: speechRateMultiplierToPercentage(
+                      input.data.loudnessRate,
+                    ),
                   },
+                  ...(input.data.qualityProfile === "production"
+                    ? {
+                        additions: JSON.stringify({
+                          ...(input.data.stylePrompt
+                            ? { context_texts: [input.data.stylePrompt] }
+                            : {}),
+                          ...(input.data.pitch !== 0
+                            ? { post_process: { pitch: input.data.pitch } }
+                            : {}),
+                        }),
+                      }
+                    : {}),
                 },
               }),
             },

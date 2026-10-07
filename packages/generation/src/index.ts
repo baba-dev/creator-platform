@@ -90,6 +90,9 @@ export const voiceRequestSchema = z
     text: z.string().trim().min(1).max(4096),
     voiceKey: z.string().trim().min(1).max(100),
     speechRate: z.number().min(0.5).max(2.0).default(1.0),
+    loudnessRate: z.number().min(0.5).max(2.0).default(1.0),
+    pitch: z.number().int().min(-12).max(12).default(0),
+    stylePrompt: z.string().trim().min(1).max(300).optional(),
     format: z.literal("mp3").default("mp3"),
   })
   .strict();
@@ -1327,6 +1330,11 @@ export async function createVoiceJob(userId: string, raw: unknown) {
     voiceKey: presetVoice.key,
     speaker: presetVoice.speakerId,
     speechRate: input.speechRate,
+    ...(input.loudnessRate !== 1
+      ? { loudnessRate: input.loudnessRate }
+      : {}),
+    ...(input.pitch !== 0 ? { pitch: input.pitch } : {}),
+    ...(input.stylePrompt ? { stylePrompt: input.stylePrompt } : {}),
     format: input.format,
   };
   const key = createHash("sha256")

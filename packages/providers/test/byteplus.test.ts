@@ -1258,6 +1258,93 @@ describe("BytePlus provider adapter", () => {
     ).rejects.toBeInstanceOf(ProviderConfigurationError);
   });
 
+  it("sends production Seed Speech quality and TTS 2.0 expression controls", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse([
+        { code: 0, data: "YWJj" },
+        { code: 20_000_000, data: null },
+      ]),
+    );
+    const provider = createBytePlusProvider({
+      region: "ap-southeast-1",
+      speechApiKey: "speech-key",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await provider.submit({
+      idempotencyKey: "speech-quality-1",
+      modelId: "seed-tts-2.0",
+      mediaKind: "voice",
+      input: {
+        text: "A clear production narration.",
+        speaker: "en_male_russell_uranus_bigtts",
+        speechRate: 0.9,
+        loudnessRate: 1.1,
+        pitch: -1,
+        stylePrompt:
+          "Speak naturally with a warm, confident professional tone and measured pauses.",
+      },
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      "https://voice.ap-southeast-1.bytepluses.com/api/v3/tts/unidirectional",
+    );
+    const body = JSON.parse(init.body as string) as {
+      req_params: {
+        audio_params: Record<string, unknown>;
+        additions: string;
+      };
+    };
+    expect(body.req_params.audio_params).toMatchObject({
+      format: "mp3",
+      sample_rate: 24_000,
+      bit_rate: 128_000,
+      speech_rate: -10,
+      loudness_rate: 10,
+    });
+    expect(JSON.parse(body.req_params.additions)).toEqual({
+      context_texts: [
+        "Speak naturally with a warm, confident professional tone and measured pauses.",
+      ],
+      post_process: { pitch: -1 },
+    });
+  });
+
+  it("can reproduce the legacy provider-default request for controlled A/B smoke tests", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse([
+        { code: 0, data: "YWJj" },
+        { code: 20_000_000, data: null },
+      ]),
+    );
+    const provider = createBytePlusProvider({
+      region: "ap-southeast-1",
+      speechApiKey: "speech-key",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    await provider.submit({
+      idempotencyKey: "speech-legacy-ab-1",
+      modelId: "seed-tts-2.0",
+      mediaKind: "voice",
+      input: {
+        text: "A clear production narration.",
+        speaker: "en_male_russell_uranus_bigtts",
+        qualityProfile: "provider-default",
+      },
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string) as {
+      req_params: Record<string, unknown> & {
+        audio_params: Record<string, unknown>;
+      };
+    };
+    expect(body.req_params.audio_params).not.toHaveProperty("bit_rate");
+    expect(body.req_params).not.toHaveProperty("additions");
+  });
+
   it("requires separate speech credentials for voice synthesis", async () => {
     const provider = createBytePlusProvider(validConfig);
     await expect(

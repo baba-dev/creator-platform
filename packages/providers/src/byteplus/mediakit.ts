@@ -207,7 +207,10 @@ const configSchema = z.object({
 const objectSchema = z.record(z.string(), z.unknown());
 const providerVideoUrlSchema = z
   .url()
-  .refine((value) => new URL(value).protocol === "https:", "HTTPS URL required");
+  .refine(
+    (value) => new URL(value).protocol === "https:",
+    "HTTPS URL required",
+  );
 
 const portraitMattingInputSchema = z
   .object({

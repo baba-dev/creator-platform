@@ -55,6 +55,18 @@ describe("assistant tools", () => {
       ctx,
     )) as { route: string };
     expect(result.route).toBe("/app/creative-team/assets");
+
+    const precision = (await navigateTool.execute(
+      { destination: "PRECISION_IMAGE" },
+      ctx,
+    )) as { route: string };
+    expect(precision.route).toBe("/app/creative-team/image/precision");
+
+    const transcription = (await navigateTool.execute(
+      { destination: "TRANSCRIPTION" },
+      ctx,
+    )) as { route: string };
+    expect(transcription.route).toBe("/app/creative-team/speech/transcription");
   });
 
   it("replays reminders idempotently", async () => {

@@ -15,8 +15,8 @@
   },
   {
     "key": "voice-generation",
-    "title": "Voice & TTS",
-    "summary": "Generate speech from text with a supported voice and speaking rate. Review the live quote before submitting.",
+    "title": "Voice Studio",
+    "summary": "Generate speech from text with a supported voice and speaking rate. Voice casting and transcription live on dedicated pages. Review the live quote before submitting.",
     "route": "/speech",
     "keywords": ["voice", "tts", "speech", "audio", "seed-tts", "narration"]
   },
@@ -86,11 +86,64 @@
     "keywords": ["storage", "google", "drive", "onedrive", "connect", "byos"]
   },
   {
-    "key": "editing",
-    "title": "Image and video editing",
-    "summary": "Open Image or Video with an accessible source asset. Use the available editing controls, inspect your changes, and save or export. Supported editing operations depend on the source type.",
-    "route": "/image",
-    "keywords": ["edit", "crop", "rotate", "resize", "trim", "zoom"]
+    "key": "precision-image-studio",
+    "title": "Precision Image Studio",
+    "summary": "Edit existing images on a dedicated page with AI precision edits, layered canvas and PSD export, or deterministic crop, resize, rotate and transform tools.",
+    "route": "/image/precision",
+    "keywords": [
+      "image",
+      "edit",
+      "precision",
+      "retouch",
+      "crop",
+      "resize",
+      "psd"
+    ]
+  },
+  {
+    "key": "video-editing-desk",
+    "title": "Video Editing Desk",
+    "summary": "Edit existing video on a dedicated desk: arrange and trim clips, adjust framing, add narration or soundtrack, manage captions, and export a new video while preserving the original.",
+    "route": "/video/editor",
+    "keywords": [
+      "video",
+      "edit",
+      "trim",
+      "crop",
+      "caption",
+      "soundtrack",
+      "export"
+    ]
+  },
+  {
+    "key": "speech-transcription",
+    "title": "Speech / Transcription",
+    "summary": "Transcribe an authorized audio or video asset on the dedicated transcription page and export transcript, SRT and VTT results. Pricing uses verified source duration.",
+    "route": "/speech/transcription",
+    "keywords": [
+      "transcription",
+      "transcribe",
+      "subtitle",
+      "srt",
+      "vtt",
+      "audio",
+      "video"
+    ]
+  },
+  {
+    "key": "voice-casting-booth",
+    "title": "Voice Casting Booth",
+    "summary": "Audition verified voices with a custom line and speaking rate, compare results, then send the selected voice and rate back to Voice Studio.",
+    "route": "/speech/voices",
+    "keywords": [
+      "voice",
+      "casting",
+      "booth",
+      "audition",
+      "speaker",
+      "tts",
+      "speech rate"
+    ]
   },
   {
     "key": "members",

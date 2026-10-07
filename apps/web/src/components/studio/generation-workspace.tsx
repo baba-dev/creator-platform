@@ -1,9 +1,6 @@
 import Link from "next/link";
 import { hasOrganizationPermission } from "@aiwa/authz";
 import { GenerationStudio } from "@/components/studio/generation-studio";
-import { TranscriptionStudio } from "@/components/studio/transcription-studio";
-import { ImageEditor } from "@/components/studio/image-editor";
-import { VideoEditor } from "@/components/studio/video-editor";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { Eyebrow } from "@/components/ui/creative";
 import { requireOrganizationPermission } from "@/lib/request-auth";
@@ -39,25 +36,23 @@ const pages = {
 export async function GenerationWorkspace({
   slug,
   kind,
-  initialAssetId,
+  initialVoiceKey,
+  initialSpeechRate,
 }: {
   slug: string;
   kind: keyof typeof pages;
-  initialAssetId?: string;
+  initialVoiceKey?: string;
+  initialSpeechRate?: number;
 }) {
   const { membership } = await requireOrganizationPermission(
     slug,
     "workspace:view",
   );
   const page = pages[kind];
-  const [promptEnhancement, transcription] = await Promise.all([
+  const promptEnhancement =
     kind === "speech"
-      ? Promise.resolve(null)
-      : getAvailableStudioModels("prompt-enhancement"),
-    kind === "speech"
-      ? getAvailableStudioModels("transcription")
-      : Promise.resolve(null),
-  ]);
+      ? null
+      : await getAvailableStudioModels("prompt-enhancement");
   return (
     <main className="relative min-h-screen min-w-0 bg-background px-4 py-7 text-foreground sm:px-7 lg:px-9 lg:py-10">
       <div className="creative-glow pointer-events-none absolute inset-0" />
@@ -100,47 +95,9 @@ export async function GenerationWorkspace({
           promptEnhancementDefaultModelId={
             promptEnhancement?.defaultModelId ?? null
           }
+          initialVoiceKey={initialVoiceKey}
+          initialSpeechRate={initialSpeechRate}
         />
-        {kind === "speech" ? (
-          <TranscriptionStudio
-            organizationId={membership.organizationId}
-            canGenerate={hasOrganizationPermission(
-              membership.role,
-              "generation:create",
-            )}
-            canUpload={hasOrganizationPermission(
-              membership.role,
-              "assets:manage",
-            )}
-            models={transcription?.models ?? []}
-            defaultModelId={transcription?.defaultModelId ?? null}
-          />
-        ) : null}
-        {kind === "image" ? (
-          <ImageEditor
-            organizationId={membership.organizationId}
-            organizationSlug={slug}
-            initialAssetId={initialAssetId}
-            canEdit={hasOrganizationPermission(
-              membership.role,
-              "assets:manage",
-            )}
-            canGenerate={hasOrganizationPermission(
-              membership.role,
-              "generation:create",
-            )}
-          />
-        ) : null}
-        {kind === "video" ? (
-          <VideoEditor
-            organizationId={membership.organizationId}
-            initialAssetId={initialAssetId}
-            canEdit={hasOrganizationPermission(
-              membership.role,
-              "assets:manage",
-            )}
-          />
-        ) : null}
       </div>
     </main>
   );

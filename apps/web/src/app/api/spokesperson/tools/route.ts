@@ -57,14 +57,12 @@ async function loadOmniHumanVideo(
   userId: string,
 ) {
   let currentId: string | null = assetId;
-  let source:
-    | {
-        id: string;
-        durationMs: number | null;
-        mimeType: string;
-        sourceAssetId: string | null;
-      }
-    | null = null;
+  let source: {
+    id: string;
+    durationMs: number | null;
+    mimeType: string;
+    sourceAssetId: string | null;
+  } | null = null;
   let trustedOriginDurationMs: number | null = null;
   const visited = new Set<string>();
 
@@ -178,13 +176,19 @@ async function loadTool(providerToolId: string) {
 export async function GET(request: Request) {
   const session = await getRequestSession(request.headers);
   if (!session)
-    return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+    return NextResponse.json(
+      { error: "Authentication required." },
+      { status: 401 },
+    );
 
   const url = new URL(request.url);
   const organizationId = url.searchParams.get("organizationId") ?? "";
   const assetId = url.searchParams.get("assetId") ?? "";
   if (!organizationId || !assetId)
-    return NextResponse.json({ error: "organizationId and assetId are required." }, { status: 400 });
+    return NextResponse.json(
+      { error: "organizationId and assetId are required." },
+      { status: 400 },
+    );
 
   try {
     await requireMembership(db, organizationId, session.user.id, true);
@@ -262,7 +266,9 @@ export async function GET(request: Request) {
     return NextResponse.json(
       {
         error:
-          error instanceof Error ? error.message : "Unable to load MediaKit tools.",
+          error instanceof Error
+            ? error.message
+            : "Unable to load MediaKit tools.",
       },
       { status: 403 },
     );
@@ -274,7 +280,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Origin not allowed." }, { status: 403 });
   const session = await getRequestSession(request.headers);
   if (!session)
-    return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+    return NextResponse.json(
+      { error: "Authentication required." },
+      { status: 401 },
+    );
   if (!isBytePlusMediaKitConfigured())
     return NextResponse.json(
       { error: "MediaKit is not configured on the worker." },
@@ -334,9 +343,7 @@ export async function POST(request: Request) {
       idempotencyKey: input.idempotencyKey,
       quotedQuantity: Math.ceil(source.durationMs / 1000),
       input: semanticInput,
-      sourceAssets: [
-        { assetId: source.id, role: "SOURCE_VIDEO", position: 0 },
-      ],
+      sourceAssets: [{ assetId: source.id, role: "SOURCE_VIDEO", position: 0 }],
     });
 
     return NextResponse.json(
@@ -356,7 +363,10 @@ export async function POST(request: Request) {
         { status: error.status },
       );
     if (error instanceof z.ZodError)
-      return NextResponse.json({ error: "Invalid MediaKit request." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid MediaKit request." },
+        { status: 400 },
+      );
     return NextResponse.json(
       { error: "Unable to start MediaKit processing." },
       { status: 500 },

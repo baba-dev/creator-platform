@@ -11,7 +11,6 @@ import { ProcessFeedback } from "@/components/process/process-feedback";
 import { Button } from "@/components/ui/button";
 import { Eyebrow } from "@/components/ui/creative";
 import { Tape } from "@/components/ui/sketch";
-import { VoiceCastingBooth } from "@/components/ui/voice-casting-booth";
 import {
   StudioModelSelect,
   type StudioModelOption,
@@ -150,6 +149,8 @@ export function GenerationStudio({
   initialMode = "IMAGE",
   promptEnhancementModels = [],
   promptEnhancementDefaultModelId = null,
+  initialVoiceKey = "jasper",
+  initialSpeechRate = 1.0,
 }: {
   canGenerate: boolean;
   organizationId: string;
@@ -158,6 +159,8 @@ export function GenerationStudio({
   initialMode?: MediaKind;
   promptEnhancementModels?: StudioModelOption[];
   promptEnhancementDefaultModelId?: string | null;
+  initialVoiceKey?: string;
+  initialSpeechRate?: number;
 }) {
   const router = useRouter();
   const [data, setData] = useState<Studio | null>(null);
@@ -166,9 +169,8 @@ export function GenerationStudio({
   const [projectId, setProjectId] = useState("");
   const [prompt, setPrompt] = useState("");
   const [voiceText, setVoiceText] = useState("");
-  const [voiceKey, setVoiceKey] = useState("jasper");
-  const [speechRate, setSpeechRate] = useState(1.0);
-  const [isVoiceBoothOpen, setIsVoiceBoothOpen] = useState(false);
+  const [voiceKey, setVoiceKey] = useState(initialVoiceKey);
+  const [speechRate, setSpeechRate] = useState(initialSpeechRate);
   const [quoteState, setQuoteState] = useState<{
     key: string;
     quote: StudioQuote;
@@ -1726,7 +1728,9 @@ export function GenerationStudio({
                   Coordinate-guided precision editing
                 </span>
                 <a
-                  href="#image-editor"
+                  href={
+                    `/app/${encodeURIComponent(organizationSlug)}/image/precision` as Route
+                  }
                   className="font-semibold text-primary underline-offset-2 hover:underline"
                 >
                   Open Precision Image Desk →
@@ -1802,15 +1806,14 @@ export function GenerationStudio({
                   >
                     Preset voice
                   </label>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setIsVoiceBoothOpen(true)}
-                    className="text-xs font-semibold text-primary hover:text-primary/80"
+                  <Link
+                    href={
+                      `/app/${encodeURIComponent(organizationSlug)}/speech/voices` as Route
+                    }
+                    className="text-xs font-semibold text-primary hover:text-primary/80 hover:underline"
                   >
                     Audition in Booth →
-                  </Button>
+                  </Link>
                 </div>
                 <select
                   id="voice-preset"
@@ -2878,19 +2881,6 @@ export function GenerationStudio({
         </div>
       </div>
 
-      {isVoiceBoothOpen ? (
-        <VoiceCastingBooth
-          isOpen={isVoiceBoothOpen}
-          onClose={() => setIsVoiceBoothOpen(false)}
-          onSelectVoice={(key, rate) => {
-            setVoiceKey(key);
-            if (rate) setSpeechRate(rate);
-          }}
-          currentVoiceKey={selectedVoiceKey}
-          organizationId={organizationId}
-          initialTestPhrase={voiceText}
-        />
-      ) : null}
     </section>
   );
 }

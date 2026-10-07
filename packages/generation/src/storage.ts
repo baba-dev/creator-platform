@@ -917,14 +917,21 @@ export async function storeVideo(
   };
 }
 
-export function validateMp3Bytes(bytes: Buffer): { durationMs: number | null } {
+export function validateMp3Bytes(
+  bytes: Buffer,
+  maxBytes = MAX_AUDIO_BYTES,
+): { durationMs: number | null } {
   if (bytes.length === 0) {
     throw new ImageStorageError(
       "AUDIO_OUTPUT_EMPTY",
       "Generated audio was empty.",
     );
   }
-  if (bytes.length > MAX_AUDIO_BYTES) {
+  if (
+    !Number.isSafeInteger(maxBytes) ||
+    maxBytes < 1 ||
+    bytes.length > maxBytes
+  ) {
     throw new ImageStorageError(
       "AUDIO_OUTPUT_TOO_LARGE",
       "Generated audio exceeded the storage size limit.",
@@ -1020,7 +1027,7 @@ export function validateAudioBytes(
     );
   }
   if (mimeType === "audio/mpeg") {
-    validateMp3Bytes(bytes);
+    validateMp3Bytes(bytes, maxBytes);
     return;
   }
   if (mimeType === "audio/wav") {

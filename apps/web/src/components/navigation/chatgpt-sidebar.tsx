@@ -7,7 +7,24 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Brand } from "@/components/ui/brand";
 import { Icon } from "@/components/ui/icon";
 import { authClient } from "@/lib/auth-client";
+import {
+  WORKSPACE_SECONDARY_ITEMS,
+  WORKSPACE_TOOL_CATEGORIES,
+  getWorkspaceBase,
+  getWorkspaceItemHref,
+  isWorkspaceItemActive,
+} from "@/lib/workspace-tools";
 import { CommandPalette } from "./command-palette";
+
+const assetItem = WORKSPACE_SECONDARY_ITEMS.find(
+  (item) => item.id === "assets",
+)!;
+const connectionsItem = WORKSPACE_SECONDARY_ITEMS.find(
+  (item) => item.id === "connections",
+)!;
+const historyItem = WORKSPACE_SECONDARY_ITEMS.find(
+  (item) => item.id === "history",
+)!;
 
 interface ProjectItem {
   id: string;
@@ -66,6 +83,7 @@ interface ChatGPTAppSidebarProps {
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
   onItemClick?: () => void;
+  showToolNavigation?: boolean;
 }
 
 export function ChatGPTAppSidebar({
@@ -79,17 +97,19 @@ export function ChatGPTAppSidebar({
   isCollapsed = false,
   onToggleCollapse,
   onItemClick,
+  showToolNavigation = false,
 }: ChatGPTAppSidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const router = useRouter();
-  const base = `/app/${encodeURIComponent(slug)}`;
+  const base = getWorkspaceBase(slug);
 
   const currentThreadId = searchParams.get("threadId");
 
   // Accordion open/close states
   const [pinnedOpen, setPinnedOpen] = useState(true);
   const [projectsOpen, setProjectsOpen] = useState(true);
+  const [toolsOpen, setToolsOpen] = useState(true);
 
   // Command palette state
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -305,16 +325,16 @@ export function ChatGPTAppSidebar({
           {/* Quick Actions in Mini-Rail */}
           <div className="flex flex-col items-center gap-2">
             <Link
-              href={base as Route}
+              href={`${base}#create` as Route}
               onClick={onItemClick}
-              title="New Chat"
+              title="Quick Create"
               className={`grid size-9 place-items-center rounded-xl transition ${
                 pathname === base
                   ? "bg-primary text-primary-foreground shadow-xs"
                   : "border border-border/80 bg-card text-muted-foreground hover:border-primary/40 hover:text-primary"
               }`}
             >
-              <Icon name="edit" className="size-4" />
+              <Icon name="plus" className="size-4" />
             </Link>
 
             <button
@@ -327,42 +347,42 @@ export function ChatGPTAppSidebar({
             </button>
 
             <Link
-              href={`${base}/assets` as Route}
+              href={getWorkspaceItemHref(base, assetItem) as Route}
               onClick={onItemClick}
-              title="Asset Library"
+              title={assetItem.title}
               className={`grid size-9 place-items-center rounded-xl transition ${
-                pathname.startsWith(`${base}/assets`)
+                pathname.startsWith(getWorkspaceItemHref(base, assetItem))
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:bg-card hover:text-foreground"
               }`}
             >
-              <Icon name="assets" className="size-4" />
+              <Icon name={assetItem.icon} className="size-4" />
             </Link>
 
             <Link
-              href={`${base}/storage` as Route}
+              href={getWorkspaceItemHref(base, connectionsItem) as Route}
               onClick={onItemClick}
-              title="Connections (Google Drive, OneDrive)"
+              title={connectionsItem.title}
               className={`grid size-9 place-items-center rounded-xl transition ${
-                pathname.startsWith(`${base}/storage`)
+                pathname.startsWith(getWorkspaceItemHref(base, connectionsItem))
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:bg-card hover:text-foreground"
               }`}
             >
-              <Icon name="settings" className="size-4" />
+              <Icon name={connectionsItem.icon} className="size-4" />
             </Link>
 
             <Link
-              href={`${base}/history` as Route}
+              href={getWorkspaceItemHref(base, historyItem) as Route}
               onClick={onItemClick}
-              title="Generation History"
+              title={historyItem.title}
               className={`grid size-9 place-items-center rounded-xl transition ${
-                pathname.startsWith(`${base}/history`)
+                pathname.startsWith(getWorkspaceItemHref(base, historyItem))
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:bg-card hover:text-foreground"
               }`}
             >
-              <Icon name="activity" className="size-4" />
+              <Icon name={historyItem.icon} className="size-4" />
             </Link>
           </div>
 
@@ -429,10 +449,10 @@ export function ChatGPTAppSidebar({
           </div>
         </div>
 
-        {/* Primary Action: New Chat (ChatGPT Style) */}
+        {/* Primary Action */}
         <div className="p-2.5">
           <Link
-            href={base as Route}
+            href={`${base}#create` as Route}
             onClick={onItemClick}
             className={`flex h-10 w-full items-center gap-3 rounded-xl px-3 text-xs font-bold transition focus-visible:outline-2 focus-visible:outline-ring ${
               pathname === base
@@ -440,47 +460,116 @@ export function ChatGPTAppSidebar({
                 : "border border-border/80 bg-card/80 text-foreground hover:border-primary/40 hover:bg-primary/10 hover:text-primary shadow-2xs"
             }`}
           >
-            <Icon name="edit" className="size-4" />
-            <span>New Chat</span>
+            <Icon name="plus" className="size-4" />
+            <span>Quick Create</span>
           </Link>
         </div>
 
         {/* Top Quicklinks: Asset Library & Connections */}
         <div className="space-y-0.5 px-2.5 pb-2 border-b border-border/60">
           <Link
-            href={`${base}/assets` as Route}
+            href={getWorkspaceItemHref(base, assetItem) as Route}
             onClick={onItemClick}
             className={`flex h-9 items-center gap-3 rounded-xl px-3 text-xs font-semibold transition focus-visible:outline-2 focus-visible:outline-ring ${
-              pathname.startsWith(`${base}/assets`)
+              pathname.startsWith(getWorkspaceItemHref(base, assetItem))
                 ? "bg-primary/10 text-primary"
                 : "text-muted-foreground hover:bg-card hover:text-foreground"
             }`}
           >
-            <Icon name="assets" className="size-4" />
-            <span>Asset Library</span>
+            <Icon name={assetItem.icon} className="size-4" />
+            <span>{assetItem.title}</span>
           </Link>
 
           <Link
-            href={`${base}/storage` as Route}
+            href={getWorkspaceItemHref(base, connectionsItem) as Route}
             onClick={onItemClick}
             className={`flex h-9 items-center gap-3 rounded-xl px-3 text-xs font-semibold transition focus-visible:outline-2 focus-visible:outline-ring ${
-              pathname.startsWith(`${base}/storage`)
+              pathname.startsWith(getWorkspaceItemHref(base, connectionsItem))
                 ? "bg-primary/10 text-primary"
                 : "text-muted-foreground hover:bg-card hover:text-foreground"
             }`}
           >
-            <Icon name="settings" className="size-4" />
-            <div className="flex flex-1 items-center justify-between">
-              <span>Connections</span>
-              <span className="rounded-sm bg-surface-sunken px-1 text-[9px] font-medium text-muted-foreground">
-                GDrive
-              </span>
-            </div>
+            <Icon name={connectionsItem.icon} className="size-4" />
+            <span>{connectionsItem.title}</span>
+          </Link>
+
+          <Link
+            href={getWorkspaceItemHref(base, historyItem) as Route}
+            onClick={onItemClick}
+            className={`flex h-9 items-center gap-3 rounded-xl px-3 text-xs font-semibold transition focus-visible:outline-2 focus-visible:outline-ring ${
+              pathname.startsWith(getWorkspaceItemHref(base, historyItem))
+                ? "bg-primary/10 text-primary"
+                : "text-muted-foreground hover:bg-card hover:text-foreground"
+            }`}
+          >
+            <Icon name={historyItem.icon} className="size-4" />
+            <span>{historyItem.title}</span>
           </Link>
         </div>
 
-        {/* Scrollable Center: Pinned, Projects, Recents */}
+        {/* Scrollable Center: Tools (mobile), Pinned, Projects, Recents */}
         <div className="flex-1 space-y-4 overflow-y-auto px-2 py-3 scrollbar-thin">
+          {showToolNavigation ? (
+            <div>
+              <button
+                type="button"
+                onClick={() => setToolsOpen(!toolsOpen)}
+                className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-muted-foreground transition hover:text-foreground"
+              >
+                <div className="flex items-center gap-1.5">
+                  <Icon name="wand" className="size-3.5 text-primary" />
+                  <span>Tools</span>
+                </div>
+                <Icon
+                  name="chevron"
+                  className={`size-3 transition-transform duration-200 ${
+                    toolsOpen ? "rotate-90" : ""
+                  }`}
+                />
+              </button>
+
+              {toolsOpen ? (
+                <div className="mt-1 space-y-3 pl-1.5">
+                  {WORKSPACE_TOOL_CATEGORIES.map((category) => (
+                    <div key={category.key}>
+                      <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80">
+                        {category.label}
+                      </div>
+                      <div className="space-y-0.5">
+                        {category.items.map((item) => {
+                          const href = getWorkspaceItemHref(base, item);
+                          const active = isWorkspaceItemActive(
+                            pathname,
+                            base,
+                            item,
+                          );
+                          return (
+                            <Link
+                              key={item.id}
+                              href={href as Route}
+                              onClick={onItemClick}
+                              className={`flex h-8 items-center gap-2 rounded-xl px-2.5 text-xs transition ${
+                                active
+                                  ? "bg-card font-semibold text-primary shadow-xs ring-1 ring-border"
+                                  : "text-foreground/80 hover:bg-card hover:text-foreground"
+                              }`}
+                            >
+                              <Icon
+                                name={item.icon}
+                                className="size-3.5 shrink-0"
+                              />
+                              <span className="truncate">{item.title}</span>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
           {/* Section: Pinned Dropdown */}
           <div>
             <button

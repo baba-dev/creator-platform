@@ -21,6 +21,11 @@ describe("Pixel navigation boundary", () => {
     expect(safePixelRoute("/speech/voices", "team")).toBe(
       "/app/team/speech/voices",
     );
+    expect(safePixelRoute("/audio", "team")).toBe("/app/team/audio");
+    expect(safePixelRoute("/chat", "team")).toBe("/app/team/chat");
+    expect(safePixelRoute("/brand-assistants?tab=story", "team")).toBe(
+      "/app/team/brand-assistants?tab=story",
+    );
   });
   it.each([
     "//evil.example",

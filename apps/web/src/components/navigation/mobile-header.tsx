@@ -83,7 +83,7 @@ export function MobileHeader({
             className="inline-flex h-8 items-center gap-1 rounded-lg border border-primary/30 bg-primary/10 px-2.5 text-xs font-bold text-primary"
           >
             <Icon name="plus" className="size-3" />
-            <span className="hidden sm:inline">Create</span>
+            <span className="hidden sm:inline">Quick Create</span>
           </Link>
 
           <UserHeaderMenu
@@ -132,6 +132,7 @@ export function MobileHeader({
                 initialThreads={initialThreads}
                 initialFavoriteAssets={initialFavoriteAssets}
                 onItemClick={() => setDrawerOpen(false)}
+                showToolNavigation
               />
             </div>
           </div>

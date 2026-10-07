@@ -4,6 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import { Icon, type IconName } from "@/components/ui/icon";
+import {
+  WORKSPACE_SECONDARY_ITEMS,
+  WORKSPACE_TOOLS,
+  getWorkspaceBase,
+  getWorkspaceItemHref,
+} from "@/lib/workspace-tools";
 
 interface PaletteItem {
   id: string;
@@ -14,6 +20,7 @@ interface PaletteItem {
   icon: IconName;
   href?: string;
   action?: () => void;
+  keywords?: readonly string[];
 }
 
 interface CommandPaletteProps {
@@ -23,6 +30,13 @@ interface CommandPaletteProps {
   threads?: Array<{ id: string; title: string; threadType?: string }>;
   projects?: Array<{ id: string; name: string }>;
 }
+
+const paletteSecondaryIds = new Set([
+  "assets",
+  "connections",
+  "team",
+  "history",
+]);
 
 export function CommandPalette({
   isOpen,
@@ -35,188 +49,85 @@ export function CommandPalette({
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
-  const base = `/app/${encodeURIComponent(slug)}`;
+  const base = getWorkspaceBase(slug);
 
-  // Default actions and studio destinations
-  const defaultItems: PaletteItem[] = [
-    // Studios & Tools
-    {
-      id: "tool-image",
-      category: "Studios & Tools",
-      title: "Image Studio",
-      description: "Text-to-image & Seedream generation",
-      icon: "image",
-      href: `${base}/image`,
-    },
-    {
-      id: "tool-precision-image",
-      category: "Studios & Tools",
-      title: "Precision Image Studio",
-      description: "AI edits, layers, PSD export, crop & transforms",
-      icon: "wand",
-      href: `${base}/image/precision`,
-    },
-    {
-      id: "tool-video",
-      category: "Studios & Tools",
-      title: "Video Studio",
-      description: "Cinematic camera and text-to-video",
-      icon: "video",
-      href: `${base}/video`,
-    },
-    {
-      id: "tool-video-editor",
-      category: "Studios & Tools",
-      title: "Video Editing Desk",
-      description: "Trim, arrange, caption, mix and export video",
-      icon: "director",
-      href: `${base}/video/editor`,
-    },
-    {
-      id: "tool-spokesperson",
-      category: "Studios & Tools",
-      title: "AI Spokesperson Studio",
-      description: "Talking presenter avatars",
-      icon: "sparkles",
-      href: `${base}/spokesperson`,
-    },
-    {
-      id: "tool-speech",
-      category: "Studios & Tools",
-      title: "Voice Studio",
-      description: "Neural voice narration & TTS",
-      icon: "voice",
-      href: `${base}/speech`,
-    },
-    {
-      id: "tool-transcription",
-      category: "Studios & Tools",
-      title: "Speech / Transcription",
-      description: "Transcripts plus SRT and VTT subtitles",
-      icon: "script",
-      href: `${base}/speech/transcription`,
-    },
-    {
-      id: "tool-voice-casting",
-      category: "Studios & Tools",
-      title: "Voice Casting Booth",
-      description: "Audition and cast verified voices",
-      icon: "voice",
-      href: `${base}/speech/voices`,
-    },
-    {
-      id: "tool-director",
-      category: "Studios & Tools",
-      title: "Creative Director",
-      description: "Storyboard orchestration & direction",
-      icon: "director",
-      href: `${base}/director`,
-    },
-    {
-      id: "tool-scripts",
-      category: "Studios & Tools",
-      title: "Scriptwriter",
-      description: "Screenplay and dialogue synthesis",
-      icon: "script",
-      href: `${base}/scripts`,
-    },
-    {
-      id: "tool-templates",
-      category: "Studios & Tools",
-      title: "Generation Templates",
-      description: "Pre-engineered creative recipes",
-      icon: "wand",
-      href: `${base}/templates`,
-    },
-    {
-      id: "tool-story",
-      category: "Studios & Tools",
-      title: "Story Planner",
-      description: "Three-act beats and narrative arcs",
-      icon: "story",
-      href: `${base}/story-planning`,
-    },
-
-    // Settings & Library
-    {
-      id: "nav-new-chat",
-      category: "Settings & Library",
-      title: "New Chat",
-      description: "Start a fresh creative conversation",
-      icon: "edit",
-      href: `${base}`,
-    },
-    {
-      id: "nav-assets",
-      category: "Settings & Library",
-      title: "Asset Library",
-      description: "Browse uploaded and generated media",
-      icon: "assets",
-      href: `${base}/assets`,
-    },
-    {
-      id: "nav-connections",
-      category: "Settings & Library",
-      title: "Connections & Cloud Storage",
-      description: "Configure Google Drive, OneDrive sync",
-      icon: "settings",
-      href: `${base}/storage`,
-    },
-    {
-      id: "nav-team",
-      category: "Settings & Library",
-      title: "Team & Members",
-      description: "Manage collaborator roles & spending caps",
-      icon: "admin",
-      href: `${base}/members`,
-    },
-    {
-      id: "nav-history",
-      category: "Settings & Library",
-      title: "Generation History",
-      description: "View recent jobs and execution logs",
-      icon: "activity",
-      href: `${base}/history`,
-    },
-  ];
-
-  // Dynamic threads
-  const threadItems: PaletteItem[] = threads.map((t) => ({
-    id: `thread-${t.id}`,
-    category: "Conversations",
-    title: t.title,
-    description:
-      t.threadType === "CREATIVE"
-        ? "Creative conversation"
-        : "Open chat thread",
-    icon: t.threadType === "CREATIVE" ? "sparkles" : "chat",
-    href:
-      t.threadType === "CREATIVE"
-        ? `${base}/conversations/${encodeURIComponent(t.id)}`
-        : `${base}/chat?threadId=${encodeURIComponent(t.id)}`,
+  const toolItems: PaletteItem[] = WORKSPACE_TOOLS.map((item) => ({
+    id: `tool-${item.id}`,
+    category: "Studios & Tools",
+    title: item.title,
+    description: item.description,
+    icon: item.icon,
+    href: getWorkspaceItemHref(base, item),
+    keywords: item.keywords,
   }));
 
-  // Dynamic projects
-  const projectItems: PaletteItem[] = projects.map((p) => ({
-    id: `project-${p.id}`,
+  const secondaryItems: PaletteItem[] = WORKSPACE_SECONDARY_ITEMS.filter(
+    (item) => paletteSecondaryIds.has(item.id),
+  ).map((item) => ({
+    id: `nav-${item.id}`,
+    category: "Settings & Library",
+    title: item.title,
+    description: item.description,
+    icon: item.icon,
+    href: getWorkspaceItemHref(base, item),
+  }));
+
+  const defaultItems: PaletteItem[] = [
+    ...toolItems,
+    {
+      id: "nav-quick-create",
+      category: "Settings & Library",
+      title: "Quick Create",
+      description: "Start a new creation from the workspace home",
+      icon: "plus",
+      href: `${base}#create`,
+      keywords: ["new creation", "new chat", "create"],
+    },
+    ...secondaryItems,
+  ];
+
+  const threadItems: PaletteItem[] = threads.map((thread) => ({
+    id: `thread-${thread.id}`,
+    category: "Conversations",
+    title: thread.title,
+    description:
+      thread.threadType === "CREATIVE"
+        ? "Creative conversation"
+        : "Character Chat thread",
+    icon: thread.threadType === "CREATIVE" ? "sparkles" : "chat",
+    href:
+      thread.threadType === "CREATIVE"
+        ? `${base}/conversations/${encodeURIComponent(thread.id)}`
+        : `${base}/chat?threadId=${encodeURIComponent(thread.id)}`,
+    keywords: ["conversation", "chat"],
+  }));
+
+  const projectItems: PaletteItem[] = projects.map((project) => ({
+    id: `project-${project.id}`,
     category: "Projects",
-    title: p.name,
+    title: project.name,
     description: "Open workspace project",
     icon: "projects",
-    href: `${base}/projects/${p.id}`,
+    href: `${base}/projects/${project.id}`,
   }));
 
   const allItems = [...defaultItems, ...threadItems, ...projectItems];
+  const normalizedQuery = query.trim().toLowerCase();
 
-  const filteredItems = query.trim()
-    ? allItems.filter(
-        (item) =>
-          item.title.toLowerCase().includes(query.toLowerCase()) ||
-          item.description?.toLowerCase().includes(query.toLowerCase()),
-      )
-    : allItems.slice(0, 10);
+  const filteredItems = normalizedQuery
+    ? allItems.filter((item) => {
+        const searchable = [
+          item.title,
+          item.description,
+          ...(item.keywords ?? []),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return searchable.includes(normalizedQuery);
+      })
+    : allItems.slice(0, 12);
 
-  // Focus input on open
   useEffect(() => {
     if (isOpen) {
       setTimeout(() => inputRef.current?.focus(), 50);
@@ -235,25 +146,24 @@ export function CommandPalette({
     [onClose, router],
   );
 
-  // Keyboard navigation
   useEffect(() => {
     if (!isOpen) return;
 
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
         onClose();
-      } else if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setSelectedIndex((prev) =>
-          prev < filteredItems.length - 1 ? prev + 1 : 0,
+      } else if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setSelectedIndex((previous) =>
+          previous < filteredItems.length - 1 ? previous + 1 : 0,
         );
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setSelectedIndex((prev) =>
-          prev > 0 ? prev - 1 : filteredItems.length - 1,
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setSelectedIndex((previous) =>
+          previous > 0 ? previous - 1 : filteredItems.length - 1,
         );
-      } else if (e.key === "Enter") {
-        e.preventDefault();
+      } else if (event.key === "Enter") {
+        event.preventDefault();
         const selected = filteredItems[selectedIndex];
         if (selected) {
           executeItem(selected);
@@ -274,23 +184,20 @@ export function CommandPalette({
       aria-label="Command Palette"
       className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-16 sm:pt-24"
     >
-      {/* Backdrop */}
       <div
         onClick={onClose}
         className="fixed inset-0 bg-background/80 backdrop-blur-md transition-opacity animate-in fade-in"
       />
 
-      {/* Palette Card */}
       <div className="relative w-full max-w-xl overflow-hidden rounded-2xl border border-border bg-card shadow-2xl animate-in fade-in zoom-in-95 duration-150">
-        {/* Search Input Bar */}
         <div className="flex items-center gap-3 border-b border-border px-4 py-3">
           <Icon name="search" className="size-5 text-muted-foreground" />
           <input
             ref={inputRef}
             type="text"
             value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
+            onChange={(event) => {
+              setQuery(event.target.value);
               setSelectedIndex(0);
             }}
             placeholder="Type a tool, chat, project, or setting..."
@@ -301,7 +208,6 @@ export function CommandPalette({
           </kbd>
         </div>
 
-        {/* Results List */}
         <div className="max-h-96 overflow-y-auto p-2 scrollbar-thin">
           {filteredItems.length === 0 ? (
             <div className="p-8 text-center text-xs text-muted-foreground">
@@ -336,11 +242,11 @@ export function CommandPalette({
                       <div className="truncate text-xs font-semibold">
                         {item.title}
                       </div>
-                      {item.description && (
+                      {item.description ? (
                         <div className="truncate text-[11px] text-muted-foreground">
                           {item.description}
                         </div>
-                      )}
+                      ) : null}
                     </div>
                     <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
                       {item.category}
@@ -352,7 +258,6 @@ export function CommandPalette({
           )}
         </div>
 
-        {/* Bottom Helper Bar */}
         <div className="flex items-center justify-between border-t border-border bg-surface-sunken/60 px-4 py-2 text-[11px] text-muted-foreground">
           <span>Navigate with arrows, Enter to open</span>
           <span className="font-mono">Aiwa Creators</span>

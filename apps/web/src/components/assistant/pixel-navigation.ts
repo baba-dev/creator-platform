@@ -1,29 +1,23 @@
+import {
+  WORKSPACE_SECONDARY_ITEMS,
+  WORKSPACE_TOOLS,
+} from "../../lib/workspace-tools";
+
+const toolSegments = WORKSPACE_TOOLS.map((item) => item.segment);
+const secondarySegments = WORKSPACE_SECONDARY_ITEMS.map((item) => item.segment);
+
 const pages = new Set([
   "",
-  "image",
-  "video",
-  "speech",
-  "assets",
-  "history",
-  "storage",
-  "members",
-  "chat",
-  "projects",
-  "templates",
-  "director",
-  "scripts",
-  "brand-assistants",
-  "story-planning",
-  "spokesperson",
+  ...toolSegments.filter((segment) => !segment.includes("/")),
+  ...secondarySegments.filter((segment) => !segment.includes("/")),
   "conversations",
+  // Backward-compatible alias. The route redirects to Brand & Story's story tab.
+  "story-planning",
 ]);
 
-const nestedPages = new Set([
-  "image/precision",
-  "video/editor",
-  "speech/transcription",
-  "speech/voices",
-]);
+const nestedPages = new Set(
+  toolSegments.filter((segment) => segment.includes("/")),
+);
 
 const resourcePages = new Set([
   "history",
@@ -39,11 +33,13 @@ export function safePixelRoute(route: string, slug: string): string | null {
     /%(?:2f|5c|2e)/i.test(route)
   )
     return null;
+
   const base = `/app/${encodeURIComponent(slug)}`;
   const candidate = route.startsWith("/app/")
     ? route
     : `${base}/${route.replace(/^\//, "")}`;
   const url = new URL(candidate, "https://pixel.invalid");
+
   if (
     url.origin !== "https://pixel.invalid" ||
     (url.pathname !== base && !url.pathname.startsWith(`${base}/`))

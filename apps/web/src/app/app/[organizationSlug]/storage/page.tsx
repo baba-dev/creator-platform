@@ -53,7 +53,7 @@ export default async function StoragePage({
     <div className="mx-auto max-w-5xl space-y-8 p-6 lg:p-8">
       <div>
         <h1 className="font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-          Storage Settings
+          Connections & Storage
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Manage how media originals and derivatives are stored for {org.name}.

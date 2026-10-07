@@ -7,5 +7,7 @@ export default async function StoryPlanningRedirect({
   params: Promise<{ organizationSlug: string }>;
 }) {
   const { organizationSlug } = await params;
-  redirect(`/app/${organizationSlug}/brand-assistants` as Route);
+  redirect(
+    `/app/${encodeURIComponent(organizationSlug)}/brand-assistants?tab=story` as Route,
+  );
 }

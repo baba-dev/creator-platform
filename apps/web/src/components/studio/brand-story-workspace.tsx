@@ -54,6 +54,7 @@ export function BrandStoryWorkspace({
   organizationSlug,
   organizationId,
   canGenerate,
+  initialTab,
   brandDefaultModelId,
   brandModels,
   storyDefaultModelId,
@@ -62,12 +63,13 @@ export function BrandStoryWorkspace({
   organizationSlug: string;
   organizationId: string;
   canGenerate: boolean;
+  initialTab: "brand" | "story";
   brandDefaultModelId: string | null;
   brandModels: StudioModelOption[];
   storyDefaultModelId: string | null;
   storyModels: StudioModelOption[];
 }) {
-  const [activeTab, setActiveTab] = useState<"brand" | "story">("brand");
+  const [activeTab, setActiveTab] = useState<"brand" | "story">(initialTab);
 
   // Brand Profiles State
   const [brandProfiles, setBrandProfiles] = useState<BrandProfile[]>([]);
@@ -261,7 +263,7 @@ export function BrandStoryWorkspace({
             </span>
           </div>
           <h1 className="font-display mt-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-            Brand Assistants & Story Planning
+            Brand & Story
           </h1>
           <p className="mt-0.5 text-xs text-muted-foreground">
             Formulate brand voice pillars and architect multi-act story beat

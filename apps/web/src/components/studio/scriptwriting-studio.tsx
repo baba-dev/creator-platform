@@ -734,7 +734,7 @@ export function ScriptwritingStudio({
             </span>
           </div>
           <h1 className="font-display mt-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-            Scriptwriting Studio
+            Scriptwriter
           </h1>
           <p className="mt-0.5 text-xs text-muted-foreground">
             Craft scenes, polish dialogue with AI, and synthesize lines into

@@ -2880,7 +2880,6 @@ export function GenerationStudio({
           ) : null}
         </div>
       </div>
-
     </section>
   );
 }

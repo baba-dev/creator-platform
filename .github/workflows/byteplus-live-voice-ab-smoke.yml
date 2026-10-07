@@ -4,7 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       billing_acknowledgement:
-        description: Type I_UNDERSTAND_THIS_IS_BILLABLE to run two live Seed Speech TTS 2.0 generations
+        description:
+          Type I_UNDERSTAND_THIS_IS_BILLABLE to run two live Seed Speech TTS 2.0
+          generations
         required: true
         type: string
 

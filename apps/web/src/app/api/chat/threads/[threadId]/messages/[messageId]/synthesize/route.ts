@@ -87,9 +87,7 @@ export async function POST(
     const input = synthesizeChatVoiceSchema.parse(body);
 
     const voiceKeyToUse =
-      input.voiceKey ||
-      thread.persona?.voiceKey ||
-      DEFAULT_PRESET_VOICE_KEY;
+      input.voiceKey || thread.persona?.voiceKey || DEFAULT_PRESET_VOICE_KEY;
 
     // Verify voice existence
     try {

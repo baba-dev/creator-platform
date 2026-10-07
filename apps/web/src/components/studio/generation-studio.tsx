@@ -1969,8 +1969,8 @@ export function GenerationStudio({
                   </div>
 
                   <p className="mt-3 text-xs text-subtle-foreground">
-                    Output quality is fixed server-side at 24 kHz / 128 kbps
-                    MP3 for consistent production results.
+                    Output quality is fixed server-side at 24 kHz / 128 kbps MP3
+                    for consistent production results.
                   </p>
                 </div>
               </div>

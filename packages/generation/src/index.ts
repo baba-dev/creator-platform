@@ -1330,9 +1330,7 @@ export async function createVoiceJob(userId: string, raw: unknown) {
     voiceKey: presetVoice.key,
     speaker: presetVoice.speakerId,
     speechRate: input.speechRate,
-    ...(input.loudnessRate !== 1
-      ? { loudnessRate: input.loudnessRate }
-      : {}),
+    ...(input.loudnessRate !== 1 ? { loudnessRate: input.loudnessRate } : {}),
     ...(input.pitch !== 0 ? { pitch: input.pitch } : {}),
     ...(input.stylePrompt ? { stylePrompt: input.stylePrompt } : {}),
     format: input.format,

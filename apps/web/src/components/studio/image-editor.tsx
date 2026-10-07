@@ -89,7 +89,8 @@ export function ImageEditor({
 }) {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [selectedId, setSelectedId] = useState("");
-  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>(initialMode);
+  const [workspaceMode, setWorkspaceMode] =
+    useState<WorkspaceMode>(initialMode);
 
   // AI Precision Edit states (Seedream 5.0 Pro)
   const [aiTool, setAiTool] = useState<AiTool>("inpaint");

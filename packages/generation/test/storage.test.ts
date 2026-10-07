@@ -18,6 +18,7 @@ import {
   storeImage,
   storeVideo,
   storedAssetSize,
+  validateAudioBytes,
   validateMp3Bytes,
   validateReferenceImage,
   validateJpegImage,
@@ -230,6 +231,51 @@ describe("private image storage", () => {
     expect(() => validateMp3Bytes(Buffer.from([0x00, 0x01, 0x02]))).toThrow(
       "MP3 validation",
     );
+  });
+
+  it("validates Seed Audio WAV, OGG, and raw PCM outputs by media type", () => {
+    const wav = Buffer.concat([
+      Buffer.from("RIFF"),
+      Buffer.alloc(4),
+      Buffer.from("WAVEfmt "),
+      Buffer.alloc(16),
+    ]);
+    const ogg = Buffer.concat([Buffer.from("OggS"), Buffer.alloc(32)]);
+    const pcm = Buffer.from([0x00, 0x00, 0x01, 0x00]);
+
+    expect(() => validateAudioBytes(wav, "audio/wav")).not.toThrow();
+    expect(() => validateAudioBytes(ogg, "audio/ogg")).not.toThrow();
+    expect(() => validateAudioBytes(pcm, "audio/L16")).not.toThrow();
+    expect(() =>
+      validateAudioBytes(Buffer.from("not-wave"), "audio/wav"),
+    ).toThrow("WAV validation");
+    expect(() =>
+      validateAudioBytes(Buffer.from("not-ogg"), "audio/ogg"),
+    ).toThrow("OGG validation");
+  });
+
+  it("stores non-MP3 Seed Audio without relabeling it as MPEG", async () => {
+    const root = await mkdtemp(join(tmpdir(), "creator-wav-storage-"));
+    vi.stubEnv("ASSET_STORAGE_ROOT", root);
+    try {
+      const wav = Buffer.concat([
+        Buffer.from("RIFF"),
+        Buffer.alloc(4),
+        Buffer.from("WAVEfmt "),
+        Buffer.alloc(16),
+      ]);
+      const result = await storeAudio(
+        "job.wav",
+        wav,
+        undefined,
+        undefined,
+        "audio/wav",
+      );
+      expect(result.byteSize).toBe(BigInt(wav.length));
+      expect(await readStoredAsset("job.wav")).toEqual(wav);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("writes and reads a private MP3 audio object", async () => {

@@ -98,6 +98,7 @@ export interface VoiceCastingBoothProps {
   organizationId: string;
   initialTestPhrase?: string;
   characterName?: string;
+  presentation?: "modal" | "page";
 }
 
 export function VoiceCastingBooth({
@@ -108,6 +109,7 @@ export function VoiceCastingBooth({
   organizationId,
   initialTestPhrase = "",
   characterName,
+  presentation = "modal",
 }: VoiceCastingBoothProps) {
   const [selectedVoice, setSelectedVoice] = useState(currentVoiceKey);
   const [genderFilter, setGenderFilter] = useState<"all" | "female" | "male">(
@@ -150,7 +152,7 @@ export function VoiceCastingBooth({
     };
   }, []);
 
-  if (!isOpen) return null;
+  if (presentation === "modal" && !isOpen) return null;
 
   const filteredVoices = VERIFIED_VOICES.filter((voice) => {
     if (genderFilter !== "all" && voice.gender !== genderFilter) return false;
@@ -256,15 +258,23 @@ export function VoiceCastingBooth({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-md"
-      onMouseDown={onClose}
+      className={
+        presentation === "modal"
+          ? "fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-md"
+          : "w-full"
+      }
+      onMouseDown={presentation === "modal" ? onClose : undefined}
     >
       <div
-        role="dialog"
-        aria-modal="true"
+        role={presentation === "modal" ? "dialog" : "region"}
+        aria-modal={presentation === "modal" ? true : undefined}
         aria-label="Voice Audition & Casting Booth"
         onMouseDown={(e) => e.stopPropagation()}
-        className="flex max-h-[92vh] w-full max-w-4xl flex-col rounded-3xl border border-border bg-card shadow-xl"
+        className={
+          presentation === "modal"
+            ? "flex max-h-[92vh] w-full max-w-4xl flex-col rounded-3xl border border-border bg-card shadow-xl"
+            : "flex w-full flex-col rounded-3xl border border-border bg-card shadow-sm"
+        }
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-6 py-5">
@@ -287,14 +297,16 @@ export function VoiceCastingBooth({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="grid size-8 place-items-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
-          >
-            <span className="text-xl leading-none">&times;</span>
-          </button>
+          {presentation === "modal" ? (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="grid size-8 place-items-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            >
+              <span className="text-xl leading-none">&times;</span>
+            </button>
+          ) : null}
         </div>
 
         {/* Test Phrase & Speed Controls */}
@@ -538,22 +550,24 @@ export function VoiceCastingBooth({
           </div>
 
           <div className="flex items-center gap-2.5">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-xl border border-border px-4 py-2 text-xs font-semibold text-foreground transition hover:bg-muted"
-            >
-              Cancel
-            </button>
+            {presentation === "modal" ? (
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-xl border border-border px-4 py-2 text-xs font-semibold text-foreground transition hover:bg-muted"
+              >
+                Cancel
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => {
                 onSelectVoice(selectedVoice, speechRate);
-                onClose();
+                if (presentation === "modal") onClose();
               }}
               className="rounded-xl bg-primary px-5 py-2 text-xs font-semibold text-primary-foreground shadow-xs transition hover:bg-primary/90"
             >
-              Cast Voice
+              {presentation === "modal" ? "Cast Voice" : "Use in Voice Studio"}
             </button>
           </div>
         </div>

@@ -18,6 +18,20 @@ const pages = new Set([
   "conversations",
 ]);
 
+const nestedPages = new Set([
+  "image/precision",
+  "video/editor",
+  "speech/transcription",
+  "speech/voices",
+]);
+
+const resourcePages = new Set([
+  "history",
+  "projects",
+  "templates",
+  "conversations",
+]);
+
 export function safePixelRoute(route: string, slug: string): string | null {
   if (
     /[\\\u0000-\u0020]/.test(route) ||
@@ -35,16 +49,16 @@ export function safePixelRoute(route: string, slug: string): string | null {
     (url.pathname !== base && !url.pathname.startsWith(`${base}/`))
   )
     return null;
-  const parts = url.pathname.slice(base.length).replace(/^\//, "").split("/");
-  if (
-    !pages.has(parts[0] ?? "") ||
-    parts.length > 2 ||
-    (parts.length === 2 &&
-      !["history", "projects", "templates", "conversations"].includes(
-        parts[0] ?? "",
-      ))
-  )
-    return null;
+
+  const relative = url.pathname.slice(base.length).replace(/^\//, "");
+  const parts = relative.split("/");
+  const root = parts[0] ?? "";
+  const isRootPage = parts.length === 1 && pages.has(root);
+  const isNestedPage = parts.length === 2 && nestedPages.has(relative);
+  const isResourcePage =
+    parts.length === 2 && resourcePages.has(root) && Boolean(parts[1]);
+
+  if (!isRootPage && !isNestedPage && !isResourcePage) return null;
   if (route.includes("..")) return null;
   return url.pathname + url.search;
 }

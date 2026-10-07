@@ -873,14 +873,7 @@ async function finalizeSucceededExecution(executionId: string): Promise<void> {
     return;
   }
 
-  let stored:
-    | {
-        byteSize: bigint;
-        sha256: string;
-        storageProvider: "LOCAL" | "S3" | "GOOGLE_DRIVE" | "ONEDRIVE";
-        externalFileId?: string | null;
-      }
-    | null = null;
+  let stored: Awaited<ReturnType<typeof storeVideo>> | null = null;
 
   if (outputUrl && outputAsset?.status === "PENDING") {
     try {
@@ -1098,7 +1091,15 @@ export async function processProviderToolExecution(
     if (!claimed.count) return;
     execution = await db.providerToolExecution.findUniqueOrThrow({
       where: { id: execution.id },
-      include: { providerTool: true, priceVersion: true },
+      include: {
+        providerTool: true,
+        priceVersion: true,
+        inputAssets: {
+          orderBy: { position: "asc" },
+          include: { asset: true },
+        },
+        outputAssets: { orderBy: { providerToolOutputIndex: "asc" } },
+      },
     });
   }
 

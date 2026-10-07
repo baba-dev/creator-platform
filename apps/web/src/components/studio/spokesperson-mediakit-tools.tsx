@@ -321,7 +321,7 @@ export function SpokespersonMediaKitTools({
 
         <div className="rounded-2xl border border-border p-4">
           <div className="flex items-center gap-2">
-            <Icon name="eye" className="size-4 text-primary" />
+            <Icon name="activity" className="size-4 text-primary" />
             <p className="text-sm font-semibold">Quality assessment</p>
           </div>
           <p className="mt-2 text-xs text-muted-foreground">

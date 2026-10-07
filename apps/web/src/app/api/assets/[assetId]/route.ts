@@ -44,7 +44,11 @@ export async function GET(
     const isAudio = asset.mimeType.startsWith("audio/");
     const isMedia = isVideo || isAudio;
     const ext = isVideo
-      ? "mp4"
+      ? asset.mimeType === "video/webm"
+        ? "webm"
+        : asset.mimeType === "video/quicktime"
+          ? "mov"
+          : "mp4"
       : isAudio
         ? "mp3"
         : asset.mimeType === "image/jpeg"

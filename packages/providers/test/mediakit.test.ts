@@ -64,22 +64,24 @@ describe("BytePlus MediaKit adapter", () => {
   });
 
   it("validates OmniHuman MediaKit video-tool payloads", async () => {
-    const fetch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
-      const body = JSON.parse(String(init?.body));
-      expect(body.video_url).toBe("https://example.com/video.mp4");
-      expect(body.periodic_stutter_detect).toEqual({
-        periodic_stutter_repair: true,
-        align_source_fps: true,
-      });
-      expect(body.duplicate_frame_detect).toEqual({
-        duplicate_frame_repair: true,
-      });
-      return jsonResponse({
-        success: true,
-        task_id: "amk-tool-enhance-video-smoothness-123",
-        request_id: "req-smooth",
-      });
-    });
+    const fetch = vi.fn(
+      async (_url: string | URL | Request, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body));
+        expect(body.video_url).toBe("https://example.com/video.mp4");
+        expect(body.periodic_stutter_detect).toEqual({
+          periodic_stutter_repair: true,
+          align_source_fps: true,
+        });
+        expect(body.duplicate_frame_detect).toEqual({
+          duplicate_frame_repair: true,
+        });
+        return jsonResponse({
+          success: true,
+          task_id: "amk-tool-enhance-video-smoothness-123",
+          request_id: "req-smooth",
+        });
+      },
+    );
     const provider = createBytePlusMediaKitProvider({
       apiKey: "test-key",
       fetch: fetch as typeof globalThis.fetch,

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import type { Route } from "next";
 import { Icon, type IconName } from "@/components/ui/icon";
@@ -56,7 +57,19 @@ export function SettingsModal({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
+  // Keep the background workspace fixed while the viewport-level dialog is open.
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isOpen]);
+
+  if (!isOpen || typeof document === "undefined") return null;
 
   const tabs: Array<{ id: SettingsTab; label: string; icon: IconName }> = [
     { id: "profile", label: "Profile", icon: "user" },
@@ -72,23 +85,23 @@ export function SettingsModal({
     setTimeout(() => setSavedMessage(null), 3000);
   }
 
-  return (
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="settings-dialog-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+      className="fixed inset-0 z-[70] flex items-center justify-center overflow-y-auto p-4 sm:p-6"
     >
       {/* Backdrop */}
       <div
         onClick={onClose}
-        className="fixed inset-0 bg-background/80 backdrop-blur-md transition-opacity animate-in fade-in"
+        className="absolute inset-0 bg-background/80 backdrop-blur-md transition-opacity animate-in fade-in"
       />
 
       {/* Modal Surface */}
-      <div className="relative flex h-[600px] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl animate-in fade-in zoom-in-95 duration-200 sm:flex-row">
+      <div className="relative flex h-[600px] max-h-[calc(100dvh-2rem)] w-full max-w-3xl min-h-0 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl animate-in fade-in zoom-in-95 duration-200 sm:max-h-[calc(100dvh-3rem)] sm:flex-row">
         {/* Left Navigation Tabs */}
-        <aside className="w-full border-b border-border bg-sidebar/60 p-4 sm:w-56 sm:border-b-0 sm:border-r">
+        <aside className="w-full shrink-0 border-b border-border bg-sidebar/60 p-4 sm:w-56 sm:border-b-0 sm:border-r">
           <div className="mb-4 flex items-center justify-between px-2">
             <h2
               id="settings-dialog-title"
@@ -114,13 +127,13 @@ export function SettingsModal({
                   key={tab.id}
                   type="button"
                   onClick={() => setTabOverride(tab.id)}
-                  className={`flex shrink-0 items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold transition ${
+                  className={`flex min-h-10 shrink-0 items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold transition focus-visible:outline-2 focus-visible:outline-ring ${
                     isActive
                       ? "bg-primary/10 text-primary"
                       : "text-muted-foreground hover:bg-card hover:text-foreground"
                   }`}
                 >
-                  <Icon name={tab.icon} className="size-4" />
+                  <Icon name={tab.icon} className="size-4 shrink-0" />
                   <span>{tab.label}</span>
                 </button>
               );
@@ -129,7 +142,7 @@ export function SettingsModal({
         </aside>
 
         {/* Right Content Area */}
-        <div className="flex flex-1 flex-col overflow-y-auto p-6">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-6">
           <div className="flex items-center justify-between border-b border-border pb-4">
             <div>
               <h3 className="font-display text-lg font-bold text-foreground">
@@ -370,6 +383,7 @@ export function SettingsModal({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

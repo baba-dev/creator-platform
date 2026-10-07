@@ -104,6 +104,10 @@ export function quoteParameters(
     sourceDraftJobId?: string;
     extensionDirection?: string;
     sourceAssetId?: string;
+    task?: "seed-audio";
+    referenceAudioAssetIds?: string[];
+    referenceImageAssetId?: string;
+    estimatedDurationSeconds?: number;
     language?: string;
     transcription?: boolean;
     responseFormat?: "text" | "json_object";
@@ -161,21 +165,36 @@ export function quoteParameters(
     };
   }
   if (mediaKind === "VOICE")
-    return input.transcription
-      ? {
-          transcription: true,
-          sourceAssetId: input.sourceAssetId ?? null,
-          language: input.language ?? null,
-          billableQuantity: input.billableQuantity ?? null,
-        }
-      : {
-          textHash:
-            input.text === undefined
-              ? null
-              : createHash("sha256").update(input.text.trim()).digest("hex"),
-          billableQuantity:
-            input.text === undefined ? (input.billableQuantity ?? null) : null,
-        };
+    if (input.task === "seed-audio")
+      return {
+        task: "seed-audio",
+        textHash:
+          input.text === undefined
+            ? null
+            : createHash("sha256").update(input.text.trim()).digest("hex"),
+        estimatedDurationSeconds:
+          input.estimatedDurationSeconds ?? input.billableQuantity ?? null,
+        referenceAudioAssetIds: input.referenceAudioAssetIds ?? [],
+        referenceImageAssetId: input.referenceImageAssetId ?? null,
+      };
+    else
+      return input.transcription
+        ? {
+            transcription: true,
+            sourceAssetId: input.sourceAssetId ?? null,
+            language: input.language ?? null,
+            billableQuantity: input.billableQuantity ?? null,
+          }
+        : {
+            textHash:
+              input.text === undefined
+                ? null
+                : createHash("sha256").update(input.text.trim()).digest("hex"),
+            billableQuantity:
+              input.text === undefined
+                ? (input.billableQuantity ?? null)
+                : null,
+          };
   if (mediaKind === "TEXT")
     return {
       textHash:

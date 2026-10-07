@@ -609,6 +609,16 @@ export function estimateGeneration(params: {
   } else {
     if (price.pricingDimension === "TOKEN")
       throw new RangeError("No estimator is registered for this media kind.");
+    if (params.mediaKind === "VOICE" && price.pricingDimension === "SECOND") {
+      billableQuantity = params.billableQuantity ?? params.durationSeconds ?? 0;
+      if (!Number.isSafeInteger(billableQuantity) || billableQuantity <= 0)
+        throw new RangeError(
+          "Seed Audio quotes require a valid estimated duration.",
+        );
+      units = Number(
+        calculateBillableUnits(BigInt(billableQuantity), price.unitQuantity),
+      );
+    }
     if (price.pricingDimension === "CHARACTER") {
       billableQuantity =
         params.text !== undefined
@@ -627,6 +637,17 @@ export function estimateGeneration(params: {
       price.providerCostMicroUsd * BigInt(units),
     );
     reservation = quote;
+    if (
+      params.mediaKind === "VOICE" &&
+      params.providerModelId === "seed-audio-1.0" &&
+      price.pricingDimension === "SECOND"
+    ) {
+      const maximumUnits = calculateBillableUnits(120n, price.unitQuantity);
+      reservation = quoteSnapshotCost(
+        price,
+        price.providerCostMicroUsd * maximumUnits,
+      );
+    }
   }
   return {
     quote,

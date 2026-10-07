@@ -375,6 +375,15 @@ export const quoteRequestSchema = z
       .max(1_000_000)
       .optional(),
     text: z.string().max(120_000).optional(),
+    task: z.literal("seed-audio").optional(),
+    referenceAudioAssetIds: z.array(cuidSchema).max(3).optional(),
+    referenceImageAssetId: cuidSchema.optional(),
+    estimatedDurationSeconds: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(120)
+      .optional(),
     schemaVersion: z.literal(2).optional(),
     workflow: z
       .enum([
@@ -419,6 +428,17 @@ export const quoteRequestSchema = z
     extensionDirection: z.enum(["BEFORE", "AFTER"]).optional(),
   })
   .superRefine((value, context) => {
+    if (
+      value.task === "seed-audio" &&
+      value.referenceImageAssetId &&
+      (value.referenceAudioAssetIds?.length ?? 0) > 0
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["referenceImageAssetId"],
+        message: "Seed Audio image and audio references cannot be combined.",
+      });
+    }
     const sources = value.sources ?? [];
     if (
       new Set(sources.map((source) => source.assetId)).size !== sources.length

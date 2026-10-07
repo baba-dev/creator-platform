@@ -38,6 +38,7 @@ const MAX_JSON_RESPONSE_BYTES = 1024 * 1024;
 const MAX_SPEECH_RESPONSE_BYTES = 36 * 1024 * 1024;
 const MAX_SPEECH_AUDIO_BYTES = 25 * 1024 * 1024;
 const SPEECH_RESOURCE_ID = "seed-tts-2.0";
+const SEED_AUDIO_MODEL_ID = "seed-audio-1.0";
 const DEFAULT_SPEECH_APP_KEY = "aGjiRDfUWi";
 
 export interface BytePlusAdapterConfig {
@@ -317,6 +318,33 @@ export const bytePlusVoiceInputSchema = z
         path: ["qualityProfile"],
         message:
           "provider-default is reserved for legacy A/B diagnostics without expression overrides.",
+      });
+    }
+  });
+
+export const bytePlusSeedAudioInputSchema = z
+  .object({
+    task: z.literal("seed-audio"),
+    textPrompt: z.string().trim().min(1).max(3000),
+    referenceAudioUrls: z.array(httpsUrlSchema).max(3).default([]),
+    referenceImageUrl: httpsUrlSchema.optional(),
+    format: z.literal("mp3").default("mp3"),
+    sampleRate: z
+      .union([z.literal(24_000), z.literal(44_100), z.literal(48_000)])
+      .default(44_100),
+    speechRate: z.number().min(0.5).max(2).default(1),
+    loudnessRate: z.number().min(0.5).max(2).default(1),
+    pitch: z.number().int().min(-12).max(12).default(0),
+    enableSubtitles: z.boolean().default(false),
+    watermark: z.boolean().default(false),
+  })
+  .strict()
+  .superRefine((input, ctx) => {
+    if (input.referenceImageUrl && input.referenceAudioUrls.length) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["referenceImageUrl"],
+        message: "Image and audio references cannot be combined.",
       });
     }
   });
@@ -652,6 +680,30 @@ export const VERIFIED_BYTEPLUS_MODELS: readonly ProviderModelDescriptor[] = [
       "format:mp3": true,
       "format:ogg_opus": true,
       "format:pcm": true,
+    },
+  },
+  {
+    id: SEED_AUDIO_MODEL_ID,
+    provider: "byteplus",
+    displayName: "Seed Audio 1.0",
+    description:
+      "Prompt-directed audio and advanced voiceover with audio or image references.",
+    mediaKind: "voice",
+    capabilities: {
+      audioGeneration: true,
+      promptDirected: true,
+      referenceAudio: true,
+      maxReferenceAudio: 3,
+      referenceImage: true,
+      imageAudioExclusive: true,
+      longFormVoiceover: true,
+      maxOutputSeconds: 120,
+      pricingUnit: "SECOND",
+      subtitles: true,
+      "format:mp3": true,
+      "format:wav": true,
+      "format:pcm": true,
+      "format:ogg_opus": true,
     },
   },
   {
@@ -1628,6 +1680,119 @@ export function createBytePlusProvider(
         }
 
         case "voice": {
+          if (resolvedModelId === SEED_AUDIO_MODEL_ID) {
+            const input = bytePlusSeedAudioInputSchema.safeParse(
+              submission.input,
+            );
+            if (!input.success)
+              throw new ProviderRequestError(
+                "Invalid Seed Audio input",
+                false,
+                {
+                  code: "INVALID_INPUT",
+                },
+              );
+            if (!validated.speechApiKey)
+              throw new ProviderConfigurationError(
+                "BytePlus Seed Speech API key is not configured",
+              );
+            const response = await safeFetch(
+              fetchClient,
+              `${speechBaseUrl}/tts/create`,
+              {
+                method: "POST",
+                headers: {
+                  "content-type": "application/json",
+                  "x-api-key": validated.speechApiKey,
+                  "x-api-request-id": requestUuid(submission.idempotencyKey),
+                },
+                body: JSON.stringify({
+                  model: SEED_AUDIO_MODEL_ID,
+                  text_prompt: input.data.textPrompt,
+                  ...(input.data.referenceAudioUrls.length
+                    ? {
+                        references: input.data.referenceAudioUrls.map(
+                          (audio_url) => ({
+                            audio_url,
+                          }),
+                        ),
+                      }
+                    : {}),
+                  ...(input.data.referenceImageUrl
+                    ? {
+                        references: [
+                          { image_url: input.data.referenceImageUrl },
+                        ],
+                      }
+                    : {}),
+                  audio_config: {
+                    format: input.data.format,
+                    sample_rate: input.data.sampleRate,
+                    speech_rate: speechRateMultiplierToPercentage(
+                      input.data.speechRate,
+                    ),
+                    loudness_rate: speechRateMultiplierToPercentage(
+                      input.data.loudnessRate,
+                    ),
+                    pitch_rate: input.data.pitch,
+                    enable_subtitle: input.data.enableSubtitles,
+                  },
+                  watermark: { aigc_watermark: input.data.watermark },
+                }),
+              },
+              timeoutMs,
+              idleTimeoutMs,
+            );
+            await assertSuccessfulResponse(response);
+            const body = await readResponseText(
+              response,
+              MAX_SPEECH_RESPONSE_BYTES,
+            );
+            let data: unknown;
+            try {
+              data = JSON.parse(body);
+            } catch {
+              throw new ProviderRequestError(
+                "BytePlus returned an invalid Seed Audio response",
+                true,
+                { code: "INVALID_PROVIDER_RESPONSE" },
+              );
+            }
+            const parsed = z
+              .object({
+                code: z.number().optional(),
+                message: z.string().optional(),
+                audio: z.string().min(1),
+                duration: z.number().positive().max(120).optional(),
+                original_duration: z.number().positive().max(120),
+              })
+              .safeParse(data);
+            if (
+              !parsed.success ||
+              (parsed.data.code !== undefined && parsed.data.code !== 0)
+            )
+              throw new ProviderRequestError(
+                "BytePlus Seed Audio generation failed",
+                false,
+                { code: "PROVIDER_REJECTED" },
+              );
+            const requestId = providerIdentifierSchema.safeParse(
+              response.headers?.get("x-tt-logid"),
+            );
+            return {
+              providerRequestId: requestId.success
+                ? requestId.data
+                : stableRequestId("seed-audio", submission.idempotencyKey),
+              status: "succeeded",
+              inlineOutputs: [
+                { mediaType: "audio/mpeg", dataBase64: parsed.data.audio },
+              ],
+              rawUsage: {
+                generatedSeconds: parsed.data.original_duration,
+                durationSeconds: parsed.data.duration ?? null,
+              },
+            };
+          }
           const input = bytePlusVoiceInputSchema.safeParse(submission.input);
           if (!input.success) {
             throw new ProviderRequestError(

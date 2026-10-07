@@ -13,6 +13,7 @@ const items: { label: string; segment: string; icon: IconName }[] = [
   { label: "Video Editor", segment: "video/editor", icon: "director" },
   { label: "Spokesperson", segment: "spokesperson", icon: "sparkles" },
   { label: "Voice", segment: "speech", icon: "voice" },
+  { label: "Audio Generation", segment: "audio", icon: "sparkles" },
   { label: "Transcription", segment: "speech/transcription", icon: "script" },
   { label: "Voice Casting", segment: "speech/voices", icon: "sparkles" },
   { label: "Chat", segment: "chat", icon: "chat" },

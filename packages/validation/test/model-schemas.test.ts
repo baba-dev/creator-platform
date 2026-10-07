@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { assertVoicePricingDimensionMatchesCapabilities } from "../src/voice-pricing";
+
 import {
   providerModelRecordIdSchema,
   publishPriceVersionSchema,
@@ -215,5 +217,34 @@ describe("model validation schemas", () => {
     expect(() =>
       assertPricingDimensionMatchesMediaKind("VOICE", "SECOND"),
     ).not.toThrow();
+
+    expect(() =>
+      assertVoicePricingDimensionMatchesCapabilities(
+        "VOICE",
+        { audioGeneration: true },
+        "SECOND",
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertVoicePricingDimensionMatchesCapabilities(
+        "VOICE",
+        { audioGeneration: true },
+        "REQUEST",
+      ),
+    ).toThrow("Audio generation models require SECOND pricing.");
+    expect(() =>
+      assertVoicePricingDimensionMatchesCapabilities(
+        "VOICE",
+        { transcription: true },
+        "SECOND",
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertVoicePricingDimensionMatchesCapabilities(
+        "VOICE",
+        { speechSynthesis: true },
+        "SECOND",
+      ),
+    ).toThrow("Speech synthesis models require CHARACTER or REQUEST pricing.");
   });
 });

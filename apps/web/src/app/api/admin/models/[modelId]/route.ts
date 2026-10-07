@@ -20,39 +20,7 @@ import { NextResponse } from "next/server";
 
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
-
-function assertVoicePricingMatchesCapabilities(
-  model: {
-    mediaKind: string;
-    capabilities: unknown;
-  },
-  pricingDimension: string,
-): void {
-  if (model.mediaKind !== "VOICE") return;
-  const capabilities =
-    model.capabilities &&
-    typeof model.capabilities === "object" &&
-    !Array.isArray(model.capabilities)
-      ? (model.capabilities as Record<string, unknown>)
-      : {};
-  const transcription = capabilities.transcription === true;
-  if (
-    transcription &&
-    pricingDimension !== "SECOND" &&
-    pricingDimension !== "REQUEST"
-  ) {
-    throw new Error("Transcription models require SECOND or REQUEST pricing.");
-  }
-  if (
-    !transcription &&
-    pricingDimension !== "CHARACTER" &&
-    pricingDimension !== "REQUEST"
-  ) {
-    throw new Error(
-      "Speech synthesis models require CHARACTER or REQUEST pricing.",
-    );
-  }
-}
+import { assertVoicePricingDimensionMatchesCapabilities } from "@aiwa/validation/voice-pricing";
 
 function priceVersionResponse(price: ModelPriceVersion) {
   return {
@@ -138,8 +106,9 @@ export async function PATCH(
           { status: 409 },
         );
       try {
-        assertVoicePricingMatchesCapabilities(
-          model,
+        assertVoicePricingDimensionMatchesCapabilities(
+          model.mediaKind,
+          model.capabilities,
           activePrice.pricingDimension,
         );
       } catch (error) {
@@ -320,7 +289,11 @@ export async function PATCH(
 
     try {
       assertPricingDimensionMatchesMediaKind(model.mediaKind, pricingDimension);
-      assertVoicePricingMatchesCapabilities(model, pricingDimension);
+      assertVoicePricingDimensionMatchesCapabilities(
+        model.mediaKind,
+        model.capabilities,
+        pricingDimension,
+      );
     } catch (err) {
       return NextResponse.json(
         {

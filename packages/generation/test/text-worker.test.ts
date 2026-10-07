@@ -40,6 +40,7 @@ vi.mock("@aiwa/credits", () => mocks.credits);
 import {
   createTextJob,
   processTextJob,
+  recoverReservedTextJobs,
   projectTextJobToChat,
 } from "../src/text";
 
@@ -91,6 +92,12 @@ function admissionTx(existing: unknown = null) {
       findUnique: vi.fn().mockResolvedValue(existing),
       count: vi.fn().mockResolvedValue(0),
       create: vi.fn().mockResolvedValue({
+        id: "job_text_1",
+        status: "QUEUED",
+        organizationId: "org_1",
+        createdById: "user_1",
+      }),
+      update: vi.fn().mockResolvedValue({
         id: "job_text_1",
         status: "QUEUED",
         organizationId: "org_1",
@@ -223,6 +230,13 @@ describe("durable text generation billing", () => {
         jobId: "job_text_1",
       }),
     );
+    expect(tx.generationJob.update).toHaveBeenCalledWith({
+      where: { id: "job_text_1" },
+      data: { status: "QUEUED", queuedAt: expect.any(Date) },
+    });
+    expect(
+      mocks.credits.reserveCreditsForJob.mock.invocationCallOrder[0],
+    ).toBeLessThan(tx.generationJob.update.mock.invocationCallOrder[0]!);
     expect(tx.generationJob.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -232,6 +246,21 @@ describe("durable text generation billing", () => {
         }),
       }),
     );
+  });
+
+  it("recovers only reserved text admissions with no provider submission", async () => {
+    await recoverReservedTextJobs();
+    expect(mocks.db.generationJob.updateMany).toHaveBeenCalledWith({
+      where: {
+        status: "CREDIT_RESERVED",
+        providerModel: { mediaKind: "TEXT" },
+        submittedAt: null,
+        providerRequestId: null,
+        completedAt: null,
+      },
+      data: { status: "QUEUED", queuedAt: expect.any(Date) },
+    });
+    expect(mocks.credits.reserveCreditsForJob).not.toHaveBeenCalled();
   });
 
   it("queues sponsored text without reserving customer credits", async () => {

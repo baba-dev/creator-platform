@@ -14,10 +14,7 @@ import {
 interface PaletteItem {
   id: string;
   category:
-    | "Studios & Tools"
-    | "Conversations"
-    | "Projects"
-    | "Settings & Library";
+    "Studios & Tools" | "Conversations" | "Projects" | "Settings & Library";
   title: string;
   description?: string;
   icon: IconName;

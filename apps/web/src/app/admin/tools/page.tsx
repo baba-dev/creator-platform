@@ -41,11 +41,14 @@ export default async function ProviderToolsAdminPage() {
       category: row.category,
       executionMode: row.executionMode,
       pricingMetric: row.pricingMetric,
+      capabilities: row.capabilities as Record<string, unknown>,
       enabled: row.enabled,
       executionCount: row._count.executions,
       price: price
         ? {
             providerCostMicroUsd: price.providerCostMicroUsd.toString(),
+            providerCostNoOutputMicroUsd:
+              price.providerCostNoOutputMicroUsd?.toString() ?? null,
             customerCredits: price.customerCredits.toString(),
             unitQuantity: price.unitQuantity,
             targetMarginBps: price.targetMarginBps,

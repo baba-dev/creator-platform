@@ -51,6 +51,23 @@ function record(value: unknown): Record<string, unknown> {
     : {};
 }
 
+type OmniHumanLineageAsset = {
+  id: string;
+  organizationId: string;
+  status: string;
+  purpose: string;
+  storageOwnerUserId: string | null;
+  mediaKind: string;
+  mimeType: string;
+  durationMs: number | null;
+  sourceAssetId: string | null;
+  generationJob: {
+    status: string;
+    requestPayload: unknown;
+    providerModel: { providerModelId: string };
+  } | null;
+};
+
 async function loadOmniHumanVideo(
   organizationId: string,
   assetId: string,
@@ -69,7 +86,7 @@ async function loadOmniHumanVideo(
   for (let depth = 0; currentId && depth < 8; depth += 1) {
     if (visited.has(currentId)) return null;
     visited.add(currentId);
-    const asset = await db.asset.findFirst({
+    const asset: OmniHumanLineageAsset | null = await db.asset.findFirst({
       where: { id: currentId, organizationId },
       select: {
         id: true,

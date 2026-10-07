@@ -116,7 +116,12 @@ export const WORKSPACE_TOOL_CATEGORIES: readonly WorkspaceToolCategory[] = [
         segment: "audio",
         icon: "sparkles",
         badge: "New",
-        keywords: ["seed audio", "advanced voiceover", "dola", "voice matching"],
+        keywords: [
+          "seed audio",
+          "advanced voiceover",
+          "dola",
+          "voice matching",
+        ],
       },
       {
         id: "transcription",

@@ -2,6 +2,99 @@ import { hasOrganizationPermission } from "@aiwa/authz";
 import { db, type Prisma } from "@aiwa/db";
 import { z } from "zod";
 
+
+type SeedAudioTimedItem = {
+  startMs: number;
+  endMs: number;
+  text: string;
+};
+
+function seedAudioTimedItems(value: unknown): SeedAudioTimedItem[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const row = item as Record<string, unknown>;
+    const startMs = Number(row.startMs);
+    const endMs = Number(row.endMs);
+    const text = typeof row.text === "string" ? row.text : "";
+    return Number.isSafeInteger(startMs) &&
+      Number.isSafeInteger(endMs) &&
+      startMs >= 0 &&
+      endMs >= startMs &&
+      text
+      ? [{ startMs, endMs, text }]
+      : [];
+  });
+}
+
+function seedAudioResult(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const output = value as Record<string, unknown>;
+  const subtitle =
+    output.subtitle &&
+    typeof output.subtitle === "object" &&
+    !Array.isArray(output.subtitle)
+      ? (output.subtitle as Record<string, unknown>)
+      : null;
+  const longForm =
+    output.longForm &&
+    typeof output.longForm === "object" &&
+    !Array.isArray(output.longForm)
+      ? (output.longForm as Record<string, unknown>)
+      : null;
+  const originalDurationSeconds =
+    typeof output.originalDurationSeconds === "number" &&
+    Number.isFinite(output.originalDurationSeconds) &&
+    output.originalDurationSeconds > 0
+      ? output.originalDurationSeconds
+      : null;
+  const playbackDurationSeconds =
+    typeof output.playbackDurationSeconds === "number" &&
+    Number.isFinite(output.playbackDurationSeconds) &&
+    output.playbackDurationSeconds > 0
+      ? output.playbackDurationSeconds
+      : originalDurationSeconds;
+  const segmentDurationsSeconds = Array.isArray(
+    longForm?.segmentDurationsSeconds,
+  )
+    ? longForm.segmentDurationsSeconds.filter(
+        (duration): duration is number =>
+          typeof duration === "number" &&
+          Number.isFinite(duration) &&
+          duration > 0 &&
+          duration <= 120,
+      )
+    : [];
+  const segmentCount =
+    typeof longForm?.segmentCount === "number" &&
+    Number.isSafeInteger(longForm.segmentCount) &&
+    longForm.segmentCount >= 1 &&
+    longForm.segmentCount <= 3
+      ? longForm.segmentCount
+      : segmentDurationsSeconds.length || 1;
+  const crossfadeMs =
+    typeof longForm?.crossfadeMs === "number" &&
+    Number.isSafeInteger(longForm.crossfadeMs) &&
+    longForm.crossfadeMs >= 0 &&
+    longForm.crossfadeMs <= 1_000
+      ? longForm.crossfadeMs
+      : 0;
+  return {
+    originalDurationSeconds,
+    playbackDurationSeconds,
+    subtitle: subtitle
+      ? {
+          text: typeof subtitle.text === "string" ? subtitle.text : "",
+          sentences: seedAudioTimedItems(subtitle.sentences),
+          words: seedAudioTimedItems(subtitle.words),
+        }
+      : null,
+    longForm: longForm
+      ? { segmentCount, segmentDurationsSeconds, crossfadeMs }
+      : null,
+  };
+}
+
 const cursorSchema = z.object({
   at: z.iso.datetime(),
   id: z.string().min(1).max(100),
@@ -204,6 +297,7 @@ export async function getCustomerJob(
           displayName: true,
           mediaKind: true,
           provider: true,
+          providerModelId: true,
         },
       },
       project: { select: { id: true, name: true } },
@@ -224,7 +318,17 @@ export async function getCustomerJob(
     },
   });
   if (!job) return null;
-  const [entries, events] = await Promise.all([
+  const request =
+    job.requestPayload &&
+    typeof job.requestPayload === "object" &&
+    !Array.isArray(job.requestPayload)
+      ? (job.requestPayload as Record<string, unknown>)
+      : {};
+  const isSeedAudio =
+    job.providerModel.providerModelId === "seed-audio-1.0" &&
+    request.task === "seed-audio";
+  const takeRootId = job.parentGenerationId ?? job.id;
+  const [entries, events, takes] = await Promise.all([
     db.ledgerEntry.findMany({
       where: {
         referenceType: "GENERATION_JOB",
@@ -239,12 +343,44 @@ export async function getCustomerJob(
       select: { action: true, createdAt: true },
       orderBy: { createdAt: "asc" },
     }),
+    isSeedAudio
+      ? db.generationJob.findMany({
+          where: {
+            organizationId,
+            createdById: job.createdById,
+            providerModel: { providerModelId: "seed-audio-1.0" },
+            OR: [{ id: takeRootId }, { parentGenerationId: takeRootId }],
+          },
+          orderBy: { createdAt: "asc" },
+          take: 8,
+          select: {
+            id: true,
+            status: true,
+            createdAt: true,
+            completedAt: true,
+            parentGenerationId: true,
+            requestPayload: true,
+            assets: {
+              where: { status: "READY", mediaKind: "AUDIO" },
+              orderBy: { createdAt: "asc" },
+              take: 1,
+              select: {
+                id: true,
+                name: true,
+                mimeType: true,
+                durationMs: true,
+              },
+            },
+          },
+        })
+      : Promise.resolve([]),
   ]);
   return {
     id: job.id,
     status: job.status,
     model: job.providerModel.displayName,
     providerModelId: job.providerModel.id,
+    providerModelKey: job.providerModel.providerModelId,
     kind: job.providerModel.mediaKind,
     project: job.project,
     creator: job.createdBy,
@@ -278,6 +414,25 @@ export async function getCustomerJob(
     quotedUnits: job.quotedUnits,
     actualUnits: job.actualUnits,
     billableQuantity: job.billableQuantity,
+    audioResult: isSeedAudio ? seedAudioResult(job.outputPayload) : null,
+    takes: takes.map((take) => {
+      const payload =
+        take.requestPayload &&
+        typeof take.requestPayload === "object" &&
+        !Array.isArray(take.requestPayload)
+          ? (take.requestPayload as Record<string, unknown>)
+          : {};
+      return {
+        id: take.id,
+        status: take.status,
+        createdAt: take.createdAt,
+        completedAt: take.completedAt,
+        parentGenerationId: take.parentGenerationId,
+        workflow:
+          typeof payload.workflow === "string" ? payload.workflow : "CREATE",
+        asset: take.assets[0] ?? null,
+      };
+    }),
     entries: entries.map((entry) => ({
       ...entry,
       amountCredits: entry.amountCredits.toString(),

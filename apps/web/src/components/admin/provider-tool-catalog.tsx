@@ -207,7 +207,8 @@ export function ProviderToolCatalog({
                       </p>
                       {row.price.providerCostNoOutputMicroUsd ? (
                         <p className="mt-1 text-muted-foreground">
-                          Detection-only: {row.price.providerCostNoOutputMicroUsd} µUSD / block
+                          Detection-only:{" "}
+                          {row.price.providerCostNoOutputMicroUsd} µUSD / block
                         </p>
                       ) : null}
                       <p className="mt-1 text-muted-foreground">
@@ -287,7 +288,8 @@ export function ProviderToolCatalog({
                   className="mt-1 h-10 w-full rounded-xl border border-input bg-background px-3 font-mono font-normal"
                 />
               </label>
-              {pricingTool.capabilities.variableBilling === "output-presence" ? (
+              {pricingTool.capabilities.variableBilling ===
+              "output-presence" ? (
                 <label className="text-xs font-semibold">
                   Detection-only cost (micro-USD)
                   <input

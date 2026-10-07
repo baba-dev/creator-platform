@@ -501,7 +501,7 @@ export async function createProviderToolExecution(
         sourceAsset.status !== "READY" ||
         sourceAsset.mediaKind !== "VIDEO" ||
         (sourceAsset.purpose === "REFERENCE_INPUT" &&
-          sourceAsset.storageOwnerUserId !== userId) ||
+          sourceAsset.storageOwnerUserId !== userId)
       ) {
         throw new ProviderToolExecutionError("Source video is unavailable.", 409);
       }

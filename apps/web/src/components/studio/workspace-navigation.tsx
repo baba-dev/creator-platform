@@ -8,9 +8,13 @@ import { Icon, type IconName } from "@/components/ui/icon";
 const items: { label: string; segment: string; icon: IconName }[] = [
   { label: "Home", segment: "", icon: "dashboard" },
   { label: "Image", segment: "image", icon: "image" },
+  { label: "Precision Image", segment: "image/precision", icon: "wand" },
   { label: "Video", segment: "video", icon: "video" },
+  { label: "Video Editor", segment: "video/editor", icon: "director" },
   { label: "Spokesperson", segment: "spokesperson", icon: "sparkles" },
-  { label: "Speech", segment: "speech", icon: "voice" },
+  { label: "Voice", segment: "speech", icon: "voice" },
+  { label: "Transcription", segment: "speech/transcription", icon: "script" },
+  { label: "Voice Casting", segment: "speech/voices", icon: "sparkles" },
   { label: "Chat", segment: "chat", icon: "chat" },
   { label: "Director", segment: "director", icon: "director" },
   { label: "Scripts", segment: "scripts", icon: "script" },
@@ -35,7 +39,9 @@ export function WorkspaceNavigation({ slug }: { slug: string }) {
         {items.map(({ label, segment, icon }) => {
           const href = segment ? `${base}/${segment}` : base;
           const active =
-            pathname === href || (segment && pathname.startsWith(`${href}/`));
+            pathname === href ||
+            (["history", "projects", "templates"].includes(segment) &&
+              pathname.startsWith(`${href}/`));
           return (
             <Link
               key={label}
@@ -59,7 +65,9 @@ export function WorkspaceNavigation({ slug }: { slug: string }) {
         {items.map(({ label, segment, icon }) => {
           const href = segment ? `${base}/${segment}` : base;
           const active =
-            pathname === href || (segment && pathname.startsWith(`${href}/`));
+            pathname === href ||
+            (["history", "projects", "templates"].includes(segment) &&
+              pathname.startsWith(`${href}/`));
           return (
             <Link
               key={label}

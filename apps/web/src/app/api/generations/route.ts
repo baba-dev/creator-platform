@@ -46,7 +46,7 @@ export async function POST(request: Request) {
 
   try {
     const text = await request.text();
-    if (text.length > 12000)
+    if (text.length > 24000)
       return NextResponse.json(
         { error: "Request too large." },
         { status: 413 },

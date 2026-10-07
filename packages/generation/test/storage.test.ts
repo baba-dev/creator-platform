@@ -254,6 +254,19 @@ describe("private image storage", () => {
     ).toThrow("OGG validation");
   });
 
+  it("allows an explicit larger storage ceiling for stitched long-form audio", () => {
+    const wav = Buffer.concat([
+      Buffer.from("RIFF"),
+      Buffer.alloc(4),
+      Buffer.from("WAVEfmt "),
+      Buffer.alloc(64),
+    ]);
+    expect(() => validateAudioBytes(wav, "audio/wav", 16)).toThrow(
+      "storage size limit",
+    );
+    expect(() => validateAudioBytes(wav, "audio/wav", 256)).not.toThrow();
+  });
+
   it("stores non-MP3 Seed Audio without relabeling it as MPEG", async () => {
     const root = await mkdtemp(join(tmpdir(), "creator-wav-storage-"));
     vi.stubEnv("ASSET_STORAGE_ROOT", root);

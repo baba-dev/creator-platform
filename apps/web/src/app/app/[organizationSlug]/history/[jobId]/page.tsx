@@ -1,7 +1,9 @@
+import { hasOrganizationPermission } from "@aiwa/authz";
 import { formatBaisa } from "@/lib/format-baisa";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CancelJobButton } from "@/components/studio/cancel-job-button";
+import { SeedAudioResultWorkspace } from "@/components/studio/seed-audio-result-workspace";
 import { JobRefresh } from "@/components/studio/job-refresh";
 import { getGenerationErrorPresentation } from "@/lib/generation-error-copy";
 import { getCustomerJob } from "@/lib/generation-history";
@@ -30,15 +32,36 @@ export default async function CustomerJobPage({
       ? (job.request as Record<string, unknown>)
       : {};
   const text =
-    typeof request.prompt === "string"
-      ? request.prompt
-      : typeof request.text === "string"
-        ? request.text
-        : null;
+    typeof request.sourceText === "string"
+      ? request.sourceText
+      : typeof request.textPrompt === "string"
+        ? request.textPrompt
+        : typeof request.prompt === "string"
+          ? request.prompt
+          : typeof request.text === "string"
+            ? request.text
+            : null;
+  const isSeedAudio =
+    request.task === "seed-audio" && job.providerModelKey === "seed-audio-1.0";
+  const seedAudioAsset = isSeedAudio
+    ? job.assets.find(
+        (asset) =>
+          asset.status === "READY" && asset.mimeType.startsWith("audio/"),
+      )
+    : null;
   const displayKind =
     request.task === "transcription" ? "TRANSCRIPTION" : job.kind;
   const settings = Object.entries(request).filter(
-    ([key]) => !["prompt", "text", "speaker"].includes(key),
+    ([key]) =>
+      ![
+        "prompt",
+        "text",
+        "textPrompt",
+        "sourceText",
+        "speaker",
+        "referenceVoiceKeys",
+        "referenceAudioAssetIds",
+      ].includes(key),
   );
   const times = [
     ["Created", job.createdAt],
@@ -121,6 +144,49 @@ export default async function CustomerJobPage({
             </div>
           ) : null}
         </section>
+        {isSeedAudio && seedAudioAsset && job.status === "SUCCEEDED" ? (
+          <SeedAudioResultWorkspace
+            organizationSlug={organizationSlug}
+            jobId={job.id}
+            asset={{
+              id: seedAudioAsset.id,
+              name: seedAudioAsset.name,
+              mimeType: seedAudioAsset.mimeType,
+              durationMs: seedAudioAsset.durationMs,
+            }}
+            request={{
+              sourceText: text ?? "",
+              workflow:
+                typeof request.workflow === "string"
+                  ? request.workflow
+                  : "CREATE",
+              directorPreset:
+                typeof request.directorPreset === "string"
+                  ? request.directorPreset
+                  : null,
+              language:
+                typeof request.language === "string" ? request.language : null,
+              format:
+                typeof request.format === "string" ? request.format : null,
+              sampleRate:
+                typeof request.sampleRate === "number"
+                  ? request.sampleRate
+                  : null,
+            }}
+            result={job.audioResult}
+            canCreateTake={
+              job.creator.id === session.user.id &&
+              hasOrganizationPermission(membership.role, "generation:create")
+            }
+            takes={job.takes.map((take) => ({
+              id: take.id,
+              status: take.status,
+              createdAt: take.createdAt.toISOString(),
+              workflow: take.workflow,
+              asset: take.asset,
+            }))}
+          />
+        ) : null}
         <section className="rounded-2xl border border-border bg-card p-6">
           <h2 className="font-display text-xl font-semibold">Request</h2>
           {text ? (

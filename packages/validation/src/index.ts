@@ -376,6 +376,7 @@ export const quoteRequestSchema = z
       .optional(),
     text: z.string().max(120_000).optional(),
     task: z.literal("seed-audio").optional(),
+    longForm: z.boolean().optional(),
     referenceAudioAssetIds: z.array(cuidSchema).max(3).optional(),
     referenceVoiceKeys: z
       .array(z.string().trim().min(1).max(100))
@@ -386,7 +387,7 @@ export const quoteRequestSchema = z
       .number()
       .int()
       .min(1)
-      .max(120)
+      .max(300)
       .optional(),
     schemaVersion: z.literal(2).optional(),
     workflow: z
@@ -435,6 +436,38 @@ export const quoteRequestSchema = z
     if (value.task === "seed-audio") {
       const audioIds = value.referenceAudioAssetIds ?? [];
       const voiceKeys = value.referenceVoiceKeys ?? [];
+      const duration = value.estimatedDurationSeconds ?? 30;
+      const textLength = value.text?.trim().length ?? 0;
+      if (!value.longForm && duration > 120) {
+        context.addIssue({
+          code: "custom",
+          path: ["estimatedDurationSeconds"],
+          message: "Standard Seed Audio generation is limited to 120 seconds.",
+        });
+      }
+      if (!value.longForm && textLength > 3_000) {
+        context.addIssue({
+          code: "custom",
+          path: ["text"],
+          message:
+            "Standard Seed Audio prompts cannot exceed 3,000 characters.",
+        });
+      }
+      if (value.longForm && textLength > 7_500) {
+        context.addIssue({
+          code: "custom",
+          path: ["text"],
+          message:
+            "Long-form Seed Audio prompts cannot exceed 7,500 characters.",
+        });
+      }
+      if (value.longForm && value.referenceImageAssetId) {
+        context.addIssue({
+          code: "custom",
+          path: ["referenceImageAssetId"],
+          message: "Long-form Seed Audio does not support image references.",
+        });
+      }
       if (
         value.referenceImageAssetId &&
         audioIds.length + voiceKeys.length > 0

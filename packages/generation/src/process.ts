@@ -22,6 +22,14 @@ import { requireMembership } from "./index";
 import { resolvePresetVoice } from "./voices";
 import { issueProviderMediaGrant } from "./provider-media-grant";
 import {
+  produceSeedAudioLongForm,
+  SeedAudioPartialGenerationError,
+  SEED_AUDIO_LONG_FORM_MAX_OUTPUT_BYTES,
+  SEED_AUDIO_LONG_FORM_MAX_SEGMENTS,
+  SEED_AUDIO_NATIVE_MAX_SECONDS,
+  type SeedAudioFormat,
+} from "./seed-audio-long-form";
+import {
   calculateSpeechTrialUsage,
   logSpeechTrialTelemetry,
 } from "./speech-trial";
@@ -456,6 +464,24 @@ export async function processVideoSubmitJob(
       },
     });
   } catch (error) {
+    if (error instanceof SeedAudioPartialGenerationError) {
+      await db.generationJob.updateMany({
+        where: { id, status: "SUBMITTED" },
+        data: {
+          status: "MANUAL_REVIEW",
+          providerRequestId: error.providerRequestIds[0] ?? null,
+          outputPayload: {
+            longForm: {
+              completedSegments: error.completedSegments,
+              providerRequestIds: error.providerRequestIds,
+            },
+          },
+          errorCode: error.code,
+          errorMessage: error.message,
+        },
+      });
+      return;
+    }
     if (
       error instanceof ProviderConfigurationError ||
       (error instanceof ProviderRequestError && !error.retryable)
@@ -1379,7 +1405,9 @@ export async function processVoiceJob(
       byteSize?: unknown;
       sha256?: unknown;
       originalDurationSeconds?: unknown;
+      playbackDurationSeconds?: unknown;
       subtitle?: Prisma.JsonValue;
+      longForm?: Prisma.JsonValue;
     } | null;
     if (
       output?.stored !== true ||
@@ -1417,11 +1445,22 @@ export async function processVoiceJob(
       typeof output.originalDurationSeconds === "number" &&
         Number.isFinite(output.originalDurationSeconds) &&
         output.originalDurationSeconds > 0 &&
-        output.originalDurationSeconds <= 120
+        output.originalDurationSeconds <=
+          SEED_AUDIO_NATIVE_MAX_SECONDS * SEED_AUDIO_LONG_FORM_MAX_SEGMENTS
         ? output.originalDurationSeconds
         : undefined,
       output.subtitle && typeof output.subtitle === "object"
         ? (output.subtitle as Prisma.InputJsonValue)
+        : undefined,
+      typeof output.playbackDurationSeconds === "number" &&
+        Number.isFinite(output.playbackDurationSeconds) &&
+        output.playbackDurationSeconds > 0 &&
+        output.playbackDurationSeconds <=
+          SEED_AUDIO_NATIVE_MAX_SECONDS * SEED_AUDIO_LONG_FORM_MAX_SEGMENTS
+        ? output.playbackDurationSeconds
+        : undefined,
+      output.longForm && typeof output.longForm === "object"
+        ? (output.longForm as Prisma.InputJsonValue)
         : undefined,
     );
     return;
@@ -1458,7 +1497,11 @@ export async function processVoiceJob(
 
   let result;
   let originalDurationSeconds: number | undefined;
+  let playbackDurationSeconds: number | undefined;
   let seedAudioSubtitle: Prisma.InputJsonValue | undefined;
+  let seedAudioLongForm: Prisma.InputJsonValue | undefined;
+  let longFormOutput = false;
+  let directAudioBytes: Buffer | undefined;
   try {
     const payload = job.requestPayload as Record<string, unknown>;
     let providerInput: Record<string, unknown> = payload;
@@ -1533,13 +1576,51 @@ export async function processVoiceJob(
         enableSubtitles: payload.enableSubtitles,
         watermark: payload.watermark,
       };
+      longFormOutput = payload.longForm === true;
+      if (longFormOutput) {
+        const textPrompt =
+          typeof payload.textPrompt === "string" ? payload.textPrompt : "";
+        const estimatedDurationSeconds = Number(
+          payload.estimatedDurationSeconds,
+        );
+        const format = payload.format as SeedAudioFormat;
+        const sampleRate = Number(payload.sampleRate);
+        const produced = await produceSeedAudioLongForm({
+          provider,
+          idempotencyKey: job.idempotencyKey,
+          modelId: job.providerModel.providerModelId,
+          baseProviderInput: providerInput,
+          textPrompt,
+          estimatedDurationSeconds,
+          expectedMediaType: voiceOutputAsset.mimeType,
+          format,
+          sampleRate,
+          maxOutputBytes: SEED_AUDIO_LONG_FORM_MAX_OUTPUT_BYTES,
+        });
+        originalDurationSeconds = produced.providerDurationSeconds;
+        playbackDurationSeconds = produced.playbackDurationSeconds;
+        seedAudioSubtitle = produced.subtitle
+          ? (produced.subtitle as Prisma.InputJsonObject)
+          : undefined;
+        seedAudioLongForm = produced.metadata as Prisma.InputJsonObject;
+        directAudioBytes = produced.audioBytes;
+        result = {
+          status: "succeeded" as const,
+          providerRequestId: produced.providerRequestId,
+          inlineOutputs: [{ mediaType: voiceOutputAsset.mimeType }],
+          rawUsage: {
+            generatedSeconds: produced.providerDurationSeconds,
+          },
+        };
+      }
     }
-    result = await provider.submit({
-      idempotencyKey: job.idempotencyKey,
-      modelId: job.providerModel.providerModelId,
-      mediaKind: "voice",
-      input: providerInput,
-    });
+    if (!result)
+      result = await provider.submit({
+        idempotencyKey: job.idempotencyKey,
+        modelId: job.providerModel.providerModelId,
+        mediaKind: "voice",
+        input: providerInput,
+      });
     if (
       result.status !== "succeeded" ||
       result.inlineOutputs?.length !== 1 ||
@@ -1551,15 +1632,20 @@ export async function processVoiceJob(
         { code: "INVALID_PROVIDER_RESPONSE" },
       );
     }
-    const rawOriginalDuration = result.rawUsage?.generatedSeconds;
+    const rawUsage = result.rawUsage as
+      Readonly<Record<string, unknown>> | undefined;
+    const rawOriginalDuration = rawUsage?.generatedSeconds;
     if (
       typeof rawOriginalDuration === "number" &&
       Number.isFinite(rawOriginalDuration) &&
       rawOriginalDuration > 0 &&
-      rawOriginalDuration <= 120
-    )
+      rawOriginalDuration <=
+        SEED_AUDIO_NATIVE_MAX_SECONDS * SEED_AUDIO_LONG_FORM_MAX_SEGMENTS
+    ) {
       originalDurationSeconds = rawOriginalDuration;
-    const rawSubtitle = result.rawUsage?.subtitle;
+      playbackDurationSeconds ??= rawOriginalDuration;
+    }
+    const rawSubtitle = rawUsage?.subtitle;
     if (
       rawSubtitle &&
       typeof rawSubtitle === "object" &&
@@ -1567,6 +1653,24 @@ export async function processVoiceJob(
     )
       seedAudioSubtitle = rawSubtitle as Prisma.InputJsonObject;
   } catch (error) {
+    if (error instanceof SeedAudioPartialGenerationError) {
+      await db.generationJob.updateMany({
+        where: { id, status: "SUBMITTED" },
+        data: {
+          status: "MANUAL_REVIEW",
+          providerRequestId: error.providerRequestIds[0] ?? null,
+          outputPayload: {
+            longForm: {
+              completedSegments: error.completedSegments,
+              providerRequestIds: error.providerRequestIds,
+            },
+          },
+          errorCode: error.code,
+          errorMessage: error.message,
+        },
+      });
+      return;
+    }
     if (
       error instanceof ProviderConfigurationError ||
       (error instanceof ProviderRequestError && !error.retryable)
@@ -1595,48 +1699,61 @@ export async function processVoiceJob(
     return;
   }
 
-  const base64 = result.inlineOutputs[0]?.dataBase64;
-  if (!base64) {
-    await db.generationJob.updateMany({
-      where: { id, status: "SUBMITTED" },
-      data: {
-        status: "MANUAL_REVIEW",
-        providerRequestId: result.providerRequestId,
-        errorCode: "INVALID_PROVIDER_RESPONSE",
-        errorMessage:
-          "Provider returned empty voice audio. Credits remain reserved for manual review.",
-      },
-    });
-    return;
-  }
+  let audioBytes = directAudioBytes;
+  if (!audioBytes) {
+    const base64 = result.inlineOutputs[0]?.dataBase64;
+    if (!base64) {
+      await db.generationJob.updateMany({
+        where: { id, status: "SUBMITTED" },
+        data: {
+          status: "MANUAL_REVIEW",
+          providerRequestId: result.providerRequestId,
+          errorCode: "INVALID_PROVIDER_RESPONSE",
+          errorMessage:
+            "Provider returned empty voice audio. Credits remain reserved for manual review.",
+        },
+      });
+      return;
+    }
 
-  const audioBytes = Buffer.from(base64, "base64");
-  const canonicalBase64 = audioBytes.toString("base64").replace(/=+$/u, "");
-  if (canonicalBase64 !== base64.replace(/=+$/u, "")) {
-    await db.generationJob.updateMany({
-      where: { id, status: "SUBMITTED" },
-      data: {
-        status: "MANUAL_REVIEW",
-        providerRequestId: result.providerRequestId,
-        errorCode: "INVALID_PROVIDER_RESPONSE",
-        errorMessage:
-          "Provider returned malformed voice audio. Credits remain reserved for manual review.",
-      },
-    });
-    return;
+    audioBytes = Buffer.from(base64, "base64");
+    const canonicalBase64 = audioBytes.toString("base64").replace(/=+$/u, "");
+    if (canonicalBase64 !== base64.replace(/=+$/u, "")) {
+      await db.generationJob.updateMany({
+        where: { id, status: "SUBMITTED" },
+        data: {
+          status: "MANUAL_REVIEW",
+          providerRequestId: result.providerRequestId,
+          errorCode: "INVALID_PROVIDER_RESPONSE",
+          errorMessage:
+            "Provider returned malformed voice audio. Credits remain reserved for manual review.",
+        },
+      });
+      return;
+    }
   }
   let stored: Awaited<ReturnType<typeof storeAudio>> | null = null;
   let lastStorageError: unknown = null;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      stored = await storeAudio(
-        voiceOutputAsset.objectKey,
-        audioBytes,
-        job.organizationId,
-        voiceOutputAsset.id,
-        voiceOutputAsset.mimeType as
-          "audio/mpeg" | "audio/wav" | "audio/ogg" | "audio/L16",
-      );
+      const mimeType = voiceOutputAsset.mimeType as
+        "audio/mpeg" | "audio/wav" | "audio/ogg" | "audio/L16";
+      stored = longFormOutput
+        ? await storeAudio(
+            voiceOutputAsset.objectKey,
+            audioBytes,
+            job.organizationId,
+            voiceOutputAsset.id,
+            mimeType,
+            SEED_AUDIO_LONG_FORM_MAX_OUTPUT_BYTES,
+          )
+        : await storeAudio(
+            voiceOutputAsset.objectKey,
+            audioBytes,
+            job.organizationId,
+            voiceOutputAsset.id,
+            mimeType,
+          );
       break;
     } catch (error) {
       lastStorageError = error;
@@ -1674,7 +1791,9 @@ export async function processVoiceJob(
         byteSize: Number(stored.byteSize),
         sha256: stored.sha256,
         ...(originalDurationSeconds ? { originalDurationSeconds } : {}),
+        ...(playbackDurationSeconds ? { playbackDurationSeconds } : {}),
         ...(seedAudioSubtitle ? { subtitle: seedAudioSubtitle } : {}),
+        ...(seedAudioLongForm ? { longForm: seedAudioLongForm } : {}),
       },
       errorCode: null,
       errorMessage: null,
@@ -1689,6 +1808,8 @@ export async function processVoiceJob(
     voiceOutputAsset.id,
     originalDurationSeconds,
     seedAudioSubtitle,
+    playbackDurationSeconds,
+    seedAudioLongForm,
   );
 }
 
@@ -1710,6 +1831,8 @@ async function finalizeVoiceJob(
   outputAssetId: string,
   originalDurationSeconds?: number,
   seedAudioSubtitle?: Prisma.InputJsonValue,
+  playbackDurationSeconds?: number,
+  seedAudioLongForm?: Prisma.InputJsonValue,
 ) {
   let finalBillableQuantity: number | null = null;
   await db.$transaction(async (tx) => {
@@ -1767,7 +1890,13 @@ async function finalizeVoiceJob(
     }
     const asset = await tx.asset.update({
       where: { id: outputAssetId },
-      data: { ...stored, status: "READY" },
+      data: {
+        ...stored,
+        status: "READY",
+        ...(playbackDurationSeconds
+          ? { durationMs: Math.round(playbackDurationSeconds * 1000) }
+          : {}),
+      },
     });
     await tx.generationJob.update({
       where: { id },
@@ -1793,7 +1922,9 @@ async function finalizeVoiceJob(
           byteSize: Number(stored.byteSize),
           sha256: stored.sha256,
           ...(originalDurationSeconds ? { originalDurationSeconds } : {}),
+          ...(playbackDurationSeconds ? { playbackDurationSeconds } : {}),
           ...(seedAudioSubtitle ? { subtitle: seedAudioSubtitle } : {}),
+          ...(seedAudioLongForm ? { longForm: seedAudioLongForm } : {}),
         },
         errorCode: null,
         errorMessage: null,

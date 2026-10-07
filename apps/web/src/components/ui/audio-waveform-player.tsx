@@ -10,6 +10,9 @@ export interface AudioWaveformPlayerProps {
   title?: string;
   className?: string;
   onEnded?: () => void;
+  onTimeChange?: (seconds: number) => void;
+  seekRequest?: { seconds: number; nonce: number } | null;
+  downloadName?: string;
   autoPlay?: boolean;
 }
 
@@ -20,6 +23,9 @@ export function AudioWaveformPlayer({
   title,
   className = "",
   onEnded,
+  onTimeChange,
+  seekRequest,
+  downloadName,
   autoPlay = false,
 }: AudioWaveformPlayerProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -56,6 +62,7 @@ export function AudioWaveformPlayer({
     const handleTimeUpdate = () => {
       if (!isScrubbing) {
         setCurrentTime(audio.currentTime);
+        onTimeChange?.(audio.currentTime);
       }
     };
 
@@ -80,7 +87,22 @@ export function AudioWaveformPlayer({
       audio.removeEventListener("pause", handlePause);
       audio.removeEventListener("ended", handleEnded);
     };
-  }, [autoPlay, isScrubbing, onEnded]);
+  }, [autoPlay, isScrubbing, onEnded, onTimeChange]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !seekRequest) return;
+    const target = Math.max(
+      0,
+      Math.min(
+        seekRequest.seconds,
+        Number.isFinite(audio.duration) ? audio.duration : seekRequest.seconds,
+      ),
+    );
+    audio.currentTime = target;
+    setCurrentTime(target);
+    onTimeChange?.(target);
+  }, [seekRequest, onTimeChange]);
 
   const togglePlay = () => {
     const audio = audioRef.current;
@@ -104,6 +126,32 @@ export function AudioWaveformPlayer({
     },
     [duration],
   );
+
+  const handleKeyboardSeek = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const audio = audioRef.current;
+    if (!audio || !duration) return;
+    const delta =
+      event.key === "ArrowRight"
+        ? 5
+        : event.key === "ArrowLeft"
+          ? -5
+          : event.key === "Home"
+            ? -duration
+            : event.key === "End"
+              ? duration
+              : 0;
+    if (!delta) return;
+    event.preventDefault();
+    const next =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? duration
+          : Math.max(0, Math.min(duration, audio.currentTime + delta));
+    audio.currentTime = next;
+    setCurrentTime(next);
+    onTimeChange?.(next);
+  };
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     setIsScrubbing(true);
@@ -216,6 +264,8 @@ export function AudioWaveformPlayer({
         <div
           ref={containerRef}
           onMouseDown={handleMouseDown}
+          onKeyDown={handleKeyboardSeek}
+          tabIndex={0}
           role="slider"
           aria-label="Audio progress"
           aria-valuemin={0}
@@ -307,7 +357,7 @@ export function AudioWaveformPlayer({
         {/* Download File Action */}
         <a
           href={src}
-          download={`${speakerName || "speech-clip"}.mp3`}
+          download={downloadName ?? `${speakerName || "speech-clip"}.mp3`}
           title="Download audio"
           className="grid size-8 place-items-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
         >

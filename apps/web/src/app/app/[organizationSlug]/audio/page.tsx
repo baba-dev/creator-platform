@@ -3,15 +3,22 @@ import { hasOrganizationPermission } from "@aiwa/authz";
 import { requireOrganizationPermission } from "@/lib/request-auth";
 import { Eyebrow } from "@/components/ui/creative";
 import { Icon } from "@/components/ui/icon";
-import { SeedAudioStudio } from "@/components/studio/seed-audio-studio";
+import {
+  SeedAudioStudio,
+  type SeedAudioInitialTake,
+} from "@/components/studio/seed-audio-studio";
+import { getCustomerJob } from "@/lib/generation-history";
 
 export default async function AudioPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ organizationSlug: string }>;
+  searchParams: Promise<{ sourceJobId?: string }>;
 }) {
   const { organizationSlug } = await params;
-  const { membership } = await requireOrganizationPermission(
+  const query = await searchParams;
+  const { membership, session } = await requireOrganizationPermission(
     organizationSlug,
     "workspace:view",
   );
@@ -19,6 +26,122 @@ export default async function AudioPage({
     membership.role,
     "generation:create",
   );
+
+  let initialTake: SeedAudioInitialTake | null = null;
+  if (query.sourceJobId) {
+    const source = await getCustomerJob(
+      query.sourceJobId,
+      membership.organizationId,
+      session.user.id,
+    );
+    const request =
+      source?.request &&
+      typeof source.request === "object" &&
+      !Array.isArray(source.request)
+        ? (source.request as Record<string, unknown>)
+        : {};
+    const formats = ["wav", "mp3", "pcm", "ogg_opus"] as const;
+    const sampleRates = [8000, 16000, 24000, 32000, 44100, 48000] as const;
+    const workflows = ["CREATE", "MATCH", "IMAGE", "LONG"] as const;
+    const languages = [
+      "auto",
+      "English",
+      "Chinese",
+      "Japanese",
+      "Korean",
+      "Spanish",
+      "German",
+      "Portuguese",
+      "French",
+      "Thai",
+      "Vietnamese",
+      "Indonesian",
+      "Malay",
+      "Filipino",
+      "Italian",
+      "Russian",
+      "Dutch",
+      "Polish",
+      "Turkish",
+      "Swedish",
+    ] as const;
+    const workflow =
+      typeof request.workflow === "string" &&
+      workflows.includes(request.workflow as (typeof workflows)[number])
+        ? (request.workflow as (typeof workflows)[number])
+        : request.longForm === true
+          ? "LONG"
+          : "CREATE";
+    const format =
+      typeof request.format === "string" &&
+      formats.includes(request.format as (typeof formats)[number])
+        ? (request.format as (typeof formats)[number])
+        : "mp3";
+    const sampleRate =
+      typeof request.sampleRate === "number" &&
+      sampleRates.includes(request.sampleRate as (typeof sampleRates)[number])
+        ? (request.sampleRate as (typeof sampleRates)[number])
+        : 44100;
+    const language =
+      typeof request.language === "string" &&
+      languages.includes(request.language as (typeof languages)[number])
+        ? (request.language as (typeof languages)[number])
+        : "auto";
+    if (
+      source?.providerModelKey === "seed-audio-1.0" &&
+      request.task === "seed-audio"
+    ) {
+      initialTake = {
+        sourceText:
+          typeof request.sourceText === "string"
+            ? request.sourceText
+            : typeof request.textPrompt === "string"
+              ? request.textPrompt
+              : "",
+        workflow,
+        duration:
+          typeof request.estimatedDurationSeconds === "number"
+            ? Math.max(
+                1,
+                Math.min(
+                  workflow === "LONG" ? 300 : 120,
+                  Math.round(request.estimatedDurationSeconds),
+                ),
+              )
+            : workflow === "LONG"
+              ? 120
+              : 30,
+        speechRate:
+          typeof request.speechRate === "number" ? request.speechRate : 1,
+        loudnessRate:
+          typeof request.loudnessRate === "number" ? request.loudnessRate : 1,
+        pitch: typeof request.pitch === "number" ? request.pitch : 0,
+        subtitles: request.enableSubtitles !== false,
+        language,
+        directorPreset:
+          typeof request.directorPreset === "string"
+            ? request.directorPreset
+            : "documentary",
+        format,
+        sampleRate,
+        referenceAudioAssetIds: Array.isArray(request.referenceAudioAssetIds)
+          ? request.referenceAudioAssetIds.filter(
+              (id): id is string => typeof id === "string",
+            )
+          : [],
+        referenceVoiceKeys: Array.isArray(request.referenceVoiceKeys)
+          ? request.referenceVoiceKeys.filter(
+              (key): key is string => typeof key === "string",
+            )
+          : [],
+        referenceImageAssetId:
+          typeof request.referenceImageAssetId === "string"
+            ? request.referenceImageAssetId
+            : "",
+        parentGenerationId: source.parentGenerationId ?? source.id,
+      };
+    }
+  }
 
   return (
     <main className="relative min-h-screen min-w-0 bg-background px-4 py-7 text-foreground sm:px-7 lg:px-9 lg:py-10">
@@ -58,6 +181,7 @@ export default async function AudioPage({
           organizationId={membership.organizationId}
           organizationSlug={organizationSlug}
           canGenerate={canGenerate}
+          initialTake={initialTake}
         />
       </div>
     </main>

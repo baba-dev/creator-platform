@@ -19,6 +19,12 @@ import { VERIFIED_BYTEPLUS_MODELS } from "@aiwa/providers/byteplus";
 import { VERIFIED_ALL_MODELS } from "@aiwa/providers/catalog";
 import { z } from "zod";
 import { resolvePresetVoice, VoiceResolutionError } from "./voices";
+import {
+  planSeedAudioLongForm,
+  SEED_AUDIO_LONG_FORM_MAX_PROMPT_CHARS,
+  SEED_AUDIO_LONG_FORM_MAX_SECONDS,
+  SEED_AUDIO_NATIVE_MAX_SECONDS,
+} from "./seed-audio-long-form";
 import { inspectTalkingAvatarSources } from "./talking-avatar";
 import {
   normalizeVideoRequest,
@@ -37,12 +43,14 @@ export * from "./speech-trial";
 export * from "./video-contract";
 export * from "./transcription";
 export * from "./media-tools";
+export * from "./seed-audio-long-form";
 import { verifyGenerationQuote, quoteParameters } from "./quote-contract";
 
 export const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 export const MAX_REFERENCE_SET_BYTES = 80 * 1024 * 1024;
 export const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 export const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
+export const MAX_LONG_AUDIO_BYTES = 96 * 1024 * 1024;
 export const MAX_TRANSCRIPTION_SOURCE_BYTES = 25 * 1024 * 1024;
 export const MAX_TRANSCRIPT_OUTPUT_BYTES = 1_000_000;
 
@@ -106,7 +114,22 @@ export const seedAudioRequestSchema = z
     priceVersionId: z.string().min(1).max(100),
     quoteToken: z.string().min(1).max(2048).optional(),
     idempotencyKey: z.uuid(),
-    textPrompt: z.string().trim().min(1).max(3000),
+    textPrompt: z
+      .string()
+      .trim()
+      .min(1)
+      .max(SEED_AUDIO_LONG_FORM_MAX_PROMPT_CHARS),
+    longForm: z.boolean().default(false),
+    workflow: z.enum(["CREATE", "MATCH", "IMAGE", "LONG"]).default("CREATE"),
+    sourceText: z
+      .string()
+      .trim()
+      .min(1)
+      .max(SEED_AUDIO_LONG_FORM_MAX_PROMPT_CHARS)
+      .optional(),
+    directorPreset: z.string().trim().min(1).max(64).optional(),
+    language: z.string().trim().min(1).max(40).optional(),
+    parentGenerationId: z.string().min(1).max(100).optional(),
     referenceAudioAssetIds: z
       .array(z.string().min(1).max(100))
       .max(3)
@@ -132,12 +155,44 @@ export const seedAudioRequestSchema = z
     pitch: z.number().int().min(-12).max(12).default(0),
     enableSubtitles: z.boolean().default(false),
     watermark: z.boolean().default(false),
-    estimatedDurationSeconds: z.number().int().min(1).max(120).default(30),
+    estimatedDurationSeconds: z
+      .number()
+      .int()
+      .min(1)
+      .max(SEED_AUDIO_LONG_FORM_MAX_SECONDS)
+      .default(30),
   })
   .strict()
   .superRefine((input, ctx) => {
     const audioReferenceCount =
       input.referenceAudioAssetIds.length + input.referenceVoiceKeys.length;
+    if (
+      !input.longForm &&
+      (input.estimatedDurationSeconds > SEED_AUDIO_NATIVE_MAX_SECONDS ||
+        input.textPrompt.length > 3_000)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["longForm"],
+        message:
+          "Enable long-form production for prompts or durations beyond Seed Audio's native limit.",
+      });
+    }
+    if (input.longForm && input.format === "pcm") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["format"],
+        message:
+          "Raw PCM is available for native Seed Audio, but stitched long-form requires WAV, MP3, or OGG Opus.",
+      });
+    }
+    if (input.longForm && input.referenceImageAssetId) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["referenceImageAssetId"],
+        message: "Long-form Seed Audio does not support image references.",
+      });
+    }
     if (input.referenceImageAssetId && audioReferenceCount > 0) {
       ctx.addIssue({
         code: "custom",
@@ -1394,6 +1449,9 @@ async function createSeedAudioJob(userId: string, raw: unknown) {
       throw error;
     }
   });
+  const longFormPlan = input.longForm
+    ? planSeedAudioLongForm(input.textPrompt, input.estimatedDurationSeconds)
+    : null;
   const output = {
     mp3: { extension: "mp3", mimeType: "audio/mpeg" },
     wav: { extension: "wav", mimeType: "audio/wav" },
@@ -1407,6 +1465,12 @@ async function createSeedAudioJob(userId: string, raw: unknown) {
   const payload = {
     task: "seed-audio" as const,
     textPrompt: input.textPrompt,
+    longForm: input.longForm,
+    workflow: input.workflow,
+    sourceText: input.sourceText ?? null,
+    directorPreset: input.directorPreset ?? null,
+    language: input.language ?? null,
+    parentGenerationId: input.parentGenerationId ?? null,
     referenceAudioAssetIds: input.referenceAudioAssetIds,
     referenceVoiceKeys: referenceVoices.map((voice) => voice.key),
     referenceImageAssetId: input.referenceImageAssetId ?? null,
@@ -1543,8 +1607,11 @@ async function createSeedAudioJob(userId: string, raw: unknown) {
         BigInt(input.estimatedDurationSeconds),
         BigInt(price.unitQuantity),
       );
+      const reservationSeconds = longFormPlan
+        ? longFormPlan.segments.length * SEED_AUDIO_NATIVE_MAX_SECONDS
+        : SEED_AUDIO_NATIVE_MAX_SECONDS;
       const reservationUnits = calculateBillableUnits(
-        120n,
+        BigInt(reservationSeconds),
         BigInt(price.unitQuantity),
       );
       const credits = priceCredits({
@@ -1561,6 +1628,7 @@ async function createSeedAudioJob(userId: string, raw: unknown) {
             priceVersionId: price.id,
             parameters: quoteParameters("VOICE", {
               task: "seed-audio",
+              longForm: input.longForm,
               billableQuantity: input.estimatedDurationSeconds,
               estimatedDurationSeconds: input.estimatedDurationSeconds,
               text: input.textPrompt,
@@ -1585,16 +1653,36 @@ async function createSeedAudioJob(userId: string, raw: unknown) {
         additionalCredits: credits,
         now,
       });
+      const audioReservationBytes = input.longForm
+        ? MAX_LONG_AUDIO_BYTES
+        : MAX_AUDIO_BYTES;
       await reserveAssetStorage(tx, {
         organizationId: input.organizationId,
         userId,
-        proposedBytes: BigInt(MAX_AUDIO_BYTES),
+        proposedBytes: BigInt(audioReservationBytes),
       });
       const wallet = await tx.wallet.findUnique({
         where: { organizationId: input.organizationId },
       });
       if (!wallet)
         throw new GenerationError("Workspace wallet is unavailable.");
+      if (input.parentGenerationId) {
+        const parent = await tx.generationJob.findFirst({
+          where: {
+            id: input.parentGenerationId,
+            organizationId: input.organizationId,
+            createdById: userId,
+            status: "SUCCEEDED",
+            providerModel: { providerModelId: "seed-audio-1.0" },
+          },
+          select: { id: true },
+        });
+        if (!parent)
+          throw new GenerationError(
+            "The source take is unavailable for regeneration.",
+            404,
+          );
+      }
       const job = await tx.generationJob.create({
         data: {
           organizationId: input.organizationId,
@@ -1603,6 +1691,7 @@ async function createSeedAudioJob(userId: string, raw: unknown) {
           providerModelId: model.id,
           priceVersionId: price.id,
           idempotencyKey: key,
+          parentGenerationId: input.parentGenerationId ?? null,
           requestPayload: payload,
           status: "QUOTED",
           quotedAt: now,
@@ -1644,7 +1733,7 @@ async function createSeedAudioJob(userId: string, raw: unknown) {
           name: defaultAssetName("AUDIO", "GENERATED"),
           objectKey: `${job.id}.${output.extension}`,
           mimeType: output.mimeType,
-          byteSize: BigInt(MAX_AUDIO_BYTES),
+          byteSize: BigInt(audioReservationBytes),
           status: "PENDING",
         },
       });
@@ -1663,6 +1752,9 @@ async function createSeedAudioJob(userId: string, raw: unknown) {
             outputFormat: input.format,
             sampleRate: input.sampleRate,
             estimatedDurationSeconds: input.estimatedDurationSeconds,
+            longForm: input.longForm,
+            segmentCount: longFormPlan?.segments.length ?? 1,
+            parentGenerationId: input.parentGenerationId ?? null,
           },
         },
       });

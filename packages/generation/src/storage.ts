@@ -917,14 +917,21 @@ export async function storeVideo(
   };
 }
 
-export function validateMp3Bytes(bytes: Buffer): { durationMs: number | null } {
+export function validateMp3Bytes(
+  bytes: Buffer,
+  maxBytes = MAX_AUDIO_BYTES,
+): { durationMs: number | null } {
   if (bytes.length === 0) {
     throw new ImageStorageError(
       "AUDIO_OUTPUT_EMPTY",
       "Generated audio was empty.",
     );
   }
-  if (bytes.length > MAX_AUDIO_BYTES) {
+  if (
+    !Number.isSafeInteger(maxBytes) ||
+    maxBytes < 1 ||
+    bytes.length > maxBytes
+  ) {
     throw new ImageStorageError(
       "AUDIO_OUTPUT_TOO_LARGE",
       "Generated audio exceeded the storage size limit.",
@@ -1001,6 +1008,7 @@ export type StoredAudioMimeType =
 export function validateAudioBytes(
   bytes: Buffer,
   mimeType: StoredAudioMimeType,
+  maxBytes = MAX_AUDIO_BYTES,
 ): void {
   if (bytes.length === 0) {
     throw new ImageStorageError(
@@ -1008,14 +1016,18 @@ export function validateAudioBytes(
       "Generated audio was empty.",
     );
   }
-  if (bytes.length > MAX_AUDIO_BYTES) {
+  if (
+    !Number.isSafeInteger(maxBytes) ||
+    maxBytes < 1 ||
+    bytes.length > maxBytes
+  ) {
     throw new ImageStorageError(
       "AUDIO_OUTPUT_TOO_LARGE",
       "Generated audio exceeded the storage size limit.",
     );
   }
   if (mimeType === "audio/mpeg") {
-    validateMp3Bytes(bytes);
+    validateMp3Bytes(bytes, maxBytes);
     return;
   }
   if (mimeType === "audio/wav") {
@@ -1053,8 +1065,9 @@ export async function storeAudio(
   organizationId?: string,
   assetId?: string,
   mimeType: StoredAudioMimeType = "audio/mpeg",
+  maxBytes = MAX_AUDIO_BYTES,
 ) {
-  validateAudioBytes(bytes, mimeType);
+  validateAudioBytes(bytes, mimeType, maxBytes);
   if (organizationId) {
     if (!assetId) {
       throw new ImageStorageError(

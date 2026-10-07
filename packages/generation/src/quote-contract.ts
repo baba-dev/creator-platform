@@ -105,6 +105,7 @@ export function quoteParameters(
     extensionDirection?: string;
     sourceAssetId?: string;
     task?: "seed-audio";
+    longForm?: boolean;
     referenceAudioAssetIds?: string[];
     referenceVoiceKeys?: string[];
     referenceImageAssetId?: string;
@@ -169,6 +170,7 @@ export function quoteParameters(
     if (input.task === "seed-audio")
       return {
         task: "seed-audio",
+        longForm: input.longForm === true,
         textHash:
           input.text === undefined
             ? null

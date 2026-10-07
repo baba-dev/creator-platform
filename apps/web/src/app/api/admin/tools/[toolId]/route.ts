@@ -18,6 +18,8 @@ function serializePrice(price: ProviderToolPriceVersion) {
   return {
     id: price.id,
     providerCostMicroUsd: price.providerCostMicroUsd.toString(),
+    providerCostNoOutputMicroUsd:
+      price.providerCostNoOutputMicroUsd?.toString() ?? null,
     customerCredits: price.customerCredits.toString(),
     pricingMetric: price.pricingMetric,
     unitQuantity: price.unitQuantity,
@@ -136,6 +138,15 @@ export async function PATCH(
       { status: 400 },
     );
   }
+  if (
+    input.providerCostNoOutputMicroUsd !== undefined &&
+    input.providerCostNoOutputMicroUsd > input.providerCostMicroUsd
+  ) {
+    return NextResponse.json(
+      { error: "Detection-only provider cost cannot exceed the maximum provider cost." },
+      { status: 400 },
+    );
+  }
   if (tool.pricingMetric === "REQUEST" && input.unitQuantity !== 1) {
     return NextResponse.json(
       { error: "Request-priced tools must use a unit quantity of 1." },
@@ -166,6 +177,8 @@ export async function PATCH(
         {
           providerToolId: tool.id,
           providerCostMicroUsd: input.providerCostMicroUsd,
+          providerCostNoOutputMicroUsd:
+            input.providerCostNoOutputMicroUsd ?? null,
           pricingMetric: tool.pricingMetric,
           unitQuantity: input.unitQuantity,
           targetMarginBps: input.targetMarginBps,
@@ -232,6 +245,8 @@ export async function PATCH(
           publicationKey: input.idempotencyKey,
           publicationHash,
           providerCostMicroUsd: input.providerCostMicroUsd,
+          providerCostNoOutputMicroUsd:
+            input.providerCostNoOutputMicroUsd ?? null,
           customerCredits: customerQuote.customerCredits,
           fxBaisaNumerator,
           fxBaisaDenominator,
@@ -256,6 +271,8 @@ export async function PATCH(
             pricingMetric: tool.pricingMetric,
             unitQuantity: input.unitQuantity,
             providerCostMicroUsd: input.providerCostMicroUsd.toString(),
+            providerCostNoOutputMicroUsd:
+              input.providerCostNoOutputMicroUsd?.toString() ?? null,
             customerCredits: customerQuote.customerCredits.toString(),
             targetMarginBps: input.targetMarginBps,
           },

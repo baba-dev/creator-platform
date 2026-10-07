@@ -54,9 +54,9 @@ describe("workspace tool registry", () => {
     expect(
       isWorkspaceItemActive(`${base}/speech/transcription`, base, voice),
     ).toBe(false);
-    expect(
-      isWorkspaceCategoryActive(`${base}/chat`, base, creative),
-    ).toBe(true);
+    expect(isWorkspaceCategoryActive(`${base}/chat`, base, creative)).toBe(
+      true,
+    );
   });
 
   it("uses canonical secondary navigation names", () => {

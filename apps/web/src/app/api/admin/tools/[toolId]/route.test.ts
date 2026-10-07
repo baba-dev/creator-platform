@@ -110,6 +110,36 @@ describe("MediaKit admin controls", () => {
     );
   });
 
+  it("accepts an 18 micro-USD per-request Intelligent Image Compression rate", async () => {
+    mocks.db.providerTool.findUnique.mockResolvedValue({
+      ...tool,
+      providerToolId: "slim-image",
+      displayName: "Intelligent Image Compression",
+      pricingMetric: "REQUEST",
+    });
+    const response = await PATCH(
+      request({
+        idempotencyKey: "96c7d9b7-c8bd-46f9-89e3-04be9c2d301e",
+        providerCostMicroUsd: "18",
+        targetMarginBps: 2000,
+        unitQuantity: 1,
+      }),
+      context,
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.tx.providerToolPriceVersion.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          pricingMetric: "REQUEST",
+          unitQuantity: 1,
+          providerCostMicroUsd: 18n,
+          customerCredits: 2n,
+        }),
+      }),
+    );
+  });
+
   it("stores smoothness detection-only pricing below the repair ceiling", async () => {
     mocks.db.providerTool.findUnique.mockResolvedValue({
       ...tool,

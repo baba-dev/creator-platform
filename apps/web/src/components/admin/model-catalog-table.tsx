@@ -879,6 +879,9 @@ export function ModelCatalogTable({
                       canManage={canManage}
                       mediaKind={row.mediaKind}
                       transcription={row.capabilities.transcription === true}
+                      audioGeneration={
+                        row.capabilities.audioGeneration === true
+                      }
                     />
                   </td>
                 ) : null}

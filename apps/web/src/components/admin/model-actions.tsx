@@ -163,6 +163,7 @@ export function ModelActions({
   canManage,
   mediaKind,
   transcription = false,
+  audioGeneration = false,
 }: {
   modelId: string;
   providerModelId?: string;
@@ -171,6 +172,7 @@ export function ModelActions({
   enabled: boolean;
   mediaKind?: "IMAGE" | "VIDEO" | "VOICE" | "REASONING" | "TEXT";
   transcription?: boolean;
+  audioGeneration?: boolean;
   currentUsageRates?: unknown;
   currentFxBaisaNumerator?: string;
   currentFxBaisaDenominator?: string;
@@ -207,14 +209,17 @@ export function ModelActions({
     "REQUEST" | "CHARACTER" | "SECOND" | "TOKEN"
   >(
     currentPricingDimension ??
-      (mediaKind === "VIDEO"
+      (mediaKind === "VIDEO" || (mediaKind === "VOICE" && audioGeneration)
         ? "SECOND"
         : mediaKind === "TEXT"
           ? "TOKEN"
           : "REQUEST"),
   );
   const [unitQuantity, setUnitQuantity] = useState(
-    String(currentUnitQuantity ?? (mediaKind === "VIDEO" ? 5 : 1000)),
+    String(
+      currentUnitQuantity ??
+        (mediaKind === "VIDEO" ? 5 : audioGeneration ? 1 : 1000),
+    ),
   );
 
   const initialRates =
@@ -382,7 +387,8 @@ export function ModelActions({
           unitQuantity:
             pricingDimension === "TOKEN"
               ? "1000"
-              : pricingDimension === "REQUEST"
+              : pricingDimension === "REQUEST" ||
+                  (audioGeneration && pricingDimension === "SECOND")
                 ? "1"
                 : unitQuantity,
         }),
@@ -502,7 +508,7 @@ export function ModelActions({
                     {(!mediaKind ||
                       mediaKind === "IMAGE" ||
                       mediaKind === "VIDEO" ||
-                      mediaKind === "VOICE" ||
+                      (mediaKind === "VOICE" && !audioGeneration) ||
                       mediaKind === "REASONING") && (
                       <option value="REQUEST">
                         Per request{mediaKind === "VIDEO" ? " (flat)" : ""}
@@ -520,13 +526,18 @@ export function ModelActions({
                     )}
                     {(!mediaKind ||
                       mediaKind === "VIDEO" ||
-                      (mediaKind === "VOICE" && transcription)) && (
+                      (mediaKind === "VOICE" &&
+                        (transcription || audioGeneration))) && (
                       <option value="SECOND">
-                        Per duration block (seconds)
+                        {mediaKind === "VOICE" && audioGeneration
+                          ? "Per second"
+                          : "Per duration block (seconds)"}
                       </option>
                     )}
                     {(!mediaKind ||
-                      (mediaKind === "VOICE" && !transcription)) && (
+                      (mediaKind === "VOICE" &&
+                        !transcription &&
+                        !audioGeneration)) && (
                       <option value="CHARACTER">Per character block</option>
                     )}
                   </select>
@@ -549,9 +560,16 @@ export function ModelActions({
                       min="1"
                       step="1"
                       required
-                      value={unitQuantity}
+                      disabled={
+                        audioGeneration && pricingDimension === "SECOND"
+                      }
+                      value={
+                        audioGeneration && pricingDimension === "SECOND"
+                          ? "1"
+                          : unitQuantity
+                      }
                       onChange={(event) => setUnitQuantity(event.target.value)}
-                      className="mt-1 h-9 w-full rounded-lg border border-border bg-background px-3 font-mono text-sm"
+                      className="mt-1 h-9 w-full rounded-lg border border-border bg-background px-3 font-mono text-sm disabled:opacity-60"
                     />
                   </div>
                 ) : null}

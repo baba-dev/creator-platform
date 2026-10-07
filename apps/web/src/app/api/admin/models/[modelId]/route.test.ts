@@ -362,6 +362,72 @@ describe("reasoning provider-cost pricing", () => {
   });
 });
 
+describe("Seed Audio duration pricing", () => {
+  beforeEach(() => {
+    mocks.db.providerModel.findUnique.mockResolvedValue({
+      id: modelId,
+      provider: "BYTEPLUS",
+      providerModelId: "seed-audio-1.0",
+      displayName: "Seed Audio 1.0",
+      mediaKind: "VOICE",
+      capabilities: {
+        audioGeneration: true,
+        maxOutputSeconds: 120,
+      },
+    });
+    mocks.db.modelPriceVersion.findUnique.mockResolvedValue(null);
+    mocks.db.modelPriceVersion.findFirst.mockResolvedValue({
+      pricingDimension: "SECOND",
+      unitQuantity: 1,
+      providerCostMicroUsd: 1000n,
+      fxBaisaNumerator: 769n,
+      fxBaisaDenominator: 2n,
+    });
+  });
+
+  it("publishes the required per-second price", async () => {
+    const res = await PATCH(
+      request({
+        providerCostMicroUsd: "1000",
+        pricingDimension: "SECOND",
+        unitQuantity: 1,
+        targetMarginBps: 2000,
+        idempotencyKey: "75578506-dc1c-48c5-a494-10911a77e350",
+      }),
+      context,
+    );
+
+    expect(res.status).toBe(200);
+    expect(mocks.db.modelPriceVersion.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          pricingDimension: "SECOND",
+          unitQuantity: 1,
+          providerCostMicroUsd: 1000n,
+        }),
+      }),
+    );
+  });
+
+  it("rejects non-duration pricing for Seed Audio", async () => {
+    const res = await PATCH(
+      request({
+        providerCostMicroUsd: "1000",
+        pricingDimension: "REQUEST",
+        unitQuantity: 1,
+        targetMarginBps: 2000,
+        idempotencyKey: "06042e99-f18d-494c-ae49-26dc54b05c05",
+      }),
+      context,
+    );
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({
+      error: expect.stringContaining("Audio generation models require SECOND"),
+    });
+  });
+});
+
 describe("transcription pricing separation", () => {
   beforeEach(() => {
     mocks.db.providerModel.findUnique.mockResolvedValue({

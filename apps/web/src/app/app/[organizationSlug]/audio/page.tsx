@@ -18,13 +18,13 @@ export default async function AudioPage({
       <div className="creative-glow pointer-events-none absolute inset-0" />
       <div className="relative mx-auto w-full max-w-7xl space-y-7">
         <div className="max-w-3xl">
-          <Eyebrow>Audio generation / advanced voiceover</Eyebrow>
+          <Eyebrow>Seed Audio / advanced voiceover</Eyebrow>
           <div className="mt-3 flex items-center gap-3">
             <span className="grid size-11 place-items-center rounded-2xl bg-primary/10 text-primary">
               <Icon name="sparkles" className="size-5" />
             </span>
             <h1 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
-              Seed Audio Studio
+              Audio Generation
             </h1>
           </div>
           <p className="mt-3 text-sm leading-6 text-muted-foreground">

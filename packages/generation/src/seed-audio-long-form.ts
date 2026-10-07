@@ -14,6 +14,7 @@ export const SEED_AUDIO_LONG_FORM_MAX_PROMPT_CHARS = 7_500;
 export const SEED_AUDIO_SEGMENT_TARGET_SECONDS = 105;
 export const SEED_AUDIO_LONG_FORM_MAX_SEGMENTS = 3;
 export const SEED_AUDIO_CROSSFADE_MS = 40;
+export const SEED_AUDIO_LONG_FORM_MAX_OUTPUT_BYTES = 96 * 1024 * 1024;
 
 export type SeedAudioFormat = "wav" | "mp3" | "pcm" | "ogg_opus";
 
@@ -88,7 +89,6 @@ function groupUnits(
   );
   const segments: string[] = [];
   let current = "";
-  let remainingChars = totalChars;
   for (let index = 0; index < units.length; index += 1) {
     const unit = units[index]!;
     const remainingUnits = units.length - index;
@@ -101,7 +101,6 @@ function groupUnits(
           remainingUnits >= Math.max(1, remainingSlots - 1)));
     if (shouldClose) {
       segments.push(current);
-      remainingChars -= current.length;
       current = unit;
     } else current = next;
   }

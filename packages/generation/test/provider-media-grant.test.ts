@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   issueProviderMediaGrant,
+  issueProviderToolMediaGrant,
   verifyProviderMediaGrant,
+  verifyProviderToolMediaGrant,
 } from "../src/provider-media-grant";
 
 const secret = "media-grants-need-a-private-secret-of-sufficient-length";
@@ -43,6 +45,36 @@ describe("provider media grants", () => {
       ...context,
       now: context.now + 30_000,
     });
+    expect(verifyProviderMediaGrant({ ...context, token })).toBe(false);
+  });
+});
+
+describe("provider tool media grants", () => {
+  it("uses a separate namespace bound to one execution and asset", () => {
+    const token = issueProviderToolMediaGrant({
+      secret,
+      executionId: "execution1",
+      assetId: "asset1",
+      now: context.now,
+    });
+    expect(
+      verifyProviderToolMediaGrant({
+        secret,
+        executionId: "execution1",
+        assetId: "asset1",
+        now: context.now,
+        token,
+      }),
+    ).toBe(true);
+    expect(
+      verifyProviderToolMediaGrant({
+        secret,
+        executionId: "execution2",
+        assetId: "asset1",
+        now: context.now,
+        token,
+      }),
+    ).toBe(false);
     expect(verifyProviderMediaGrant({ ...context, token })).toBe(false);
   });
 });

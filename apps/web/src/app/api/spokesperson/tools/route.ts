@@ -1,0 +1,478 @@
+import { AssetQuotaExceededError } from "@aiwa/assets";
+import { LedgerDomainError, quoteProviderToolPrice } from "@aiwa/credits";
+import { db } from "@aiwa/db";
+import {
+  createProviderToolExecution,
+  GenerationError,
+  ProviderToolExecutionError,
+  requireMembership,
+} from "@aiwa/generation";
+import { isBytePlusMediaKitConfigured } from "@aiwa/providers/byteplus";
+import { NextResponse } from "next/server";
+import { z } from "zod";
+
+import { getRequestSession } from "@/lib/request-auth";
+import { hasTrustedMutationOrigin } from "@/lib/request-security";
+import { rateLimit } from "@/lib/rate-limit";
+import { spokespersonToolRequestSchema } from "./schema";
+
+type ToolKey = "matting" | "quality" | "smoothness";
+
+const providerToolIds: Record<ToolKey, string> = {
+  matting: "matte-portrait-video",
+  quality: "assess-video-quality",
+  smoothness: "enhance-video-smoothness",
+};
+
+const MAX_TOOL_REQUEST_BYTES = 4 * 1024;
+const toolLimiter = rateLimit({
+  max: 10,
+  windowMs: 60_000,
+  prefix: "spokesperson-mediakit",
+});
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+type OmniHumanLineageAsset = {
+  id: string;
+  organizationId: string;
+  status: string;
+  purpose: string;
+  storageOwnerUserId: string | null;
+  mediaKind: string;
+  mimeType: string;
+  durationMs: number | null;
+  sourceAssetId: string | null;
+  generationJob: {
+    status: string;
+    requestPayload: unknown;
+    providerModel: { providerModelId: string };
+  } | null;
+};
+
+async function loadOmniHumanVideo(
+  organizationId: string,
+  assetId: string,
+  userId: string,
+) {
+  let currentId: string | null = assetId;
+  let source: {
+    id: string;
+    durationMs: number | null;
+    mimeType: string;
+    sourceAssetId: string | null;
+  } | null = null;
+  let trustedOriginDurationMs: number | null = null;
+  const visited = new Set<string>();
+
+  for (let depth = 0; currentId && depth < 8; depth += 1) {
+    if (visited.has(currentId)) return null;
+    visited.add(currentId);
+    const asset: OmniHumanLineageAsset | null = await db.asset.findFirst({
+      where: { id: currentId, organizationId },
+      select: {
+        id: true,
+        organizationId: true,
+        status: true,
+        purpose: true,
+        storageOwnerUserId: true,
+        mediaKind: true,
+        mimeType: true,
+        durationMs: true,
+        sourceAssetId: true,
+        generationJob: {
+          select: {
+            status: true,
+            requestPayload: true,
+            providerModel: { select: { providerModelId: true } },
+          },
+        },
+      },
+    });
+    if (
+      !asset ||
+      asset.status !== "READY" ||
+      asset.mediaKind !== "VIDEO" ||
+      (asset.purpose === "REFERENCE_INPUT" &&
+        asset.storageOwnerUserId !== userId)
+    )
+      return null;
+
+    if (depth === 0) {
+      source = {
+        id: asset.id,
+        durationMs: asset.durationMs,
+        mimeType: asset.mimeType,
+        sourceAssetId: asset.sourceAssetId,
+      };
+    }
+
+    if (
+      asset.generationJob?.status === "SUCCEEDED" &&
+      asset.generationJob.providerModel.providerModelId === "omnihuman-1.5"
+    ) {
+      const payload = record(asset.generationJob.requestPayload);
+      trustedOriginDurationMs =
+        typeof payload.trustedDrivingAudioDurationMs === "number" &&
+        Number.isSafeInteger(payload.trustedDrivingAudioDurationMs) &&
+        payload.trustedDrivingAudioDurationMs > 0
+          ? payload.trustedDrivingAudioDurationMs
+          : null;
+      if (!source) return null;
+      const durationMs = source.durationMs ?? trustedOriginDurationMs;
+      if (!durationMs || durationMs <= 0) return null;
+      return { ...source, durationMs };
+    }
+    currentId = asset.sourceAssetId;
+  }
+  return null;
+}
+
+function quote(
+  price: {
+    providerCostMicroUsd: bigint;
+    pricingMetric: "REQUEST" | "INPUT_SECOND" | "OUTPUT_SECOND";
+    unitQuantity: number;
+    fxBaisaNumerator: bigint;
+    fxBaisaDenominator: bigint;
+    targetMarginBps: number;
+    creditsPerBaisa: bigint;
+  },
+  quantity: number,
+  providerCostMicroUsd = price.providerCostMicroUsd,
+) {
+  return quoteProviderToolPrice({
+    providerCostMicroUsd,
+    pricingMetric: price.pricingMetric,
+    unitQuantity: price.unitQuantity,
+    billableQuantity: quantity,
+    exchangeRate: {
+      baisaNumerator: price.fxBaisaNumerator,
+      baisaDenominator: price.fxBaisaDenominator,
+    },
+    targetGrossMarginBps: price.targetMarginBps,
+    creditsPerBaisa: price.creditsPerBaisa,
+  });
+}
+
+async function loadTool(providerToolId: string) {
+  const now = new Date();
+  return db.providerTool.findFirst({
+    where: { provider: "BYTEPLUS", providerToolId },
+    include: {
+      priceVersions: {
+        where: {
+          effectiveFrom: { lte: now },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
+        },
+        orderBy: { effectiveFrom: "desc" },
+        take: 1,
+      },
+    },
+  });
+}
+
+export async function GET(request: Request) {
+  const session = await getRequestSession(request.headers);
+  if (!session)
+    return NextResponse.json(
+      { error: "Authentication required." },
+      { status: 401 },
+    );
+
+  const url = new URL(request.url);
+  const query = z
+    .object({
+      organizationId: z.string().min(1).max(128),
+      assetId: z.string().min(1).max(128),
+    })
+    .strict()
+    .safeParse({
+      organizationId: url.searchParams.get("organizationId") ?? "",
+      assetId: url.searchParams.get("assetId") ?? "",
+    });
+  if (!query.success)
+    return NextResponse.json(
+      { error: "Invalid MediaKit tool query." },
+      { status: 400 },
+    );
+  const { organizationId, assetId } = query.data;
+
+  try {
+    await requireMembership(db, organizationId, session.user.id, true);
+    const source = await loadOmniHumanVideo(
+      organizationId,
+      assetId,
+      session.user.id,
+    );
+    if (!source)
+      return NextResponse.json(
+        { error: "Choose a completed OmniHuman video." },
+        { status: 404 },
+      );
+
+    const quantity = Math.ceil(source.durationMs / 1000);
+    const [rows, activeExecution] = await Promise.all([
+      Promise.all(
+        (Object.entries(providerToolIds) as Array<[ToolKey, string]>).map(
+          async ([key, providerToolId]) => {
+            const tool = await loadTool(providerToolId);
+            const price = tool?.priceVersions[0];
+            const formatAllowed = ["video/mp4", "video/quicktime"].includes(
+              source.mimeType,
+            );
+            const repairAllowed =
+              key !== "smoothness" || source.durationMs <= 35_000;
+            if (!tool || !price || price.pricingMetric !== tool.pricingMetric) {
+              return {
+                key,
+                providerToolId,
+                available: false,
+                enabled: tool?.enabled ?? false,
+                repairAllowed,
+                reason: "Pricing is not configured.",
+              };
+            }
+            const maximum = quote(price, quantity);
+            const detectionOnly =
+              key === "smoothness" && price.providerCostNoOutputMicroUsd
+                ? quote(price, quantity, price.providerCostNoOutputMicroUsd)
+                : null;
+            return {
+              key,
+              providerToolId,
+              available:
+                tool.enabled &&
+                isBytePlusMediaKitConfigured() &&
+                formatAllowed &&
+                repairAllowed &&
+                (key !== "smoothness" || detectionOnly !== null),
+              enabled: tool.enabled,
+              repairAllowed,
+              priceVersionId: price.id,
+              estimatedCredits: maximum.customerCredits.toString(),
+              detectionOnlyCredits:
+                detectionOnly?.customerCredits.toString() ?? null,
+              reason: !isBytePlusMediaKitConfigured()
+                ? "MediaKit credential is not configured."
+                : !tool.enabled
+                  ? "Tool is disabled by an administrator."
+                  : !formatAllowed
+                    ? "This derived video format is not accepted as MediaKit input."
+                    : !repairAllowed
+                      ? "Smoothness repair supports videos up to 35 seconds."
+                      : key === "smoothness" && !detectionOnly
+                        ? "Detection-only pricing is not configured."
+                        : null,
+            };
+          },
+        ),
+      ),
+      db.providerToolExecution.findFirst({
+        where: {
+          organizationId,
+          createdById: session.user.id,
+          status: {
+            in: ["QUEUED", "SUBMITTING", "PROCESSING", "MANUAL_REVIEW"],
+          },
+          inputAssets: { some: { assetId: source.id } },
+          providerTool: {
+            providerToolId: { in: Object.values(providerToolIds) },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          status: true,
+          providerTool: { select: { providerToolId: true } },
+        },
+      }),
+    ]);
+
+    const activeTool = activeExecution
+      ? (Object.entries(providerToolIds) as Array<[ToolKey, string]>).find(
+          ([, providerToolId]) =>
+            providerToolId === activeExecution.providerTool.providerToolId,
+        )?.[0]
+      : undefined;
+
+    return NextResponse.json(
+      {
+        asset: {
+          id: source.id,
+          durationMs: source.durationMs,
+          mimeType: source.mimeType,
+        },
+        tools: rows,
+        activeExecution:
+          activeExecution && activeTool
+            ? {
+                id: activeExecution.id,
+                status: activeExecution.status,
+                tool: activeTool,
+              }
+            : null,
+      },
+      { headers: { "Cache-Control": "private, no-store" } },
+    );
+  } catch (error) {
+    if (error instanceof GenerationError)
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.status },
+      );
+    return NextResponse.json(
+      { error: "Unable to load MediaKit tools." },
+      { status: 503 },
+    );
+  }
+}
+
+export async function POST(request: Request) {
+  if (!hasTrustedMutationOrigin(request))
+    return NextResponse.json({ error: "Origin not allowed." }, { status: 403 });
+  const session = await getRequestSession(request.headers);
+  if (!session)
+    return NextResponse.json(
+      { error: "Authentication required." },
+      { status: 401 },
+    );
+  const rateLimited = await toolLimiter.check(session.user.id);
+  if (rateLimited) return rateLimited;
+  if (!isBytePlusMediaKitConfigured())
+    return NextResponse.json(
+      { error: "MediaKit is not configured on the worker." },
+      { status: 503 },
+    );
+
+  try {
+    const declaredLength = Number(request.headers.get("content-length"));
+    if (
+      Number.isFinite(declaredLength) &&
+      declaredLength > MAX_TOOL_REQUEST_BYTES
+    )
+      return NextResponse.json(
+        { error: "MediaKit request is too large." },
+        { status: 413 },
+      );
+    const text = await request.text();
+    if (text.length > MAX_TOOL_REQUEST_BYTES)
+      return NextResponse.json(
+        { error: "MediaKit request is too large." },
+        { status: 413 },
+      );
+    const input = spokespersonToolRequestSchema.parse(JSON.parse(text));
+    await requireMembership(db, input.organizationId, session.user.id, true);
+    const source = await loadOmniHumanVideo(
+      input.organizationId,
+      input.assetId,
+      session.user.id,
+    );
+    if (!source)
+      return NextResponse.json(
+        { error: "Choose a completed OmniHuman video." },
+        { status: 404 },
+      );
+    if (!["video/mp4", "video/quicktime"].includes(source.mimeType))
+      return NextResponse.json(
+        {
+          error: "This derived video format is not accepted as MediaKit input.",
+        },
+        { status: 400 },
+      );
+    if (input.tool === "smoothness" && source.durationMs > 35_000)
+      return NextResponse.json(
+        { error: "Smoothness repair supports videos up to 35 seconds." },
+        { status: 400 },
+      );
+
+    const providerToolId = providerToolIds[input.tool];
+    const tool = await loadTool(providerToolId);
+    const price = tool?.priceVersions[0];
+    if (
+      !tool ||
+      !tool.enabled ||
+      !price ||
+      price.pricingMetric !== tool.pricingMetric ||
+      (input.tool === "smoothness" && !price.providerCostNoOutputMicroUsd)
+    )
+      return NextResponse.json(
+        { error: "This MediaKit tool is not currently available." },
+        { status: 409 },
+      );
+
+    const semanticInput: Record<string, unknown> =
+      input.tool === "matting"
+        ? {
+            format: input.mattingFormat,
+            ...(input.mattingFormat === "MP4" && input.backgroundColor
+              ? { background_color: input.backgroundColor }
+              : {}),
+          }
+        : input.tool === "smoothness"
+          ? { alignSourceFps: true }
+          : {};
+
+    const execution = await createProviderToolExecution(session.user.id, {
+      organizationId: input.organizationId,
+      toolId: tool.id,
+      priceVersionId: price.id,
+      idempotencyKey: input.idempotencyKey,
+      quotedQuantity: Math.ceil(source.durationMs / 1000),
+      input: semanticInput,
+      sourceAssets: [{ assetId: source.id, role: "SOURCE_VIDEO", position: 0 }],
+    });
+
+    return NextResponse.json(
+      {
+        execution: {
+          id: execution.id,
+          status: execution.status,
+          reservedCredits: execution.reservedCredits.toString(),
+        },
+      },
+      { status: 202 },
+    );
+  } catch (error) {
+    if (error instanceof ProviderToolExecutionError)
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.status },
+      );
+    if (error instanceof GenerationError)
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.status },
+      );
+    if (error instanceof AssetQuotaExceededError)
+      return NextResponse.json(
+        {
+          error: error.message,
+          code: "STORAGE_QUOTA_EXCEEDED",
+          scope: error.scope,
+        },
+        { status: 409 },
+      );
+    if (error instanceof LedgerDomainError)
+      return NextResponse.json(
+        { error: error.message, code: error.code },
+        { status: 400 },
+      );
+    if (error instanceof z.ZodError)
+      return NextResponse.json(
+        { error: "Invalid MediaKit request." },
+        { status: 400 },
+      );
+    return NextResponse.json(
+      {
+        error:
+          "Unable to start MediaKit processing. Retry with the same request.",
+      },
+      { status: 503 },
+    );
+  }
+}

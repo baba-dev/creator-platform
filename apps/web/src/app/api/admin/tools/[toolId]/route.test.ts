@@ -35,6 +35,7 @@ const tool = {
   providerToolId: "lip-sync",
   displayName: "Video Lip Sync",
   pricingMetric: "OUTPUT_SECOND",
+  capabilities: {},
   enabled: false,
 };
 
@@ -68,6 +69,23 @@ describe("MediaKit admin controls", () => {
     expect(response.status).toBe(409);
   });
 
+  it("does not enable variable-output billing without a detection-only price", async () => {
+    mocks.db.providerTool.findUnique.mockResolvedValue({
+      ...tool,
+      providerToolId: "enhance-video-smoothness",
+      pricingMetric: "INPUT_SECOND",
+      capabilities: { variableBilling: "output-presence" },
+    });
+    mocks.db.providerToolPriceVersion.findFirst.mockResolvedValue({
+      providerCostMicroUsd: 5000n,
+      providerCostNoOutputMicroUsd: null,
+      pricingMetric: "INPUT_SECOND",
+    });
+    const response = await PATCH(request({ enabled: true }), context);
+    expect(response.status).toBe(409);
+    expect(mocks.tx.providerTool.update).not.toHaveBeenCalled();
+  });
+
   it("publishes immutable integer pricing with a 20% margin snapshot", async () => {
     const response = await PATCH(
       request({
@@ -90,6 +108,55 @@ describe("MediaKit admin controls", () => {
         }),
       }),
     );
+  });
+
+  it("stores smoothness detection-only pricing below the repair ceiling", async () => {
+    mocks.db.providerTool.findUnique.mockResolvedValue({
+      ...tool,
+      providerToolId: "enhance-video-smoothness",
+      pricingMetric: "INPUT_SECOND",
+      capabilities: { variableBilling: "output-presence" },
+    });
+    const response = await PATCH(
+      request({
+        idempotencyKey: "c9c99fd2-bba4-4702-b6cf-c7e09a3ee5d1",
+        providerCostMicroUsd: "5000",
+        providerCostNoOutputMicroUsd: "500",
+        targetMarginBps: 2000,
+        unitQuantity: 1,
+      }),
+      context,
+    );
+    expect(response.status).toBe(200);
+    expect(mocks.tx.providerToolPriceVersion.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          providerCostMicroUsd: 5000n,
+          providerCostNoOutputMicroUsd: 500n,
+        }),
+      }),
+    );
+  });
+
+  it("rejects a detection-only price above the repair price", async () => {
+    mocks.db.providerTool.findUnique.mockResolvedValue({
+      ...tool,
+      providerToolId: "enhance-video-smoothness",
+      pricingMetric: "INPUT_SECOND",
+      capabilities: { variableBilling: "output-presence" },
+    });
+    const response = await PATCH(
+      request({
+        idempotencyKey: "16a7e04c-b4cb-48a0-b14a-461cb2420354",
+        providerCostMicroUsd: "500",
+        providerCostNoOutputMicroUsd: "501",
+        targetMarginBps: 2000,
+        unitQuantity: 1,
+      }),
+      context,
+    );
+    expect(response.status).toBe(400);
+    expect(mocks.tx.providerToolPriceVersion.create).not.toHaveBeenCalled();
   });
 
   it("replays an identical publication key without creating another price", async () => {

@@ -14,10 +14,12 @@ export type ProviderToolCatalogRow = {
   category: string;
   executionMode: "ASYNC" | "SYNC";
   pricingMetric: "REQUEST" | "INPUT_SECOND" | "OUTPUT_SECOND";
+  capabilities: Record<string, unknown>;
   enabled: boolean;
   executionCount: number;
   price: null | {
     providerCostMicroUsd: string;
+    providerCostNoOutputMicroUsd: string | null;
     customerCredits: string;
     unitQuantity: number;
     targetMarginBps: number;
@@ -103,6 +105,13 @@ export function ProviderToolCatalog({
       const payload = await apiPatch(pricingTool.id, {
         idempotencyKey: crypto.randomUUID(),
         providerCostMicroUsd: String(data.get("providerCostMicroUsd") ?? ""),
+        ...(pricingTool.capabilities.variableBilling === "output-presence"
+          ? {
+              providerCostNoOutputMicroUsd: String(
+                data.get("providerCostNoOutputMicroUsd") ?? "",
+              ),
+            }
+          : {}),
         targetMarginBps: Math.round(Number(data.get("marginPercent")) * 100),
         unitQuantity:
           pricingTool.pricingMetric === "REQUEST"
@@ -196,6 +205,12 @@ export function ProviderToolCatalog({
                         {row.price.customerCredits} credits /{" "}
                         {row.price.unitQuantity}
                       </p>
+                      {row.price.providerCostNoOutputMicroUsd ? (
+                        <p className="mt-1 text-muted-foreground">
+                          Detection-only:{" "}
+                          {row.price.providerCostNoOutputMicroUsd} µUSD / block
+                        </p>
+                      ) : null}
                       <p className="mt-1 text-muted-foreground">
                         {row.price.targetMarginBps / 100}% margin
                       </p>
@@ -273,6 +288,22 @@ export function ProviderToolCatalog({
                   className="mt-1 h-10 w-full rounded-xl border border-input bg-background px-3 font-mono font-normal"
                 />
               </label>
+              {pricingTool.capabilities.variableBilling ===
+              "output-presence" ? (
+                <label className="text-xs font-semibold">
+                  Detection-only cost (micro-USD)
+                  <input
+                    name="providerCostNoOutputMicroUsd"
+                    required
+                    inputMode="numeric"
+                    pattern="[1-9][0-9]*"
+                    defaultValue={
+                      pricingTool.price?.providerCostNoOutputMicroUsd ?? ""
+                    }
+                    className="mt-1 h-10 w-full rounded-xl border border-input bg-background px-3 font-mono font-normal"
+                  />
+                </label>
+              ) : null}
               <label className="text-xs font-semibold">
                 Target gross margin (%)
                 <input

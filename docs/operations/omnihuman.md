@@ -31,3 +31,38 @@ submit retains credits and requires review; no automatic resubmit.
 
 API contract:
 https://docs.byteplus.com/en/docs/byteplus-vision/omnihuman-video_generation
+
+## MediaKit finishing tools
+
+Completed OmniHuman videos can use three BytePlus MediaKit tools: portrait
+matting, VQScore assessment and smoothness detection/repair. Configure
+`BYTEPLUS_MEDIAKIT_API_KEY` on both web and the worker deployment. The worker
+role must own the `provider-tools` queue (`all`, `core` or `orchestration`). The
+base URL and bounded request/idle timeouts are documented in `.env.example`.
+
+Roll out the tools in this order:
+
+1. Apply the database migration and deploy web and workers together.
+2. In **Admin → MediaKit tools**, sync the allow-listed registry.
+3. Publish an immutable price for each tool. Smoothness requires both its repair
+   ceiling and its lower detection-only provider cost.
+4. Enable each tool explicitly only after the corresponding BytePlus product is
+   active for the production account.
+5. Run one short consented OmniHuman output through assessment, MP4 matting,
+   transparent WebM matting and smoothness. Confirm one reservation and one
+   capture per execution, a private durable output where expected, and released
+   storage reservation for a detection-only smoothness result.
+
+The browser supplies only an Asset ID. Workers exchange it for a short-lived,
+execution-bound HTTPS capability after rechecking tenant, owner and asset state.
+Never copy capability or provider output URLs into logs or operator notes.
+Smoothness repair accepts at most 35 seconds and always requests source-FPS
+alignment.
+
+Provider success is persisted before output download. Storage recovery must
+reuse that result and must never resubmit billable work. `MANUAL_REVIEW` keeps
+the credit reservation when provider acceptance, authoritative usage or output
+durability is ambiguous. Verify the provider task and stored object before any
+ledger adjustment; use an audited reversal or adjustment rather than editing
+ledger history. Do not clear a review row merely to bypass the per-source
+unsettled-work guard.

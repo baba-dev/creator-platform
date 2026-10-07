@@ -10,6 +10,7 @@ import { StatusDot, Tape } from "@/components/ui/sketch";
 import { AudioWaveformPlayer } from "@/components/ui/audio-waveform-player";
 import { ProcessFeedback } from "@/components/process/process-feedback";
 import { announceGenerationStarted } from "@/lib/generation-activity";
+import { SpokespersonMediaKitTools } from "./spokesperson-mediakit-tools";
 
 interface PresetVoice {
   key: string;
@@ -787,7 +788,7 @@ export function SpokespersonStudio({
                     className="inline-flex items-center gap-1.5 rounded-lg bg-black/60 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-md transition-colors hover:bg-black/80"
                   >
                     <Icon name="arrow" className="size-3.5 rotate-90" />
-                    Download MP4
+                    Download video
                   </a>
                   <Link
                     href={
@@ -861,6 +862,16 @@ export function SpokespersonStudio({
                 </div>
               )}
           </div>
+
+          {activeVideoAssetId ? (
+            <SpokespersonMediaKitTools
+              key={activeVideoAssetId}
+              organizationId={organizationId}
+              assetId={activeVideoAssetId}
+              canGenerate={canGenerate}
+              onOutputAsset={setActiveVideoAssetId}
+            />
+          ) : null}
 
           {/* Avatar Source Selector */}
           <div className="space-y-4 rounded-3xl border border-border bg-card p-6 shadow-sm">

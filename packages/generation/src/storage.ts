@@ -314,7 +314,7 @@ export const MAX_REFERENCE_IMAGE_BYTES = 30 * 1024 * 1024;
 export const MAX_REFERENCE_IMAGE_PIXELS = 36_000_000;
 
 export function storagePath(key: string) {
-  if (!/^[a-zA-Z0-9_-]+\.(png|jpg|webp|mp4|mp3)$/.test(key))
+  if (!/^[a-zA-Z0-9_-]+\.(png|jpg|webp|mp4|webm|mp3)$/.test(key))
     throw new Error("Invalid storage key");
   const root =
     process.env.ASSET_STORAGE_ROOT ?? "/var/www/creator-platform/shared/assets";
@@ -765,6 +765,7 @@ async function downloadTrustedVideo(
           contentType &&
           ![
             "video/mp4",
+            "video/webm",
             "video/quicktime",
             "application/octet-stream",
             "binary/octet-stream",
@@ -836,9 +837,23 @@ async function downloadTrustedVideo(
   });
 }
 
-export async function downloadVideo(urlString: string) {
+export async function downloadVideo(
+  urlString: string,
+  expectedFormat: "mp4" | "webm" = "mp4",
+) {
   const url = parseTrustedVideoUrl(urlString);
   const bytes = await downloadTrustedVideo(url, MAX_REDIRECTS);
+
+  if (expectedFormat === "webm") {
+    const ebml = Buffer.from([0x1a, 0x45, 0xdf, 0xa3]);
+    if (bytes.length < 4 || !bytes.subarray(0, 4).equals(ebml)) {
+      throw new ImageStorageError(
+        "VIDEO_OUTPUT_INVALID_MP4",
+        "Generated video failed WebM validation.",
+      );
+    }
+    return bytes;
+  }
 
   if (bytes.length < 12)
     throw new ImageStorageError(
@@ -860,6 +875,7 @@ export async function storeVideo(
   bytes: Buffer,
   organizationId?: string,
   assetId?: string,
+  mimeType: "video/mp4" | "video/webm" = "video/mp4",
 ) {
   if (organizationId) {
     if (!assetId) {
@@ -873,7 +889,7 @@ export async function storeVideo(
       assetId,
       objectKey: key,
       bytes,
-      mimeType: "video/mp4",
+      mimeType,
       mediaKind: "VIDEO",
     });
   }

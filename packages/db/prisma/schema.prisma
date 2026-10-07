@@ -529,8 +529,9 @@ model ProviderToolPriceVersion {
   providerToolId        String
   publicationKey        String?                   @unique @db.VarChar(36)
   publicationHash       String?                   @db.VarChar(64)
-  providerCostMicroUsd  BigInt
-  customerCredits       BigInt
+  providerCostMicroUsd          BigInt
+  providerCostNoOutputMicroUsd  BigInt?
+  customerCredits               BigInt
   fxBaisaNumerator      BigInt
   fxBaisaDenominator    BigInt
   targetMarginBps       Int
@@ -581,12 +582,30 @@ model ProviderToolExecution {
   createdBy                  User                        @relation("ProviderToolExecutionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   providerTool               ProviderTool                @relation(fields: [providerToolId], references: [id], onDelete: Restrict)
   priceVersion               ProviderToolPriceVersion    @relation(fields: [priceVersionId], references: [id], onDelete: Restrict)
+  inputAssets                ProviderToolInputAsset[]
+  outputAssets               Asset[]
 
   @@unique([providerToolId, providerTaskId])
   @@index([status, nextAttemptAt, updatedAt])
   @@index([organizationId, createdAt])
   @@index([createdById, createdAt])
 }
+
+model ProviderToolInputAsset {
+  executionId String
+  assetId     String
+  position    Int
+  role        String                @db.VarChar(32)
+  createdAt   DateTime              @default(now())
+  execution   ProviderToolExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  asset       Asset                 @relation(fields: [assetId], references: [id], onDelete: Restrict)
+
+  @@id([executionId, assetId])
+  @@unique([executionId, position])
+  @@index([executionId, role, position])
+  @@index([assetId])
+}
+
 
 model GenerationJob {
   id                         String                 @id @default(cuid())
@@ -681,6 +700,8 @@ model Asset {
   projectId             String?
   folderId              String?
   generationJobId       String?
+  providerToolExecutionId String?
+  providerToolOutputIndex Int?
   sourceAssetId         String?
   generationOutputIndex Int?
   storageOwnerUserId    String?
@@ -709,6 +730,7 @@ model Asset {
   project               Project?               @relation(fields: [projectId], references: [id], onDelete: SetNull)
   folder                AssetFolder?           @relation(fields: [folderId], references: [id], onDelete: SetNull)
   generationJob         GenerationJob?         @relation(fields: [generationJobId], references: [id], onDelete: SetNull)
+  providerToolExecution ProviderToolExecution? @relation(fields: [providerToolExecutionId], references: [id], onDelete: SetNull)
   sourceAsset           Asset?                 @relation("AssetLineage", fields: [sourceAssetId], references: [id], onDelete: Restrict)
   derivedAssets         Asset[]                @relation("AssetLineage")
   imageOperation        ImageOperation?        @relation("ImageOperationOutput")
@@ -720,14 +742,17 @@ model Asset {
   uploadedBy            User?                  @relation("AssetUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
   variants              AssetVariant[]
   generationInputs      GenerationInputAsset[]
+  providerToolInputs     ProviderToolInputAsset[]
   tagAssignments        AssetTagAssignment[]
   favorites             AssetFavorite[]
 
   @@unique([generationJobId, generationOutputIndex])
+  @@unique([providerToolExecutionId, providerToolOutputIndex])
   @@index([organizationId, createdAt])
   @@index([organizationId, mediaKind, status, createdAt])
   @@index([organizationId, sourceType, status, createdAt])
   @@index([generationJobId])
+  @@index([providerToolExecutionId])
   @@index([sourceAssetId])
   @@index([projectId, status, createdAt])
   @@index([folderId, status, createdAt])

@@ -18,6 +18,8 @@ function serializePrice(price: ProviderToolPriceVersion) {
   return {
     id: price.id,
     providerCostMicroUsd: price.providerCostMicroUsd.toString(),
+    providerCostNoOutputMicroUsd:
+      price.providerCostNoOutputMicroUsd?.toString() ?? null,
     customerCredits: price.customerCredits.toString(),
     pricingMetric: price.pricingMetric,
     unitQuantity: price.unitQuantity,
@@ -28,6 +30,16 @@ function serializePrice(price: ProviderToolPriceVersion) {
     providerCostBasisNote: price.providerCostBasisNote,
     effectiveFrom: price.effectiveFrom.toISOString(),
   };
+}
+
+function usesOutputPresenceBilling(capabilities: unknown): boolean {
+  return Boolean(
+    capabilities &&
+    typeof capabilities === "object" &&
+    !Array.isArray(capabilities) &&
+    (capabilities as Record<string, unknown>).variableBilling ===
+      "output-presence",
+  );
 }
 
 export async function PATCH(
@@ -82,7 +94,12 @@ export async function PATCH(
       if (
         !activePrice ||
         activePrice.providerCostMicroUsd <= 0n ||
-        activePrice.pricingMetric !== tool.pricingMetric
+        activePrice.pricingMetric !== tool.pricingMetric ||
+        (usesOutputPresenceBilling(tool.capabilities) &&
+          (activePrice.providerCostNoOutputMicroUsd === null ||
+            activePrice.providerCostNoOutputMicroUsd <= 0n ||
+            activePrice.providerCostNoOutputMicroUsd >
+              activePrice.providerCostMicroUsd))
       ) {
         return NextResponse.json(
           {
@@ -127,11 +144,38 @@ export async function PATCH(
   }
 
   const input = publication.data;
+  const variableOutputBilling = usesOutputPresenceBilling(tool.capabilities);
+  if (
+    (variableOutputBilling &&
+      input.providerCostNoOutputMicroUsd === undefined) ||
+    (!variableOutputBilling && input.providerCostNoOutputMicroUsd !== undefined)
+  ) {
+    return NextResponse.json(
+      {
+        error: variableOutputBilling
+          ? "Detection-only provider cost is required for this tool."
+          : "Detection-only provider cost is not supported for this tool.",
+      },
+      { status: 400 },
+    );
+  }
   if ((input.creditsPerBaisa ?? 1n) !== 1n) {
     return NextResponse.json(
       {
         error:
           "The platform credit denomination is fixed at 1 credit per baisa.",
+      },
+      { status: 400 },
+    );
+  }
+  if (
+    input.providerCostNoOutputMicroUsd !== undefined &&
+    input.providerCostNoOutputMicroUsd > input.providerCostMicroUsd
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "Detection-only provider cost cannot exceed the maximum provider cost.",
       },
       { status: 400 },
     );
@@ -166,6 +210,8 @@ export async function PATCH(
         {
           providerToolId: tool.id,
           providerCostMicroUsd: input.providerCostMicroUsd,
+          providerCostNoOutputMicroUsd:
+            input.providerCostNoOutputMicroUsd ?? null,
           pricingMetric: tool.pricingMetric,
           unitQuantity: input.unitQuantity,
           targetMarginBps: input.targetMarginBps,
@@ -232,6 +278,8 @@ export async function PATCH(
           publicationKey: input.idempotencyKey,
           publicationHash,
           providerCostMicroUsd: input.providerCostMicroUsd,
+          providerCostNoOutputMicroUsd:
+            input.providerCostNoOutputMicroUsd ?? null,
           customerCredits: customerQuote.customerCredits,
           fxBaisaNumerator,
           fxBaisaDenominator,
@@ -256,6 +304,8 @@ export async function PATCH(
             pricingMetric: tool.pricingMetric,
             unitQuantity: input.unitQuantity,
             providerCostMicroUsd: input.providerCostMicroUsd.toString(),
+            providerCostNoOutputMicroUsd:
+              input.providerCostNoOutputMicroUsd?.toString() ?? null,
             customerCredits: customerQuote.customerCredits.toString(),
             targetMarginBps: input.targetMarginBps,
           },

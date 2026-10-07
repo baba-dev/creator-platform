@@ -313,7 +313,7 @@ export function ProviderToolCatalog({
                     name="providerCostNoOutputMicroUsd"
                     required
                     inputMode="numeric"
-                      defaultValue={
+                    defaultValue={
                       pricingTool.price?.providerCostNoOutputMicroUsd ?? ""
                     }
                     className="mt-1 h-10 w-full rounded-xl border border-input bg-background px-3 font-mono font-normal"

@@ -93,6 +93,81 @@ describe("authoritative quote API", () => {
     );
     expect(response.headers.get("cache-control")).toBe("no-store");
   });
+  it.each(["720p", "1080p"])(
+    "reports OmniHuman billable seconds at %s using trusted audio duration",
+    async (resolution) => {
+      mocks.db.providerModel.findFirst.mockResolvedValue({
+        ...model,
+        mediaKind: "VIDEO",
+        providerModelId: "omnihuman-1.5",
+        capabilities: {
+          talkingAvatar: true,
+          avatarImage: true,
+          audioInput: true,
+          "resolution:720p": true,
+          "resolution:1080p": true,
+          "aspectRatio:adaptive": true,
+        },
+        priceVersions: [
+          {
+            ...price,
+            pricingDimension: "SECOND",
+            providerCostMicroUsd: 120000n,
+            targetMarginBps: 2000,
+          },
+        ],
+      });
+      const avatar = "c12345678901234567891";
+      const audio = "c12345678901234567892";
+      mocks.db.asset.findMany.mockResolvedValue([
+        {
+          id: avatar,
+          mediaKind: "IMAGE",
+          mimeType: "image/jpeg",
+          byteSize: 100000n,
+          width: 1024,
+          height: 1024,
+          durationMs: null,
+        },
+        {
+          id: audio,
+          mediaKind: "AUDIO",
+          mimeType: "audio/mpeg",
+          byteSize: 10000n,
+          width: null,
+          height: null,
+          durationMs: 1200,
+        },
+      ]);
+      const response = await POST(
+        request({
+          schemaVersion: 2,
+          workflow: "TALKING_AVATAR",
+          sources: [
+            { assetId: avatar, role: "AVATAR_IMAGE", position: 0 },
+            { assetId: audio, role: "DRIVING_AUDIO", position: 1 },
+          ],
+          resolution,
+          aspectRatio: "adaptive",
+          durationSeconds: -1,
+          generateAudio: false,
+          outputFormat: "mp4",
+          returnLastFrame: false,
+        }),
+      );
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.quote.estimatedUsage).toEqual({
+        unit: "SECOND",
+        quantity: "2",
+        isEstimate: false,
+      });
+      expect(body.quote.estimatedCredits).toBe("117");
+      expect(body.quote.reservationCredits).toBe("117");
+      expect(body.quote.settlement).toBe("FIXED");
+    },
+  );
+
   it("returns commercial cost only to finance roles", async () => {
     mocks.session.mockResolvedValue({
       user: { id: "finance", platformRole: "FINANCE_ADMIN" },

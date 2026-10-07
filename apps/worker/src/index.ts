@@ -26,6 +26,7 @@ import {
 import {
   createVoiceJob,
   processTextJob,
+  recoverReservedTextJobs,
   processTranscriptionJob,
   projectTextJobToChat,
 } from "@aiwa/generation";
@@ -1043,6 +1044,7 @@ async function dispatchGeneration() {
   generationDispatching = true;
   try {
     await reapExpiredRecoveryJobs();
+    await recoverReservedTextJobs();
 
     // 1. Fetch new submissions with keyset cursor rotation
     const submitWhere: Prisma.GenerationJobWhereInput = {

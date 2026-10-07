@@ -465,6 +465,12 @@ export async function createTextJob(
           jobId: job.id,
         });
       }
+      // Reservation changes the persisted status to CREDIT_RESERVED. Queue only
+      // after it succeeds, in the same transaction, and return the durable row.
+      const queuedJob = await tx.generationJob.update({
+        where: { id: job.id },
+        data: { status: "QUEUED", queuedAt: now },
+      });
       await tx.auditEvent.create({
         data: {
           actorUserId: userId,
@@ -475,10 +481,24 @@ export async function createTextJob(
           metadata: { mediaKind: "TEXT", sponsored },
         },
       });
-      return job;
+      return queuedJob;
     },
     { isolationLevel: "ReadCommitted", timeout: 15_000 },
   );
+}
+
+/** Repair admissions left reserved before any provider submission occurred. */
+export async function recoverReservedTextJobs(): Promise<void> {
+  await db.generationJob.updateMany({
+    where: {
+      status: "CREDIT_RESERVED",
+      providerModel: { mediaKind: "TEXT" },
+      submittedAt: null,
+      providerRequestId: null,
+      completedAt: null,
+    },
+    data: { status: "QUEUED", queuedAt: new Date() },
+  });
 }
 
 async function failTextJob(

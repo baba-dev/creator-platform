@@ -1,6 +1,12 @@
 import { createHash } from "node:crypto";
 
+import {
+  finalizeAssetStorage,
+  releaseAssetStorage,
+  reserveAssetStorage,
+} from "@aiwa/assets";
 import { hasOrganizationPermission } from "@aiwa/authz";
+import { parseServerEnv } from "@aiwa/config";
 import {
   captureCreditsForReference,
   quoteProviderToolPrice,
@@ -16,9 +22,18 @@ import {
 } from "@aiwa/providers";
 import { z } from "zod";
 
+import { issueProviderToolMediaGrant } from "./provider-media-grant";
+import { downloadVideo, storeVideo } from "./storage";
+
 const REFERENCE_TYPE = "PROVIDER_TOOL_EXECUTION";
 const MAX_ACTIVE_PER_USER = 5;
 const MAX_ACTIVE_PER_ORG = 20;
+const MAX_TOOL_VIDEO_BYTES = 100n * 1024n * 1024n;
+const FIRST_VIDEO_TOOLS = new Set([
+  "matte-portrait-video",
+  "assess-video-quality",
+  "enhance-video-smoothness",
+]);
 
 export class ProviderToolExecutionError extends Error {
   constructor(
@@ -38,6 +53,18 @@ export const providerToolExecutionRequestSchema = z
     idempotencyKey: z.uuid(),
     quotedQuantity: z.number().int().min(1).max(86_400),
     input: z.record(z.string(), z.unknown()),
+    sourceAssets: z
+      .array(
+        z
+          .object({
+            assetId: z.string().min(1).max(128),
+            role: z.literal("SOURCE_VIDEO"),
+            position: z.number().int().min(0).max(9),
+          })
+          .strict(),
+      )
+      .max(4)
+      .default([]),
   })
   .strict();
 
@@ -58,6 +85,11 @@ export function providerToolRequestHash(input: {
   priceVersionId: string;
   quotedQuantity: number;
   payload: Readonly<Record<string, unknown>>;
+  sourceAssets?: readonly {
+    assetId: string;
+    role: string;
+    position: number;
+  }[];
 }): string {
   return createHash("sha256")
     .update(JSON.stringify(canonical(input)))
@@ -77,6 +109,7 @@ function executionKey(
 function priceQuote(
   price: {
     providerCostMicroUsd: bigint;
+    providerCostNoOutputMicroUsd?: bigint | null;
     pricingMetric: "REQUEST" | "INPUT_SECOND" | "OUTPUT_SECOND";
     unitQuantity: number;
     fxBaisaNumerator: bigint;
@@ -85,9 +118,10 @@ function priceQuote(
     creditsPerBaisa: bigint;
   },
   quantity: number,
+  providerCostMicroUsd = price.providerCostMicroUsd,
 ) {
   return quoteProviderToolPrice({
-    providerCostMicroUsd: price.providerCostMicroUsd,
+    providerCostMicroUsd,
     pricingMetric: price.pricingMetric,
     unitQuantity: price.unitQuantity,
     billableQuantity: quantity,
@@ -218,6 +252,141 @@ async function assertToolSpendingCap(
   }
 }
 
+function outputReservationForTool(
+  providerToolId: string,
+  input: Readonly<Record<string, unknown>>,
+): { extension: "mp4" | "webm"; mimeType: "video/mp4" | "video/webm"; name: string } | null {
+  if (providerToolId === "matte-portrait-video") {
+    const format = input.format === "MP4" ? "MP4" : "WEBM";
+    return format === "MP4"
+      ? {
+          extension: "mp4",
+          mimeType: "video/mp4",
+          name: "Matted spokesperson video",
+        }
+      : {
+          extension: "webm",
+          mimeType: "video/webm",
+          name: "Transparent spokesperson video",
+        };
+  }
+  if (providerToolId === "enhance-video-smoothness") {
+    return {
+      extension: "mp4",
+      mimeType: "video/mp4",
+      name: "Smoothed spokesperson video",
+    };
+  }
+  return null;
+}
+
+function firstVideoTool(providerToolId: string): boolean {
+  return FIRST_VIDEO_TOOLS.has(providerToolId);
+}
+
+function toolResultRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function resultVideoUrl(result: Record<string, unknown>): string | null {
+  return typeof result.video_url === "string" && result.video_url
+    ? result.video_url
+    : null;
+}
+
+function validQualityScore(result: Record<string, unknown>): boolean {
+  const score = result.vq_score;
+  return typeof score === "number" && Number.isFinite(score) && score >= 0 && score <= 100;
+}
+
+async function materializeProviderInput(execution: {
+  id: string;
+  providerTool: { providerToolId: string };
+  requestPayload: unknown;
+  inputAssets: Array<{
+    role: string;
+    position: number;
+    asset: {
+      id: string;
+      organizationId: string;
+      status: string;
+      mediaKind: string;
+      purpose: string;
+      storageOwnerUserId: string | null;
+    };
+  }>;
+  organizationId: string;
+  createdById: string;
+}): Promise<Record<string, unknown>> {
+  const semantic = toolResultRecord(execution.requestPayload);
+  if (!firstVideoTool(execution.providerTool.providerToolId)) return semantic;
+
+  if (execution.inputAssets.length !== 1) {
+    throw new ProviderRequestError("MediaKit source snapshot is invalid", false, {
+      code: "REFERENCE_MEDIA_UNAVAILABLE",
+      stage: "dispatch",
+    });
+  }
+  const input = execution.inputAssets[0]!;
+  const asset = input.asset;
+  if (
+    input.role !== "SOURCE_VIDEO" ||
+    input.position !== 0 ||
+    asset.organizationId !== execution.organizationId ||
+    asset.status !== "READY" ||
+    asset.mediaKind !== "VIDEO" ||
+    (asset.purpose === "REFERENCE_INPUT" &&
+      asset.storageOwnerUserId !== execution.createdById)
+  ) {
+    throw new ProviderRequestError("MediaKit source video is unavailable", false, {
+      code: "REFERENCE_MEDIA_UNAVAILABLE",
+      stage: "dispatch",
+    });
+  }
+
+  const env = parseServerEnv();
+  const base = new URL(env.APP_URL);
+  if (base.protocol !== "https:") {
+    throw new ProviderRequestError(
+      "MediaKit source requires a public HTTPS app URL",
+      false,
+      { code: "INVALID_PROVIDER_SOURCE", stage: "dispatch" },
+    );
+  }
+  const url = new URL(
+    `/api/provider-tool-media/${encodeURIComponent(asset.id)}`,
+    base,
+  );
+  url.searchParams.set("executionId", execution.id);
+  url.searchParams.set(
+    "grant",
+    issueProviderToolMediaGrant({
+      secret: env.AUTH_SECRET,
+      executionId: execution.id,
+      assetId: asset.id,
+    }),
+  );
+
+  if (execution.providerTool.providerToolId === "enhance-video-smoothness") {
+    const alignSourceFps = semantic.alignSourceFps !== false;
+    return {
+      video_url: url.toString(),
+      periodic_stutter_detect: {
+        periodic_stutter_repair: true,
+        align_source_fps: alignSourceFps,
+      },
+      duplicate_frame_detect: { duplicate_frame_repair: true },
+    };
+  }
+
+  return {
+    ...semantic,
+    video_url: url.toString(),
+  };
+}
+
 export async function createProviderToolExecution(
   userId: string,
   raw: unknown,
@@ -229,6 +398,7 @@ export async function createProviderToolExecution(
     priceVersionId: input.priceVersionId,
     quotedQuantity: input.quotedQuantity,
     payload: input.input,
+    sourceAssets: input.sourceAssets,
   });
 
   return db.$transaction(async (tx) => {
@@ -273,6 +443,85 @@ export async function createProviderToolExecution(
         409,
       );
     }
+    let sourceAsset:
+      | {
+          id: string;
+          organizationId: string;
+          projectId: string | null;
+          status: string;
+          purpose: string;
+          storageOwnerUserId: string | null;
+          mediaKind: string;
+          mimeType: string;
+          durationMs: number | null;
+        }
+      | null = null;
+    if (firstVideoTool(tool.providerToolId)) {
+      if (
+        input.sourceAssets.length !== 1 ||
+        input.sourceAssets[0]?.role !== "SOURCE_VIDEO" ||
+        input.sourceAssets[0]?.position !== 0
+      ) {
+        throw new ProviderToolExecutionError(
+          "This MediaKit tool requires exactly one source video.",
+          400,
+        );
+      }
+      sourceAsset = await tx.asset.findFirst({
+        where: {
+          id: input.sourceAssets[0].assetId,
+          organizationId: input.organizationId,
+        },
+        select: {
+          id: true,
+          organizationId: true,
+          projectId: true,
+          status: true,
+          purpose: true,
+          storageOwnerUserId: true,
+          mediaKind: true,
+          mimeType: true,
+          durationMs: true,
+        },
+      });
+      if (
+        !sourceAsset ||
+        sourceAsset.status !== "READY" ||
+        sourceAsset.mediaKind !== "VIDEO" ||
+        (sourceAsset.purpose === "REFERENCE_INPUT" &&
+          sourceAsset.storageOwnerUserId !== userId) ||
+        sourceAsset.durationMs === null ||
+        !Number.isSafeInteger(sourceAsset.durationMs) ||
+        sourceAsset.durationMs <= 0
+      ) {
+        throw new ProviderToolExecutionError(
+          "Source video is unavailable or missing trusted duration metadata.",
+          409,
+        );
+      }
+      const trustedQuantity = Math.ceil(sourceAsset.durationMs / 1000);
+      if (trustedQuantity !== input.quotedQuantity) {
+        throw new ProviderToolExecutionError(
+          "MediaKit quote is stale. Refresh the video and try again.",
+          409,
+        );
+      }
+      if (
+        tool.providerToolId === "enhance-video-smoothness" &&
+        sourceAsset.durationMs > 35_000
+      ) {
+        throw new ProviderToolExecutionError(
+          "Smoothness repair supports source videos up to 35 seconds.",
+          400,
+        );
+      }
+    } else if (input.sourceAssets.length > 0) {
+      throw new ProviderToolExecutionError(
+        "This MediaKit tool does not accept snapshotted video sources yet.",
+        400,
+      );
+    }
+
     const quote = priceQuote(price, input.quotedQuantity);
     await assertToolSpendingCap(tx, {
       organizationId: input.organizationId,
@@ -304,6 +553,44 @@ export async function createProviderToolExecution(
         status: "QUEUED",
       },
     });
+    if (sourceAsset) {
+      await tx.providerToolInputAsset.create({
+        data: {
+          executionId: execution.id,
+          assetId: sourceAsset.id,
+          position: 0,
+          role: "SOURCE_VIDEO",
+        },
+      });
+      const output = outputReservationForTool(tool.providerToolId, input.input);
+      if (output) {
+        await reserveAssetStorage(tx, {
+          organizationId: input.organizationId,
+          userId,
+          proposedBytes: MAX_TOOL_VIDEO_BYTES,
+        });
+        await tx.asset.create({
+          data: {
+            organizationId: input.organizationId,
+            projectId: sourceAsset.projectId,
+            providerToolExecutionId: execution.id,
+            providerToolOutputIndex: 0,
+            sourceAssetId: sourceAsset.id,
+            storageOwnerUserId: userId,
+            createdById: userId,
+            status: "PENDING",
+            purpose: "GENERAL",
+            mediaKind: "VIDEO",
+            sourceType: "DERIVED",
+            storageProvider: "LOCAL",
+            name: output.name,
+            objectKey: `${execution.id}-tool.${output.extension}`,
+            mimeType: output.mimeType,
+            byteSize: MAX_TOOL_VIDEO_BYTES,
+          },
+        });
+      }
+    }
     await reserveCreditsForReference(tx, {
       walletId: wallet.id,
       amountCredits: quote.customerCredits,
@@ -400,6 +687,29 @@ async function releaseTerminal(
       description: message,
       metadata: { errorCode: code },
     });
+    const pendingOutputs = await tx.asset.findMany({
+      where: { providerToolExecutionId: execution.id, status: "PENDING" },
+      select: { id: true, byteSize: true },
+    });
+    const reservedOutputBytes = pendingOutputs.reduce(
+      (total, asset) => total + asset.byteSize,
+      0n,
+    );
+    if (reservedOutputBytes > 0n) {
+      await releaseAssetStorage(tx, {
+        organizationId: execution.organizationId,
+        reservedBytes: reservedOutputBytes,
+      });
+      await tx.asset.updateMany({
+        where: { id: { in: pendingOutputs.map((asset) => asset.id) } },
+        data: {
+          status: "DELETED",
+          byteSize: 0n,
+          deletedAt: new Date(),
+          purgeAfter: new Date(),
+        },
+      });
+    }
     await tx.providerToolExecution.update({
       where: { id: execution.id },
       data: {
@@ -444,76 +754,268 @@ export function providerToolActualQuantity(
   return Math.ceil(duration);
 }
 
-async function settleSucceeded(
+async function deferOutputRecovery(
+  executionId: string,
+  errorCode: string,
+): Promise<void> {
+  const current = await db.providerToolExecution.findUnique({
+    where: { id: executionId },
+    select: { retryCount: true, maxAttempts: true },
+  });
+  if (!current) return;
+  const next = current.retryCount + 1;
+  await db.providerToolExecution.updateMany({
+    where: { id: executionId, status: "PROCESSING" },
+    data:
+      next >= current.maxAttempts
+        ? {
+            status: "MANUAL_REVIEW",
+            retryCount: next,
+            nextAttemptAt: null,
+            errorCode,
+            errorMessage:
+              "MediaKit completed, but output storage recovery was exhausted. Credits remain reserved for review.",
+          }
+        : {
+            retryCount: next,
+            nextAttemptAt: retryAt(next),
+            errorCode,
+            errorMessage:
+              "MediaKit completed, but the output is still being saved. Credits remain reserved until durable storage succeeds.",
+          },
+  });
+}
+
+async function persistProviderSuccess(
   executionId: string,
   result: ProviderToolTask,
 ): Promise<void> {
-  await db.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM ProviderToolExecution WHERE id = ${executionId} FOR UPDATE`;
-    const execution = await tx.providerToolExecution.findUnique({
-      where: { id: executionId },
-      include: { providerTool: true, priceVersion: true },
-    });
-    if (!execution || execution.status === "SUCCEEDED") return;
-    if (!["SUBMITTING", "PROCESSING"].includes(execution.status)) return;
+  await db.providerToolExecution.updateMany({
+    where: {
+      id: executionId,
+      status: { in: ["SUBMITTING", "PROCESSING"] },
+    },
+    data: {
+      status: "PROCESSING",
+      providerTaskId: result.providerTaskId,
+      providerRequestId: result.providerRequestId,
+      resultPayload: (result.result ?? {}) as Prisma.InputJsonValue,
+      retryCount: 0,
+      nextAttemptAt: new Date(),
+      errorCode: null,
+      errorMessage: null,
+    },
+  });
+}
 
-    const actualQuantity = providerToolActualQuantity(
-      execution.priceVersion.pricingMetric,
-      result.result,
-    );
-    if (actualQuantity === null) {
-      await tx.providerToolExecution.update({
-        where: { id: execution.id },
-        data: {
-          status: "MANUAL_REVIEW",
-          nextAttemptAt: null,
-          errorCode: "MISSING_PROVIDER_USAGE",
-          errorMessage:
-            "Provider succeeded without authoritative billable usage. Credits remain reserved for operator review.",
-          resultPayload: (result.result ?? {}) as Prisma.InputJsonValue,
-        },
-      });
+async function finalizeSucceededExecution(executionId: string): Promise<void> {
+  const execution = await db.providerToolExecution.findUnique({
+    where: { id: executionId },
+    include: {
+      providerTool: true,
+      priceVersion: true,
+      outputAssets: { orderBy: { providerToolOutputIndex: "asc" } },
+    },
+  });
+  if (!execution || execution.status !== "PROCESSING" || !execution.resultPayload)
+    return;
+
+  const result = toolResultRecord(execution.resultPayload);
+  const actualQuantity = providerToolActualQuantity(
+    execution.priceVersion.pricingMetric,
+    result,
+  );
+  if (actualQuantity === null) {
+    await db.providerToolExecution.updateMany({
+      where: { id: execution.id, status: "PROCESSING" },
+      data: {
+        status: "MANUAL_REVIEW",
+        nextAttemptAt: null,
+        errorCode: "MISSING_PROVIDER_USAGE",
+        errorMessage:
+          "Provider succeeded without authoritative billable usage. Credits remain reserved for operator review.",
+      },
+    });
+    return;
+  }
+
+  const toolKey = execution.providerTool.providerToolId;
+  if (toolKey === "assess-video-quality" && !validQualityScore(result)) {
+    await db.providerToolExecution.updateMany({
+      where: { id: execution.id, status: "PROCESSING" },
+      data: {
+        status: "MANUAL_REVIEW",
+        nextAttemptAt: null,
+        errorCode: "INVALID_PROVIDER_RESPONSE",
+        errorMessage:
+          "MediaKit quality assessment returned an invalid VQScore. Credits remain reserved for review.",
+      },
+    });
+    return;
+  }
+
+  const outputUrl = resultVideoUrl(result);
+  const outputAsset = execution.outputAssets[0] ?? null;
+  const detectionOnly =
+    toolKey === "enhance-video-smoothness" && outputUrl === null;
+
+  if (toolKey === "matte-portrait-video" && !outputUrl) {
+    await db.providerToolExecution.updateMany({
+      where: { id: execution.id, status: "PROCESSING" },
+      data: {
+        status: "MANUAL_REVIEW",
+        nextAttemptAt: null,
+        errorCode: "INVALID_PROVIDER_RESPONSE",
+        errorMessage:
+          "MediaKit matting completed without a video output. Credits remain reserved for review.",
+      },
+    });
+    return;
+  }
+
+  let stored:
+    | {
+        byteSize: bigint;
+        sha256: string;
+        storageProvider: "LOCAL" | "S3" | "GOOGLE_DRIVE" | "ONEDRIVE";
+        externalFileId?: string | null;
+      }
+    | null = null;
+
+  if (outputUrl && outputAsset?.status === "PENDING") {
+    try {
+      const expectedFormat = outputAsset.mimeType === "video/webm" ? "webm" : "mp4";
+      const bytes = await downloadVideo(outputUrl, expectedFormat);
+      stored = await storeVideo(
+        outputAsset.objectKey,
+        bytes,
+        execution.organizationId,
+        outputAsset.id,
+        outputAsset.mimeType === "video/webm" ? "video/webm" : "video/mp4",
+      );
+    } catch {
+      await deferOutputRecovery(execution.id, "TOOL_OUTPUT_STORAGE_FAILED");
       return;
     }
-    const quote = priceQuote(execution.priceVersion, actualQuantity);
-    if (quote.customerCredits > execution.reservedCredits) {
-      await tx.providerToolExecution.update({
-        where: { id: execution.id },
+  } else if (outputUrl && outputAsset?.status !== "READY") {
+    await db.providerToolExecution.updateMany({
+      where: { id: execution.id, status: "PROCESSING" },
+      data: {
+        status: "MANUAL_REVIEW",
+        nextAttemptAt: null,
+        errorCode: "OUTPUT_ASSET_STATE_INVALID",
+        errorMessage:
+          "MediaKit output reservation is not recoverable. Credits remain reserved for review.",
+      },
+    });
+    return;
+  }
+
+  const effectiveProviderCost =
+    detectionOnly
+      ? execution.priceVersion.providerCostNoOutputMicroUsd
+      : execution.priceVersion.providerCostMicroUsd;
+  if (effectiveProviderCost === null) {
+    await db.providerToolExecution.updateMany({
+      where: { id: execution.id, status: "PROCESSING" },
+      data: {
+        status: "MANUAL_REVIEW",
+        nextAttemptAt: null,
+        errorCode: "MISSING_NO_OUTPUT_PRICE",
+        errorMessage:
+          "Smoothness detection completed without repair, but no detection-only price is configured. Credits remain reserved.",
+      },
+    });
+    return;
+  }
+
+  const quote = priceQuote(
+    execution.priceVersion,
+    actualQuantity,
+    effectiveProviderCost,
+  );
+  if (quote.customerCredits > execution.reservedCredits) {
+    await db.providerToolExecution.updateMany({
+      where: { id: execution.id, status: "PROCESSING" },
+      data: {
+        status: "MANUAL_REVIEW",
+        actualQuantity,
+        actualProviderCostMicroUsd: quote.providerCostMicroUsd,
+        nextAttemptAt: null,
+        errorCode: "ACTUAL_COST_EXCEEDS_RESERVATION",
+        errorMessage:
+          "Provider usage exceeded the pre-authorized reservation. No extra credits were captured automatically.",
+      },
+    });
+    return;
+  }
+
+  await db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM ProviderToolExecution WHERE id = ${execution.id} FOR UPDATE`;
+    const current = await tx.providerToolExecution.findUniqueOrThrow({
+      where: { id: execution.id },
+      include: {
+        outputAssets: { orderBy: { providerToolOutputIndex: "asc" } },
+      },
+    });
+    if (current.status !== "PROCESSING") return;
+
+    const currentOutput = current.outputAssets[0] ?? null;
+    let readyOutputAssetId: string | null =
+      currentOutput?.status === "READY" ? currentOutput.id : null;
+
+    if (stored && currentOutput?.status === "PENDING") {
+      await finalizeAssetStorage(tx, {
+        organizationId: current.organizationId,
+        reservedBytes: currentOutput.byteSize,
+        actualBytes: stored.byteSize,
+      });
+      const ready = await tx.asset.update({
+        where: { id: currentOutput.id },
         data: {
-          status: "MANUAL_REVIEW",
-          actualQuantity,
-          actualProviderCostMicroUsd: quote.providerCostMicroUsd,
-          nextAttemptAt: null,
-          errorCode: "ACTUAL_COST_EXCEEDS_RESERVATION",
-          errorMessage:
-            "Provider usage exceeded the pre-authorized reservation. No extra credits were captured automatically.",
-          resultPayload: (result.result ?? {}) as Prisma.InputJsonValue,
+          ...stored,
+          status: "READY",
         },
       });
-      return;
+      readyOutputAssetId = ready.id;
+    } else if (detectionOnly && currentOutput?.status === "PENDING") {
+      await releaseAssetStorage(tx, {
+        organizationId: current.organizationId,
+        reservedBytes: currentOutput.byteSize,
+      });
+      await tx.asset.update({
+        where: { id: currentOutput.id },
+        data: {
+          status: "DELETED",
+          byteSize: 0n,
+          deletedAt: new Date(),
+          purgeAfter: new Date(),
+        },
+      });
     }
 
     const wallet = await tx.wallet.findUniqueOrThrow({
-      where: { organizationId: execution.organizationId },
+      where: { organizationId: current.organizationId },
     });
     await captureCreditsForReference(tx, {
       walletId: wallet.id,
       amountCredits: quote.customerCredits,
-      idempotencyKey: `provider-tool-capture-${execution.id}`,
+      idempotencyKey: `provider-tool-capture-${current.id}`,
       referenceType: REFERENCE_TYPE,
-      referenceId: execution.id,
-      description: `Capture for provider tool execution ${execution.id}`,
+      referenceId: current.id,
+      description: `Capture for provider tool execution ${current.id}`,
       metadata: {
         pricingMetric: execution.priceVersion.pricingMetric,
         actualQuantity,
         billableUnits: quote.billableUnits.toString(),
+        detectionOnly,
+        ...(readyOutputAssetId ? { outputAssetId: readyOutputAssetId } : {}),
       },
     });
     await tx.providerToolExecution.update({
-      where: { id: execution.id },
+      where: { id: current.id },
       data: {
         status: "SUCCEEDED",
-        resultPayload: (result.result ?? {}) as Prisma.InputJsonValue,
         actualQuantity,
         chargedCredits: quote.customerCredits,
         reservedCredits: quote.customerCredits,
@@ -527,16 +1029,18 @@ async function settleSucceeded(
     });
     await tx.auditEvent.create({
       data: {
-        actorUserId: execution.createdById,
-        organizationId: execution.organizationId,
+        actorUserId: current.createdById,
+        organizationId: current.organizationId,
         action: "provider_tool.succeeded",
         targetType: "ProviderToolExecution",
-        targetId: execution.id,
+        targetId: current.id,
         metadata: {
-          providerToolId: execution.providerToolId,
+          providerToolId: current.providerToolId,
           pricingMetric: execution.priceVersion.pricingMetric,
           actualQuantity,
           chargedCredits: quote.customerCredits.toString(),
+          detectionOnly,
+          ...(readyOutputAssetId ? { outputAssetId: readyOutputAssetId } : {}),
         },
       },
     });
@@ -549,7 +1053,15 @@ export async function processProviderToolExecution(
 ): Promise<void> {
   let execution = await db.providerToolExecution.findUnique({
     where: { id: executionId },
-    include: { providerTool: true, priceVersion: true },
+    include: {
+      providerTool: true,
+      priceVersion: true,
+      inputAssets: {
+        orderBy: { position: "asc" },
+        include: { asset: true },
+      },
+      outputAssets: { orderBy: { providerToolOutputIndex: "asc" } },
+    },
   });
   if (!execution) return;
 
@@ -593,10 +1105,11 @@ export async function processProviderToolExecution(
   if (execution.status === "SUBMITTING") {
     let submitted: ProviderToolTask;
     try {
+      const providerInput = await materializeProviderInput(execution);
       submitted = await provider.submit({
         idempotencyKey: execution.idempotencyKey,
         toolId: execution.providerTool.providerToolId,
-        input: execution.requestPayload as Record<string, unknown>,
+        input: providerInput,
       });
     } catch (error) {
       if (error instanceof ProviderRequestError && error.retryable) {
@@ -635,7 +1148,8 @@ export async function processProviderToolExecution(
       return;
     }
     if (submitted.status === "succeeded") {
-      await settleSucceeded(execution.id, submitted);
+      await persistProviderSuccess(execution.id, submitted);
+      await finalizeSucceededExecution(execution.id);
       return;
     }
     if (!submitted.providerTaskId) {
@@ -666,7 +1180,12 @@ export async function processProviderToolExecution(
     return;
   }
 
-  if (execution.status !== "PROCESSING" || !execution.providerTaskId) return;
+  if (execution.status !== "PROCESSING") return;
+  if (execution.resultPayload) {
+    await finalizeSucceededExecution(execution.id);
+    return;
+  }
+  if (!execution.providerTaskId) return;
 
   let polled: ProviderToolTask;
   try {
@@ -716,5 +1235,6 @@ export async function processProviderToolExecution(
     );
     return;
   }
-  await settleSucceeded(execution.id, polled);
+  await persistProviderSuccess(execution.id, polled);
+  await finalizeSucceededExecution(execution.id);
 }

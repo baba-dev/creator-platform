@@ -146,7 +146,7 @@ export function SeedAudioStudio({
     );
   }
   async function generate() {
-    if (!model || !activeQuote || busy) return;
+    if (!canGenerate || !model || !activeQuote || busy) return;
     setBusy(true);
     setMessage(null);
     try {
@@ -404,7 +404,8 @@ export function SeedAudioStudio({
             <div>
               <p className="text-sm font-semibold">Delivery presets</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Start with a balanced profile, then fine-tune pace, pitch, and volume below.
+                Start with a balanced profile, then fine-tune pace, pitch, and
+                volume below.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -542,9 +543,12 @@ export function SeedAudioStudio({
         </dl>
         {!canGenerate ? (
           <div className="mt-5 rounded-xl border border-warning/20 bg-warning/5 p-3">
-            <p className="text-xs font-semibold text-foreground">View-only access</p>
+            <p className="text-xs font-semibold text-foreground">
+              View-only access
+            </p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              Your workspace role does not include permission to create generations.
+              Your workspace role does not include permission to create
+              generations.
             </p>
           </div>
         ) : null}

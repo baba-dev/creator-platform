@@ -590,6 +590,13 @@ export async function processVideoPollJob(
       ? rawCompletionTokens
       : null;
   const requestPayload = job.requestPayload as Record<string, unknown>;
+  const trustedTalkingAvatarDurationMs =
+    job.providerModel.providerModelId === "omnihuman-1.5" &&
+    typeof requestPayload.trustedDrivingAudioDurationMs === "number" &&
+    Number.isSafeInteger(requestPayload.trustedDrivingAudioDurationMs) &&
+    requestPayload.trustedDrivingAudioDurationMs > 0
+      ? requestPayload.trustedDrivingAudioDurationMs
+      : null;
   const isV2 = requestPayload.schemaVersion === 2;
   const v2Context = v2VideoInputContext(requestPayload);
   const hasVideoInput = isV2
@@ -775,7 +782,13 @@ export async function processVideoPollJob(
         ? videoAsset
         : await tx.asset.update({
             where: { id: videoAsset.id },
-            data: { ...storedVideo, status: "READY" },
+            data: {
+              ...storedVideo,
+              status: "READY",
+              ...(trustedTalkingAvatarDurationMs
+                ? { durationMs: trustedTalkingAvatarDurationMs }
+                : {}),
+            },
           });
 
     let readyLastFrameId: string | null = null;

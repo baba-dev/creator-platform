@@ -78,16 +78,18 @@ export function ImageEditor({
   canEdit,
   canGenerate,
   initialAssetId,
+  initialMode = "ai",
 }: {
   organizationId: string;
   organizationSlug: string;
   canEdit: boolean;
   canGenerate: boolean;
   initialAssetId?: string;
+  initialMode?: WorkspaceMode;
 }) {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [selectedId, setSelectedId] = useState("");
-  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("ai");
+  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>(initialMode);
 
   // AI Precision Edit states (Seedream 5.0 Pro)
   const [aiTool, setAiTool] = useState<AiTool>("inpaint");

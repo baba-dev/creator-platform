@@ -111,10 +111,21 @@ export const seedAudioRequestSchema = z
       .array(z.string().min(1).max(100))
       .max(3)
       .default([]),
+    referenceVoiceKeys: z
+      .array(z.string().trim().min(1).max(100))
+      .max(3)
+      .default([]),
     referenceImageAssetId: z.string().min(1).max(100).optional(),
-    format: z.literal("mp3").default("mp3"),
+    format: z.enum(["wav", "mp3", "pcm", "ogg_opus"]).default("mp3"),
     sampleRate: z
-      .union([z.literal(24_000), z.literal(44_100), z.literal(48_000)])
+      .union([
+        z.literal(8_000),
+        z.literal(16_000),
+        z.literal(24_000),
+        z.literal(32_000),
+        z.literal(44_100),
+        z.literal(48_000),
+      ])
       .default(44_100),
     speechRate: z.number().min(0.5).max(2).default(1),
     loudnessRate: z.number().min(0.5).max(2).default(1),
@@ -125,11 +136,21 @@ export const seedAudioRequestSchema = z
   })
   .strict()
   .superRefine((input, ctx) => {
-    if (input.referenceImageAssetId && input.referenceAudioAssetIds.length) {
+    const audioReferenceCount =
+      input.referenceAudioAssetIds.length + input.referenceVoiceKeys.length;
+    if (input.referenceImageAssetId && audioReferenceCount > 0) {
       ctx.addIssue({
         code: "custom",
         path: ["referenceImageAssetId"],
-        message: "Use audio references or one image reference, not both.",
+        message:
+          "Use audio/saved-voice references or one image reference, not both.",
+      });
+    }
+    if (audioReferenceCount > 3) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["referenceVoiceKeys"],
+        message: "Seed Audio supports at most three audio references.",
       });
     }
     if (
@@ -140,6 +161,16 @@ export const seedAudioRequestSchema = z
         code: "custom",
         path: ["referenceAudioAssetIds"],
         message: "Reference audio assets must be unique.",
+      });
+    }
+    const normalizedVoiceKeys = input.referenceVoiceKeys.map((key) =>
+      key.toLowerCase(),
+    );
+    if (new Set(normalizedVoiceKeys).size !== normalizedVoiceKeys.length) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["referenceVoiceKeys"],
+        message: "Saved voice references must be unique.",
       });
     }
   });
@@ -1354,6 +1385,21 @@ export async function createVideoJob(userId: string, raw: unknown) {
 
 async function createSeedAudioJob(userId: string, raw: unknown) {
   const input = seedAudioRequestSchema.parse(raw);
+  const referenceVoices = input.referenceVoiceKeys.map((voiceKey) => {
+    try {
+      return resolvePresetVoice(voiceKey, "seed-audio-1.0");
+    } catch (error) {
+      if (error instanceof VoiceResolutionError)
+        throw new GenerationError(error.message, 400);
+      throw error;
+    }
+  });
+  const output = {
+    mp3: { extension: "mp3", mimeType: "audio/mpeg" },
+    wav: { extension: "wav", mimeType: "audio/wav" },
+    pcm: { extension: "pcm", mimeType: "audio/L16" },
+    ogg_opus: { extension: "ogg", mimeType: "audio/ogg" },
+  }[input.format];
   const referenceAssetIds = [
     ...input.referenceAudioAssetIds,
     ...(input.referenceImageAssetId ? [input.referenceImageAssetId] : []),
@@ -1362,6 +1408,7 @@ async function createSeedAudioJob(userId: string, raw: unknown) {
     task: "seed-audio" as const,
     textPrompt: input.textPrompt,
     referenceAudioAssetIds: input.referenceAudioAssetIds,
+    referenceVoiceKeys: referenceVoices.map((voice) => voice.key),
     referenceImageAssetId: input.referenceImageAssetId ?? null,
     format: input.format,
     sampleRate: input.sampleRate,
@@ -1519,6 +1566,7 @@ async function createSeedAudioJob(userId: string, raw: unknown) {
               estimatedDurationSeconds: input.estimatedDurationSeconds,
               text: input.textPrompt,
               referenceAudioAssetIds: input.referenceAudioAssetIds,
+              referenceVoiceKeys: referenceVoices.map((voice) => voice.key),
               referenceImageAssetId: input.referenceImageAssetId,
             }),
           },
@@ -1595,8 +1643,8 @@ async function createSeedAudioJob(userId: string, raw: unknown) {
           sourceType: "GENERATED",
           storageProvider: org?.defaultStorageProvider ?? "LOCAL",
           name: defaultAssetName("AUDIO", "GENERATED"),
-          objectKey: `${job.id}.mp3`,
-          mimeType: "audio/mpeg",
+          objectKey: `${job.id}.${output.extension}`,
+          mimeType: output.mimeType,
           byteSize: BigInt(MAX_AUDIO_BYTES),
           status: "PENDING",
         },
@@ -1610,7 +1658,12 @@ async function createSeedAudioJob(userId: string, raw: unknown) {
           targetId: job.id,
           metadata: {
             task: "seed-audio",
-            referenceCount: referenceAssetIds.length,
+            referenceCount:
+              referenceAssetIds.length + referenceVoices.length,
+            referenceAssetCount: referenceAssetIds.length,
+            referenceVoiceCount: referenceVoices.length,
+            outputFormat: input.format,
+            sampleRate: input.sampleRate,
             estimatedDurationSeconds: input.estimatedDurationSeconds,
           },
         },

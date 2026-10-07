@@ -1093,6 +1093,16 @@ describe("BytePlus provider adapter", () => {
           audio,
           duration: 12.5,
           original_duration: 14,
+          subtitle: {
+            text: "Welcome home",
+            sentences: [
+              { start_time: 0, end_time: 1250, text: "Welcome home" },
+            ],
+            words: [
+              { start_time: 0, end_time: 600, text: "Welcome" },
+              { start_time: 610, end_time: 1250, text: "home" },
+            ],
+          },
         }),
         { status: 200, headers: { "x-tt-logid": "seed-audio-request-1" } },
       ),
@@ -1109,10 +1119,12 @@ describe("BytePlus provider adapter", () => {
       mediaKind: "voice",
       input: {
         task: "seed-audio",
-        textPrompt: "@Audio1 narrates this with a quiet, documentary warmth.",
+        textPrompt:
+          "@Audio1 and @Audio2 narrate this with a quiet, documentary warmth.",
         referenceAudioUrls: ["https://example.test/reference.mp3"],
-        format: "mp3",
-        sampleRate: 44100,
+        referenceSpeakerIds: ["en_male_russell_uranus_bigtts"],
+        format: "wav",
+        sampleRate: 48000,
         speechRate: 0.9,
         loudnessRate: 1.1,
         pitch: -1,
@@ -1124,8 +1136,19 @@ describe("BytePlus provider adapter", () => {
     expect(job).toMatchObject({
       providerRequestId: "seed-audio-request-1",
       status: "succeeded",
-      inlineOutputs: [{ mediaType: "audio/mpeg", dataBase64: audio }],
-      rawUsage: { generatedSeconds: 14, durationSeconds: 12.5 },
+      inlineOutputs: [{ mediaType: "audio/wav", dataBase64: audio }],
+      rawUsage: {
+        generatedSeconds: 14,
+        durationSeconds: 12.5,
+        subtitle: {
+          text: "Welcome home",
+          sentences: [{ startMs: 0, endMs: 1250, text: "Welcome home" }],
+          words: [
+            { startMs: 0, endMs: 600, text: "Welcome" },
+            { startMs: 610, endMs: 1250, text: "home" },
+          ],
+        },
+      },
     });
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe(
@@ -1133,11 +1156,15 @@ describe("BytePlus provider adapter", () => {
     );
     expect(JSON.parse(init.body as string)).toMatchObject({
       model: "seed-audio-1.0",
-      text_prompt: "@Audio1 narrates this with a quiet, documentary warmth.",
-      references: [{ audio_url: "https://example.test/reference.mp3" }],
+      text_prompt:
+        "@Audio1 and @Audio2 narrate this with a quiet, documentary warmth.",
+      references: [
+        { audio_url: "https://example.test/reference.mp3" },
+        { speaker: "en_male_russell_uranus_bigtts" },
+      ],
       audio_config: {
-        format: "mp3",
-        sample_rate: 44100,
+        format: "wav",
+        sample_rate: 48000,
         speech_rate: -10,
         loudness_rate: 10,
         pitch_rate: -1,

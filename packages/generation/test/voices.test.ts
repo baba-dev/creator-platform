@@ -23,6 +23,14 @@ describe("preset voice catalogue", () => {
     expect(voice.gender).toBe("male");
   });
 
+  it("allows verified TTS 2.0 voices as Seed Audio Speaker references", () => {
+    const voice = resolvePresetVoice("russell", "seed-audio-1.0");
+    expect(voice.speakerId).toBe("en_male_russell_uranus_bigtts");
+    const publicVoices = listPublicPresetVoices("seed-audio-1.0");
+    expect(publicVoices.some((item) => item.key === "russell")).toBe(true);
+    expect(publicVoices[0]).not.toHaveProperty("speakerId");
+  });
+
   it("handles case-insensitive and trimmed voice keys", () => {
     const voice = resolvePresetVoice("  CHARLOTTE  ");
     expect(voice.key).toBe("charlotte");

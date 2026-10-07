@@ -33,7 +33,7 @@ const SETTINGS_MENU_ITEMS: Array<{
     label: "Organization Settings",
     icon: "projects",
   },
-  { tab: "team", label: "Team Settings", icon: "admin" },
+  { tab: "team", label: "Team & Members", icon: "admin" },
   { tab: "security", label: "Login & Security", icon: "shield" },
   { tab: "chatbot", label: "Chatbot Settings", icon: "bot" },
   { tab: "locale", label: "Locale Settings", icon: "globe" },

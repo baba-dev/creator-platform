@@ -1,7 +1,7 @@
 import {
   WORKSPACE_SECONDARY_ITEMS,
   WORKSPACE_TOOLS,
-} from "@/lib/workspace-tools";
+} from "../../lib/workspace-tools";
 
 const toolSegments = WORKSPACE_TOOLS.map((item) => item.segment);
 const secondarySegments = WORKSPACE_SECONDARY_ITEMS.map((item) => item.segment);

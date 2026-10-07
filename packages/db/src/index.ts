@@ -51,6 +51,7 @@ export type {
   ProviderTool,
   ProviderToolPriceVersion,
   ProviderToolExecution,
+  ProviderToolInputAsset,
   TwoFactor,
   User,
   Wallet,

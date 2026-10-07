@@ -55,10 +55,14 @@ export function PixelControls({
   threadId,
   refreshKey,
   onNavigate,
+  showPreferences,
+  onClosePreferences,
 }: {
   threadId: string;
   refreshKey: number;
   onNavigate: (route: string) => void;
+  showPreferences: boolean;
+  onClosePreferences: () => void;
 }) {
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [preferences, setPreferences] = useState<Preferences>(defaults);
@@ -150,117 +154,131 @@ export function PixelControls({
 
   return (
     <div className="space-y-3 text-sm [&_button]:min-h-11 [&_button]:h-auto [&_button]:whitespace-normal [&_button]:py-2">
-      <details
-        data-pixel-preferences
-        className="rounded-xl border border-border bg-background p-3"
-      >
-        <summary className="min-h-10 cursor-pointer font-semibold">
-          Pixel preferences &amp; memory
-        </summary>
-        <p className="mb-3 text-xs text-muted-foreground">
-          Save preferences for this workspace only. Turn memory off to forget
-          them.
-        </p>
-        <label className="flex min-h-11 items-center gap-2">
-          <input
-            type="checkbox"
-            checked={preferences.enabled}
-            onChange={(e) =>
-              setPreferences({ ...preferences, enabled: e.target.checked })
-            }
-          />
-          Remember my choices
-        </label>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="grid gap-1">
-            Language
-            <select
-              className="min-h-11 rounded-lg border border-border bg-card p-2"
-              value={preferences.language}
+      {showPreferences && (
+        <section
+          data-pixel-preferences
+          aria-label="Pixel preferences and memory"
+          className="rounded-xl border border-border bg-background p-3"
+        >
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div>
+              <p className="font-semibold">Pixel preferences &amp; memory</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Save preferences for this workspace only. Turn memory off to
+                forget them.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onClosePreferences}
+              className="min-h-10 shrink-0 rounded-lg px-2 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="Close Pixel preferences"
+            >
+              Close
+            </button>
+          </div>
+          <label className="flex min-h-11 items-center gap-2">
+            <input
+              type="checkbox"
+              checked={preferences.enabled}
               onChange={(e) =>
-                setPreferences({
-                  ...preferences,
-                  language: e.target.value as Preferences["language"],
-                })
+                setPreferences({ ...preferences, enabled: e.target.checked })
+              }
+            />
+            Remember my choices
+          </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="grid gap-1">
+              Language
+              <select
+                className="min-h-11 rounded-lg border border-border bg-card p-2"
+                value={preferences.language}
+                onChange={(e) =>
+                  setPreferences({
+                    ...preferences,
+                    language: e.target.value as Preferences["language"],
+                  })
+                }
+              >
+                {["English", "Hinglish", "Arabic"].map((v) => (
+                  <option key={v}>{v}</option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1">
+              Response style
+              <select
+                className="min-h-11 rounded-lg border border-border bg-card p-2"
+                value={preferences.responseStyle}
+                onChange={(e) =>
+                  setPreferences({
+                    ...preferences,
+                    responseStyle: e.target.value as Preferences["responseStyle"],
+                  })
+                }
+              >
+                <option value="concise">Concise</option>
+                <option value="detailed">Detailed</option>
+              </select>
+            </label>
+            <label className="grid gap-1">
+              Preferred ratio
+              <select
+                className="min-h-11 rounded-lg border border-border bg-card p-2"
+                value={preferences.aspectRatio}
+                onChange={(e) =>
+                  setPreferences({
+                    ...preferences,
+                    aspectRatio: e.target.value as Preferences["aspectRatio"],
+                  })
+                }
+              >
+                {["1:1", "9:16", "16:9"].map((v) => (
+                  <option key={v}>{v}</option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1">
+              Brand profile
+              <select
+                className="min-h-11 rounded-lg border border-border bg-card p-2"
+                value={preferences.brandProfileId ?? ""}
+                onChange={(e) =>
+                  setPreferences({
+                    ...preferences,
+                    brandProfileId: e.target.value || null,
+                  })
+                }
+              >
+                <option value="">No brand</option>
+                {brands.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button
+              disabled={busy}
+              onClick={() => void act({ operation: "preferences", preferences })}
+            >
+              Save preferences
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={busy}
+              onClick={() =>
+                void act({ operation: "preferences", preferences: defaults })
               }
             >
-              {["English", "Hinglish", "Arabic"].map((v) => (
-                <option key={v}>{v}</option>
-              ))}
-            </select>
-          </label>
-          <label className="grid gap-1">
-            Response style
-            <select
-              className="min-h-11 rounded-lg border border-border bg-card p-2"
-              value={preferences.responseStyle}
-              onChange={(e) =>
-                setPreferences({
-                  ...preferences,
-                  responseStyle: e.target.value as Preferences["responseStyle"],
-                })
-              }
-            >
-              <option value="concise">Concise</option>
-              <option value="detailed">Detailed</option>
-            </select>
-          </label>
-          <label className="grid gap-1">
-            Preferred ratio
-            <select
-              className="min-h-11 rounded-lg border border-border bg-card p-2"
-              value={preferences.aspectRatio}
-              onChange={(e) =>
-                setPreferences({
-                  ...preferences,
-                  aspectRatio: e.target.value as Preferences["aspectRatio"],
-                })
-              }
-            >
-              {["1:1", "9:16", "16:9"].map((v) => (
-                <option key={v}>{v}</option>
-              ))}
-            </select>
-          </label>
-          <label className="grid gap-1">
-            Brand profile
-            <select
-              className="min-h-11 rounded-lg border border-border bg-card p-2"
-              value={preferences.brandProfileId ?? ""}
-              onChange={(e) =>
-                setPreferences({
-                  ...preferences,
-                  brandProfileId: e.target.value || null,
-                })
-              }
-            >
-              <option value="">No brand</option>
-              {brands.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Button
-            disabled={busy}
-            onClick={() => void act({ operation: "preferences", preferences })}
-          >
-            Save preferences
-          </Button>
-          <Button
-            variant="secondary"
-            disabled={busy}
-            onClick={() =>
-              void act({ operation: "preferences", preferences: defaults })
-            }
-          >
-            Forget preferences
-          </Button>
-        </div>
-      </details>
+              Forget preferences
+            </Button>
+          </div>
+
+        </section>
+      )}
       {workflows.map((workflow) => (
         <details
           key={workflow.id}

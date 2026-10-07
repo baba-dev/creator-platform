@@ -217,6 +217,18 @@ export async function listGenerationHistory(
             {
               requestPayload: { path: "$.text", string_contains: input.search },
             },
+            {
+              requestPayload: {
+                path: "$.sourceText",
+                string_contains: input.search,
+              },
+            },
+            {
+              requestPayload: {
+                path: "$.textPrompt",
+                string_contains: input.search,
+              },
+            },
           ],
         }
       : {}),

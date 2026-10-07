@@ -1501,6 +1501,7 @@ export async function processVoiceJob(
   let seedAudioSubtitle: Prisma.InputJsonValue | undefined;
   let seedAudioLongForm: Prisma.InputJsonValue | undefined;
   let longFormOutput = false;
+  let directAudioBytes: Buffer | undefined;
   try {
     const payload = job.requestPayload as Record<string, unknown>;
     let providerInput: Record<string, unknown> = payload;
@@ -1602,15 +1603,11 @@ export async function processVoiceJob(
           ? (produced.subtitle as Prisma.InputJsonObject)
           : undefined;
         seedAudioLongForm = produced.metadata as Prisma.InputJsonObject;
+        directAudioBytes = produced.audioBytes;
         result = {
           status: "succeeded" as const,
           providerRequestId: produced.providerRequestId,
-          inlineOutputs: [
-            {
-              mediaType: voiceOutputAsset.mimeType,
-              dataBase64: produced.audioBytes.toString("base64"),
-            },
-          ],
+          inlineOutputs: [{ mediaType: voiceOutputAsset.mimeType }],
           rawUsage: {
             generatedSeconds: produced.providerDurationSeconds,
           },
@@ -1682,35 +1679,38 @@ export async function processVoiceJob(
     return;
   }
 
-  const base64 = result.inlineOutputs[0]?.dataBase64;
-  if (!base64) {
-    await db.generationJob.updateMany({
-      where: { id, status: "SUBMITTED" },
-      data: {
-        status: "MANUAL_REVIEW",
-        providerRequestId: result.providerRequestId,
-        errorCode: "INVALID_PROVIDER_RESPONSE",
-        errorMessage:
-          "Provider returned empty voice audio. Credits remain reserved for manual review.",
-      },
-    });
-    return;
-  }
+  let audioBytes = directAudioBytes;
+  if (!audioBytes) {
+    const base64 = result.inlineOutputs[0]?.dataBase64;
+    if (!base64) {
+      await db.generationJob.updateMany({
+        where: { id, status: "SUBMITTED" },
+        data: {
+          status: "MANUAL_REVIEW",
+          providerRequestId: result.providerRequestId,
+          errorCode: "INVALID_PROVIDER_RESPONSE",
+          errorMessage:
+            "Provider returned empty voice audio. Credits remain reserved for manual review.",
+        },
+      });
+      return;
+    }
 
-  const audioBytes = Buffer.from(base64, "base64");
-  const canonicalBase64 = audioBytes.toString("base64").replace(/=+$/u, "");
-  if (canonicalBase64 !== base64.replace(/=+$/u, "")) {
-    await db.generationJob.updateMany({
-      where: { id, status: "SUBMITTED" },
-      data: {
-        status: "MANUAL_REVIEW",
-        providerRequestId: result.providerRequestId,
-        errorCode: "INVALID_PROVIDER_RESPONSE",
-        errorMessage:
-          "Provider returned malformed voice audio. Credits remain reserved for manual review.",
-      },
-    });
-    return;
+    audioBytes = Buffer.from(base64, "base64");
+    const canonicalBase64 = audioBytes.toString("base64").replace(/=+$/u, "");
+    if (canonicalBase64 !== base64.replace(/=+$/u, "")) {
+      await db.generationJob.updateMany({
+        where: { id, status: "SUBMITTED" },
+        data: {
+          status: "MANUAL_REVIEW",
+          providerRequestId: result.providerRequestId,
+          errorCode: "INVALID_PROVIDER_RESPONSE",
+          errorMessage:
+            "Provider returned malformed voice audio. Credits remain reserved for manual review.",
+        },
+      });
+      return;
+    }
   }
   let stored: Awaited<ReturnType<typeof storeAudio>> | null = null;
   let lastStorageError: unknown = null;

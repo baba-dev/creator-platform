@@ -174,8 +174,11 @@ export default async function CustomerJobPage({
             }}
             result={job.audioResult}
             takes={job.takes.map((take) => ({
-              ...take,
+              id: take.id,
+              status: take.status,
               createdAt: take.createdAt.toISOString(),
+              workflow: take.workflow,
+              asset: take.asset,
             }))}
           />
         ) : null}

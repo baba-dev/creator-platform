@@ -315,7 +315,7 @@ export const MAX_REFERENCE_IMAGE_BYTES = 30 * 1024 * 1024;
 export const MAX_REFERENCE_IMAGE_PIXELS = 36_000_000;
 
 export function storagePath(key: string) {
-  if (!/^[a-zA-Z0-9_-]+\.(png|jpg|webp|mp4|webm|mp3)$/.test(key))
+  if (!/^[a-zA-Z0-9_-]+\.(png|jpg|webp|mp4|webm|mp3|wav|ogg|pcm)$/.test(key))
     throw new Error("Invalid storage key");
   const root =
     process.env.ASSET_STORAGE_ROOT ?? "/var/www/creator-platform/shared/assets";

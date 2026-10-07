@@ -1088,6 +1088,14 @@ describe("image processing", () => {
 });
 
 describe("voice processing", () => {
+  beforeEach(() => {
+    mocks.db.asset.findFirstOrThrow.mockResolvedValue({
+      id: "asset1",
+      objectKey: "job1.mp3",
+      mimeType: "audio/mpeg",
+    });
+  });
+
   const voiceBase = {
     ...base,
     requestPayload: {
@@ -1136,6 +1144,7 @@ describe("voice processing", () => {
       audioBytes,
       "org1",
       "asset1",
+      "audio/mpeg",
     );
     expect(mocks.storeAudio.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.capture.mock.invocationCallOrder[0]!,
@@ -1146,7 +1155,7 @@ describe("voice processing", () => {
     );
     expect(tx.asset.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { objectKey: "job1.mp3" },
+        where: { id: "asset1" },
         data: expect.objectContaining({ status: "READY" }),
       }),
     );

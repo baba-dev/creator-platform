@@ -399,11 +399,8 @@ export function SeedAudioStudio({
       promptTooLong ||
       !referenceReady ||
       !imageReady
-    ) {
-      setQuote(null);
-      setQuoteKey(null);
+    )
       return;
-    }
     const controller = new AbortController();
     const timer = setTimeout(
       () =>

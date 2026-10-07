@@ -84,9 +84,7 @@ export function WorkspaceNavigation({ slug }: { slug: string }) {
         className="flex max-w-full gap-1 overflow-x-auto border-b border-border bg-sidebar/90 p-2 lg:hidden"
       >
         {items.map((item) => {
-          const href = item.segment
-            ? getWorkspaceItemHref(base, item)
-            : base;
+          const href = item.segment ? getWorkspaceItemHref(base, item) : base;
           const active = isActiveItem(pathname, base, item);
 
           return (

@@ -525,11 +525,14 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
       subtitles: true,
       "format:mp3": true,
     },
-    // Operator-published per-second rate. Replace with the contracted rate before enabling production use.
-    providerCostMicroUsd: 30_000n,
-    customerCredits: 16n,
+    // A commercial Seed Audio rate must be published by an operator after the
+    // BytePlus contract is verified; never seed a guessed production price.
+    providerCostMicroUsd: 0n,
+    customerCredits: 0n,
     pricingDimension: "SECOND",
     unitQuantity: 1,
+    enabled: false,
+    seedPrice: false,
   },
   {
     providerModelId: "dola-seed-2-1-turbo-260628",

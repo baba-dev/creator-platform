@@ -5,10 +5,13 @@ import { getAvailableStudioModels } from "@/lib/studio-model-discovery";
 
 export default async function BrandAssistantsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ organizationSlug: string }>;
+  searchParams: Promise<{ tab?: string }>;
 }) {
   const { organizationSlug } = await params;
+  const { tab } = await searchParams;
   const { membership } = await requireOrganizationPermission(
     organizationSlug,
     "workspace:view",
@@ -27,6 +30,7 @@ export default async function BrandAssistantsPage({
       organizationSlug={organizationSlug}
       organizationId={membership.organizationId}
       canGenerate={canGenerate}
+      initialTab={tab === "story" ? "story" : "brand"}
       brandDefaultModelId={brandDiscovery.defaultModelId}
       brandModels={brandDiscovery.models}
       storyDefaultModelId={storyDiscovery.defaultModelId}

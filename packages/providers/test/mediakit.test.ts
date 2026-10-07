@@ -63,6 +63,60 @@ describe("BytePlus MediaKit adapter", () => {
     });
   });
 
+  it("validates OmniHuman MediaKit video-tool payloads", async () => {
+    const fetch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      expect(body.video_url).toBe("https://example.com/video.mp4");
+      expect(body.periodic_stutter_detect).toEqual({
+        periodic_stutter_repair: true,
+        align_source_fps: true,
+      });
+      expect(body.duplicate_frame_detect).toEqual({
+        duplicate_frame_repair: true,
+      });
+      return jsonResponse({
+        success: true,
+        task_id: "amk-tool-enhance-video-smoothness-123",
+        request_id: "req-smooth",
+      });
+    });
+    const provider = createBytePlusMediaKitProvider({
+      apiKey: "test-key",
+      fetch: fetch as typeof globalThis.fetch,
+    });
+    await expect(
+      provider.submit({
+        idempotencyKey: "smooth-request",
+        toolId: "enhance-video-smoothness",
+        input: {
+          video_url: "https://example.com/video.mp4",
+          periodic_stutter_detect: {
+            periodic_stutter_repair: true,
+            align_source_fps: true,
+          },
+          duplicate_frame_detect: { duplicate_frame_repair: true },
+        },
+      }),
+    ).resolves.toMatchObject({ status: "submitted" });
+  });
+
+  it("rejects arbitrary fields for the first user-facing MediaKit tools", async () => {
+    const provider = createBytePlusMediaKitProvider({
+      apiKey: "test-key",
+      fetch: vi.fn() as unknown as typeof globalThis.fetch,
+    });
+    await expect(
+      provider.submit({
+        idempotencyKey: "quality-request",
+        toolId: "assess-video-quality",
+        input: {
+          video_url: "https://example.com/video.mp4",
+          callback_url: "https://attacker.example/callback",
+        },
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_TOOL_INPUT", retryable: false });
+  });
+
   it("prevents callers from overriding durability fields", async () => {
     const provider = createBytePlusMediaKitProvider({
       apiKey: "test-key",

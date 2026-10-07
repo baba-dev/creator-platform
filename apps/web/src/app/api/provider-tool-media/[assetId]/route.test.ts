@@ -42,6 +42,8 @@ afterAll(async () => rm(root, { recursive: true, force: true }));
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.db.providerToolInputAsset.findUnique.mockResolvedValue({
+    role: "SOURCE_VIDEO",
+    position: 0,
     asset: {
       id: "asset1",
       organizationId: "org1",
@@ -89,6 +91,9 @@ describe("provider tool media retrieval", () => {
     for (const patch of [
       { asset: { ...row.asset, organizationId: "org2" } },
       { asset: { ...row.asset, storageOwnerUserId: "other" } },
+      { role: "OTHER_INPUT" },
+      { position: 1 },
+      { asset: { ...row.asset, mimeType: "video/webm" } },
       { execution: { ...row.execution, status: "FAILED" } },
     ]) {
       mocks.db.providerToolInputAsset.findUnique.mockResolvedValueOnce({

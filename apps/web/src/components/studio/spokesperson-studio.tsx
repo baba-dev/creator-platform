@@ -865,6 +865,7 @@ export function SpokespersonStudio({
 
           {activeVideoAssetId ? (
             <SpokespersonMediaKitTools
+              key={activeVideoAssetId}
               organizationId={organizationId}
               assetId={activeVideoAssetId}
               canGenerate={canGenerate}

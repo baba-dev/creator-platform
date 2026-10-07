@@ -154,6 +154,34 @@ describe("BytePlus MediaKit adapter", () => {
     expect(result.result).toMatchObject({ duration: 12.5 });
   });
 
+  it("keeps documented pre-processing task states recoverable", async () => {
+    const provider = createBytePlusMediaKitProvider({
+      apiKey: "test-key",
+      fetch: vi.fn(async () =>
+        jsonResponse({ success: true, task_id: "task-1", status: "pending" }),
+      ) as unknown as typeof globalThis.fetch,
+    });
+    await expect(provider.getTask("task-1")).resolves.toMatchObject({
+      status: "submitted",
+    });
+  });
+
+  it.each([undefined, "mystery-state"])(
+    "rejects unknown polling status %s instead of polling forever",
+    async (status) => {
+      const provider = createBytePlusMediaKitProvider({
+        apiKey: "test-key",
+        fetch: vi.fn(async () =>
+          jsonResponse({ success: true, task_id: "task-1", status }),
+        ) as unknown as typeof globalThis.fetch,
+      });
+      await expect(provider.getTask("task-1")).rejects.toMatchObject({
+        code: "INVALID_PROVIDER_RESPONSE",
+        retryable: true,
+      });
+    },
+  );
+
   it("marks throttling as retryable without exposing response details", async () => {
     const provider = createBytePlusMediaKitProvider({
       apiKey: "test-key",

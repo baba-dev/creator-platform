@@ -1,7 +1,9 @@
-import { quoteProviderToolPrice } from "@aiwa/credits";
+import { AssetQuotaExceededError } from "@aiwa/assets";
+import { LedgerDomainError, quoteProviderToolPrice } from "@aiwa/credits";
 import { db } from "@aiwa/db";
 import {
   createProviderToolExecution,
+  GenerationError,
   ProviderToolExecutionError,
   requireMembership,
 } from "@aiwa/generation";
@@ -11,9 +13,10 @@ import { z } from "zod";
 
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
+import { rateLimit } from "@/lib/rate-limit";
+import { spokespersonToolRequestSchema } from "./schema";
 
-const toolKeySchema = z.enum(["matting", "quality", "smoothness"]);
-type ToolKey = z.infer<typeof toolKeySchema>;
+type ToolKey = "matting" | "quality" | "smoothness";
 
 const providerToolIds: Record<ToolKey, string> = {
   matting: "matte-portrait-video",
@@ -21,29 +24,12 @@ const providerToolIds: Record<ToolKey, string> = {
   smoothness: "enhance-video-smoothness",
 };
 
-const postSchema = z
-  .object({
-    organizationId: z.string().min(1).max(128),
-    assetId: z.string().min(1).max(128),
-    tool: toolKeySchema,
-    idempotencyKey: z.uuid(),
-    mattingFormat: z.enum(["WEBM", "MP4"]).default("WEBM"),
-    backgroundColor: z.enum(["black", "white", "green"]).optional(),
-  })
-  .strict()
-  .superRefine((value, context) => {
-    if (
-      value.tool === "matting" &&
-      value.mattingFormat !== "MP4" &&
-      value.backgroundColor !== undefined
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["backgroundColor"],
-        message: "Background color is available only for MP4 matting output.",
-      });
-    }
-  });
+const MAX_TOOL_REQUEST_BYTES = 4 * 1024;
+const toolLimiter = rateLimit({
+  max: 10,
+  windowMs: 60_000,
+  prefix: "spokesperson-mediakit",
+});
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -199,13 +185,22 @@ export async function GET(request: Request) {
     );
 
   const url = new URL(request.url);
-  const organizationId = url.searchParams.get("organizationId") ?? "";
-  const assetId = url.searchParams.get("assetId") ?? "";
-  if (!organizationId || !assetId)
+  const query = z
+    .object({
+      organizationId: z.string().min(1).max(128),
+      assetId: z.string().min(1).max(128),
+    })
+    .strict()
+    .safeParse({
+      organizationId: url.searchParams.get("organizationId") ?? "",
+      assetId: url.searchParams.get("assetId") ?? "",
+    });
+  if (!query.success)
     return NextResponse.json(
-      { error: "organizationId and assetId are required." },
+      { error: "Invalid MediaKit tool query." },
       { status: 400 },
     );
+  const { organizationId, assetId } = query.data;
 
   try {
     await requireMembership(db, organizationId, session.user.id, true);
@@ -221,79 +216,118 @@ export async function GET(request: Request) {
       );
 
     const quantity = Math.ceil(source.durationMs / 1000);
-    const rows = await Promise.all(
-      (Object.entries(providerToolIds) as Array<[ToolKey, string]>).map(
-        async ([key, providerToolId]) => {
-          const tool = await loadTool(providerToolId);
-          const price = tool?.priceVersions[0];
-          const formatAllowed = ["video/mp4", "video/quicktime"].includes(
-            source.mimeType,
-          );
-          const repairAllowed =
-            key !== "smoothness" || source.durationMs <= 35_000;
-          if (!tool || !price || price.pricingMetric !== tool.pricingMetric) {
+    const [rows, activeExecution] = await Promise.all([
+      Promise.all(
+        (Object.entries(providerToolIds) as Array<[ToolKey, string]>).map(
+          async ([key, providerToolId]) => {
+            const tool = await loadTool(providerToolId);
+            const price = tool?.priceVersions[0];
+            const formatAllowed = ["video/mp4", "video/quicktime"].includes(
+              source.mimeType,
+            );
+            const repairAllowed =
+              key !== "smoothness" || source.durationMs <= 35_000;
+            if (!tool || !price || price.pricingMetric !== tool.pricingMetric) {
+              return {
+                key,
+                providerToolId,
+                available: false,
+                enabled: tool?.enabled ?? false,
+                repairAllowed,
+                reason: "Pricing is not configured.",
+              };
+            }
+            const maximum = quote(price, quantity);
+            const detectionOnly =
+              key === "smoothness" && price.providerCostNoOutputMicroUsd
+                ? quote(price, quantity, price.providerCostNoOutputMicroUsd)
+                : null;
             return {
               key,
               providerToolId,
-              available: false,
-              enabled: tool?.enabled ?? false,
+              available:
+                tool.enabled &&
+                isBytePlusMediaKitConfigured() &&
+                formatAllowed &&
+                repairAllowed &&
+                (key !== "smoothness" || detectionOnly !== null),
+              enabled: tool.enabled,
               repairAllowed,
-              reason: "Pricing is not configured.",
+              priceVersionId: price.id,
+              estimatedCredits: maximum.customerCredits.toString(),
+              detectionOnlyCredits:
+                detectionOnly?.customerCredits.toString() ?? null,
+              reason: !isBytePlusMediaKitConfigured()
+                ? "MediaKit credential is not configured."
+                : !tool.enabled
+                  ? "Tool is disabled by an administrator."
+                  : !formatAllowed
+                    ? "This derived video format is not accepted as MediaKit input."
+                    : !repairAllowed
+                      ? "Smoothness repair supports videos up to 35 seconds."
+                      : key === "smoothness" && !detectionOnly
+                        ? "Detection-only pricing is not configured."
+                        : null,
             };
-          }
-          const maximum = quote(price, quantity);
-          const detectionOnly =
-            key === "smoothness" && price.providerCostNoOutputMicroUsd
-              ? quote(price, quantity, price.providerCostNoOutputMicroUsd)
-              : null;
-          return {
-            key,
-            providerToolId,
-            available:
-              tool.enabled &&
-              isBytePlusMediaKitConfigured() &&
-              formatAllowed &&
-              repairAllowed &&
-              (key !== "smoothness" || detectionOnly !== null),
-            enabled: tool.enabled,
-            repairAllowed,
-            priceVersionId: price.id,
-            estimatedCredits: maximum.customerCredits.toString(),
-            detectionOnlyCredits:
-              detectionOnly?.customerCredits.toString() ?? null,
-            reason: !isBytePlusMediaKitConfigured()
-              ? "MediaKit credential is not configured."
-              : !tool.enabled
-                ? "Tool is disabled by an administrator."
-                : !formatAllowed
-                  ? "This derived video format is not accepted as MediaKit input."
-                  : !repairAllowed
-                    ? "Smoothness repair supports videos up to 35 seconds."
-                    : key === "smoothness" && !detectionOnly
-                      ? "Detection-only pricing is not configured."
-                      : null,
-          };
-        },
+          },
+        ),
       ),
-    );
+      db.providerToolExecution.findFirst({
+        where: {
+          organizationId,
+          createdById: session.user.id,
+          status: {
+            in: ["QUEUED", "SUBMITTING", "PROCESSING", "MANUAL_REVIEW"],
+          },
+          inputAssets: { some: { assetId: source.id } },
+          providerTool: {
+            providerToolId: { in: Object.values(providerToolIds) },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          status: true,
+          providerTool: { select: { providerToolId: true } },
+        },
+      }),
+    ]);
 
-    return NextResponse.json({
-      asset: {
-        id: source.id,
-        durationMs: source.durationMs,
-        mimeType: source.mimeType,
-      },
-      tools: rows,
-    });
-  } catch (error) {
+    const activeTool = activeExecution
+      ? (Object.entries(providerToolIds) as Array<[ToolKey, string]>).find(
+          ([, providerToolId]) =>
+            providerToolId === activeExecution.providerTool.providerToolId,
+        )?.[0]
+      : undefined;
+
     return NextResponse.json(
       {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Unable to load MediaKit tools.",
+        asset: {
+          id: source.id,
+          durationMs: source.durationMs,
+          mimeType: source.mimeType,
+        },
+        tools: rows,
+        activeExecution:
+          activeExecution && activeTool
+            ? {
+                id: activeExecution.id,
+                status: activeExecution.status,
+                tool: activeTool,
+              }
+            : null,
       },
-      { status: 403 },
+      { headers: { "Cache-Control": "private, no-store" } },
+    );
+  } catch (error) {
+    if (error instanceof GenerationError)
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.status },
+      );
+    return NextResponse.json(
+      { error: "Unable to load MediaKit tools." },
+      { status: 503 },
     );
   }
 }
@@ -307,6 +341,8 @@ export async function POST(request: Request) {
       { error: "Authentication required." },
       { status: 401 },
     );
+  const rateLimited = await toolLimiter.check(session.user.id);
+  if (rateLimited) return rateLimited;
   if (!isBytePlusMediaKitConfigured())
     return NextResponse.json(
       { error: "MediaKit is not configured on the worker." },
@@ -314,7 +350,22 @@ export async function POST(request: Request) {
     );
 
   try {
-    const input = postSchema.parse(await request.json());
+    const declaredLength = Number(request.headers.get("content-length"));
+    if (
+      Number.isFinite(declaredLength) &&
+      declaredLength > MAX_TOOL_REQUEST_BYTES
+    )
+      return NextResponse.json(
+        { error: "MediaKit request is too large." },
+        { status: 413 },
+      );
+    const text = await request.text();
+    if (text.length > MAX_TOOL_REQUEST_BYTES)
+      return NextResponse.json(
+        { error: "MediaKit request is too large." },
+        { status: 413 },
+      );
+    const input = spokespersonToolRequestSchema.parse(JSON.parse(text));
     await requireMembership(db, input.organizationId, session.user.id, true);
     const source = await loadOmniHumanVideo(
       input.organizationId,
@@ -392,14 +443,36 @@ export async function POST(request: Request) {
         { error: error.message },
         { status: error.status },
       );
+    if (error instanceof GenerationError)
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.status },
+      );
+    if (error instanceof AssetQuotaExceededError)
+      return NextResponse.json(
+        {
+          error: error.message,
+          code: "STORAGE_QUOTA_EXCEEDED",
+          scope: error.scope,
+        },
+        { status: 409 },
+      );
+    if (error instanceof LedgerDomainError)
+      return NextResponse.json(
+        { error: error.message, code: error.code },
+        { status: 400 },
+      );
     if (error instanceof z.ZodError)
       return NextResponse.json(
         { error: "Invalid MediaKit request." },
         { status: 400 },
       );
     return NextResponse.json(
-      { error: "Unable to start MediaKit processing." },
-      { status: 500 },
+      {
+        error:
+          "Unable to start MediaKit processing. Retry with the same request.",
+      },
+      { status: 503 },
     );
   }
 }

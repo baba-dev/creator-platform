@@ -40,12 +40,21 @@ export async function GET(
     );
 
   try {
-    await requireMembership(
+    const membership = await requireMembership(
       db,
       execution.organizationId,
       session.user.id,
       false,
     );
+    if (
+      membership.role !== "ORGANIZATION_OWNER" &&
+      execution.createdById !== session.user.id
+    ) {
+      return NextResponse.json(
+        { error: "Execution not found." },
+        { status: 404 },
+      );
+    }
   } catch {
     return NextResponse.json(
       { error: "Execution not found." },
@@ -64,20 +73,23 @@ export async function GET(
       ? result.vq_score
       : null;
 
-  return NextResponse.json({
-    execution: {
-      id: execution.id,
-      tool: execution.providerTool.providerToolId,
-      displayName: execution.providerTool.displayName,
-      status: execution.status,
-      chargedCredits: execution.chargedCredits.toString(),
-      reservedCredits: execution.reservedCredits.toString(),
-      errorCode: execution.errorCode,
-      errorMessage: execution.errorMessage,
-      vqScore,
-      outputAssetId: execution.outputAssets[0]?.id ?? null,
-      outputMimeType: execution.outputAssets[0]?.mimeType ?? null,
-      completedAt: execution.completedAt?.toISOString() ?? null,
+  return NextResponse.json(
+    {
+      execution: {
+        id: execution.id,
+        tool: execution.providerTool.providerToolId,
+        displayName: execution.providerTool.displayName,
+        status: execution.status,
+        chargedCredits: execution.chargedCredits.toString(),
+        reservedCredits: execution.reservedCredits.toString(),
+        errorCode: execution.errorCode,
+        errorMessage: execution.errorMessage,
+        vqScore,
+        outputAssetId: execution.outputAssets[0]?.id ?? null,
+        outputMimeType: execution.outputAssets[0]?.mimeType ?? null,
+        completedAt: execution.completedAt?.toISOString() ?? null,
+      },
     },
-  });
+    { headers: { "Cache-Control": "private, no-store" } },
+  );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
@@ -22,6 +22,11 @@ interface ToolAvailability {
 interface ToolCatalogResponse {
   asset: { id: string; durationMs: number; mimeType: string };
   tools: ToolAvailability[];
+  activeExecution?: {
+    id: string;
+    status: string;
+    tool: ToolKey;
+  } | null;
   error?: string;
 }
 
@@ -39,6 +44,30 @@ interface ExecutionResponse {
 }
 
 const TERMINAL = new Set(["SUCCEEDED", "FAILED", "CANCELLED", "MANUAL_REVIEW"]);
+
+type Execution = NonNullable<ExecutionResponse["execution"]>;
+
+async function waitForExecution(
+  executionId: string,
+  signal?: AbortSignal,
+): Promise<Execution> {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+    const response = await fetch(
+      `/api/spokesperson/tools/${encodeURIComponent(executionId)}`,
+      { cache: "no-store", signal },
+    );
+    const body = (await response.json().catch(() => ({}))) as ExecutionResponse;
+    if (!response.ok || !body.execution) {
+      throw new Error(body.error ?? "Unable to read MediaKit status.");
+    }
+    if (TERMINAL.has(body.execution.status)) return body.execution;
+  }
+  throw new Error(
+    "MediaKit is still processing. The durable job will continue in the worker.",
+  );
+}
 
 export function SpokespersonMediaKitTools({
   organizationId,
@@ -60,13 +89,51 @@ export function SpokespersonMediaKitTools({
   const [backgroundColor, setBackgroundColor] = useState<
     "black" | "white" | "green"
   >("green");
+  const runControllerRef = useRef<AbortController | null>(null);
+
+  const applyExecution = useCallback(
+    (execution: Execution, tool: ToolKey) => {
+      if (execution.status !== "SUCCEEDED") {
+        throw new Error(
+          execution.errorMessage ??
+            "MediaKit processing needs operator review.",
+        );
+      }
+
+      if (
+        tool === "quality" &&
+        execution.vqScore !== null &&
+        execution.vqScore !== undefined
+      ) {
+        setQualityScore(execution.vqScore);
+        const band =
+          execution.vqScore >= 70
+            ? "excellent"
+            : execution.vqScore >= 60
+              ? "good"
+              : "needs improvement";
+        setMessage(
+          `VQScore ${execution.vqScore.toFixed(1)} / 100 — ${band}. Charged ${execution.chargedCredits ?? "0"} credits.`,
+        );
+      } else if (execution.outputAssetId) {
+        onOutputAsset(execution.outputAssetId);
+        setMessage(
+          `${tool === "smoothness" ? "Smoothness enhancement" : "Portrait matting"} completed. Charged ${execution.chargedCredits ?? "0"} credits.`,
+        );
+      } else if (tool === "smoothness") {
+        setMessage(
+          `No repair was needed. Detection-only pricing applied: ${execution.chargedCredits ?? "0"} credits.`,
+        );
+      } else {
+        setMessage("MediaKit processing completed.");
+      }
+    },
+    [onOutputAsset],
+  );
 
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
-    setLoading(true);
-    setMessage(null);
-    setQualityScore(null);
     void fetch(
       `/api/spokesperson/tools?organizationId=${encodeURIComponent(
         organizationId,
@@ -82,7 +149,28 @@ export function SpokespersonMediaKitTools({
         return body;
       })
       .then((body) => {
-        if (active) setCatalog(body);
+        if (!active) return;
+        setCatalog(body);
+        if (body.activeExecution) {
+          const { id, tool } = body.activeExecution;
+          setRunning(tool);
+          setMessage("Resuming MediaKit processing…");
+          void waitForExecution(id, controller.signal)
+            .then((execution) => {
+              if (active) applyExecution(execution, tool);
+            })
+            .catch((error: unknown) => {
+              if (!active || controller.signal.aborted) return;
+              setMessage(
+                error instanceof Error
+                  ? error.message
+                  : "MediaKit processing failed.",
+              );
+            })
+            .finally(() => {
+              if (active) setRunning(null);
+            });
+        }
       })
       .catch((error: unknown) => {
         if (!active || controller.signal.aborted) return;
@@ -100,7 +188,14 @@ export function SpokespersonMediaKitTools({
       active = false;
       controller.abort();
     };
-  }, [organizationId, assetId]);
+  }, [organizationId, assetId, applyExecution]);
+
+  useEffect(
+    () => () => {
+      runControllerRef.current?.abort();
+    },
+    [],
+  );
 
   const tools = useMemo(
     () =>
@@ -110,62 +205,6 @@ export function SpokespersonMediaKitTools({
     [catalog?.tools],
   );
 
-  async function pollExecution(executionId: string, tool: ToolKey) {
-    for (let attempt = 0; attempt < 120; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 2500));
-      const response = await fetch(
-        `/api/spokesperson/tools/${encodeURIComponent(executionId)}`,
-        { cache: "no-store" },
-      );
-      const body = (await response
-        .json()
-        .catch(() => ({}))) as ExecutionResponse;
-      if (!response.ok || !body.execution) {
-        throw new Error(body.error ?? "Unable to read MediaKit status.");
-      }
-      if (!TERMINAL.has(body.execution.status)) continue;
-
-      if (body.execution.status !== "SUCCEEDED") {
-        throw new Error(
-          body.execution.errorMessage ??
-            "MediaKit processing needs operator review.",
-        );
-      }
-
-      if (
-        tool === "quality" &&
-        body.execution.vqScore !== null &&
-        body.execution.vqScore !== undefined
-      ) {
-        setQualityScore(body.execution.vqScore);
-        const band =
-          body.execution.vqScore >= 70
-            ? "excellent"
-            : body.execution.vqScore >= 60
-              ? "good"
-              : "needs improvement";
-        setMessage(
-          `VQScore ${body.execution.vqScore.toFixed(1)} / 100 — ${band}. Charged ${body.execution.chargedCredits ?? "0"} credits.`,
-        );
-      } else if (body.execution.outputAssetId) {
-        onOutputAsset(body.execution.outputAssetId);
-        setMessage(
-          `${tool === "smoothness" ? "Smoothness enhancement" : "Portrait matting"} completed. Charged ${body.execution.chargedCredits ?? "0"} credits.`,
-        );
-      } else if (tool === "smoothness") {
-        setMessage(
-          `No repair was needed. Detection-only pricing applied: ${body.execution.chargedCredits ?? "0"} credits.`,
-        );
-      } else {
-        setMessage("MediaKit processing completed.");
-      }
-      return;
-    }
-    throw new Error(
-      "MediaKit is still processing. The durable job will continue in the worker.",
-    );
-  }
-
   async function run(tool: ToolKey) {
     if (!canGenerate || running) return;
     const availability = tools.get(tool);
@@ -173,6 +212,9 @@ export function SpokespersonMediaKitTools({
       setMessage(availability?.reason ?? "This MediaKit tool is unavailable.");
       return;
     }
+    const controller = new AbortController();
+    runControllerRef.current?.abort();
+    runControllerRef.current = controller;
     setRunning(tool);
     setMessage(null);
     if (tool === "quality") setQualityScore(null);
@@ -180,6 +222,7 @@ export function SpokespersonMediaKitTools({
       const response = await fetch("/api/spokesperson/tools", {
         method: "POST",
         headers: { "content-type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           organizationId,
           assetId,
@@ -202,13 +245,21 @@ export function SpokespersonMediaKitTools({
       setMessage(
         `${tool === "quality" ? "Assessing video quality" : tool === "smoothness" ? "Detecting and repairing stutter" : "Removing portrait background"}…`,
       );
-      await pollExecution(body.execution.id, tool);
+      const execution = await waitForExecution(
+        body.execution.id,
+        controller.signal,
+      );
+      applyExecution(execution, tool);
     } catch (error) {
+      if (controller.signal.aborted) return;
       setMessage(
         error instanceof Error ? error.message : "MediaKit processing failed.",
       );
     } finally {
-      setRunning(null);
+      if (runControllerRef.current === controller) {
+        runControllerRef.current = null;
+        setRunning(null);
+      }
     }
   }
 

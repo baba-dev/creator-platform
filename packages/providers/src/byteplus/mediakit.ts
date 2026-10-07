@@ -298,7 +298,7 @@ function clientToken(idempotencyKey: string): string {
   return `aiwa_${createHash("sha256").update(idempotencyKey).digest("hex").slice(0, 56)}`;
 }
 
-function normalizeStatus(value: string | undefined): ProviderToolStatus {
+function normalizeStatus(value: string | undefined): ProviderToolStatus | null {
   switch ((value ?? "").toLowerCase()) {
     case "completed":
     case "succeeded":
@@ -313,8 +313,13 @@ function normalizeStatus(value: string | undefined): ProviderToolStatus {
     case "processing":
     case "running":
       return "processing";
-    default:
+    case "created":
+    case "pending":
+    case "queued":
+    case "submitted":
       return "submitted";
+    default:
+      return null;
   }
 }
 
@@ -564,6 +569,16 @@ export function createBytePlusMediaKitProvider(
       const body = parsedPayload.data;
       const status =
         body.success === false ? "failed" : normalizeStatus(body.status);
+      if (!status) {
+        throw new ProviderRequestError(
+          "MediaKit returned an unknown task status",
+          true,
+          {
+            code: "INVALID_PROVIDER_RESPONSE",
+            stage: "parsing",
+          },
+        );
+      }
       return {
         providerTaskId: body.task_id ?? providerTaskId,
         providerRequestId: body.request_id,

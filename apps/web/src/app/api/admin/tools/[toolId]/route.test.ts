@@ -35,6 +35,7 @@ const tool = {
   providerToolId: "lip-sync",
   displayName: "Video Lip Sync",
   pricingMetric: "OUTPUT_SECOND",
+  capabilities: {},
   enabled: false,
 };
 
@@ -68,6 +69,23 @@ describe("MediaKit admin controls", () => {
     expect(response.status).toBe(409);
   });
 
+  it("does not enable variable-output billing without a detection-only price", async () => {
+    mocks.db.providerTool.findUnique.mockResolvedValue({
+      ...tool,
+      providerToolId: "enhance-video-smoothness",
+      pricingMetric: "INPUT_SECOND",
+      capabilities: { variableBilling: "output-presence" },
+    });
+    mocks.db.providerToolPriceVersion.findFirst.mockResolvedValue({
+      providerCostMicroUsd: 5000n,
+      providerCostNoOutputMicroUsd: null,
+      pricingMetric: "INPUT_SECOND",
+    });
+    const response = await PATCH(request({ enabled: true }), context);
+    expect(response.status).toBe(409);
+    expect(mocks.tx.providerTool.update).not.toHaveBeenCalled();
+  });
+
   it("publishes immutable integer pricing with a 20% margin snapshot", async () => {
     const response = await PATCH(
       request({
@@ -97,6 +115,7 @@ describe("MediaKit admin controls", () => {
       ...tool,
       providerToolId: "enhance-video-smoothness",
       pricingMetric: "INPUT_SECOND",
+      capabilities: { variableBilling: "output-presence" },
     });
     const response = await PATCH(
       request({
@@ -120,6 +139,12 @@ describe("MediaKit admin controls", () => {
   });
 
   it("rejects a detection-only price above the repair price", async () => {
+    mocks.db.providerTool.findUnique.mockResolvedValue({
+      ...tool,
+      providerToolId: "enhance-video-smoothness",
+      pricingMetric: "INPUT_SECOND",
+      capabilities: { variableBilling: "output-presence" },
+    });
     const response = await PATCH(
       request({
         idempotencyKey: "16a7e04c-b4cb-48a0-b14a-461cb2420354",

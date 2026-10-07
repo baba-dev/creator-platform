@@ -32,6 +32,16 @@ function serializePrice(price: ProviderToolPriceVersion) {
   };
 }
 
+function usesOutputPresenceBilling(capabilities: unknown): boolean {
+  return Boolean(
+    capabilities &&
+    typeof capabilities === "object" &&
+    !Array.isArray(capabilities) &&
+    (capabilities as Record<string, unknown>).variableBilling ===
+      "output-presence",
+  );
+}
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ toolId: string }> },
@@ -84,7 +94,12 @@ export async function PATCH(
       if (
         !activePrice ||
         activePrice.providerCostMicroUsd <= 0n ||
-        activePrice.pricingMetric !== tool.pricingMetric
+        activePrice.pricingMetric !== tool.pricingMetric ||
+        (usesOutputPresenceBilling(tool.capabilities) &&
+          (activePrice.providerCostNoOutputMicroUsd === null ||
+            activePrice.providerCostNoOutputMicroUsd <= 0n ||
+            activePrice.providerCostNoOutputMicroUsd >
+              activePrice.providerCostMicroUsd))
       ) {
         return NextResponse.json(
           {
@@ -129,6 +144,21 @@ export async function PATCH(
   }
 
   const input = publication.data;
+  const variableOutputBilling = usesOutputPresenceBilling(tool.capabilities);
+  if (
+    (variableOutputBilling &&
+      input.providerCostNoOutputMicroUsd === undefined) ||
+    (!variableOutputBilling && input.providerCostNoOutputMicroUsd !== undefined)
+  ) {
+    return NextResponse.json(
+      {
+        error: variableOutputBilling
+          ? "Detection-only provider cost is required for this tool."
+          : "Detection-only provider cost is not supported for this tool.",
+      },
+      { status: 400 },
+    );
+  }
   if ((input.creditsPerBaisa ?? 1n) !== 1n) {
     return NextResponse.json(
       {

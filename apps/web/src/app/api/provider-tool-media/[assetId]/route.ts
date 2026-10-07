@@ -14,7 +14,7 @@ import { z } from "zod";
 export const runtime = "nodejs";
 
 const identifier = z.string().regex(/^[A-Za-z0-9_-]{1,128}$/);
-const MAX_PROVIDER_VIDEO_BYTES = 100_000_000;
+const MAX_PROVIDER_VIDEO_BYTES = 100 * 1024 * 1024;
 
 async function serve(request: Request, assetId: string, head: boolean) {
   const url = new URL(request.url);
@@ -41,6 +41,8 @@ async function serve(request: Request, assetId: string, head: boolean) {
   const input = await db.providerToolInputAsset.findUnique({
     where: { executionId_assetId: { executionId, assetId } },
     select: {
+      role: true,
+      position: true,
       execution: {
         select: { organizationId: true, createdById: true, status: true },
       },
@@ -65,10 +67,13 @@ async function serve(request: Request, assetId: string, head: boolean) {
   if (
     !asset ||
     !execution ||
+    input.role !== "SOURCE_VIDEO" ||
+    input.position !== 0 ||
     asset.organizationId !== execution.organizationId ||
     !["SUBMITTING", "PROCESSING"].includes(execution.status) ||
     asset.status !== "READY" ||
     asset.mediaKind !== "VIDEO" ||
+    !["video/mp4", "video/quicktime"].includes(asset.mimeType) ||
     (asset.purpose === "REFERENCE_INPUT" &&
       asset.storageOwnerUserId !== execution.createdById)
   )

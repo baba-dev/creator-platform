@@ -294,10 +294,14 @@ function toolResultRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
-function resultVideoUrl(result: Record<string, unknown>): string | null {
-  return typeof result.video_url === "string" && result.video_url
-    ? result.video_url
-    : null;
+export function classifyProviderVideoOutput(
+  result: Record<string, unknown>,
+): { kind: "absent" } | { kind: "valid"; url: string } | { kind: "invalid" } {
+  const value = result.video_url;
+  if (value === undefined || value === null) return { kind: "absent" };
+  if (typeof value === "string" && value.length > 0)
+    return { kind: "valid", url: value };
+  return { kind: "invalid" };
 }
 
 function validQualityScore(result: Record<string, unknown>): boolean {
@@ -574,6 +578,29 @@ export async function createProviderToolExecution(
         "This MediaKit tool does not accept snapshotted video sources yet.",
         400,
       );
+    }
+
+    if (sourceAsset) {
+      const unsettledForSource = await tx.providerToolExecution.findFirst({
+        where: {
+          organizationId: input.organizationId,
+          createdById: userId,
+          status: {
+            in: ["QUEUED", "SUBMITTING", "PROCESSING", "MANUAL_REVIEW"],
+          },
+          inputAssets: { some: { assetId: sourceAsset.id } },
+          providerTool: {
+            providerToolId: { in: [...FIRST_VIDEO_TOOLS] },
+          },
+        },
+        select: { id: true },
+      });
+      if (unsettledForSource) {
+        throw new ProviderToolExecutionError(
+          "This video already has unsettled MediaKit work. Wait for it to finish or request operator review.",
+          409,
+        );
+      }
     }
 
     const quote = priceQuote(price, input.quotedQuantity);
@@ -927,7 +954,21 @@ async function finalizeSucceededExecution(executionId: string): Promise<void> {
     return;
   }
 
-  const outputUrl = resultVideoUrl(result);
+  const output = classifyProviderVideoOutput(result);
+  if (output.kind === "invalid") {
+    await db.providerToolExecution.updateMany({
+      where: { id: execution.id, status: "PROCESSING" },
+      data: {
+        status: "MANUAL_REVIEW",
+        nextAttemptAt: null,
+        errorCode: "INVALID_PROVIDER_RESPONSE",
+        errorMessage:
+          "MediaKit returned a malformed video output. Credits remain reserved for review.",
+      },
+    });
+    return;
+  }
+  const outputUrl = output.kind === "valid" ? output.url : null;
   const outputAsset = execution.outputAssets[0] ?? null;
   const detectionOnly =
     toolKey === "enhance-video-smoothness" && outputUrl === null;

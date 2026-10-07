@@ -691,7 +691,7 @@ export function SpokespersonStudio({
       <div className="flex min-h-[400px] items-center justify-center">
         <div className="flex items-center gap-3 text-sm text-muted-foreground">
           <span className="size-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          Loading Digital Spokesperson Studio…
+          Loading AI Spokesperson…
         </div>
       </div>
     );
@@ -715,7 +715,7 @@ export function SpokespersonStudio({
             </span>
           </div>
           <h1 className="font-display text-2xl font-bold tracking-tight text-foreground lg:text-3xl">
-            Digital Spokesperson Studio
+            AI Spokesperson
           </h1>
           <p className="max-w-2xl text-sm text-muted-foreground">
             Generate photorealistic, lip-synchronized talking presenters from a

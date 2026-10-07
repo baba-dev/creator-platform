@@ -1074,8 +1074,11 @@ describe("BytePlus provider adapter", () => {
         audio_params: {
           format: "mp3",
           sample_rate: 24_000,
+          bit_rate: 128_000,
           speech_rate: 10,
+          loudness_rate: 0,
         },
+        additions: "{}",
       },
     });
   });

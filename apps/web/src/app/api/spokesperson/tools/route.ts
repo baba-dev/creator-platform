@@ -268,10 +268,10 @@ export async function GET(request: Request) {
                 : !formatAllowed
                   ? "This derived video format is not accepted as MediaKit input."
                   : !repairAllowed
-                  ? "Smoothness repair supports videos up to 35 seconds."
-                  : key === "smoothness" && !detectionOnly
-                    ? "Detection-only pricing is not configured."
-                    : null,
+                    ? "Smoothness repair supports videos up to 35 seconds."
+                    : key === "smoothness" && !detectionOnly
+                      ? "Detection-only pricing is not configured."
+                      : null,
           };
         },
       ),
@@ -328,7 +328,9 @@ export async function POST(request: Request) {
       );
     if (!["video/mp4", "video/quicktime"].includes(source.mimeType))
       return NextResponse.json(
-        { error: "This derived video format is not accepted as MediaKit input." },
+        {
+          error: "This derived video format is not accepted as MediaKit input.",
+        },
         { status: 400 },
       );
     if (input.tool === "smoothness" && source.durationMs > 35_000)

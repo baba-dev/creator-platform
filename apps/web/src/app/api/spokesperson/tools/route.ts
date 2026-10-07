@@ -226,6 +226,9 @@ export async function GET(request: Request) {
         async ([key, providerToolId]) => {
           const tool = await loadTool(providerToolId);
           const price = tool?.priceVersions[0];
+          const formatAllowed = ["video/mp4", "video/quicktime"].includes(
+            source.mimeType,
+          );
           const repairAllowed =
             key !== "smoothness" || source.durationMs <= 35_000;
           if (!tool || !price || price.pricingMetric !== tool.pricingMetric) {
@@ -249,6 +252,7 @@ export async function GET(request: Request) {
             available:
               tool.enabled &&
               isBytePlusMediaKitConfigured() &&
+              formatAllowed &&
               repairAllowed &&
               (key !== "smoothness" || detectionOnly !== null),
             enabled: tool.enabled,
@@ -261,7 +265,9 @@ export async function GET(request: Request) {
               ? "MediaKit credential is not configured."
               : !tool.enabled
                 ? "Tool is disabled by an administrator."
-                : !repairAllowed
+                : !formatAllowed
+                  ? "This derived video format is not accepted as MediaKit input."
+                  : !repairAllowed
                   ? "Smoothness repair supports videos up to 35 seconds."
                   : key === "smoothness" && !detectionOnly
                     ? "Detection-only pricing is not configured."
@@ -319,6 +325,11 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: "Choose a completed OmniHuman video." },
         { status: 404 },
+      );
+    if (!["video/mp4", "video/quicktime"].includes(source.mimeType))
+      return NextResponse.json(
+        { error: "This derived video format is not accepted as MediaKit input." },
+        { status: 400 },
       );
     if (input.tool === "smoothness" && source.durationMs > 35_000)
       return NextResponse.json(

@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { GenerationWorkspace } from "@/components/studio/generation-workspace";
 export default async function VideoPage({
   params,
@@ -8,11 +9,10 @@ export default async function VideoPage({
 }) {
   const { organizationSlug } = await params;
   const { assetId } = await searchParams;
-  return (
-    <GenerationWorkspace
-      slug={organizationSlug}
-      kind="video"
-      initialAssetId={assetId}
-    />
-  );
+  if (assetId) {
+    redirect(
+      `/app/${encodeURIComponent(organizationSlug)}/video/editor?assetId=${encodeURIComponent(assetId)}`,
+    );
+  }
+  return <GenerationWorkspace slug={organizationSlug} kind="video" />;
 }

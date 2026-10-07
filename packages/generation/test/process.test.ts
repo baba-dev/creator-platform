@@ -34,6 +34,7 @@ const mocks = vi.hoisted(() => ({
   membership: vi.fn(),
   finalizeAssetStorage: vi.fn(),
   releaseAssetStorage: vi.fn(),
+  produceLongForm: vi.fn(),
 }));
 vi.mock("@aiwa/db", () => ({ db: mocks.db }));
 vi.mock("@aiwa/config", () => ({
@@ -52,6 +53,10 @@ vi.mock("@aiwa/assets", () => ({
   releaseAssetStorage: mocks.releaseAssetStorage,
 }));
 vi.mock("../src/index", () => ({ requireMembership: mocks.membership }));
+vi.mock("../src/seed-audio-long-form", async (importOriginal) => ({
+  ...((await importOriginal()) as object),
+  produceSeedAudioLongForm: mocks.produceLongForm,
+}));
 vi.mock("../src/storage", () => ({
   ImageStorageError: mocks.ImageStorageError,
   downloadImage: mocks.download,
@@ -62,6 +67,7 @@ vi.mock("../src/storage", () => ({
   storedAssetSize: mocks.storedAssetSize,
   referenceImageDataUri: mocks.referenceImage,
 }));
+import { SeedAudioPartialGenerationError } from "../src/seed-audio-long-form";
 import {
   ProviderConfigurationError,
   ProviderRequestError,
@@ -1284,6 +1290,173 @@ describe("voice processing", () => {
     );
     expect(mocks.capture).not.toHaveBeenCalled();
     expect(mocks.release).not.toHaveBeenCalled();
+  });
+
+
+  it("stores and settles a stitched long-form Seed Audio master", async () => {
+    const p = provider();
+    const longJob = {
+      ...voiceBase,
+      requestPayload: {
+        task: "seed-audio",
+        longForm: true,
+        textPrompt: "Documentary direction.\n\nLong narration.",
+        estimatedDurationSeconds: 240,
+        format: "wav",
+        sampleRate: 48000,
+        speechRate: 1,
+        loudnessRate: 1,
+        pitch: 0,
+        enableSubtitles: true,
+        watermark: false,
+        referenceVoiceKeys: [],
+      },
+      providerModel: {
+        id: "seed-audio-model",
+        providerModelId: "seed-audio-1.0",
+        enabled: true,
+      },
+      priceVersion: {
+        providerCostMicroUsd: 18_000n,
+        unitQuantity: 1,
+        fxBaisaNumerator: 769n,
+        fxBaisaDenominator: 2n,
+        targetMarginBps: 2500,
+        creditsPerBaisa: 1n,
+      },
+      quotedUnits: 240,
+      billableQuantity: 240,
+      reservedCredits: 200n,
+    };
+    const wav = Buffer.concat([
+      Buffer.from("RIFF"),
+      Buffer.alloc(4),
+      Buffer.from("WAVEfmt "),
+      Buffer.alloc(32),
+    ]);
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+      ...longJob,
+      status: "QUEUED",
+    });
+    mocks.produceLongForm.mockResolvedValue({
+      audioBytes: wav,
+      providerRequestId: "seed-audio-part-1",
+      providerDurationSeconds: 238.5,
+      playbackDurationSeconds: 238.42,
+      subtitle: {
+        text: "Long narration.",
+        sentences: [{ startMs: 0, endMs: 1000, text: "Long narration." }],
+        words: [{ startMs: 0, endMs: 300, text: "Long" }],
+      },
+      metadata: {
+        segmentCount: 3,
+        segmentDurationsSeconds: [80, 80, 78.5],
+        providerRequestIds: [
+          "seed-audio-part-1",
+          "seed-audio-part-2",
+          "seed-audio-part-3",
+        ],
+        crossfadeMs: 80,
+      },
+    });
+    mocks.db.asset.findFirstOrThrow.mockResolvedValue({
+      id: "asset1",
+      objectKey: "job1.wav",
+      mimeType: "audio/wav",
+    });
+    const tx = transaction("PROCESSING", longJob);
+
+    await processVoiceJob("job1", p);
+
+    expect(mocks.produceLongForm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        idempotencyKey: "key1",
+        modelId: "seed-audio-1.0",
+        format: "wav",
+        sampleRate: 48000,
+      }),
+    );
+    expect(p.submit).not.toHaveBeenCalled();
+    expect(mocks.storeAudio).toHaveBeenCalledWith(
+      "job1.wav",
+      wav,
+      "org1",
+      "asset1",
+      "audio/wav",
+      96 * 1024 * 1024,
+    );
+    expect(tx.asset.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "asset1" },
+        data: expect.objectContaining({ durationMs: 238420, status: "READY" }),
+      }),
+    );
+    expect(tx.generationJob.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "SUCCEEDED",
+          billableQuantity: 239,
+          outputPayload: expect.objectContaining({
+            originalDurationSeconds: 238.5,
+            playbackDurationSeconds: 238.42,
+            longForm: expect.objectContaining({ segmentCount: 3 }),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("holds credits when a later long-form provider segment fails", async () => {
+    const p = provider();
+    const longJob = {
+      ...voiceBase,
+      requestPayload: {
+        task: "seed-audio",
+        longForm: true,
+        textPrompt: "Documentary direction.\n\nLong narration.",
+        estimatedDurationSeconds: 180,
+        format: "mp3",
+        sampleRate: 44100,
+        speechRate: 1,
+        loudnessRate: 1,
+        pitch: 0,
+        enableSubtitles: true,
+        watermark: false,
+        referenceVoiceKeys: [],
+      },
+      providerModel: {
+        id: "seed-audio-model",
+        providerModelId: "seed-audio-1.0",
+        enabled: true,
+      },
+    };
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue({
+      ...longJob,
+      status: "QUEUED",
+    });
+    mocks.produceLongForm.mockRejectedValue(
+      new SeedAudioPartialGenerationError(
+        "Segment two failed after provider work completed.",
+        1,
+        ["seed-audio-part-1"],
+      ),
+    );
+
+    await processVoiceJob("job1", p);
+
+    expect(mocks.release).not.toHaveBeenCalled();
+    expect(mocks.capture).not.toHaveBeenCalled();
+    expect(mocks.storeAudio).not.toHaveBeenCalled();
+    expect(mocks.db.generationJob.updateMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: { id: "job1", status: "SUBMITTED" },
+        data: expect.objectContaining({
+          status: "MANUAL_REVIEW",
+          providerRequestId: "seed-audio-part-1",
+          errorCode: "LONG_FORM_PARTIAL_PROVIDER_RUN",
+        }),
+      }),
+    );
   });
 
   it("does not replay jobs that are not QUEUED", async () => {

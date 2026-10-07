@@ -55,9 +55,7 @@ export function WorkspaceNavigation({ slug }: { slug: string }) {
         className="hidden space-y-1 p-3 lg:block"
       >
         {items.map((item) => {
-          const href = item.segment
-            ? getWorkspaceItemHref(base, item)
-            : base;
+          const href = item.segment ? getWorkspaceItemHref(base, item) : base;
           const active = isActiveItem(pathname, base, item);
 
           return (

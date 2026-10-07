@@ -199,7 +199,10 @@ export async function POST(request: Request): Promise<NextResponse> {
             estimate.estimatedTokens === null
               ? model.mediaKind === "VOICE"
                 ? "CHARACTER"
-                : "IMAGE"
+                : model.mediaKind === "VIDEO" &&
+                    activePriceVersion.pricingDimension === "SECOND"
+                  ? "SECOND"
+                  : "IMAGE"
               : model.mediaKind === "TEXT"
                 ? "TOKEN"
                 : "COMPLETION_TOKEN",

@@ -8,6 +8,12 @@ import {
 } from "./video-contract";
 import { inspectTalkingAvatarSources } from "./talking-avatar";
 import { resolvePresetVoice, VoiceResolutionError } from "./voices";
+import {
+  planSeedAudioLongForm,
+  SEED_AUDIO_NATIVE_MAX_SECONDS,
+  SEED_AUDIO_LONG_FORM_MAX_SECONDS,
+  SEED_AUDIO_LONG_FORM_MAX_PROMPT_CHARS,
+} from "./seed-audio-long-form";
 
 export class QuoteValidationError extends Error {
   constructor(
@@ -39,6 +45,7 @@ interface QuoteInput {
   sourceDraftJobId?: string;
   extensionDirection?: "BEFORE" | "AFTER";
   task?: "seed-audio";
+  longForm?: boolean;
   referenceAudioAssetIds?: string[];
   referenceVoiceKeys?: string[];
   referenceImageAssetId?: string;
@@ -112,6 +119,34 @@ export async function estimateAuthorizedGeneration(
       );
     const audioIds = input.referenceAudioAssetIds ?? [];
     const voiceKeys = input.referenceVoiceKeys ?? [];
+    const estimatedDuration = input.estimatedDurationSeconds ?? 30;
+    const prompt = input.text?.trim() ?? "";
+    if (
+      !Number.isSafeInteger(estimatedDuration) ||
+      estimatedDuration < 1 ||
+      estimatedDuration >
+        (input.longForm
+          ? SEED_AUDIO_LONG_FORM_MAX_SECONDS
+          : SEED_AUDIO_NATIVE_MAX_SECONDS)
+    )
+      throw new QuoteValidationError(
+        "Seed Audio duration is outside the supported range.",
+        400,
+      );
+    if (
+      !prompt ||
+      prompt.length >
+        (input.longForm ? SEED_AUDIO_LONG_FORM_MAX_PROMPT_CHARS : 3_000)
+    )
+      throw new QuoteValidationError(
+        "Seed Audio prompt is outside the supported size.",
+        400,
+      );
+    if (input.longForm && input.referenceImageAssetId)
+      throw new QuoteValidationError(
+        "Long-form Seed Audio does not support image references.",
+        400,
+      );
     if (audioIds.length + voiceKeys.length > 3)
       throw new QuoteValidationError(
         "Seed Audio supports at most three audio references.",
@@ -521,6 +556,13 @@ export async function estimateAuthorizedGeneration(
       generateAudio: pricingGenerateAudio,
       totalInputVideoDurationMs,
       referenceImageCount: referenceIds.length,
+      reservationBillableQuantity:
+        input.task === "seed-audio" && input.longForm
+          ? planSeedAudioLongForm(
+              input.text ?? "",
+              input.estimatedDurationSeconds ?? 30,
+            ).segments.length * SEED_AUDIO_NATIVE_MAX_SECONDS
+          : undefined,
     });
   } catch (error) {
     throw new QuoteValidationError(

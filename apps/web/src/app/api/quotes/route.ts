@@ -28,7 +28,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   const requestText = await request.text();
-  if (requestText.length > 12_000) {
+  if (requestText.length > 16_000) {
     return NextResponse.json({ error: "Request too large." }, { status: 413 });
   }
   const body = (() => {

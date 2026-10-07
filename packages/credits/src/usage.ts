@@ -441,6 +441,7 @@ export function estimateGeneration(params: {
   inputDurationMs?: number;
   totalInputVideoDurationMs?: number;
   referenceImageCount?: number;
+  reservationBillableQuantity?: number;
 }): GenerationEstimate {
   const { price } = params;
   let quote: CreditQuote;
@@ -642,7 +643,18 @@ export function estimateGeneration(params: {
       params.providerModelId === "seed-audio-1.0" &&
       price.pricingDimension === "SECOND"
     ) {
-      const maximumUnits = calculateBillableUnits(120n, price.unitQuantity);
+      const reservationQuantity =
+        params.reservationBillableQuantity ?? 120;
+      if (
+        !Number.isSafeInteger(reservationQuantity) ||
+        reservationQuantity < billableQuantity ||
+        reservationQuantity > 10_000
+      )
+        throw new RangeError("Invalid Seed Audio reservation envelope.");
+      const maximumUnits = calculateBillableUnits(
+        BigInt(reservationQuantity),
+        price.unitQuantity,
+      );
       reservation = quoteSnapshotCost(
         price,
         price.providerCostMicroUsd * maximumUnits,

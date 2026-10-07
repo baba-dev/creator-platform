@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
-import type { Route } from "next";
 import { useRouter } from "next/navigation";
-import { Icon } from "@/components/ui/icon";
+import { Icon, type IconName } from "@/components/ui/icon";
 import { authClient } from "@/lib/auth-client";
 import { SettingsModal, type SettingsTab } from "./settings-modal";
 
@@ -24,8 +22,24 @@ interface UserHeaderMenuProps {
   role: string;
 }
 
+const SETTINGS_MENU_ITEMS: Array<{
+  tab: SettingsTab;
+  label: string;
+  icon: IconName;
+}> = [
+  { tab: "profile", label: "Profile Settings", icon: "user" },
+  {
+    tab: "organization",
+    label: "Organization Settings",
+    icon: "projects",
+  },
+  { tab: "team", label: "Team Settings", icon: "admin" },
+  { tab: "security", label: "Login & Security", icon: "shield" },
+  { tab: "chatbot", label: "Chatbot Settings", icon: "bot" },
+  { tab: "locale", label: "Locale Settings", icon: "globe" },
+];
+
 export function UserHeaderMenu({
-  slug,
   user,
   organization,
   role,
@@ -107,7 +121,7 @@ export function UserHeaderMenu({
         {/* Minimal Dropdown Menu */}
         {isOpen && (
           <div
-            className="absolute right-0 top-full z-50 mt-2 w-64 rounded-2xl border border-border bg-card/95 p-1.5 shadow-xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150"
+            className="absolute right-0 top-full z-50 mt-2 max-h-[calc(100dvh-5rem)] w-64 overflow-y-auto rounded-2xl border border-border bg-card/95 p-1.5 shadow-xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150"
             role="menu"
             aria-orientation="vertical"
           >
@@ -128,76 +142,29 @@ export function UserHeaderMenu({
               </div>
               <div className="mt-2 flex items-center justify-between text-[10px] text-muted-foreground">
                 <span className="font-mono uppercase">{role}</span>
-                <span className="truncate max-w-[120px] font-medium">
+                <span className="max-w-[120px] truncate font-medium">
                   {organization.name}
                 </span>
               </div>
             </div>
 
-            {/* Minimal Settings Links */}
+            {/* Settings Links */}
             <div className="space-y-0.5 py-1.5">
-              <button
-                type="button"
-                onClick={() => openSettings("profile")}
-                role="menuitem"
-                className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-medium text-foreground transition hover:bg-surface-sunken hover:text-primary"
-              >
-                <Icon name="user" className="size-4 text-muted-foreground" />
-                <span>Profile Settings</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => openSettings("organization")}
-                role="menuitem"
-                className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-medium text-foreground transition hover:bg-surface-sunken hover:text-primary"
-              >
-                <Icon
-                  name="projects"
-                  className="size-4 text-muted-foreground"
-                />
-                <span>Organization Settings</span>
-              </button>
-
-              <Link
-                href={`/app/${slug}/members` as Route}
-                onClick={() => setIsOpen(false)}
-                role="menuitem"
-                className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-medium text-foreground transition hover:bg-surface-sunken hover:text-primary"
-              >
-                <Icon name="admin" className="size-4 text-muted-foreground" />
-                <span>Team Settings</span>
-              </Link>
-
-              <button
-                type="button"
-                onClick={() => openSettings("security")}
-                role="menuitem"
-                className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-medium text-foreground transition hover:bg-surface-sunken hover:text-primary"
-              >
-                <Icon name="shield" className="size-4 text-muted-foreground" />
-                <span>Login & Security</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => openSettings("chatbot")}
-                role="menuitem"
-                className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-medium text-foreground transition hover:bg-surface-sunken hover:text-primary"
-              >
-                <Icon name="bot" className="size-4 text-muted-foreground" />
-                <span>Chatbot Settings</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => openSettings("locale")}
-                role="menuitem"
-                className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-medium text-foreground transition hover:bg-surface-sunken hover:text-primary"
-              >
-                <Icon name="globe" className="size-4 text-muted-foreground" />
-                <span>Locale Settings</span>
-              </button>
+              {SETTINGS_MENU_ITEMS.map((item) => (
+                <button
+                  key={item.tab}
+                  type="button"
+                  onClick={() => openSettings(item.tab)}
+                  role="menuitem"
+                  className="group flex min-h-10 w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-medium text-foreground transition hover:bg-surface-sunken hover:text-primary focus-visible:outline-2 focus-visible:outline-ring"
+                >
+                  <Icon
+                    name={item.icon}
+                    className="size-4 shrink-0 text-muted-foreground transition group-hover:text-primary"
+                  />
+                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                </button>
+              ))}
             </div>
 
             {/* Divider & Sign Out */}
@@ -207,9 +174,9 @@ export function UserHeaderMenu({
                 onClick={handleSignOut}
                 disabled={isSigningOut}
                 role="menuitem"
-                className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-semibold text-destructive transition hover:bg-destructive/10"
+                className="flex min-h-10 w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-semibold text-destructive transition hover:bg-destructive/10 focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <Icon name="logout" className="size-4" />
+                <Icon name="logout" className="size-4 shrink-0" />
                 <span>{isSigningOut ? "Signing out…" : "Log Out"}</span>
               </button>
             </div>

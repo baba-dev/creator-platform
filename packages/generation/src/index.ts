@@ -97,6 +97,53 @@ export const voiceRequestSchema = z
   })
   .strict();
 
+export const seedAudioRequestSchema = z
+  .object({
+    task: z.literal("seed-audio"),
+    organizationId: z.string().min(1).max(100),
+    projectId: z.string().min(1).max(100).nullable().optional(),
+    modelId: z.string().min(1).max(100),
+    priceVersionId: z.string().min(1).max(100),
+    quoteToken: z.string().min(1).max(2048).optional(),
+    idempotencyKey: z.uuid(),
+    textPrompt: z.string().trim().min(1).max(3000),
+    referenceAudioAssetIds: z
+      .array(z.string().min(1).max(100))
+      .max(3)
+      .default([]),
+    referenceImageAssetId: z.string().min(1).max(100).optional(),
+    format: z.literal("mp3").default("mp3"),
+    sampleRate: z
+      .union([z.literal(24_000), z.literal(44_100), z.literal(48_000)])
+      .default(44_100),
+    speechRate: z.number().min(0.5).max(2).default(1),
+    loudnessRate: z.number().min(0.5).max(2).default(1),
+    pitch: z.number().int().min(-12).max(12).default(0),
+    enableSubtitles: z.boolean().default(false),
+    watermark: z.boolean().default(false),
+    estimatedDurationSeconds: z.number().int().min(1).max(120).default(30),
+  })
+  .strict()
+  .superRefine((input, ctx) => {
+    if (input.referenceImageAssetId && input.referenceAudioAssetIds.length) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["referenceImageAssetId"],
+        message: "Use audio references or one image reference, not both.",
+      });
+    }
+    if (
+      new Set(input.referenceAudioAssetIds).size !==
+      input.referenceAudioAssetIds.length
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["referenceAudioAssetIds"],
+        message: "Reference audio assets must be unique.",
+      });
+    }
+  });
+
 export const transcriptionRequestSchema = z
   .object({
     organizationId: z.string().min(1).max(100),
@@ -1305,7 +1352,284 @@ export async function createVideoJob(userId: string, raw: unknown) {
   );
 }
 
+async function createSeedAudioJob(userId: string, raw: unknown) {
+  const input = seedAudioRequestSchema.parse(raw);
+  const referenceAssetIds = [
+    ...input.referenceAudioAssetIds,
+    ...(input.referenceImageAssetId ? [input.referenceImageAssetId] : []),
+  ];
+  const payload = {
+    task: "seed-audio" as const,
+    textPrompt: input.textPrompt,
+    referenceAudioAssetIds: input.referenceAudioAssetIds,
+    referenceImageAssetId: input.referenceImageAssetId ?? null,
+    format: input.format,
+    sampleRate: input.sampleRate,
+    speechRate: input.speechRate,
+    loudnessRate: input.loudnessRate,
+    pitch: input.pitch,
+    enableSubtitles: input.enableSubtitles,
+    watermark: input.watermark,
+    estimatedDurationSeconds: input.estimatedDurationSeconds,
+  };
+  const key = createHash("sha256")
+    .update(`${input.organizationId}:${userId}:${input.idempotencyKey}`)
+    .digest("hex");
+  return db.$transaction(
+    async (tx) => {
+      await tx.$queryRaw`SELECT id FROM Organization WHERE id = ${input.organizationId} FOR UPDATE`;
+      const member = await requireMembership(
+        tx,
+        input.organizationId,
+        userId,
+        true,
+      );
+      const existing = await tx.generationJob.findUnique({
+        where: { idempotencyKey: key },
+      });
+      if (existing) {
+        if (
+          existing.providerModelId !== input.modelId ||
+          existing.priceVersionId !== input.priceVersionId ||
+          JSON.stringify(existing.requestPayload) !== JSON.stringify(payload)
+        )
+          throw new GenerationError(
+            "Request key was already used for different inputs.",
+            409,
+          );
+        return existing;
+      }
+      await assertGenerationAdmission(tx, {
+        organizationId: input.organizationId,
+        userId,
+      });
+      await assertAssignableProject(tx, input.organizationId, input.projectId);
+      const now = new Date();
+      const model = await tx.providerModel.findFirst({
+        where: {
+          id: input.modelId,
+          enabled: true,
+          provider: "BYTEPLUS",
+          mediaKind: "VOICE",
+          providerModelId: "seed-audio-1.0",
+        },
+        include: {
+          priceVersions: {
+            where: {
+              effectiveFrom: { lte: now },
+              OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
+            },
+            orderBy: { effectiveFrom: "desc" },
+            take: 1,
+          },
+        },
+      });
+      const price = model?.priceVersions[0];
+      if (
+        !model ||
+        !price ||
+        price.id !== input.priceVersionId ||
+        price.pricingDimension !== "SECOND"
+      )
+        throw new GenerationError(
+          "Seed Audio model or per-second price changed. Refresh and try again.",
+          409,
+        );
+      const references = referenceAssetIds.length
+        ? await tx.asset.findMany({
+            where: {
+              id: { in: referenceAssetIds },
+              organizationId: input.organizationId,
+              status: "READY",
+              storageProvider: "LOCAL",
+              OR: [
+                { purpose: "GENERAL" },
+                { purpose: "REFERENCE_INPUT", storageOwnerUserId: userId },
+              ],
+            },
+            select: {
+              id: true,
+              mediaKind: true,
+              mimeType: true,
+              byteSize: true,
+              durationMs: true,
+            },
+          })
+        : [];
+      if (references.length !== referenceAssetIds.length)
+        throw new GenerationError(
+          "One or more reference assets are unavailable.",
+          404,
+        );
+      for (const asset of references) {
+        const audio = input.referenceAudioAssetIds.includes(asset.id);
+        if (
+          audio &&
+          (asset.mediaKind !== "AUDIO" ||
+            asset.durationMs === null ||
+            asset.durationMs > 30_000 ||
+            asset.byteSize > 10n * 1024n * 1024n ||
+            ![
+              "audio/mpeg",
+              "audio/mp3",
+              "audio/wav",
+              "audio/x-wav",
+              "audio/ogg",
+            ].includes(asset.mimeType))
+        )
+          throw new GenerationError(
+            "Each reference audio clip must be a supported file under 10 MB and 30 seconds.",
+            400,
+          );
+        if (
+          !audio &&
+          (asset.mediaKind !== "IMAGE" ||
+            asset.byteSize > 10n * 1024n * 1024n ||
+            !["image/jpeg", "image/png", "image/webp"].includes(asset.mimeType))
+        )
+          throw new GenerationError(
+            "The reference image must be JPEG, PNG, or WebP under 10 MB.",
+            400,
+          );
+      }
+      const units = calculateBillableUnits(
+        BigInt(input.estimatedDurationSeconds),
+        BigInt(price.unitQuantity),
+      );
+      const reservationUnits = calculateBillableUnits(
+        120n,
+        BigInt(price.unitQuantity),
+      );
+      const credits = priceCredits({
+        ...price,
+        providerCostMicroUsd: price.providerCostMicroUsd * reservationUnits,
+      });
+      try {
+        verifyGenerationQuote(
+          input.quoteToken,
+          {
+            organizationId: input.organizationId,
+            userId,
+            modelId: model.id,
+            priceVersionId: price.id,
+            parameters: quoteParameters("VOICE", {
+              task: "seed-audio",
+              billableQuantity: input.estimatedDurationSeconds,
+              estimatedDurationSeconds: input.estimatedDurationSeconds,
+              text: input.textPrompt,
+              referenceAudioAssetIds: input.referenceAudioAssetIds,
+              referenceImageAssetId: input.referenceImageAssetId,
+            }),
+          },
+          credits,
+          now,
+        );
+      } catch (error) {
+        throw new GenerationError(
+          error instanceof Error ? error.message : "Quote is invalid.",
+          409,
+        );
+      }
+      await assertWithinMonthlySpendingCap(tx, {
+        organizationId: input.organizationId,
+        userId,
+        cap: member.monthlySpendingCapCredits,
+        additionalCredits: credits,
+        now,
+      });
+      await reserveAssetStorage(tx, {
+        organizationId: input.organizationId,
+        userId,
+        proposedBytes: BigInt(MAX_AUDIO_BYTES),
+      });
+      const wallet = await tx.wallet.findUnique({
+        where: { organizationId: input.organizationId },
+      });
+      if (!wallet)
+        throw new GenerationError("Workspace wallet is unavailable.");
+      const job = await tx.generationJob.create({
+        data: {
+          organizationId: input.organizationId,
+          projectId: input.projectId ?? null,
+          createdById: userId,
+          providerModelId: model.id,
+          priceVersionId: price.id,
+          idempotencyKey: key,
+          requestPayload: payload,
+          status: "QUOTED",
+          quotedAt: now,
+          billableQuantity: input.estimatedDurationSeconds,
+          quotedUnits: Number(units),
+        },
+      });
+      if (referenceAssetIds.length)
+        await tx.generationInputAsset.createMany({
+          data: referenceAssetIds.map((assetId, position) => ({
+            generationJobId: job.id,
+            assetId,
+            position,
+            role: input.referenceAudioAssetIds.includes(assetId)
+              ? "REFERENCE_AUDIO"
+              : "REFERENCE_IMAGE",
+          })),
+        });
+      await reserveCreditsForJob(tx, {
+        walletId: wallet.id,
+        amountCredits: credits,
+        idempotencyKey: `generation-reserve-${job.id}`,
+        jobId: job.id,
+      });
+      const org = await tx.organization.findUnique({
+        where: { id: input.organizationId },
+        select: { defaultStorageProvider: true },
+      });
+      await tx.asset.create({
+        data: {
+          organizationId: input.organizationId,
+          projectId: input.projectId ?? null,
+          storageOwnerUserId: userId,
+          createdById: userId,
+          generationJobId: job.id,
+          mediaKind: "AUDIO",
+          sourceType: "GENERATED",
+          storageProvider: org?.defaultStorageProvider ?? "LOCAL",
+          name: defaultAssetName("AUDIO", "GENERATED"),
+          objectKey: `${job.id}.mp3`,
+          mimeType: "audio/mpeg",
+          byteSize: BigInt(MAX_AUDIO_BYTES),
+          status: "PENDING",
+        },
+      });
+      await tx.auditEvent.create({
+        data: {
+          actorUserId: userId,
+          organizationId: input.organizationId,
+          action: "generation.queued",
+          targetType: "GenerationJob",
+          targetId: job.id,
+          metadata: {
+            task: "seed-audio",
+            referenceCount: referenceAssetIds.length,
+            estimatedDurationSeconds: input.estimatedDurationSeconds,
+          },
+        },
+      });
+      return tx.generationJob.update({
+        where: { id: job.id },
+        data: { status: "QUEUED", queuedAt: now },
+      });
+    },
+    { isolationLevel: "ReadCommitted", timeout: 15_000 },
+  );
+}
+
 export async function createVoiceJob(userId: string, raw: unknown) {
+  if (
+    typeof raw === "object" &&
+    raw !== null &&
+    (raw as Record<string, unknown>).task === "seed-audio"
+  )
+    return createSeedAudioJob(userId, raw);
   const input = voiceRequestSchema.parse(raw);
   const presetVoice = (() => {
     try {

@@ -37,6 +37,10 @@ interface QuoteInput {
   seed?: number;
   sourceDraftJobId?: string;
   extensionDirection?: "BEFORE" | "AFTER";
+  task?: "seed-audio";
+  referenceAudioAssetIds?: string[];
+  referenceImageAssetId?: string;
+  estimatedDurationSeconds?: number;
 }
 
 function legacyVideoSources(input: QuoteInput): VideoSource[] {
@@ -97,6 +101,69 @@ export async function estimateAuthorizedGeneration(
       "This model has no registered generation estimator.",
       400,
     );
+
+  if (model.mediaKind === "VOICE" && input.task === "seed-audio") {
+    if (model.providerModelId !== "seed-audio-1.0")
+      throw new QuoteValidationError(
+        "This model does not support Seed Audio generation.",
+        400,
+      );
+    const audioIds = input.referenceAudioAssetIds ?? [];
+    const sourceIds = [
+      ...audioIds,
+      ...(input.referenceImageAssetId ? [input.referenceImageAssetId] : []),
+    ];
+    if (input.referenceImageAssetId && audioIds.length)
+      throw new QuoteValidationError(
+        "Image and audio references cannot be combined.",
+        400,
+      );
+    if (sourceIds.length) {
+      const assets = await db.asset.findMany({
+        where: {
+          id: { in: sourceIds },
+          organizationId,
+          status: "READY",
+          storageProvider: "LOCAL",
+          OR: [
+            { purpose: "GENERAL" },
+            { purpose: "REFERENCE_INPUT", storageOwnerUserId: userId },
+          ],
+        },
+        select: {
+          id: true,
+          mediaKind: true,
+          mimeType: true,
+          byteSize: true,
+          durationMs: true,
+        },
+      });
+      if (assets.length !== sourceIds.length)
+        throw new QuoteValidationError("Reference media is unavailable.", 400);
+      for (const asset of assets) {
+        const audio = audioIds.includes(asset.id);
+        if (
+          audio &&
+          (asset.mediaKind !== "AUDIO" ||
+            asset.durationMs === null ||
+            asset.durationMs > 30_000 ||
+            asset.byteSize > 10n * 1024n * 1024n)
+        )
+          throw new QuoteValidationError(
+            "Reference audio exceeds Seed Audio limits.",
+            400,
+          );
+        if (
+          !audio &&
+          (asset.mediaKind !== "IMAGE" || asset.byteSize > 10n * 1024n * 1024n)
+        )
+          throw new QuoteValidationError(
+            "Reference image exceeds Seed Audio limits.",
+            400,
+          );
+      }
+    }
+  }
 
   if (model.mediaKind === "IMAGE") {
     if (
@@ -425,8 +492,14 @@ export async function estimateAuthorizedGeneration(
       providerModelId: model.providerModelId,
       units,
       text,
-      billableQuantity,
-      durationSeconds: pricingDurationSeconds,
+      billableQuantity:
+        input.task === "seed-audio"
+          ? input.estimatedDurationSeconds
+          : billableQuantity,
+      durationSeconds:
+        input.task === "seed-audio"
+          ? input.estimatedDurationSeconds
+          : pricingDurationSeconds,
       resolution: normalizedResolution,
       aspectRatio: normalizedRatio,
       generateAudio: pricingGenerateAudio,

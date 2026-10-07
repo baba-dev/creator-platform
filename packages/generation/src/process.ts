@@ -522,11 +522,16 @@ export async function processVideoPollJob(
 ) {
   const job = await db.generationJob.findUniqueOrThrow({
     where: { id },
-    include: { providerModel: true, priceVersion: true },
+    include: {
+      providerModel: true,
+      priceVersion: true,
+      inputAssets: { include: { asset: true }, orderBy: { position: "asc" } },
+    },
   });
   if (job.status !== "PROCESSING" || !job.providerRequestId) return;
 
   let result;
+  let originalDurationSeconds: number | undefined;
   try {
     result = await provider.getJob(job.providerRequestId);
   } catch (error) {
@@ -1341,13 +1346,18 @@ export async function processVoiceJob(
 ) {
   const job = await db.generationJob.findUniqueOrThrow({
     where: { id },
-    include: { providerModel: true, priceVersion: true },
+    include: {
+      providerModel: true,
+      priceVersion: true,
+      inputAssets: { include: { asset: true }, orderBy: { position: "asc" } },
+    },
   });
   if (job.status === "PROCESSING") {
     const output = job.outputPayload as {
       stored?: unknown;
       byteSize?: unknown;
       sha256?: unknown;
+      originalDurationSeconds?: unknown;
     } | null;
     if (
       output?.stored !== true ||
@@ -1377,10 +1387,17 @@ export async function processVoiceJob(
       await recordStorageFailure(id, error, "audio");
       throw error;
     }
-    await finalizeVoiceJob(id, job, {
-      byteSize: BigInt(output.byteSize),
-      sha256: output.sha256,
-    });
+    await finalizeVoiceJob(
+      id,
+      job,
+      { byteSize: BigInt(output.byteSize), sha256: output.sha256 },
+      typeof output.originalDurationSeconds === "number" &&
+        Number.isFinite(output.originalDurationSeconds) &&
+        output.originalDurationSeconds > 0 &&
+        output.originalDurationSeconds <= 120
+        ? output.originalDurationSeconds
+        : undefined,
+    );
     return;
   }
   if (job.status !== "QUEUED") return;
@@ -1414,12 +1431,61 @@ export async function processVoiceJob(
   }
 
   let result;
+  let originalDurationSeconds: number | undefined;
   try {
+    const payload = job.requestPayload as Record<string, unknown>;
+    let providerInput: Record<string, unknown> = payload;
+    if (payload.task === "seed-audio") {
+      const env = parseServerEnv();
+      const base = new URL(env.APP_URL);
+      if (job.inputAssets.length && base.protocol !== "https:")
+        throw new ProviderRequestError(
+          "Provider sources require a public HTTPS app URL",
+          false,
+          { code: "INVALID_PROVIDER_SOURCE" },
+        );
+      const audioUrls: string[] = [];
+      let imageUrl: string | undefined;
+      for (const input of job.inputAssets) {
+        const asset = input.asset;
+        if (
+          asset.organizationId !== job.organizationId ||
+          asset.status !== "READY" ||
+          (asset.purpose === "REFERENCE_INPUT" &&
+            asset.storageOwnerUserId !== job.createdById)
+        )
+          throw new ProviderRequestError(
+            "Generation source media is no longer available",
+            false,
+            { code: "REFERENCE_MEDIA_UNAVAILABLE" },
+          );
+        const url = new URL(
+          `/api/provider-media/${encodeURIComponent(asset.id)}`,
+          base,
+        );
+        url.searchParams.set("jobId", job.id);
+        url.searchParams.set(
+          "grant",
+          issueProviderMediaGrant({
+            secret: env.AUTH_SECRET,
+            jobId: job.id,
+            assetId: asset.id,
+          }),
+        );
+        if (input.role === "REFERENCE_AUDIO") audioUrls.push(url.toString());
+        else if (input.role === "REFERENCE_IMAGE") imageUrl = url.toString();
+      }
+      providerInput = {
+        ...payload,
+        referenceAudioUrls: audioUrls,
+        ...(imageUrl ? { referenceImageUrl: imageUrl } : {}),
+      };
+    }
     result = await provider.submit({
       idempotencyKey: job.idempotencyKey,
       modelId: job.providerModel.providerModelId,
       mediaKind: "voice",
-      input: job.requestPayload as Record<string, unknown>,
+      input: providerInput,
     });
     if (
       result.status !== "succeeded" ||
@@ -1432,6 +1498,14 @@ export async function processVoiceJob(
         { code: "INVALID_PROVIDER_RESPONSE" },
       );
     }
+    const rawOriginalDuration = result.rawUsage?.generatedSeconds;
+    if (
+      typeof rawOriginalDuration === "number" &&
+      Number.isFinite(rawOriginalDuration) &&
+      rawOriginalDuration > 0 &&
+      rawOriginalDuration <= 120
+    )
+      originalDurationSeconds = rawOriginalDuration;
   } catch (error) {
     if (
       error instanceof ProviderConfigurationError ||
@@ -1546,6 +1620,7 @@ export async function processVoiceJob(
         stored: true,
         byteSize: Number(stored.byteSize),
         sha256: stored.sha256,
+        ...(originalDurationSeconds ? { originalDurationSeconds } : {}),
       },
       errorCode: null,
       errorMessage: null,
@@ -1553,7 +1628,7 @@ export async function processVoiceJob(
   });
   if (!persisted.count) return;
 
-  await finalizeVoiceJob(id, job, stored);
+  await finalizeVoiceJob(id, job, stored, originalDurationSeconds);
 }
 
 async function finalizeVoiceJob(
@@ -1561,23 +1636,59 @@ async function finalizeVoiceJob(
   job: {
     organizationId: string;
     createdById: string;
-    priceVersion: { providerCostMicroUsd: bigint; unitQuantity: number };
+    priceVersion: {
+      providerCostMicroUsd: bigint;
+      unitQuantity: number;
+      fxBaisaNumerator: bigint;
+      fxBaisaDenominator: bigint;
+      targetMarginBps: number;
+      creditsPerBaisa: bigint;
+    };
   },
   stored: Awaited<ReturnType<typeof storeAudio>>,
+  originalDurationSeconds?: number,
 ) {
   let finalBillableQuantity: number | null = null;
   await db.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM GenerationJob WHERE id = ${id} FOR UPDATE`;
     const current = await tx.generationJob.findUniqueOrThrow({ where: { id } });
     if (current.status !== "PROCESSING") return;
-    finalBillableQuantity = current.billableQuantity;
+    const payload = current.requestPayload as Record<string, unknown>;
+    const seedAudio = payload.task === "seed-audio";
+    const actualSeconds =
+      seedAudio && originalDurationSeconds !== undefined
+        ? Math.ceil(originalDurationSeconds)
+        : null;
+    const actualUnits =
+      actualSeconds === null
+        ? (current.quotedUnits ?? 1)
+        : Number(
+            (BigInt(actualSeconds) +
+              BigInt(job.priceVersion.unitQuantity) -
+              1n) /
+              BigInt(job.priceVersion.unitQuantity),
+          );
+    const chargedCredits =
+      actualSeconds === null
+        ? current.reservedCredits
+        : createCreditQuote({
+            providerCostMicroUsd:
+              job.priceVersion.providerCostMicroUsd * BigInt(actualUnits),
+            exchangeRate: {
+              baisaNumerator: job.priceVersion.fxBaisaNumerator,
+              baisaDenominator: job.priceVersion.fxBaisaDenominator,
+            },
+            targetGrossMarginBps: job.priceVersion.targetMarginBps,
+            creditsPerBaisa: job.priceVersion.creditsPerBaisa,
+          }).customerCredits;
+    finalBillableQuantity = actualSeconds ?? current.billableQuantity;
     const wallet = await tx.wallet.findUniqueOrThrow({
       where: { organizationId: job.organizationId },
     });
     await captureCreditsForJob(tx, {
       walletId: wallet.id,
       jobId: id,
-      amountCredits: current.reservedCredits,
+      amountCredits: chargedCredits,
       idempotencyKey: `generation-capture-${id}`,
     });
     const pendingAsset = await tx.asset.findUniqueOrThrow({
@@ -1599,13 +1710,17 @@ async function finalizeVoiceJob(
       where: { id },
       data: {
         status: "SUCCEEDED",
-        actualUnits: current.quotedUnits,
-        providerCostBasis: "CONFIGURED_CHARACTERS",
-        actualProviderCostMicroUsd:
-          current.billableQuantity == null
+        actualUnits,
+        billableQuantity: actualSeconds ?? current.billableQuantity,
+        providerCostBasis: seedAudio
+          ? "PROVIDER_ORIGINAL_SECONDS"
+          : "CONFIGURED_CHARACTERS",
+        actualProviderCostMicroUsd: seedAudio
+          ? job.priceVersion.providerCostMicroUsd * BigInt(actualUnits)
+          : current.billableQuantity == null
             ? null
             : (job.priceVersion.providerCostMicroUsd *
-                BigInt(current.billableQuantity) +
+                BigInt(current.billableQuantity ?? 0) +
                 BigInt(job.priceVersion.unitQuantity) -
                 1n) /
               BigInt(job.priceVersion.unitQuantity),

@@ -44,6 +44,7 @@ describe("BytePlus provider adapter", () => {
       "dreamina-seedance-2-5-260628",
       "omnihuman-1.5",
       "seed-tts-2.0",
+      "seed-audio-1.0",
       "dola-seed-2-1-turbo-260628",
       "seed-2-0-pro-260328",
       "seed-2-0-lite-260428",
@@ -1079,6 +1080,68 @@ describe("BytePlus provider adapter", () => {
           loudness_rate: 0,
         },
         additions: "{}",
+      },
+    });
+  });
+
+  it("submits Seed Audio with bounded reference-audio URLs and returns billable duration", async () => {
+    const audio = Buffer.from("seed-audio-output").toString("base64");
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: 0,
+          audio,
+          duration: 12.5,
+          original_duration: 14,
+        }),
+        { status: 200, headers: { "x-tt-logid": "seed-audio-request-1" } },
+      ),
+    );
+    const provider = createBytePlusProvider({
+      ...validConfig,
+      speechApiKey: "speech-api-key",
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const job = await provider.submit({
+      idempotencyKey: "seed-audio-job-1",
+      modelId: "seed-audio-1.0",
+      mediaKind: "voice",
+      input: {
+        task: "seed-audio",
+        textPrompt: "@Audio1 narrates this with a quiet, documentary warmth.",
+        referenceAudioUrls: ["https://example.test/reference.mp3"],
+        format: "mp3",
+        sampleRate: 44100,
+        speechRate: 0.9,
+        loudnessRate: 1.1,
+        pitch: -1,
+        enableSubtitles: true,
+        watermark: false,
+      },
+    });
+
+    expect(job).toMatchObject({
+      providerRequestId: "seed-audio-request-1",
+      status: "succeeded",
+      inlineOutputs: [{ mediaType: "audio/mpeg", dataBase64: audio }],
+      rawUsage: { generatedSeconds: 14, durationSeconds: 12.5 },
+    });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      "https://voice.ap-southeast-1.bytepluses.com/api/v3/tts/create",
+    );
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      model: "seed-audio-1.0",
+      text_prompt: "@Audio1 narrates this with a quiet, documentary warmth.",
+      references: [{ audio_url: "https://example.test/reference.mp3" }],
+      audio_config: {
+        format: "mp3",
+        sample_rate: 44100,
+        speech_rate: -10,
+        loudness_rate: 10,
+        pitch_rate: -1,
+        enable_subtitle: true,
       },
     });
   });

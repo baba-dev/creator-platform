@@ -509,6 +509,29 @@ const verifiedBytePlusModels: readonly SeedModel[] = [
     unitQuantity: 1000,
   },
   {
+    providerModelId: "seed-audio-1.0",
+    mediaKind: "VOICE",
+    displayName: "Seed Audio 1.0",
+    description:
+      "Prompt-directed audio and advanced voiceover with audio or image references.",
+    capabilities: {
+      audioGeneration: true,
+      promptDirected: true,
+      referenceAudio: true,
+      maxReferenceAudio: 3,
+      referenceImage: true,
+      longFormVoiceover: true,
+      maxOutputSeconds: 120,
+      subtitles: true,
+      "format:mp3": true,
+    },
+    // Operator-published per-second rate. Replace with the contracted rate before enabling production use.
+    providerCostMicroUsd: 30_000n,
+    customerCredits: 16n,
+    pricingDimension: "SECOND",
+    unitQuantity: 1,
+  },
+  {
     providerModelId: "dola-seed-2-1-turbo-260628",
     mediaKind: "TEXT",
     displayName: "Dola Seed 2.1 Turbo",

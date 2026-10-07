@@ -69,8 +69,7 @@ export function BrandStoryWorkspace({
   storyDefaultModelId: string | null;
   storyModels: StudioModelOption[];
 }) {
-  const [activeTab, setActiveTab] =
-    useState<"brand" | "story">(initialTab);
+  const [activeTab, setActiveTab] = useState<"brand" | "story">(initialTab);
 
   // Brand Profiles State
   const [brandProfiles, setBrandProfiles] = useState<BrandProfile[]>([]);

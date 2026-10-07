@@ -51,11 +51,8 @@ jobs:
             echo "deploy=false" >>"$GITHUB_OUTPUT"
             echo "### Deployment not eligible" >>"$GITHUB_STEP_SUMMARY"
             echo "CI run $SOURCE_RUN_ID must be a successful main-branch push in this repository. Rerun failed CI first; rerunning deployment cannot change its CI result." >>"$GITHUB_STEP_SUMMARY"
-            if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
-              echo "::error::The selected CI run is not eligible for deployment."
-              exit 1
-            fi
-            exit 0
+            echo "::error::CI run $SOURCE_RUN_ID is not eligible for deployment."
+            exit 1
           fi
           release_sha="$(jq -r '.head_sha' "$source_file")"
           echo "deploy=true" >>"$GITHUB_OUTPUT"

@@ -531,7 +531,6 @@ export async function processVideoPollJob(
   if (job.status !== "PROCESSING" || !job.providerRequestId) return;
 
   let result;
-  let originalDurationSeconds: number | undefined;
   try {
     result = await provider.getJob(job.providerRequestId);
   } catch (error) {

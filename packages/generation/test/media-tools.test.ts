@@ -27,18 +27,14 @@ describe("MediaKit durable execution helpers", () => {
       priceVersionId: "price",
       quotedQuantity: 5,
       payload: {},
-      sourceAssets: [
-        { assetId: "asset-a", role: "SOURCE_VIDEO", position: 0 },
-      ],
+      sourceAssets: [{ assetId: "asset-a", role: "SOURCE_VIDEO", position: 0 }],
     });
     const b = providerToolRequestHash({
       toolId: "tool",
       priceVersionId: "price",
       quotedQuantity: 5,
       payload: {},
-      sourceAssets: [
-        { assetId: "asset-b", role: "SOURCE_VIDEO", position: 0 },
-      ],
+      sourceAssets: [{ assetId: "asset-b", role: "SOURCE_VIDEO", position: 0 }],
     });
     expect(a).not.toBe(b);
   });

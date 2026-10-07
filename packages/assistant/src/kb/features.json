@@ -4,21 +4,109 @@
     "title": "Image Generation",
     "summary": "Generate images from prompts and authorized reference assets. The live model catalog determines available resolutions, ratios and output counts. Review the current quote before generating.",
     "route": "/image",
-    "keywords": ["image", "generate", "photo", "picture", "seedream", "create"]
+    "keywords": [
+      "image",
+      "generate",
+      "photo",
+      "picture",
+      "seedream",
+      "create"
+    ]
   },
   {
     "key": "video-generation",
     "title": "Video Generation",
     "summary": "Generate videos from text, first frames or other supported sources. Supported workflows, durations and resolutions depend on the selected model; review its live capabilities and quote.",
     "route": "/video",
-    "keywords": ["video", "generate", "clip", "animation", "megacreator", "wan"]
+    "keywords": [
+      "video",
+      "generate",
+      "clip",
+      "animation",
+      "megacreator",
+      "wan"
+    ]
   },
   {
     "key": "voice-generation",
-    "title": "Voice & TTS",
-    "summary": "Generate speech from text with a supported voice and speaking rate. Review the live quote before submitting.",
+    "title": "Voice Studio",
+    "summary": "Generate speech from text with a supported voice and speaking rate. Voice casting and transcription now live on their own dedicated pages. Review the live quote before submitting.",
     "route": "/speech",
-    "keywords": ["voice", "tts", "speech", "audio", "seed-tts", "narration"]
+    "keywords": [
+      "voice",
+      "tts",
+      "speech",
+      "audio",
+      "seed-tts",
+      "narration"
+    ]
+  },
+  {
+    "key": "precision-image-studio",
+    "title": "Precision Image Studio",
+    "summary": "Edit existing images without mixing editing controls into Image Studio. Use AI precision edits, layered canvas and PSD export, or deterministic crop, resize, rotate and transform tools.",
+    "route": "/image/precision",
+    "keywords": [
+      "image",
+      "edit",
+      "precision",
+      "retouch",
+      "inpaint",
+      "outpaint",
+      "crop",
+      "resize",
+      "rotate",
+      "psd",
+      "layers"
+    ]
+  },
+  {
+    "key": "video-editing-desk",
+    "title": "Video Editing Desk",
+    "summary": "Edit existing video on its dedicated desk: arrange and trim clips, adjust framing, add narration or soundtrack, manage captions, and export a new video while preserving the original.",
+    "route": "/video/editor",
+    "keywords": [
+      "video",
+      "edit",
+      "trim",
+      "crop",
+      "caption",
+      "soundtrack",
+      "narration",
+      "export"
+    ]
+  },
+  {
+    "key": "speech-transcription",
+    "title": "Speech / Transcription",
+    "summary": "Transcribe an authorized audio or video asset on the dedicated transcription page and export transcript, SRT and VTT results. Pricing uses verified source duration.",
+    "route": "/speech/transcription",
+    "keywords": [
+      "transcription",
+      "transcribe",
+      "subtitle",
+      "srt",
+      "vtt",
+      "audio",
+      "video",
+      "speech"
+    ]
+  },
+  {
+    "key": "voice-casting-booth",
+    "title": "Voice Casting Booth",
+    "summary": "Audition verified voices with a custom line and speaking rate, compare results, then send the selected voice and rate back to Voice Studio.",
+    "route": "/speech/voices",
+    "keywords": [
+      "voice",
+      "casting",
+      "booth",
+      "audition",
+      "speaker",
+      "tts",
+      "speech rate",
+      "seed-tts"
+    ]
   },
   {
     "key": "spokesperson-studio",
@@ -37,16 +125,28 @@
   {
     "key": "templates",
     "title": "Generation Templates",
-    "summary": "Use pre-built templates for common workflows \u2014 fill in variables and generate in one click.",
+    "summary": "Use pre-built templates for common workflows — fill in variables and generate in one click.",
     "route": "/templates",
-    "keywords": ["template", "workflow", "preset", "quick"]
+    "keywords": [
+      "template",
+      "workflow",
+      "preset",
+      "quick"
+    ]
   },
   {
     "key": "assets",
     "title": "Asset Library",
     "summary": "All your generated and uploaded files live here. Organise with folders, tags and favourites. Originals are kept private; grid views use optimised thumbnails.",
     "route": "/assets",
-    "keywords": ["asset", "library", "files", "folder", "gallery", "media"]
+    "keywords": [
+      "asset",
+      "library",
+      "files",
+      "folder",
+      "gallery",
+      "media"
+    ]
   },
   {
     "key": "credits",
@@ -69,34 +169,51 @@
     "title": "Projects",
     "summary": "Organise your generation work into projects. Each generation job can belong to a project for easy filtering.",
     "route": "/projects",
-    "keywords": ["project", "folder", "organise", "group"]
+    "keywords": [
+      "project",
+      "folder",
+      "organise",
+      "group"
+    ]
   },
   {
     "key": "chat",
     "title": "AI Chat (Creative Characters)",
     "summary": "Chat with creative personas using available text models. Open a creative conversation to continue generation from previous outputs.",
     "route": "/chat",
-    "keywords": ["chat", "conversation", "persona", "character", "roleplay"]
+    "keywords": [
+      "chat",
+      "conversation",
+      "persona",
+      "character",
+      "roleplay"
+    ]
   },
   {
     "key": "storage",
     "title": "Connect Google Drive or OneDrive",
     "summary": "Open Storage. A workspace owner can connect Google Drive or OneDrive through the provider authorization screen, then select the connected provider. If unavailable, the administrator must configure the integration. Pixel never asks for passwords or OAuth secrets. Existing assets keep their own storage location.",
     "route": "/storage",
-    "keywords": ["storage", "google", "drive", "onedrive", "connect", "byos"]
-  },
-  {
-    "key": "editing",
-    "title": "Image and video editing",
-    "summary": "Open Image or Video with an accessible source asset. Use the available editing controls, inspect your changes, and save or export. Supported editing operations depend on the source type.",
-    "route": "/image",
-    "keywords": ["edit", "crop", "rotate", "resize", "trim", "zoom"]
+    "keywords": [
+      "storage",
+      "google",
+      "drive",
+      "onedrive",
+      "connect",
+      "byos"
+    ]
   },
   {
     "key": "members",
     "title": "Team members",
     "summary": "Workspace owners manage membership and permissions in Members. Pixel can show permitted member information and open the management page; access changes use the normal permission controls.",
     "route": "/members",
-    "keywords": ["members", "team", "invite", "roles", "permissions"]
+    "keywords": [
+      "members",
+      "team",
+      "invite",
+      "roles",
+      "permissions"
+    ]
   }
 ]

@@ -31,6 +31,10 @@ test("sign-in is keyboard reachable and CSP permits local blob audio", async ({
   const password = page.getByLabel(/password/i);
   await email.focus();
   await page.keyboard.press("Tab");
+  await expect(
+    page.getByRole("link", { name: /forgot password/i }),
+  ).toBeFocused();
+  await page.keyboard.press("Tab");
   await expect(password).toBeFocused();
 
   const mediaResult = await page.evaluate(async () => {

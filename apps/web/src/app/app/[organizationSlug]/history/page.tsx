@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@aiwa/db";
 import { getGenerationErrorPresentation } from "@/lib/generation-error-copy";
+import { CREATIVE_LOCALE_PRESETS } from "@aiwa/generation/locale";
 import {
   historyQuerySchema,
   listGenerationHistory,
@@ -234,6 +235,9 @@ export default async function HistoryPage({
                     : job.providerModel.mediaKind}{" "}
                   · {job.project?.name ?? "No project"} · {job.createdBy.name} ·{" "}
                   {job.createdAt.toLocaleString()}
+                  {job.localeIntent && job.localeIntent.preset !== "auto" ? (
+                    <> · {CREATIVE_LOCALE_PRESETS.find((preset) => preset.id === job.localeIntent?.preset)?.flag ?? "🌐"} {job.localeIntent.language}</>
+                  ) : null}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {job.id} ·{" "}

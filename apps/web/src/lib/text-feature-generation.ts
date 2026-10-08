@@ -3,6 +3,7 @@ import {
   normalizeLegacyTextUsageRatesForProvider,
 } from "@aiwa/credits";
 import { db } from "@aiwa/db";
+import type { CreativeLocaleIntent } from "@aiwa/generation/locale";
 import {
   GenerationError,
   issueGenerationQuote,
@@ -21,6 +22,7 @@ export type TextFeatureQuoteInput = {
   messages: TextMessage[];
   maxTokens: number;
   responseFormat?: "text" | "json_object";
+  localeIntent?: CreativeLocaleIntent;
 } & TextFeatureModelSelection;
 
 async function resolveTextFeatureModel(
@@ -135,6 +137,7 @@ export async function issueTextFeatureQuote(input: TextFeatureQuoteInput) {
         text: promptText,
         units: input.maxTokens,
         responseFormat: input.responseFormat ?? "text",
+        localeIntent: input.localeIntent,
       }),
     },
     estimate.reservation.customerCredits,

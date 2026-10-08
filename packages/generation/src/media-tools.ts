@@ -36,6 +36,7 @@ import {
   parseMediaToolInput,
   mediaToolSourceRoles,
   mediaToolImageInputFits,
+  mediaToolSourceIssue,
   scrollingDurationCeiling,
 } from "./media-tool-input";
 
@@ -633,6 +634,12 @@ export async function createProviderToolExecution(
           409,
         );
       }
+      const sourceIssue = mediaToolSourceIssue(
+        tool.providerToolId,
+        "SOURCE_VIDEO",
+        { ...sourceAsset, durationMs: trustedDurationMs },
+      );
+      if (sourceIssue) throw new ProviderToolExecutionError(sourceIssue);
       if (
         tool.providerToolId === "semantic-segment" &&
         trustedDurationMs > 10_800_000
@@ -719,6 +726,14 @@ export async function createProviderToolExecution(
       throw new ProviderToolExecutionError(
         "Crop exceeds the source dimensions or trusted dimensions are missing.",
       );
+    if (sourceAsset?.mediaKind === "IMAGE") {
+      const issue = mediaToolSourceIssue(
+        tool.providerToolId,
+        "SOURCE_IMAGE",
+        sourceAsset,
+      );
+      if (issue) throw new ProviderToolExecutionError(issue);
+    }
     const extraSources = [];
     for (const ref of input.sourceAssets.slice(1)) {
       if (ref.role === "WATERMARK_IMAGE") {
@@ -738,6 +753,12 @@ export async function createProviderToolExecution(
           throw new ProviderToolExecutionError(
             "Logo is unavailable or exceeds 5 MiB.",
           );
+        const issue = mediaToolSourceIssue(
+          tool.providerToolId,
+          "WATERMARK_IMAGE",
+          logo,
+        );
+        if (issue) throw new ProviderToolExecutionError(issue);
         extraSources.push({
           executionId: "",
           assetId: logo.id,
@@ -762,6 +783,12 @@ export async function createProviderToolExecution(
         audio.byteSize > MAX_TOOL_VIDEO_BYTES
       )
         throw new ProviderToolExecutionError("Source audio is unavailable.");
+      const issue = mediaToolSourceIssue(
+        tool.providerToolId,
+        "SOURCE_AUDIO",
+        audio,
+      );
+      if (issue) throw new ProviderToolExecutionError(issue);
       // Lip-sync output follows driving audio duration.
       if (input.quotedQuantity !== Math.ceil(audio.durationMs / 1000))
         throw new ProviderToolExecutionError("Audio quote is stale.", 409);
@@ -1758,6 +1785,8 @@ export async function prepareMediaToolRequest(
       throw new ProviderToolExecutionError(
         "Logo must be PNG, JPEG or WebP and at most 5 MiB.",
       );
+    const issue = mediaToolSourceIssue(params.toolKey, role, asset);
+    if (issue) throw new ProviderToolExecutionError(issue);
     assets.push(asset);
   }
   if (!mediaToolImageInputFits(semantic, assets[0]!.width, assets[0]!.height))

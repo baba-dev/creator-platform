@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   mediaToolSourceRoles,
   mediaToolImageInputFits,
+  mediaToolSourceIssue,
   parseMediaToolInput,
   scrollingDurationCeiling,
 } from "../src/media-tool-input";
@@ -108,4 +109,46 @@ describe("visual crop and watermark inputs", () => {
       }).watermark_position,
     ).toBe("right_center");
   });
+});
+
+it("checks source capabilities consistently for pickers and quote admission", () => {
+  const video = {
+    mediaKind: "VIDEO",
+    mimeType: "video/mp4",
+    byteSize: "1000",
+    width: 640,
+    height: 480,
+    durationMs: 35000,
+  };
+  expect(
+    mediaToolSourceIssue("enhance-video-smoothness", "SOURCE_VIDEO", video),
+  ).toBeNull();
+  expect(
+    mediaToolSourceIssue("enhance-video-smoothness", "SOURCE_VIDEO", {
+      ...video,
+      durationMs: 35001,
+    }),
+  ).toMatch(/35 seconds/);
+  expect(
+    mediaToolSourceIssue("assess-video-quality", "SOURCE_VIDEO", {
+      ...video,
+      mimeType: "video/webm",
+    }),
+  ).toMatch(/MP4 or MOV/);
+  expect(
+    mediaToolSourceIssue("compress-image", "SOURCE_IMAGE", {
+      ...video,
+      mediaKind: "IMAGE",
+      mimeType: "image/png",
+      byteSize: "not-a-size",
+    }),
+  ).toMatch(/metadata/);
+  expect(
+    mediaToolSourceIssue("crop-image", "SOURCE_IMAGE", {
+      ...video,
+      mediaKind: "IMAGE",
+      mimeType: "image/png",
+      width: null,
+    }),
+  ).toMatch(/dimensions/);
 });

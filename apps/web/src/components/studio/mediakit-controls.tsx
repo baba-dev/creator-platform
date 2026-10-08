@@ -92,7 +92,7 @@ export function AssetPicker({
       onClose={onClose}
     >
       <label className="block text-sm font-semibold">
-        Search workspace assets
+        Search recent compatible assets
         <input
           type="search"
           className={fieldClass}
@@ -102,7 +102,7 @@ export function AssetPicker({
         />
       </label>
       <p className="mt-3 text-xs text-muted-foreground">
-        {matches.length} assets · protected previews
+        {matches.length} compatible assets · protected previews
       </p>
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
         {matches.map((asset) => (

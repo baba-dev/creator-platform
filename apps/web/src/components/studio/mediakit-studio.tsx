@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
+import { mediaToolSourceIssue } from "@aiwa/generation/media-tool-input";
 import { Button } from "@/components/ui/button";
 import { CreativeSurface, Eyebrow, Annotation } from "@/components/ui/creative";
 import { Icon } from "@/components/ui/icon";
@@ -109,12 +110,20 @@ export function MediaKitStudio({
   );
   const requiresLogo =
     toolKey === "add-image-watermark" && settings.watermarkType === "image";
+  const sourceIssue = source
+    ? mediaToolSourceIssue(toolKey, `SOURCE_${sourceKind(toolKey)}`, source)
+    : null;
   const ready = Boolean(
     source &&
+    !sourceIssue &&
     tool?.available &&
     canGenerate &&
-    (!requiresLogo || (logo && logo.id !== source.id)) &&
-    (toolKey !== "lip-sync" || audio) &&
+    (!requiresLogo ||
+      (logo &&
+        logo.id !== source.id &&
+        !mediaToolSourceIssue(toolKey, "WATERMARK_IMAGE", logo))) &&
+    (toolKey !== "lip-sync" ||
+      (audio && !mediaToolSourceIssue(toolKey, "SOURCE_AUDIO", audio))) &&
     (toolKey !== "crop-image" || (source.width && source.height)) &&
     !pendingForSource,
   );
@@ -560,9 +569,11 @@ export function MediaKitStudio({
                       ? "Your workspace role cannot start processing."
                       : !tool?.available
                         ? "This tool’s pricing or availability is pending."
-                        : pendingForSource
-                          ? "This source has unsettled work. Wait for its saved job to finish."
-                          : "No credits reserved until you confirm. Finished media is saved to your Asset Library."}
+                        : sourceIssue
+                          ? sourceIssue
+                          : pendingForSource
+                            ? "This source has unsettled work. Wait for its saved job to finish."
+                            : "No credits reserved until you confirm. Finished media is saved to your Asset Library."}
                   </p>
                 </div>
               </fieldset>
@@ -644,12 +655,18 @@ export function MediaKitStudio({
             ? assets.filter(
                 (asset) =>
                   asset.id !== sourceId &&
-                  Number(asset.byteSize) <= 5 * 1024 * 1024 &&
-                  ["image/png", "image/jpeg", "image/webp"].includes(
-                    asset.mimeType,
+                  !mediaToolSourceIssue(toolKey, "WATERMARK_IMAGE", asset),
+              )
+            : assets.filter(
+                (asset) =>
+                  !mediaToolSourceIssue(
+                    toolKey,
+                    picker === "audio"
+                      ? "SOURCE_AUDIO"
+                      : `SOURCE_${sourceKind(toolKey)}`,
+                    asset,
                   ),
               )
-            : assets
         }
         selected={
           picker === "audio" ? audioId : picker === "logo" ? logoId : sourceId

@@ -171,3 +171,67 @@ export function scrollingDurationCeiling(
       Number(input.end_hold_duration),
   );
 }
+
+// Pure capability checks shared by the browser picker and server quote boundary.
+export function mediaToolSourceIssue(
+  key: string,
+  role: string,
+  asset: {
+    mediaKind: string;
+    mimeType: string;
+    byteSize: string | bigint;
+    width: number | null;
+    height: number | null;
+    durationMs: number | null;
+  },
+): string | null {
+  let bytes: bigint;
+  try {
+    bytes = BigInt(asset.byteSize);
+  } catch {
+    return "Source size metadata is unavailable.";
+  }
+  if (bytes <= 0n) return "Source size metadata is unavailable.";
+  if (role === "SOURCE_IMAGE" || role === "WATERMARK_IMAGE") {
+    const limit = role === "WATERMARK_IMAGE" ? 5 : 35;
+    if (
+      asset.mediaKind !== "IMAGE" ||
+      !["image/png", "image/jpeg", "image/webp"].includes(asset.mimeType)
+    )
+      return "Choose a PNG, JPEG or WebP image.";
+    if (bytes > BigInt(limit) * 1024n * 1024n)
+      return `Choose an image up to ${limit} MiB.`;
+    if ((asset.width ?? 0) > 10000 || (asset.height ?? 0) > 10000)
+      return "Images must be at most 10,000 pixels on each side.";
+    if (key === "crop-image" && (!asset.width || !asset.height))
+      return "Cropping needs trusted image dimensions.";
+    return null;
+  }
+  if (bytes > 100n * 1024n * 1024n) return "Choose media up to 100 MiB.";
+  if (
+    !asset.durationMs ||
+    !Number.isSafeInteger(asset.durationMs) ||
+    asset.durationMs <= 0
+  )
+    return "Source needs trusted duration metadata.";
+  if (role === "SOURCE_AUDIO")
+    return asset.mediaKind === "AUDIO" &&
+      ["audio/mpeg", "audio/wav", "audio/x-wav"].includes(asset.mimeType)
+      ? null
+      : "Choose MP3 or WAV driving audio.";
+  if (
+    asset.mediaKind !== "VIDEO" ||
+    !["video/mp4", "video/quicktime"].includes(asset.mimeType)
+  )
+    return "Choose an MP4 or MOV video.";
+  if (
+    key === "lip-sync" &&
+    (asset.mimeType !== "video/mp4" || asset.durationMs > 1_800_000)
+  )
+    return "Lip sync needs MP4 video up to 30 minutes.";
+  if (key === "enhance-video-smoothness" && asset.durationMs > 35_000)
+    return "Smoothness repair supports video up to 35 seconds.";
+  if (key === "semantic-segment" && asset.durationMs > 10_800_000)
+    return "Segmentation supports video up to three hours.";
+  return null;
+}

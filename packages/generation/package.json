@@ -10,7 +10,8 @@
     "./provider-media-grant": "./src/provider-media-grant.ts",
     "./reconciliation": "./src/reconciliation.ts",
     "./media-tools": "./src/media-tools.ts",
-    "./locale": "./src/locale.ts"
+    "./locale": "./src/locale.ts",
+    "./media-tool-input": "./src/media-tool-input.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",

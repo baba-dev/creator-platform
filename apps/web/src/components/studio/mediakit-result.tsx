@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-img-element -- Protected same-origin previews. */
 "use client";
+import { mediaToolSourceIssue } from "@aiwa/generation/media-tool-input";
 import { useRef, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
@@ -28,6 +29,9 @@ export function MediaKitResult({
   onUse: (asset: MediaAsset) => void;
 }) {
   const [compare, setCompare] = useState(50);
+  const [segmentPage, setSegmentPage] = useState(0);
+  const pageSegments =
+    e.segments?.slice(segmentPage * 100, (segmentPage + 1) * 100) ?? [];
   const videoRef = useRef<HTMLVideoElement>(null);
   const output = e.outputAsset,
     source = e.sourceAsset;
@@ -191,8 +195,8 @@ export function MediaKitResult({
               <p className="mt-1 text-xs text-muted-foreground">
                 Choose a segment to seek the source video.
               </p>
-              <div className="mt-3 flex min-h-10 overflow-hidden rounded-lg border border-border">
-                {e.segments.map((segment) => (
+              <div className="mt-3 flex min-h-10 overflow-x-auto rounded-lg border border-border">
+                {pageSegments.map((segment) => (
                   <button
                     key={segment.index}
                     type="button"
@@ -210,8 +214,33 @@ export function MediaKitResult({
                   </button>
                 ))}
               </div>
+              {e.segments.length > 100 && (
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={segmentPage === 0}
+                    onClick={() => setSegmentPage((page) => page - 1)}
+                  >
+                    Previous segments
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    {segmentPage * 100 + 1}–
+                    {Math.min((segmentPage + 1) * 100, e.segments.length)} of{" "}
+                    {e.segments.length}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={(segmentPage + 1) * 100 >= e.segments.length}
+                    onClick={() => setSegmentPage((page) => page + 1)}
+                  >
+                    Next segments
+                  </Button>
+                </div>
+              )}
               <div className="mt-3 max-h-52 overflow-auto">
-                {e.segments.map((segment) => (
+                {pageSegments.map((segment) => (
                   <button
                     key={segment.index}
                     type="button"
@@ -242,15 +271,22 @@ export function MediaKitResult({
                   Download result
                 </a>
               </Button>
-              {output && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => onUse(output)}
-                >
-                  Use in another tool
-                </Button>
-              )}
+              {output &&
+                !mediaToolSourceIssue(
+                  output.mediaKind === "IMAGE"
+                    ? "compress-image"
+                    : "assess-video-quality",
+                  `SOURCE_${output.mediaKind}`,
+                  output,
+                ) && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => onUse(output)}
+                  >
+                    Use in another tool
+                  </Button>
+                )}
               <Button asChild variant="ghost">
                 <Link href={`${base}/assets` as Route}>Asset Library</Link>
               </Button>

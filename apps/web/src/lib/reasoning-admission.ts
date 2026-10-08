@@ -5,7 +5,10 @@ import {
 } from "@aiwa/credits";
 import { db, Prisma } from "@aiwa/db";
 import { supportsStudioTask } from "@aiwa/providers";
-import { normalizeCreativeLocaleIntent, type CreativeLocaleIntent } from "@aiwa/generation/locale";
+import {
+  normalizeCreativeLocaleIntent,
+  type CreativeLocaleIntent,
+} from "@aiwa/generation/locale";
 
 import { getProviderRuntimeReadiness } from "./provider-readiness";
 
@@ -111,7 +114,12 @@ export async function admitReasoningJob(
         payload.task !== "prompt-enhancement" ||
         payload.userPrompt !== input.userPrompt ||
         payload.targetMedia !== input.targetMedia ||
-        JSON.stringify(payload.localeIntent ?? null) !== JSON.stringify(input.localeIntent ? normalizeCreativeLocaleIntent(input.localeIntent) : null)
+        JSON.stringify(payload.localeIntent ?? null) !==
+          JSON.stringify(
+            input.localeIntent
+              ? normalizeCreativeLocaleIntent(input.localeIntent)
+              : null,
+          )
       ) {
         throw new ReasoningAdmissionLimitError(
           "Idempotency key was already used for different inputs.",
@@ -254,7 +262,11 @@ export async function admitReasoningJob(
           systemPrompt: input.systemPrompt,
           userPrompt: input.userPrompt,
           targetMedia: input.targetMedia,
-          ...(input.localeIntent ? { localeIntent: normalizeCreativeLocaleIntent(input.localeIntent) } : {}),
+          ...(input.localeIntent
+            ? {
+                localeIntent: normalizeCreativeLocaleIntent(input.localeIntent),
+              }
+            : {}),
           responseSchemaName: "prompt-enhancement-v1",
           modelSnapshot: {
             provider: model.provider,

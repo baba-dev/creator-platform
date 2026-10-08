@@ -140,7 +140,12 @@ export async function POST(request: Request) {
     if (limited) return limited;
     const result =
       input.operation === "quote"
-        ? await quotePixelAction(ctx, input.actionId, input.selectedSourceId, input.localeIntent)
+        ? await quotePixelAction(
+            ctx,
+            input.actionId,
+            input.selectedSourceId,
+            input.localeIntent,
+          )
         : input.operation === "execute"
           ? await executePixelAction(ctx, input.actionId, input.quoteId)
           : input.operation === "cancel"

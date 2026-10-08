@@ -17,9 +17,9 @@ describe("Creators Conversation v3 End-to-End Orchestrated Journey", () => {
     // Stage B Plan Compilation
     const plan = compileCreativePlan({ userPrompt, locale: "ar-OM" });
     expect(plan.steps.length).toBe(3);
-    expect(plan.steps[0].task).toBe("image-generation");
-    expect(plan.steps[1].task).toBe("video-generation");
-    expect(plan.steps[2].task).toBe("speech-synthesis");
+    expect(plan.steps[0]!.task).toBe("image-generation");
+    expect(plan.steps[1]!.task).toBe("video-generation");
+    expect(plan.steps[2]!.task).toBe("speech-synthesis");
 
     // Convert into workflow graph
     const workflow: WorkflowGraph = {
@@ -34,10 +34,10 @@ describe("Creators Conversation v3 End-to-End Orchestrated Journey", () => {
         {
           id: "step-img-1",
           task: "image-generation",
-          title: plan.steps[0].title,
+          title: plan.steps[0]!.title,
           position: 0,
           status: "SUCCEEDED",
-          payload: plan.steps[0].payload,
+          payload: plan.steps[0]!.payload,
           dependencies: [],
           outputs: [
             {
@@ -50,10 +50,10 @@ describe("Creators Conversation v3 End-to-End Orchestrated Journey", () => {
         {
           id: "step-vid-2",
           task: "video-generation",
-          title: plan.steps[1].title,
+          title: plan.steps[1]!.title,
           position: 1,
           status: "AWAITING_APPROVAL",
-          payload: plan.steps[1].payload,
+          payload: plan.steps[1]!.payload,
           dependencies: [
             {
               sourceStepId: "step-img-1",
@@ -63,17 +63,19 @@ describe("Creators Conversation v3 End-to-End Orchestrated Journey", () => {
           ],
           outputs: [],
           approvedAt: new Date().toISOString(),
+          quote: { quoteId: "q", quoteToken: "signed", expiresAt: new Date(Date.now()+60000).toISOString(), modelId: "m", provider: "byteplus", priceVersionId: "p", pricingDimension: "REQUEST", unitQuantity: 1, estimatedCredits: "1", maximumChargeCredits: "1", requestHash: "a".repeat(64) },
         },
         {
           id: "step-aud-3",
           task: "speech-synthesis",
-          title: plan.steps[2].title,
+          title: plan.steps[2]!.title,
           position: 2,
           status: "AWAITING_APPROVAL",
-          payload: plan.steps[2].payload,
+          payload: plan.steps[2]!.payload,
           dependencies: [],
           outputs: [],
           approvedAt: new Date().toISOString(),
+          quote: { quoteId: "q", quoteToken: "signed", expiresAt: new Date(Date.now()+60000).toISOString(), modelId: "m", provider: "byteplus", priceVersionId: "p", pricingDimension: "REQUEST", unitQuantity: 1, estimatedCredits: "1", maximumChargeCredits: "1", requestHash: "a".repeat(64) },
         },
       ],
     };

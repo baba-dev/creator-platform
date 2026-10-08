@@ -1,4 +1,3 @@
-import type { StepStatus } from "../contracts/index";
 import type { WorkflowStepAction } from "../workflow/index";
 
 export interface RecoveryAction {

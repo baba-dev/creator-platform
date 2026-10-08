@@ -214,6 +214,7 @@ describe("@aiwa/orchestration contracts & workflow engine", () => {
           ],
           outputs: [],
           approvedAt: new Date().toISOString(),
+        quote: { quoteId: "q", quoteToken: "signed", expiresAt: new Date(Date.now()+60000).toISOString(), modelId: "m", provider: "byteplus", priceVersionId: "p", pricingDimension: "REQUEST", unitQuantity: 1, estimatedCredits: "1", maximumChargeCredits: "1", requestHash: "a".repeat(64) },
         },
       ],
     };

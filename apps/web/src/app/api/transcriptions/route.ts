@@ -3,6 +3,7 @@ import { db } from "@aiwa/db";
 import { createTranscriptionJob } from "@aiwa/generation";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { creativeLocaleIntentSchema } from "@aiwa/generation/locale";
 
 import { generationError } from "@/lib/generation-api";
 import { rateLimit } from "@/lib/rate-limit";
@@ -30,6 +31,7 @@ const createSchema = z
     idempotencyKey: z.uuid(),
     sourceAssetId: z.string().min(1).max(100),
     language: z.string().trim().min(2).max(20).optional(),
+    localeIntent: creativeLocaleIntentSchema.optional(),
     prompt: z.string().trim().max(1000).optional(),
   })
   .strict();

@@ -9,7 +9,8 @@
     "./storage": "./src/storage.ts",
     "./provider-media-grant": "./src/provider-media-grant.ts",
     "./reconciliation": "./src/reconciliation.ts",
-    "./media-tools": "./src/media-tools.ts"
+    "./media-tools": "./src/media-tools.ts",
+    "./locale": "./src/locale.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",

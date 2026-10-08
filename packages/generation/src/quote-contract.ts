@@ -1,3 +1,4 @@
+import type { CreativeLocaleIntent } from "./locale";
 import {
   createHash,
   createHmac,
@@ -111,10 +112,14 @@ export function quoteParameters(
     referenceImageAssetId?: string;
     estimatedDurationSeconds?: number;
     language?: string;
+    localeIntent?: CreativeLocaleIntent;
     transcription?: boolean;
     responseFormat?: "text" | "json_object";
   },
 ): Record<string, unknown> {
+  const localeBinding = input.localeIntent
+    ? { localeIntent: input.localeIntent }
+    : {};
   if (mediaKind === "VIDEO") {
     const sources = Array.isArray(input.sources)
       ? [...input.sources]
@@ -123,6 +128,7 @@ export function quoteParameters(
       : undefined;
     const schemaVersion = input.schemaVersion ?? (sources ? 2 : 1);
     return {
+      ...localeBinding,
       schemaVersion,
       workflow: input.workflow ?? null,
       durationSeconds: input.durationSeconds ?? 5,
@@ -169,6 +175,7 @@ export function quoteParameters(
   if (mediaKind === "VOICE")
     if (input.task === "seed-audio")
       return {
+        ...localeBinding,
         task: "seed-audio",
         longForm: input.longForm === true,
         textHash:
@@ -186,12 +193,14 @@ export function quoteParameters(
     else
       return input.transcription
         ? {
+            ...localeBinding,
             transcription: true,
             sourceAssetId: input.sourceAssetId ?? null,
             language: input.language ?? null,
             billableQuantity: input.billableQuantity ?? null,
           }
         : {
+            ...localeBinding,
             textHash:
               input.text === undefined
                 ? null
@@ -203,6 +212,7 @@ export function quoteParameters(
           };
   if (mediaKind === "TEXT")
     return {
+      ...localeBinding,
       textHash:
         input.text === undefined
           ? null
@@ -215,6 +225,7 @@ export function quoteParameters(
         input.text === undefined ? (input.billableQuantity ?? null) : null,
     };
   return {
+    ...localeBinding,
     units: input.outputCount ?? input.units ?? 1,
     resolution: input.resolution ?? "2K",
     aspectRatio: input.aspectRatio ?? "1:1",

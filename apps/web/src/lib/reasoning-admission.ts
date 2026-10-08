@@ -5,6 +5,10 @@ import {
 } from "@aiwa/credits";
 import { db, Prisma } from "@aiwa/db";
 import { supportsStudioTask } from "@aiwa/providers";
+import {
+  normalizeCreativeLocaleIntent,
+  type CreativeLocaleIntent,
+} from "@aiwa/generation/locale";
 
 import { getProviderRuntimeReadiness } from "./provider-readiness";
 
@@ -38,6 +42,7 @@ export interface AdmitReasoningJobInput {
   idempotencyKey: string;
   userPrompt: string;
   targetMedia: "IMAGE" | "VIDEO";
+  localeIntent?: CreativeLocaleIntent;
   systemPrompt: string;
 }
 
@@ -99,6 +104,7 @@ export async function admitReasoningJob(
         task?: unknown;
         userPrompt?: unknown;
         targetMedia?: unknown;
+        localeIntent?: unknown;
       };
       if (
         existing.organizationId !== input.organizationId ||
@@ -107,7 +113,13 @@ export async function admitReasoningJob(
           existing.priceVersionId !== input.priceVersionId) ||
         payload.task !== "prompt-enhancement" ||
         payload.userPrompt !== input.userPrompt ||
-        payload.targetMedia !== input.targetMedia
+        payload.targetMedia !== input.targetMedia ||
+        JSON.stringify(payload.localeIntent ?? null) !==
+          JSON.stringify(
+            input.localeIntent
+              ? normalizeCreativeLocaleIntent(input.localeIntent)
+              : null,
+          )
       ) {
         throw new ReasoningAdmissionLimitError(
           "Idempotency key was already used for different inputs.",
@@ -250,6 +262,11 @@ export async function admitReasoningJob(
           systemPrompt: input.systemPrompt,
           userPrompt: input.userPrompt,
           targetMedia: input.targetMedia,
+          ...(input.localeIntent
+            ? {
+                localeIntent: normalizeCreativeLocaleIntent(input.localeIntent),
+              }
+            : {}),
           responseSchemaName: "prompt-enhancement-v1",
           modelSnapshot: {
             provider: model.provider,

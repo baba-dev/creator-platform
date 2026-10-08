@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  CreativeLocaleSelector,
+  useCreativeLocale,
+} from "@/components/studio/creative-locale-selector";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { CreativeSurface, Eyebrow } from "@/components/ui/creative";
@@ -141,6 +146,7 @@ export function CharacterChatWorkspace({
   initialThreadId?: string;
   textModels: StudioChatModel[];
 }) {
+  const [localeIntent, setLocaleIntent] = useCreativeLocale(organizationId);
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [selectedPersona, setSelectedPersona] = useState<Persona | null>(null);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
@@ -536,6 +542,7 @@ export function CharacterChatWorkspace({
         {
           content: userText,
           autoVoice,
+          localeIntent,
         },
         {
           idempotencyKey: clientRequestId,
@@ -689,6 +696,11 @@ export function CharacterChatWorkspace({
 
   return (
     <div className="mx-auto flex h-[calc(100vh-65px)] max-w-[1600px] flex-col p-4 sm:p-6 lg:p-8">
+      <CreativeLocaleSelector
+        value={localeIntent}
+        onChange={setLocaleIntent}
+        disabled={isSending}
+      />
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-4">
         <div>

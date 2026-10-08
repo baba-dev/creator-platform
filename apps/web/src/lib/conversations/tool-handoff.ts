@@ -58,7 +58,7 @@ export function resolveCreativeToolHandoff(
   // Don't interpret a visual prompt that merely mentions an actor or a script
   // as an instruction to leave the generation workflow.
   const explicitTask =
-    /^(?:please\\s+)?(?:open|take me to|go to|launch|start|use|help me (?:with|to)|i want to|i need to|transcribe|write|create subtitles|edit video|trim video|crop image|remove background)\\b/i.test(
+    /^(?:please\\s+)?(?:open|take me to|go to|launch|start|use|help me (?:with|to|write)|i want to|i need to|transcribe|write|create subtitles|edit video|trim video|crop image|remove background)\\b/i.test(
       text.trim(),
     );
   if (!explicitTask) return null;

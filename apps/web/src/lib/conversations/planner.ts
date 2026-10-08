@@ -106,8 +106,8 @@ export async function planConversationTurn(params: {
   // Questions, consultation and capability discovery are NEVER implicit paid
   // media requests. Interpret them as a read-only conversational turn.
   const isNonGenerationQuestion =
-    /\\?$/.test(text) ||
-    /^(?:what|why|which|who|where|when|how|explain|describe|help me|tell me|can you tell|could you explain|i want to know|let's plan|lets plan|plan a|suggest|recommend|compare)\\b/i.test(
+    /\?$/.test(text) ||
+    /^(?:what|why|which|who|where|when|how|explain|describe|help me|tell me|can you tell|could you explain|i want to know|let's plan|lets plan|plan a|suggest|recommend|compare)\b/i.test(
       text,
     );
   if (isNonGenerationQuestion) {
@@ -121,18 +121,18 @@ export async function planConversationTurn(params: {
 
   // Recognize explicit settings before the asset-reference resolver. A setting
   // patch can use the selected output without asking a misleading question.
-  const resolutionMatch = /\\b(480p|720p|1080p|1k|1\\.5k|2k|3k|4k)\\b/i.exec(
+  const resolutionMatch = /\b(480p|720p|1080p|1k|1\.5k|2k|3k|4k)\b/i.exec(
     text,
   );
   const resolution = resolutionMatch?.[1]?.toUpperCase().replace(/P$/, "p") as
     "480p" | "720p" | "1080p" | "1K" | "1.5K" | "2K" | "3K" | "4K" | undefined;
   const isResolutionIntent =
     Boolean(resolution) &&
-    /^(?:make|change|set|switch|render|convert|upscale|increase|decrease|use|output|export)\\b|\\b(?:resolution|quality)\\b/i.test(
+    /^(?:make|change|set|switch|render|convert|upscale|increase|decrease|use|output|export)\b|\b(?:resolution|quality)\b/i.test(
       text,
     );
   const voiceMatch =
-    /^(?:change|switch|set|use)\\s+(?:the\\s+)?voice\\s+(?:to\\s+)?([a-z][a-z0-9_-]{1,60})[.!]?$/i.exec(
+    /^(?:change|switch|set|use)\s+(?:the\s+)?voice\s+(?:to\s+)?([a-z][a-z0-9_-]{1,60})[.!]?$/i.exec(
       text,
     );
   if (context.activeModality === "VOICE" && voiceMatch) {
@@ -145,10 +145,10 @@ export async function planConversationTurn(params: {
     };
   }
   if (
-    /\\b(?:enhance|improve|optimi[sz]e)\\s+(?:my |the )?prompt\\b/i.test(
+    /\b(?:enhance|improve|optimi[sz]e)\s+(?:my |the )?prompt\b/i.test(
       text,
     ) ||
-    /\\blast frame\\b/i.test(text)
+    /\blast frame\b/i.test(text)
   ) {
     return {
       version: ACTION_PROTOCOL_VERSION,
@@ -194,10 +194,16 @@ export async function planConversationTurn(params: {
   // First-turn video/voice requests have no media reference to resolve.
   // Do not let the word "video" or "this" trigger a false asset clarification.
   const isFreshVideoIntent =
-    /^(?:please\\s+)?(?:create|generate|make|produce|render)\\s+(?:me\\s+)?(?:an?\\s+)?(?:[\\w-]+\\s+){0,3}(?:video|clip|animation)\\b/i.test(text) &&
-    !/\\b(?:from this|use this|first frame|selected image|previous image)\\b/i.test(text);
+    /^(?:please\s+)?(?:create|generate|make|produce|render)\s+(?:me\s+)?(?:an?\s+)?(?:[\w-]+\s+){0,3}(?:video|clip|animation)\b/i.test(
+      text,
+    ) &&
+    !/\b(?:from this|use this|first frame|selected image|previous image)\b/i.test(
+      text,
+    );
   const isFreshSpeechIntent =
-    /^(?:please\\s+)?(?:narrate|read aloud|speak|say|generate speech|create (?:a |an )?voiceover|make (?:a |an )?voiceover)\\b/i.test(text);
+    /^(?:please\s+)?(?:narrate|read aloud|speak|say|generate speech|create (?:a |an )?voiceover|make (?:a |an )?voiceover)\b/i.test(
+      text,
+    );
   const hasReferenceWord =
     !isAspectRatioIntent &&
     !isFreshCreationIntent &&

@@ -21,7 +21,7 @@ import {
 import { planConversationTurn } from "../../../../../lib/conversations/planner";
 import { answerCreativeQuestion } from "../../../../../lib/conversations/read-only-response";
 import { describeCreativeHandoff } from "../../../../../lib/conversations/tool-handoff";
-import { WORKSPACE_TOOLS } from "@/lib/workspace-tools";
+import { WORKSPACE_TOOLS } from "../../../../../lib/workspace-tools";
 import { findCompatibleAlternativeModel } from "../../../../../lib/conversations/capability-router";
 import type {
   ConversationState,

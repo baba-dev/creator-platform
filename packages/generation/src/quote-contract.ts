@@ -117,7 +117,9 @@ export function quoteParameters(
     responseFormat?: "text" | "json_object";
   },
 ): Record<string, unknown> {
-  const localeBinding = input.localeIntent ? { localeIntent: input.localeIntent } : {};
+  const localeBinding = input.localeIntent
+    ? { localeIntent: input.localeIntent }
+    : {};
   if (mediaKind === "VIDEO") {
     const sources = Array.isArray(input.sources)
       ? [...input.sources]

@@ -85,6 +85,12 @@ export async function GET(
         errorCode: execution.errorCode,
         errorMessage: execution.errorMessage,
         vqScore,
+        segments:
+          execution.status === "SUCCEEDED" &&
+          execution.providerTool.providerToolId === "semantic-segment" &&
+          Array.isArray(result.segments)
+            ? result.segments
+            : null,
         outputAssetId: execution.outputAssets[0]?.id ?? null,
         outputMimeType: execution.outputAssets[0]?.mimeType ?? null,
         completedAt: execution.completedAt?.toISOString() ?? null,

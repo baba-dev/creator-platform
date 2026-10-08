@@ -67,13 +67,19 @@ async function serve(request: Request, assetId: string, head: boolean) {
   if (
     !asset ||
     !execution ||
-    input.role !== "SOURCE_VIDEO" ||
-    input.position !== 0 ||
+    !["SOURCE_VIDEO", "SOURCE_IMAGE", "SOURCE_AUDIO"].includes(input.role) ||
+    input.position !== (input.role === "SOURCE_AUDIO" ? 1 : 0) ||
     asset.organizationId !== execution.organizationId ||
     !["SUBMITTING", "PROCESSING"].includes(execution.status) ||
     asset.status !== "READY" ||
-    asset.mediaKind !== "VIDEO" ||
-    !["video/mp4", "video/quicktime"].includes(asset.mimeType) ||
+    asset.mediaKind !== input.role.replace("SOURCE_", "") ||
+    !(
+      input.role === "SOURCE_VIDEO"
+        ? ["video/mp4", "video/quicktime"]
+        : input.role === "SOURCE_IMAGE"
+          ? ["image/png", "image/jpeg", "image/webp"]
+          : ["audio/mpeg", "audio/wav", "audio/x-wav"]
+    ).includes(asset.mimeType) ||
     (asset.purpose === "REFERENCE_INPUT" &&
       asset.storageOwnerUserId !== execution.createdById)
   )
@@ -99,12 +105,21 @@ async function serve(request: Request, assetId: string, head: boolean) {
     )
       return new Response(null, { status: 503 });
 
+    const imageAudioExtensions: Record<string, string> = {
+      "image/png": "png",
+      "image/jpeg": "jpg",
+      "image/webp": "webp",
+      "audio/mpeg": "mp3",
+      "audio/wav": "wav",
+      "audio/x-wav": "wav",
+    };
     const extension =
-      asset.mimeType === "video/webm"
+      imageAudioExtensions[asset.mimeType] ??
+      (asset.mimeType === "video/webm"
         ? "webm"
         : asset.mimeType === "video/quicktime"
           ? "mov"
-          : "mp4";
+          : "mp4");
     const headers = new Headers({
       "Content-Type": asset.mimeType,
       "Cache-Control": "private, no-store",

@@ -13,7 +13,7 @@ export type ProviderToolCatalogRow = {
   description: string;
   category: string;
   executionMode: "ASYNC" | "SYNC";
-  pricingMetric: "REQUEST" | "INPUT_SECOND" | "OUTPUT_SECOND";
+  pricingMetric: "REQUEST" | "INPUT_SECOND" | "OUTPUT_SECOND" | "INPUT_BYTE";
   capabilities: Record<string, unknown>;
   enabled: boolean;
   executionCount: number;
@@ -22,6 +22,8 @@ export type ProviderToolCatalogRow = {
     providerCostNoOutputMicroUsd: string | null;
     customerCredits: string;
     unitQuantity: number;
+    proportional: boolean;
+    resolutionRates: Record<string, string> | null;
     targetMarginBps: number;
     providerCostBasisNote: string | null;
   };
@@ -127,6 +129,17 @@ export function ProviderToolCatalog({
                 data,
                 "providerCostNoOutputMicroUsd",
                 "Detection-only cost",
+              ),
+            }
+          : {}),
+        proportional: data.get("proportional") === "on",
+        ...(pricingTool.capabilities.resolutionPricing
+          ? {
+              resolutionRates: Object.fromEntries(
+                (pricingTool.capabilities.resolutionPricing === "matting"
+                  ? ["720p", "1080p", "1440p", "2160p"]
+                  : ["360p", "480p", "720p", "1080p"]
+                ).map((tier) => [tier, String(data.get(`rate-${tier}`) ?? "")]),
               ),
             }
           : {}),
@@ -285,9 +298,15 @@ export function ProviderToolCatalog({
         <div className="fixed inset-0 z-50 grid place-items-center bg-background/75 p-4 backdrop-blur-sm">
           <form
             onSubmit={publishPrice}
-            className="w-full max-w-xl rounded-3xl border border-border bg-card p-6 shadow-xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="mediakit-price-title"
+            className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-3xl border border-border bg-card p-6 shadow-xl"
           >
-            <h2 className="font-display text-2xl font-semibold">
+            <h2
+              id="mediakit-price-title"
+              className="font-display text-2xl font-semibold"
+            >
               Price {pricingTool.displayName}
             </h2>
             <p className="mt-1 text-xs text-muted-foreground">
@@ -341,14 +360,16 @@ export function ProviderToolCatalog({
                 Billing block (
                 {pricingTool.pricingMetric === "REQUEST"
                   ? "request"
-                  : "seconds"}
+                  : pricingTool.pricingMetric === "INPUT_BYTE"
+                    ? "bytes"
+                    : "seconds"}
                 )
                 <input
                   name="unitQuantity"
                   required
                   type="number"
                   min="1"
-                  max="86400"
+                  max="1073741824"
                   disabled={pricingTool.pricingMetric === "REQUEST"}
                   defaultValue={
                     pricingTool.pricingMetric === "REQUEST"
@@ -358,6 +379,37 @@ export function ProviderToolCatalog({
                   className="mt-1 h-10 w-full rounded-xl border border-input bg-background px-3 font-mono font-normal disabled:opacity-60"
                 />
               </label>
+              <label className="text-xs font-semibold sm:col-span-2 flex items-center gap-2">
+                <input
+                  name="proportional"
+                  type="checkbox"
+                  defaultChecked={
+                    pricingTool.price?.proportional ??
+                    (pricingTool.pricingMetric === "INPUT_BYTE" ||
+                      Boolean(pricingTool.capabilities.resolutionPricing))
+                  }
+                />
+                Prorate usage (bytes or seconds), rounding only the final cost
+              </label>
+              {pricingTool.capabilities.resolutionPricing
+                ? (pricingTool.capabilities.resolutionPricing === "matting"
+                    ? ["720p", "1080p", "1440p", "2160p"]
+                    : ["360p", "480p", "720p", "1080p"]
+                  ).map((tier) => (
+                    <label key={tier} className="text-xs font-semibold">
+                      {tier} cost (micro-USD per unit)
+                      <input
+                        name={`rate-${tier}`}
+                        required
+                        inputMode="numeric"
+                        defaultValue={
+                          pricingTool.price?.resolutionRates?.[tier] ?? ""
+                        }
+                        className="mt-1 h-10 w-full rounded-xl border border-input bg-background px-3 font-mono font-normal"
+                      />
+                    </label>
+                  ))
+                : null}
               <label className="text-xs font-semibold sm:col-span-2">
                 Rate source / contract note
                 <input

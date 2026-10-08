@@ -89,6 +89,7 @@ enum ProviderToolExecutionMode {
 }
 
 enum ProviderToolPricingMetric {
+  INPUT_BYTE
   REQUEST
   INPUT_SECOND
   OUTPUT_SECOND
@@ -480,6 +481,8 @@ model ModelPriceVersion {
   publicationKey        String?          @unique @db.VarChar(36)
   publicationHash       String?          @db.VarChar(64)
   usageRates            Json?
+  proportional          Boolean                   @default(false)
+  resolutionRates       Json?
   providerCostBasisNote String?          @db.VarChar(255)
   videoInputRate720p    BigInt?
   videoInputRate1080p   BigInt?
@@ -538,6 +541,8 @@ model ProviderToolPriceVersion {
   pricingMetric         ProviderToolPricingMetric
   unitQuantity          Int                       @default(1)
   creditsPerBaisa       BigInt                    @default(1)
+  proportional          Boolean                   @default(false)
+  resolutionRates       Json?
   providerCostBasisNote String?                    @db.VarChar(255)
   effectiveFrom         DateTime
   effectiveTo           DateTime?

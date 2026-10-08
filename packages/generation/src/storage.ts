@@ -179,6 +179,8 @@ function responseContentType(value: string | undefined): string | null {
 async function downloadTrustedImage(
   url: URL,
   redirectsRemaining: number,
+  contentTypes = allowedContentTypes,
+  byteLimit = MAX_IMAGE_BYTES,
 ): Promise<Buffer> {
   const pinnedAddress = await resolvePublicIpv4(url.hostname);
 
@@ -218,10 +220,12 @@ async function downloadTrustedImage(
             return;
           }
 
-          void downloadTrustedImage(redirected, redirectsRemaining - 1).then(
-            resolveDownload,
-            rejectDownload,
-          );
+          void downloadTrustedImage(
+            redirected,
+            redirectsRemaining - 1,
+            contentTypes,
+            byteLimit,
+          ).then(resolveDownload, rejectDownload);
           return;
         }
 
@@ -241,7 +245,7 @@ async function downloadTrustedImage(
             ? response.headers["content-type"][0]
             : response.headers["content-type"],
         );
-        if (contentType && !allowedContentTypes.has(contentType)) {
+        if (contentType && !contentTypes.has(contentType)) {
           response.resume();
           rejectDownload(
             new ImageStorageError(
@@ -253,10 +257,7 @@ async function downloadTrustedImage(
         }
 
         const declaredLength = Number(response.headers["content-length"]);
-        if (
-          Number.isFinite(declaredLength) &&
-          declaredLength > MAX_IMAGE_BYTES
-        ) {
+        if (Number.isFinite(declaredLength) && declaredLength > byteLimit) {
           response.resume();
           rejectDownload(
             new ImageStorageError(
@@ -271,7 +272,7 @@ async function downloadTrustedImage(
         let size = 0;
         response.on("data", (part: Buffer) => {
           size += part.length;
-          if (size > MAX_IMAGE_BYTES) {
+          if (size > byteLimit) {
             response.destroy(
               new ImageStorageError(
                 "IMAGE_OUTPUT_TOO_LARGE",
@@ -1145,4 +1146,21 @@ function mp3FrameLength(bytes: Buffer, offset: number): number | null {
   return frameLength >= 4 && offset + frameLength <= bytes.length
     ? frameLength
     : null;
+}
+
+export async function downloadMediaToolAnalysis(
+  urlString: string,
+): Promise<Buffer> {
+  return downloadTrustedImage(
+    parseTrustedImageUrl(urlString),
+    MAX_REDIRECTS,
+    new Set([
+      "application/gzip",
+      "application/x-gzip",
+      "application/json",
+      "application/octet-stream",
+      "binary/octet-stream",
+    ]),
+    2 * 1024 * 1024,
+  );
 }

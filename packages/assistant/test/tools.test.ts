@@ -67,6 +67,11 @@ describe("assistant tools", () => {
       ctx,
     )) as { route: string };
     expect(transcription.route).toBe("/app/creative-team/speech/transcription");
+    const mediakit = (await navigateTool.execute(
+      { destination: "MEDIAKIT" },
+      ctx,
+    )) as { route: string };
+    expect(mediakit.route).toBe("/app/creative-team/media-tools");
   });
 
   it("replays reminders idempotently", async () => {

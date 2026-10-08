@@ -84,6 +84,21 @@ export const WORKSPACE_TOOL_CATEGORIES: readonly WorkspaceToolCategory[] = [
         keywords: ["omnihuman", "avatar", "talking presenter"],
       },
       {
+        id: "mediakit",
+        title: "MediaKit Tools",
+        shortTitle: "MediaKit",
+        description: "Compress, crop, protect images and process video",
+        segment: "media-tools",
+        icon: "wand",
+        keywords: [
+          "mediakit",
+          "matting",
+          "watermark",
+          "lip sync",
+          "scrolling video",
+        ],
+      },
+      {
         id: "video-editor",
         title: "Video Editing Desk",
         shortTitle: "Video Editor",

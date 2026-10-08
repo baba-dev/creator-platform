@@ -23,6 +23,7 @@ const inputSchema = z.object({
     "BRANDS",
     "STORIES",
     "SPOKESPERSON",
+    "MEDIAKIT",
     "HOME",
   ]),
 });
@@ -48,6 +49,7 @@ const routes: Record<z.infer<typeof inputSchema>["destination"], string> = {
   BRANDS: "brand-assistants",
   STORIES: "story-planning",
   SPOKESPERSON: "spokesperson",
+  MEDIAKIT: "media-tools",
   HOME: "",
 };
 

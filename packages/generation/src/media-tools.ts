@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { gunzipSync } from "node:zlib";
 
 import {
   finalizeAssetStorage,
@@ -10,6 +11,7 @@ import { parseServerEnv } from "@aiwa/config";
 import {
   captureCreditsForReference,
   quoteProviderToolPrice,
+  mediaToolResolutionRate,
   releaseCreditsForReference,
   reserveCreditsForReference,
 } from "@aiwa/credits";
@@ -23,14 +25,29 @@ import {
 import { z } from "zod";
 
 import { issueProviderToolMediaGrant } from "./provider-media-grant";
-import { downloadVideo, storeVideo } from "./storage";
+import {
+  downloadImage,
+  downloadMediaToolAnalysis,
+  storeImage,
+  downloadVideo,
+  storeVideo,
+} from "./storage";
+import {
+  parseMediaToolInput,
+  mediaToolSourceRoles,
+  scrollingDurationCeiling,
+} from "./media-tool-input";
 
 const REFERENCE_TYPE = "PROVIDER_TOOL_EXECUTION";
 const MAX_ACTIVE_PER_USER = 5;
 const MAX_ACTIVE_PER_ORG = 20;
+const MAX_TOOL_IMAGE_BYTES = 35n * 1024n * 1024n;
 const MAX_TOOL_VIDEO_BYTES = 100n * 1024n * 1024n;
 const FIRST_VIDEO_TOOLS = new Set([
   "matte-portrait-video",
+  "matte-greenscreen-video",
+  "semantic-segment",
+  "lip-sync",
   "assess-video-quality",
   "enhance-video-smoothness",
 ]);
@@ -51,14 +68,14 @@ export const providerToolExecutionRequestSchema = z
     toolId: z.string().min(1).max(128),
     priceVersionId: z.string().min(1).max(128),
     idempotencyKey: z.uuid(),
-    quotedQuantity: z.number().int().min(1).max(86_400),
+    quotedQuantity: z.number().int().min(1).max(104_857_600),
     input: z.record(z.string(), z.unknown()),
     sourceAssets: z
       .array(
         z
           .object({
             assetId: z.string().min(1).max(128),
-            role: z.literal("SOURCE_VIDEO"),
+            role: z.enum(["SOURCE_VIDEO", "SOURCE_IMAGE", "SOURCE_AUDIO"]),
             position: z.number().int().min(0).max(9),
           })
           .strict(),
@@ -110,7 +127,9 @@ function priceQuote(
   price: {
     providerCostMicroUsd: bigint;
     providerCostNoOutputMicroUsd?: bigint | null;
-    pricingMetric: "REQUEST" | "INPUT_SECOND" | "OUTPUT_SECOND";
+    pricingMetric: "REQUEST" | "INPUT_SECOND" | "OUTPUT_SECOND" | "INPUT_BYTE";
+    proportional?: boolean;
+    resolutionRates?: unknown;
     unitQuantity: number;
     fxBaisaNumerator: bigint;
     fxBaisaDenominator: bigint;
@@ -119,12 +138,15 @@ function priceQuote(
   },
   quantity: number,
   providerCostMicroUsd = price.providerCostMicroUsd,
+  durationMs?: number | null,
 ) {
   return quoteProviderToolPrice({
     providerCostMicroUsd,
+    proportional: price.proportional,
     pricingMetric: price.pricingMetric,
     unitQuantity: price.unitQuantity,
-    billableQuantity: quantity,
+    billableQuantity: price.proportional && durationMs ? durationMs : quantity,
+    billableQuantityDenominator: price.proportional && durationMs ? 1000n : 1n,
     exchangeRate: {
       baisaNumerator: price.fxBaisaNumerator,
       baisaDenominator: price.fxBaisaDenominator,
@@ -256,11 +278,14 @@ function outputReservationForTool(
   providerToolId: string,
   input: Readonly<Record<string, unknown>>,
 ): {
-  extension: "mp4" | "webm";
-  mimeType: "video/mp4" | "video/webm";
+  extension: "mp4" | "webm" | "png" | "jpg";
+  mimeType: "video/mp4" | "video/webm" | "image/png" | "image/jpeg";
   name: string;
 } | null {
-  if (providerToolId === "matte-portrait-video") {
+  if (
+    providerToolId === "matte-portrait-video" ||
+    providerToolId === "matte-greenscreen-video"
+  ) {
     const format = input.format === "MP4" ? "MP4" : "WEBM";
     return format === "MP4"
       ? {
@@ -274,11 +299,31 @@ function outputReservationForTool(
           name: "Transparent spokesperson video",
         };
   }
-  if (providerToolId === "enhance-video-smoothness") {
+  if (providerToolId.endsWith("image")) {
+    const jpeg =
+      providerToolId === "compress-image" || providerToolId === "slim-image";
+    return {
+      extension: jpeg ? "jpg" : "png",
+      mimeType: jpeg ? "image/jpeg" : "image/png",
+      name: "MediaKit image",
+    };
+  }
+  if (
+    [
+      "enhance-video-smoothness",
+      "lip-sync",
+      "text-to-scrolling-video",
+    ].includes(providerToolId)
+  ) {
     return {
       extension: "mp4",
       mimeType: "video/mp4",
-      name: "Smoothed spokesperson video",
+      name:
+        providerToolId === "lip-sync"
+          ? "Lip-synced video"
+          : providerToolId === "text-to-scrolling-video"
+            ? "Scrolling text video"
+            : "Smoothed spokesperson video",
     };
   }
   return null;
@@ -334,66 +379,57 @@ async function materializeProviderInput(execution: {
   createdById: string;
 }): Promise<Record<string, unknown>> {
   const semantic = toolResultRecord(execution.requestPayload);
-  if (!firstVideoTool(execution.providerTool.providerToolId)) return semantic;
-
-  if (execution.inputAssets.length !== 1) {
-    throw new ProviderRequestError(
-      "MediaKit source snapshot is invalid",
-      false,
-      {
-        code: "REFERENCE_MEDIA_UNAVAILABLE",
-        stage: "dispatch",
-      },
-    );
-  }
-  const input = execution.inputAssets[0]!;
-  const asset = input.asset;
-  if (
-    input.role !== "SOURCE_VIDEO" ||
-    input.position !== 0 ||
-    asset.organizationId !== execution.organizationId ||
-    asset.status !== "READY" ||
-    asset.mediaKind !== "VIDEO" ||
-    (asset.purpose === "REFERENCE_INPUT" &&
-      asset.storageOwnerUserId !== execution.createdById)
-  ) {
-    throw new ProviderRequestError(
-      "MediaKit source video is unavailable",
-      false,
-      {
-        code: "REFERENCE_MEDIA_UNAVAILABLE",
-        stage: "dispatch",
-      },
-    );
-  }
-
+  const roles = mediaToolSourceRoles(execution.providerTool.providerToolId);
   const env = parseServerEnv();
   const base = new URL(env.APP_URL);
-  if (base.protocol !== "https:") {
-    throw new ProviderRequestError(
-      "MediaKit source requires a public HTTPS app URL",
-      false,
-      { code: "INVALID_PROVIDER_SOURCE", stage: "dispatch" },
+  if (base.protocol !== "https:")
+    throw new ProviderRequestError("MediaKit requires public HTTPS", false, {
+      code: "INVALID_PROVIDER_SOURCE",
+      stage: "dispatch",
+    });
+  if (execution.inputAssets.length !== roles.length)
+    throw new ProviderRequestError("Source snapshot is invalid", false, {
+      code: "REFERENCE_MEDIA_UNAVAILABLE",
+      stage: "dispatch",
+    });
+  const urls: Record<string, string> = {};
+  for (const [position, role] of roles.entries()) {
+    const input = execution.inputAssets.find(
+      (item) => item.position === position && item.role === role,
     );
+    const asset = input?.asset;
+    if (
+      !asset ||
+      asset.organizationId !== execution.organizationId ||
+      asset.status !== "READY" ||
+      asset.mediaKind !== role.replace("SOURCE_", "") ||
+      (asset.purpose === "REFERENCE_INPUT" &&
+        asset.storageOwnerUserId !== execution.createdById)
+    ) {
+      throw new ProviderRequestError("Source media is unavailable", false, {
+        code: "REFERENCE_MEDIA_UNAVAILABLE",
+        stage: "dispatch",
+      });
+    }
+    const url = new URL(
+      `/api/provider-tool-media/${encodeURIComponent(asset.id)}`,
+      base,
+    );
+    url.searchParams.set("executionId", execution.id);
+    url.searchParams.set(
+      "grant",
+      issueProviderToolMediaGrant({
+        secret: env.AUTH_SECRET,
+        executionId: execution.id,
+        assetId: asset.id,
+      }),
+    );
+    urls[`${role.replace("SOURCE_", "").toLowerCase()}_url`] = url.toString();
   }
-  const url = new URL(
-    `/api/provider-tool-media/${encodeURIComponent(asset.id)}`,
-    base,
-  );
-  url.searchParams.set("executionId", execution.id);
-  url.searchParams.set(
-    "grant",
-    issueProviderToolMediaGrant({
-      secret: env.AUTH_SECRET,
-      executionId: execution.id,
-      assetId: asset.id,
-    }),
-  );
-
   if (execution.providerTool.providerToolId === "enhance-video-smoothness") {
     const alignSourceFps = semantic.alignSourceFps !== false;
     return {
-      video_url: url.toString(),
+      video_url: urls.video_url,
       periodic_stutter_detect: {
         periodic_stutter_repair: true,
         align_source_fps: alignSourceFps,
@@ -404,7 +440,7 @@ async function materializeProviderInput(execution: {
 
   return {
     ...semantic,
-    video_url: url.toString(),
+    ...urls,
   };
 }
 
@@ -474,6 +510,7 @@ export async function createProviderToolExecution(
       mediaKind: string;
       mimeType: string;
       durationMs: number | null;
+      byteSize: bigint;
       generationJob: {
         status: string;
         requestPayload: unknown;
@@ -482,7 +519,8 @@ export async function createProviderToolExecution(
     } | null = null;
     if (firstVideoTool(tool.providerToolId)) {
       if (
-        input.sourceAssets.length !== 1 ||
+        input.sourceAssets.length !==
+          mediaToolSourceRoles(tool.providerToolId).length ||
         input.sourceAssets[0]?.role !== "SOURCE_VIDEO" ||
         input.sourceAssets[0]?.position !== 0
       ) {
@@ -506,6 +544,7 @@ export async function createProviderToolExecution(
           mediaKind: true,
           mimeType: true,
           durationMs: true,
+          byteSize: true,
           generationJob: {
             select: {
               status: true,
@@ -533,6 +572,14 @@ export async function createProviderToolExecution(
           400,
         );
       }
+      if (
+        sourceAsset.byteSize > MAX_TOOL_VIDEO_BYTES ||
+        (tool.providerToolId === "lip-sync" &&
+          sourceAsset.mimeType !== "video/mp4")
+      )
+        throw new ProviderToolExecutionError(
+          "Source video exceeds 100 MiB or is not MP4 for lip sync.",
+        );
       const generationPayload = toolResultRecord(
         sourceAsset.generationJob?.requestPayload,
       );
@@ -557,8 +604,22 @@ export async function createProviderToolExecution(
           409,
         );
       }
+      if (
+        tool.providerToolId === "semantic-segment" &&
+        trustedDurationMs > 10_800_000
+      )
+        throw new ProviderToolExecutionError(
+          "Segmentation supports videos up to three hours.",
+        );
+      if (tool.providerToolId === "lip-sync" && trustedDurationMs > 1_800_000)
+        throw new ProviderToolExecutionError(
+          "Lip sync supports videos up to 30 minutes.",
+        );
       const trustedQuantity = Math.ceil(trustedDurationMs / 1000);
-      if (trustedQuantity !== input.quotedQuantity) {
+      if (
+        tool.providerToolId !== "lip-sync" &&
+        trustedQuantity !== input.quotedQuantity
+      ) {
         throw new ProviderToolExecutionError(
           "MediaKit quote is stale. Refresh the video and try again.",
           409,
@@ -573,11 +634,79 @@ export async function createProviderToolExecution(
           400,
         );
       }
-    } else if (input.sourceAssets.length > 0) {
-      throw new ProviderToolExecutionError(
-        "This MediaKit tool does not accept snapshotted video sources yet.",
-        400,
-      );
+    } else {
+      const ref = input.sourceAssets[0];
+      if (
+        input.sourceAssets.length !== 1 ||
+        ref?.role !== "SOURCE_IMAGE" ||
+        ref.position !== 0
+      )
+        throw new ProviderToolExecutionError("Select one source image.");
+      sourceAsset = await tx.asset.findFirst({
+        where: { id: ref.assetId, organizationId: input.organizationId },
+        include: { generationJob: { include: { providerModel: true } } },
+      });
+      if (
+        !sourceAsset ||
+        sourceAsset.status !== "READY" ||
+        sourceAsset.mediaKind !== "IMAGE" ||
+        !["image/png", "image/jpeg", "image/webp"].includes(
+          sourceAsset.mimeType,
+        ) ||
+        sourceAsset.byteSize <= 0n ||
+        sourceAsset.byteSize > 35n * 1024n * 1024n ||
+        (sourceAsset.purpose === "REFERENCE_INPUT" &&
+          sourceAsset.storageOwnerUserId !== userId)
+      )
+        throw new ProviderToolExecutionError(
+          "Source image is unavailable or exceeds 35 MiB.",
+        );
+      const quantity =
+        tool.pricingMetric === "INPUT_BYTE"
+          ? Number(sourceAsset.byteSize)
+          : tool.providerToolId === "text-to-scrolling-video"
+            ? scrollingDurationCeiling(
+                parseMediaToolInput(tool.providerToolId, input.input),
+              )
+            : 1;
+      if (quantity > 86400 && tool.pricingMetric !== "INPUT_BYTE")
+        throw new ProviderToolExecutionError(
+          "Shorten the scrolling text or reduce page duration.",
+        );
+      if (input.quotedQuantity !== quantity)
+        throw new ProviderToolExecutionError(
+          "MediaKit quote is stale. Refresh and try again.",
+          409,
+        );
+    }
+    const semanticInput = parseMediaToolInput(tool.providerToolId, input.input);
+    const extraSources = [];
+    for (const ref of input.sourceAssets.slice(1)) {
+      if (ref.role !== "SOURCE_AUDIO" || ref.position !== 1)
+        throw new ProviderToolExecutionError("Invalid source role.");
+      const audio = await tx.asset.findFirst({
+        where: { id: ref.assetId, organizationId: input.organizationId },
+      });
+      if (
+        !audio ||
+        audio.status !== "READY" ||
+        audio.mediaKind !== "AUDIO" ||
+        !["audio/mpeg", "audio/wav", "audio/x-wav"].includes(audio.mimeType) ||
+        (audio.purpose === "REFERENCE_INPUT" &&
+          audio.storageOwnerUserId !== userId) ||
+        !audio.durationMs ||
+        audio.byteSize > MAX_TOOL_VIDEO_BYTES
+      )
+        throw new ProviderToolExecutionError("Source audio is unavailable.");
+      // Lip-sync output follows driving audio duration.
+      if (input.quotedQuantity !== Math.ceil(audio.durationMs / 1000))
+        throw new ProviderToolExecutionError("Audio quote is stale.", 409);
+      extraSources.push({
+        executionId: "",
+        assetId: audio.id,
+        position: ref.position,
+        role: ref.role,
+      });
     }
 
     if (sourceAsset) {
@@ -628,7 +757,7 @@ export async function createProviderToolExecution(
         priceVersionId: price.id,
         idempotencyKey: key,
         requestHash,
-        requestPayload: input.input as Prisma.InputJsonValue,
+        requestPayload: semanticInput as Prisma.InputJsonValue,
         quotedQuantity: input.quotedQuantity,
         reservedCredits: quote.customerCredits,
         status: "QUEUED",
@@ -640,15 +769,21 @@ export async function createProviderToolExecution(
           executionId: execution.id,
           assetId: sourceAsset.id,
           position: 0,
-          role: "SOURCE_VIDEO",
+          role: input.sourceAssets[0]!.role,
         },
       });
+      for (const ref of extraSources)
+        await tx.providerToolInputAsset.create({
+          data: { ...ref, executionId: execution.id },
+        });
       const output = outputReservationForTool(tool.providerToolId, input.input);
       if (output) {
         await reserveAssetStorage(tx, {
           organizationId: input.organizationId,
           userId,
-          proposedBytes: MAX_TOOL_VIDEO_BYTES,
+          proposedBytes: output.mimeType.startsWith("image/")
+            ? MAX_TOOL_IMAGE_BYTES
+            : MAX_TOOL_VIDEO_BYTES,
         });
         await tx.asset.create({
           data: {
@@ -661,13 +796,15 @@ export async function createProviderToolExecution(
             createdById: userId,
             status: "PENDING",
             purpose: "GENERAL",
-            mediaKind: "VIDEO",
+            mediaKind: output.mimeType.startsWith("image/") ? "IMAGE" : "VIDEO",
             sourceType: "DERIVED",
             storageProvider: "LOCAL",
             name: output.name,
             objectKey: `${execution.id}-tool.${output.extension}`,
             mimeType: output.mimeType,
-            byteSize: MAX_TOOL_VIDEO_BYTES,
+            byteSize: output.mimeType.startsWith("image/")
+              ? MAX_TOOL_IMAGE_BYTES
+              : MAX_TOOL_VIDEO_BYTES,
           },
         });
       }
@@ -819,7 +956,7 @@ async function releaseTerminal(
 }
 
 export function providerToolActualQuantity(
-  pricingMetric: "REQUEST" | "INPUT_SECOND" | "OUTPUT_SECOND",
+  pricingMetric: "REQUEST" | "INPUT_SECOND" | "OUTPUT_SECOND" | "INPUT_BYTE",
   result: Readonly<Record<string, unknown>> | undefined,
 ): number | null {
   if (pricingMetric === "REQUEST") return 1;
@@ -921,10 +1058,13 @@ async function finalizeSucceededExecution(executionId: string): Promise<void> {
     return;
 
   const result = toolResultRecord(execution.resultPayload);
-  const actualQuantity = providerToolActualQuantity(
-    execution.priceVersion.pricingMetric,
-    result,
-  );
+  const actualQuantity =
+    execution.priceVersion.pricingMetric === "INPUT_BYTE"
+      ? execution.quotedQuantity
+      : providerToolActualQuantity(
+          execution.priceVersion.pricingMetric,
+          result,
+        );
   if (actualQuantity === null) {
     await db.providerToolExecution.updateMany({
       where: { id: execution.id, status: "PROCESSING" },
@@ -940,6 +1080,44 @@ async function finalizeSucceededExecution(executionId: string): Promise<void> {
   }
 
   const toolKey = execution.providerTool.providerToolId;
+  if (toolKey === "semantic-segment") {
+    try {
+      let rawSegments: unknown = result.segments;
+      if (!Array.isArray(rawSegments)) {
+        if (typeof result.result_url !== "string")
+          throw new Error("Missing segmentation output");
+        const bytes = await downloadMediaToolAnalysis(result.result_url);
+        const data = JSON.parse(
+          gunzipSync(bytes, { maxOutputLength: 2 * 1024 * 1024 }).toString(
+            "utf8",
+          ),
+        );
+        rawSegments = data.segments;
+      }
+      const segments = z
+        .array(
+          z
+            .object({
+              index: z.number().int().min(0),
+              start_ms: z.number().int().min(0),
+              end_ms: z.number().int().positive(),
+            })
+            .strip()
+            .refine((v) => v.end_ms > v.start_ms && v.end_ms <= 10_800_000),
+        )
+        .min(1)
+        .max(10800)
+        .parse(rawSegments);
+      result.segments = segments;
+      await db.providerToolExecution.updateMany({
+        where: { id: execution.id, status: "PROCESSING" },
+        data: { resultPayload: result as Prisma.InputJsonValue },
+      });
+    } catch {
+      await deferOutputRecovery(execution.id, "TOOL_ANALYSIS_STORAGE_FAILED");
+      return;
+    }
+  }
   if (toolKey === "assess-video-quality" && !validQualityScore(result)) {
     await db.providerToolExecution.updateMany({
       where: { id: execution.id, status: "PROCESSING" },
@@ -954,7 +1132,10 @@ async function finalizeSucceededExecution(executionId: string): Promise<void> {
     return;
   }
 
-  const output = classifyProviderVideoOutput(result);
+  const imageOutput = execution.providerTool.category === "image";
+  const output = classifyProviderVideoOutput(
+    imageOutput ? { video_url: result.image_url } : result,
+  );
   if (output.kind === "invalid") {
     await db.providerToolExecution.updateMany({
       where: { id: execution.id, status: "PROCESSING" },
@@ -973,7 +1154,14 @@ async function finalizeSucceededExecution(executionId: string): Promise<void> {
   const detectionOnly =
     toolKey === "enhance-video-smoothness" && outputUrl === null;
 
-  if (toolKey === "matte-portrait-video" && !outputUrl) {
+  if (
+    outputReservationForTool(
+      toolKey,
+      toolResultRecord(execution.requestPayload),
+    ) &&
+    !detectionOnly &&
+    !outputUrl
+  ) {
     await db.providerToolExecution.updateMany({
       where: { id: execution.id, status: "PROCESSING" },
       data: {
@@ -993,14 +1181,27 @@ async function finalizeSucceededExecution(executionId: string): Promise<void> {
     try {
       const expectedFormat =
         outputAsset.mimeType === "video/webm" ? "webm" : "mp4";
-      const bytes = await downloadVideo(outputUrl, expectedFormat);
-      stored = await storeVideo(
-        outputAsset.objectKey,
-        bytes,
-        execution.organizationId,
-        outputAsset.id,
-        outputAsset.mimeType === "video/webm" ? "video/webm" : "video/mp4",
-      );
+      if (imageOutput) {
+        const bytes = await downloadImage(
+          outputUrl,
+          outputAsset.mimeType === "image/jpeg" ? "jpeg" : "png",
+        );
+        stored = await storeImage(
+          outputAsset.objectKey,
+          bytes,
+          execution.organizationId,
+          outputAsset.id,
+        );
+      } else {
+        const bytes = await downloadVideo(outputUrl, expectedFormat);
+        stored = await storeVideo(
+          outputAsset.objectKey,
+          bytes,
+          execution.organizationId,
+          outputAsset.id,
+          outputAsset.mimeType === "video/webm" ? "video/webm" : "video/mp4",
+        );
+      }
     } catch {
       await deferOutputRecovery(execution.id, "TOOL_OUTPUT_STORAGE_FAILED");
       return;
@@ -1019,9 +1220,26 @@ async function finalizeSucceededExecution(executionId: string): Promise<void> {
     return;
   }
 
+  const resolutionRate = mediaToolResolutionRate(
+    execution.priceVersion.resolutionRates,
+    result.resolution,
+  );
+  if (execution.priceVersion.resolutionRates && resolutionRate === null) {
+    await db.providerToolExecution.updateMany({
+      where: { id: execution.id, status: "PROCESSING" },
+      data: {
+        status: "MANUAL_REVIEW",
+        nextAttemptAt: null,
+        errorCode: "MISSING_PROVIDER_RESOLUTION",
+        errorMessage:
+          "Provider resolution is missing from the price tariff. Credits remain reserved for review.",
+      },
+    });
+    return;
+  }
   const effectiveProviderCost = detectionOnly
     ? execution.priceVersion.providerCostNoOutputMicroUsd
-    : execution.priceVersion.providerCostMicroUsd;
+    : (resolutionRate ?? execution.priceVersion.providerCostMicroUsd);
   if (effectiveProviderCost === null) {
     await db.providerToolExecution.updateMany({
       where: { id: execution.id, status: "PROCESSING" },
@@ -1040,6 +1258,9 @@ async function finalizeSucceededExecution(executionId: string): Promise<void> {
     execution.priceVersion,
     actualQuantity,
     effectiveProviderCost,
+    execution.priceVersion.pricingMetric.endsWith("SECOND")
+      ? providerToolDurationMs(result)
+      : null,
   );
   if (quote.customerCredits > execution.reservedCredits) {
     await db.providerToolExecution.updateMany({
@@ -1353,4 +1574,95 @@ export async function processProviderToolExecution(
   }
   await persistProviderSuccess(execution.id, polled);
   await finalizeSucceededExecution(execution.id);
+}
+
+export async function prepareMediaToolRequest(
+  userId: string,
+  params: {
+    organizationId: string;
+    toolKey: string;
+    assetIds: string[];
+    input: unknown;
+  },
+) {
+  await requireToolMembership(db, params.organizationId, userId);
+  const now = new Date();
+  const tool = await db.providerTool.findFirst({
+    where: {
+      provider: "BYTEPLUS",
+      providerToolId: params.toolKey,
+      enabled: true,
+    },
+    include: {
+      priceVersions: {
+        where: {
+          effectiveFrom: { lte: now },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
+        },
+        orderBy: { effectiveFrom: "desc" },
+        take: 1,
+      },
+    },
+  });
+  const price = tool?.priceVersions[0];
+  if (!tool || !price || tool.pricingMetric !== price.pricingMetric)
+    throw new ProviderToolExecutionError("Tool pricing is unavailable.", 409);
+  const semantic = parseMediaToolInput(params.toolKey, params.input);
+  const roles = mediaToolSourceRoles(params.toolKey);
+  if (
+    params.assetIds.length !== roles.length ||
+    new Set(params.assetIds).size !== roles.length
+  )
+    throw new ProviderToolExecutionError("Select the required source media.");
+  const assets = [];
+  for (const [position, role] of roles.entries()) {
+    const asset = await db.asset.findFirst({
+      where: {
+        id: params.assetIds[position],
+        organizationId: params.organizationId,
+        status: "READY",
+      },
+    });
+    if (
+      !asset ||
+      asset.mediaKind !== role.replace("SOURCE_", "") ||
+      (asset.purpose === "REFERENCE_INPUT" &&
+        asset.storageOwnerUserId !== userId)
+    )
+      throw new ProviderToolExecutionError("Source media is unavailable.", 404);
+    assets.push(asset);
+  }
+  const durationAsset = params.toolKey === "lip-sync" ? assets[1]! : assets[0]!;
+  const quantity =
+    tool.pricingMetric === "REQUEST"
+      ? 1
+      : tool.pricingMetric === "INPUT_BYTE"
+        ? Number(assets[0]!.byteSize)
+        : params.toolKey === "text-to-scrolling-video"
+          ? scrollingDurationCeiling(semantic)
+          : durationAsset.durationMs
+            ? Math.ceil(durationAsset.durationMs / 1000)
+            : 0;
+  if (
+    !Number.isSafeInteger(quantity) ||
+    quantity < 1 ||
+    (tool.pricingMetric !== "INPUT_BYTE" && quantity > 86400)
+  )
+    throw new ProviderToolExecutionError(
+      "Source needs trusted duration metadata, or scrolling text is too long.",
+      409,
+    );
+  return {
+    organizationId: params.organizationId,
+    toolId: tool.id,
+    priceVersionId: price.id,
+    quotedQuantity: quantity,
+    input: semantic,
+    sourceAssets: assets.map((asset, position) => ({
+      assetId: asset.id,
+      role: roles[position]!,
+      position,
+    })),
+    reservedCredits: priceQuote(price, quantity).customerCredits.toString(),
+  };
 }

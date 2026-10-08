@@ -726,7 +726,11 @@ export function CharacterChatWorkspace({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <CreativeLocaleButton value={localeIntent} onChange={setLocaleIntent} disabled={isSending} />
+          <CreativeLocaleButton
+            value={localeIntent}
+            onChange={setLocaleIntent}
+            disabled={isSending}
+          />
           {/* Model Selector */}
           <div className="relative">
             <select

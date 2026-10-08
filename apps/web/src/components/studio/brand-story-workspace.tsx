@@ -279,7 +279,11 @@ export function BrandStoryWorkspace({
           </p>
         </div>
 
-        <CreativeLocaleButton value={localeIntent} onChange={setLocaleIntent} disabled={isGeneratingBrand || isGeneratingStory} />
+        <CreativeLocaleButton
+          value={localeIntent}
+          onChange={setLocaleIntent}
+          disabled={isGeneratingBrand || isGeneratingStory}
+        />
         {/* Tab Toggle */}
         <div className="flex rounded-xl border border-border bg-card p-1 shadow-xs">
           <button

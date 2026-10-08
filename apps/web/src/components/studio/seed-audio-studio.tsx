@@ -666,23 +666,27 @@ export function SeedAudioStudio({
               </h2>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <CreativeLocaleButton value={localeIntent} onChange={setLocaleIntent} disabled={busy} />
-            <span
-              className={
-                model
-                  ? "inline-flex min-h-8 items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 text-xs font-semibold text-primary"
-                  : "inline-flex min-h-8 items-center gap-2 rounded-full border border-border bg-muted px-3 text-xs font-semibold text-muted-foreground"
-              }
-            >
+              <CreativeLocaleButton
+                value={localeIntent}
+                onChange={setLocaleIntent}
+                disabled={busy}
+              />
               <span
                 className={
                   model
-                    ? "size-2 rounded-full bg-primary"
-                    : "size-2 rounded-full bg-muted-foreground/40"
+                    ? "inline-flex min-h-8 items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 text-xs font-semibold text-primary"
+                    : "inline-flex min-h-8 items-center gap-2 rounded-full border border-border bg-muted px-3 text-xs font-semibold text-muted-foreground"
                 }
-              />
-              {model ? "Seed Audio ready" : "Checking model"}
-            </span>
+              >
+                <span
+                  className={
+                    model
+                      ? "size-2 rounded-full bg-primary"
+                      : "size-2 rounded-full bg-muted-foreground/40"
+                  }
+                />
+                {model ? "Seed Audio ready" : "Checking model"}
+              </span>
             </div>
           </div>
 

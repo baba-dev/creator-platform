@@ -351,9 +351,13 @@ export function TranscriptionStudio({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <CreativeLocaleButton value={localeIntent} onChange={setLocaleIntent} disabled={busy || uploadBusy} />
+          <CreativeLocaleButton
+            value={localeIntent}
+            onChange={setLocaleIntent}
+            disabled={busy || uploadBusy}
+          />
           <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-          {models.length} {models.length === 1 ? "model" : "models"} ready
+            {models.length} {models.length === 1 ? "model" : "models"} ready
           </span>
         </div>
       </div>

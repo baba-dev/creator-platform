@@ -1831,7 +1831,11 @@ export function GenerationStudio({
                 </div>
               </div>
               <div className="flex justify-end">
-                <CreativeLocaleButton value={localeIntent} onChange={setLocaleIntent} disabled={busy} />
+                <CreativeLocaleButton
+                  value={localeIntent}
+                  onChange={setLocaleIntent}
+                  disabled={busy}
+                />
               </div>
 
               <div className={variant === "quick" ? "hidden" : "space-y-4"}>
@@ -2068,7 +2072,11 @@ export function GenerationStudio({
                 />
               </div>
               <div className="mt-2 flex flex-wrap justify-end gap-2">
-                <CreativeLocaleButton value={localeIntent} onChange={setLocaleIntent} disabled={busy || isEnhancing} />
+                <CreativeLocaleButton
+                  value={localeIntent}
+                  onChange={setLocaleIntent}
+                  disabled={busy || isEnhancing}
+                />
                 <Button
                   type="button"
                   variant="secondary"

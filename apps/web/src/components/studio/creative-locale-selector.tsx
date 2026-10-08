@@ -89,7 +89,10 @@ function LocaleFlag({
 }) {
   if (!preset.countryCode) {
     return (
-      <span className="grid size-9 place-items-center rounded-lg bg-primary/10 text-primary" aria-hidden="true">
+      <span
+        className="grid size-9 place-items-center rounded-lg bg-primary/10 text-primary"
+        aria-hidden="true"
+      >
         <Icon name="globe" className="size-5" />
       </span>
     );
@@ -165,7 +168,11 @@ function CreativeLocaleDialog({
   }, []);
 
   const selectPreset = (preset: LocalePreset) => {
-    setDraft({ ...draft, preset: preset.id, language: preset.languages[0].code });
+    setDraft({
+      ...draft,
+      preset: preset.id,
+      language: preset.languages[0].code,
+    });
   };
 
   return (
@@ -184,10 +191,21 @@ function CreativeLocaleDialog({
               <Icon name="globe" className="size-6" />
             </span>
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">Your creative direction</p>
-              <h2 id={titleId} className="font-display mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">Creative locale</h2>
-              <p id={titleId + "-description"} className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
-                Choose who you're creating for. We'll carry your selection across studios without changing your original prompt.
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">
+                Your creative direction
+              </p>
+              <h2
+                id={titleId}
+                className="font-display mt-1 text-2xl font-semibold tracking-tight sm:text-3xl"
+              >
+                Creative locale
+              </h2>
+              <p
+                id={titleId + "-description"}
+                className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground"
+              >
+                Choose who you're creating for. We'll carry your selection
+                across studios without changing your original prompt.
               </p>
             </div>
           </div>
@@ -205,20 +223,32 @@ function CreativeLocaleDialog({
           <span className="min-w-0 text-sm">
             <span className="block font-semibold">{current.name}</span>
             <span className="block truncate text-xs text-muted-foreground">
-              {current.languages.find((item) => item.code === draft.language)?.label ?? "Automatic"} · {draft.tone}
+              {current.languages.find((item) => item.code === draft.language)
+                ?.label ?? "Automatic"}{" "}
+              · {draft.tone}
             </span>
           </span>
-          <span className="ml-2 rounded-full bg-primary/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-primary">Preview</span>
+          <span className="ml-2 rounded-full bg-primary/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-primary">
+            Preview
+          </span>
         </div>
       </div>
 
       <div className="space-y-6 px-5 py-5 sm:px-7 sm:py-6">
         <section aria-label="Target country">
           <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-            <h3 className="text-sm font-bold text-foreground">Where is your audience?</h3>
-            <span className="text-xs text-muted-foreground">Select a country or let the model decide</span>
+            <h3 className="text-sm font-bold text-foreground">
+              Where is your audience?
+            </h3>
+            <span className="text-xs text-muted-foreground">
+              Select a country or let the model decide
+            </span>
           </div>
-          <div className="grid max-h-72 grid-cols-3 gap-2 overflow-y-auto pr-1 sm:grid-cols-4 md:grid-cols-5" role="group" aria-label="Creative locale country">
+          <div
+            className="grid max-h-72 grid-cols-3 gap-2 overflow-y-auto pr-1 sm:grid-cols-4 md:grid-cols-5"
+            role="group"
+            aria-label="Creative locale country"
+          >
             {CREATIVE_LOCALE_PRESETS.map((preset) => (
               <button
                 key={preset.id}
@@ -235,7 +265,10 @@ function CreativeLocaleDialog({
                 }
               >
                 {preset.id === draft.preset && (
-                  <span className="absolute right-2 top-2 grid size-4 place-items-center rounded-full bg-primary text-primary-foreground" aria-hidden="true">
+                  <span
+                    className="absolute right-2 top-2 grid size-4 place-items-center rounded-full bg-primary text-primary-foreground"
+                    aria-hidden="true"
+                  >
                     <Icon name="check" className="size-3" />
                   </span>
                 )}
@@ -246,49 +279,88 @@ function CreativeLocaleDialog({
           </div>
         </section>
 
-        <section className="grid gap-4 border-t border-border pt-5 sm:grid-cols-3" aria-label="Creative language and style">
+        <section
+          className="grid gap-4 border-t border-border pt-5 sm:grid-cols-3"
+          aria-label="Creative language and style"
+        >
           <div className="flex min-w-0 flex-col gap-2 text-xs font-semibold">
             <span className="flex items-center gap-2">
               Language
-              <HelpTooltip label="language" explanation="Choose the language used for generated words or speech. Image-only requests aren't translated; voice accents depend on the selected model." />
+              <HelpTooltip
+                label="language"
+                explanation="Choose the language used for generated words or speech. Image-only requests aren't translated; voice accents depend on the selected model."
+              />
             </span>
             <select
               aria-label="Creative locale language"
               disabled={draft.preset === "auto"}
               value={draft.language}
-              onChange={(event) => setDraft({ ...draft, language: event.target.value })}
+              onChange={(event) =>
+                setDraft({ ...draft, language: event.target.value })
+              }
               className="min-h-11 w-full rounded-xl border border-input bg-background px-3 text-sm font-medium text-foreground focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-60"
             >
               {current.languages.map((entry) => (
-                <option key={entry.code} value={entry.code}>{entry.label}</option>
+                <option key={entry.code} value={entry.code}>
+                  {entry.label}
+                </option>
               ))}
             </select>
           </div>
           <div className="flex min-w-0 flex-col gap-2 text-xs font-semibold">
             <span className="flex items-center gap-2">
               Tone
-              <HelpTooltip label="tone" explanation="Sets the overall creative voice: natural, relaxed, professional, energetic, warm, premium, or authoritative. Your explicit prompt always wins." />
+              <HelpTooltip
+                label="tone"
+                explanation="Sets the overall creative voice: natural, relaxed, professional, energetic, warm, premium, or authoritative. Your explicit prompt always wins."
+              />
             </span>
             <select
               aria-label="Creative locale tone"
               value={draft.tone}
-              onChange={(event) => setDraft({ ...draft, tone: event.target.value as CreativeLocaleIntent["tone"] })}
+              onChange={(event) =>
+                setDraft({
+                  ...draft,
+                  tone: event.target.value as CreativeLocaleIntent["tone"],
+                })
+              }
               className="min-h-11 w-full rounded-xl border border-input bg-background px-3 text-sm font-medium text-foreground focus-visible:outline-2 focus-visible:outline-ring"
             >
-              {(["natural", "casual", "professional", "energetic", "warm", "luxury", "authoritative"] as const).map((tone) => (
-                <option key={tone} value={tone}>{tone.charAt(0).toUpperCase() + tone.slice(1)}</option>
+              {(
+                [
+                  "natural",
+                  "casual",
+                  "professional",
+                  "energetic",
+                  "warm",
+                  "luxury",
+                  "authoritative",
+                ] as const
+              ).map((tone) => (
+                <option key={tone} value={tone}>
+                  {tone.charAt(0).toUpperCase() + tone.slice(1)}
+                </option>
               ))}
             </select>
           </div>
           <div className="flex min-w-0 flex-col gap-2 text-xs font-semibold">
             <span className="flex items-center gap-2">
               Cultural context
-              <HelpTooltip label="cultural context" explanation="Controls whether generation should draw on local culture when relevant. It won't inject stereotypes, landmarks, or costumes into unrelated prompts." />
+              <HelpTooltip
+                label="cultural context"
+                explanation="Controls whether generation should draw on local culture when relevant. It won't inject stereotypes, landmarks, or costumes into unrelated prompts."
+              />
             </span>
             <select
               aria-label="Cultural context influence"
               value={draft.culturalContext}
-              onChange={(event) => setDraft({ ...draft, culturalContext: event.target.value as CreativeLocaleIntent["culturalContext"] })}
+              onChange={(event) =>
+                setDraft({
+                  ...draft,
+                  culturalContext: event.target
+                    .value as CreativeLocaleIntent["culturalContext"],
+                })
+              }
               className="min-h-11 w-full rounded-xl border border-input bg-background px-3 text-sm font-medium text-foreground focus-visible:outline-2 focus-visible:outline-ring"
             >
               <option value="auto">As relevant</option>
@@ -308,7 +380,9 @@ function CreativeLocaleDialog({
           Reset to automatic
         </button>
         <div className="flex items-center gap-2">
-          <Button type="button" variant="secondary" size="sm" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="secondary" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
           <Button type="button" size="sm" onClick={() => onApply(draft)}>
             <Icon name="check" className="size-4" /> Apply locale
           </Button>

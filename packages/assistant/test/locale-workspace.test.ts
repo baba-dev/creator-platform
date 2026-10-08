@@ -35,6 +35,8 @@ describe("Pixel creative locale context", () => {
   });
 
   it("keeps locale optional for older Pixel messages", () => {
-    expect(pixelWorkspaceSchema.parse({ page: "home" }).localeIntent).toBeUndefined();
+    expect(
+      pixelWorkspaceSchema.parse({ page: "home" }).localeIntent,
+    ).toBeUndefined();
   });
 });

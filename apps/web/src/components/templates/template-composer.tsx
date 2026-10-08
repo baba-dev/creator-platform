@@ -106,7 +106,13 @@ export function TemplateComposer({
         </div>
       </div>
 
-      <div className="mt-4 flex justify-end"><CreativeLocaleButton value={localeIntent} onChange={setLocaleIntent} disabled={busy} /></div>
+      <div className="mt-4 flex justify-end">
+        <CreativeLocaleButton
+          value={localeIntent}
+          onChange={setLocaleIntent}
+          disabled={busy}
+        />
+      </div>
       <div className="mt-6 space-y-5">
         {variables.map((variable) => {
           const id = `template-variable-${variable.key}`;

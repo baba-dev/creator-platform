@@ -750,7 +750,11 @@ export function ScriptwritingStudio({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <CreativeLocaleButton value={localeIntent} onChange={setLocaleIntent} disabled={isGenerating} />
+          <CreativeLocaleButton
+            value={localeIntent}
+            onChange={setLocaleIntent}
+            disabled={isGenerating}
+          />
           <Button
             variant="secondary"
             size="sm"

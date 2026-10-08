@@ -173,7 +173,11 @@ export function CreativeDirectorWorkspace({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <CreativeLocaleButton value={localeIntent} onChange={setLocaleIntent} disabled={isGenerating} />
+          <CreativeLocaleButton
+            value={localeIntent}
+            onChange={setLocaleIntent}
+            disabled={isGenerating}
+          />
           <StudioModelSelect
             models={textModels}
             value={selectedModel}

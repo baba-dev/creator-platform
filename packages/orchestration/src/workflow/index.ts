@@ -63,14 +63,16 @@ export function validateWorkflowGraphDAG(workflow: WorkflowGraph): {
     if (stepIds.has(step.id)) {
       return { valid: false, error: `Duplicate step id: ${step.id}` };
     }
-    if (positions.has(step.position)) return {valid: false, error: "Duplicate step position."};
+    if (positions.has(step.position))
+      return { valid: false, error: "Duplicate step position." };
     positions.add(step.position);
     stepIds.add(step.id);
     idToPosition.set(step.id, step.position);
   }
 
-  for (let i=0; i<workflow.steps.length; i++) {
-    if (!positions.has(i)) return {valid: false, error: "Step positions must be consecutive."};
+  for (let i = 0; i < workflow.steps.length; i++) {
+    if (!positions.has(i))
+      return { valid: false, error: "Step positions must be consecutive." };
   }
   for (const step of workflow.steps) {
     for (const dep of step.dependencies) {

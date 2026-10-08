@@ -9,6 +9,7 @@ import {
 import { chatMessageCreateSchema } from "@aiwa/validation";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { creativeLocaleIntentSchema } from "@aiwa/generation/locale";
 import { resolvePersistedChatModel } from "@/lib/chat-model-selection";
 import { deterministicUuid } from "@/lib/idempotency";
 import { getRequestSession } from "@/lib/request-auth";
@@ -31,6 +32,7 @@ const messageListSchema = z.object({
 const chatGenerationSchema = chatMessageCreateSchema
   .extend({
     mode: z.enum(["quote", "generate"]).default("generate"),
+    localeIntent: creativeLocaleIntentSchema.optional(),
     quoteToken: z.string().min(1).max(2048).optional(),
     quotedModelId: z.string().min(1).max(100).optional(),
     priceVersionId: z.string().min(1).max(100).optional(),
@@ -144,6 +146,7 @@ export async function POST(
       quoteToken: input.quoteToken,
       idempotencyKey: input.idempotencyKey,
       chatThreadId: threadId,
+      localeIntent: input.localeIntent,
       chatOptions: {
         autoVoice: input.autoVoice,
         voiceKey: thread.persona?.voiceKey || "jasper",

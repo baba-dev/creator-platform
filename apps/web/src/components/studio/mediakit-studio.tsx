@@ -132,7 +132,14 @@ export function MediaKitStudio({
         const payload = await jsonRequest(
           `/api/media-tools/${encodeURIComponent(id)}`,
         );
-        if (!disposed) setExecution(payload.execution);
+        if (!disposed) {
+          setExecution(payload.execution);
+          setHistory((items) =>
+            items.map((item) =>
+              item.id === id ? { ...item, ...payload.execution } : item,
+            ),
+          );
+        }
       } catch (error) {
         if (!disposed)
           setFeedback(
@@ -227,7 +234,10 @@ export function MediaKitStudio({
           idempotencyKey: requestKey.current,
         });
         setExecution({ ...payload.execution, displayName: tool.name });
-        setHistory((items) => [payload.execution, ...items]);
+        setHistory((items) => [
+          { ...payload.execution, displayName: tool.name },
+          ...items,
+        ]);
         invalidateQuote();
       }
     } catch (error) {
@@ -670,7 +680,9 @@ export function MediaKitStudio({
                     className="flex w-full justify-between gap-3 rounded-lg border border-border p-3 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <span>
-                      {item.providerTool?.displayName ?? "MediaKit job"}
+                      {item.displayName ??
+                        item.providerTool?.displayName ??
+                        "MediaKit job"}
                     </span>
                     <span className="text-muted-foreground">
                       {item.status.replaceAll("_", " ")}

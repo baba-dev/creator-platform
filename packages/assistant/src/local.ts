@@ -24,6 +24,7 @@ export const pixelWorkspaceSchema = z
         "brand-assistants",
         "story-planning",
         "spokesperson",
+        "media-tools",
         "conversations",
       ])
       .optional(),

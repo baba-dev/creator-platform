@@ -6,7 +6,10 @@ import { CancelJobButton } from "@/components/studio/cancel-job-button";
 import { SeedAudioResultWorkspace } from "@/components/studio/seed-audio-result-workspace";
 import { JobRefresh } from "@/components/studio/job-refresh";
 import { getGenerationErrorPresentation } from "@/lib/generation-error-copy";
-import { CREATIVE_LOCALE_PRESETS, readCreativeLocaleIntent } from "@aiwa/generation/locale";
+import {
+  CREATIVE_LOCALE_PRESETS,
+  readCreativeLocaleIntent,
+} from "@aiwa/generation/locale";
 import { getCustomerJob } from "@/lib/generation-history";
 import { requireOrganizationPermission } from "@/lib/request-auth";
 
@@ -43,7 +46,9 @@ export default async function CustomerJobPage({
             ? request.text
             : null;
   const localeIntent = readCreativeLocaleIntent(request.localeIntent);
-  const localePreset = CREATIVE_LOCALE_PRESETS.find((preset) => preset.id === localeIntent?.preset);
+  const localePreset = CREATIVE_LOCALE_PRESETS.find(
+    (preset) => preset.id === localeIntent?.preset,
+  );
   const isSeedAudio =
     request.task === "seed-audio" && job.providerModelKey === "seed-audio-1.0";
   const seedAudioAsset = isSeedAudio
@@ -201,10 +206,20 @@ export default async function CustomerJobPage({
             <p className="mt-3 text-muted-foreground">No prompt stored.</p>
           )}
           {localeIntent && localePreset ? (
-            <div className="mt-4 flex flex-wrap gap-2 text-xs" aria-label="Generation creative locale">
-              <span className="rounded-full border border-border bg-muted px-3 py-1">{localePreset.flag} {localePreset.name} · {localeIntent.language}</span>
-              <span className="rounded-full border border-border bg-muted px-3 py-1">Tone: {localeIntent.tone}</span>
-              <span className="rounded-full border border-border bg-muted px-3 py-1">Culture: {localeIntent.culturalContext}</span>
+            <div
+              className="mt-4 flex flex-wrap gap-2 text-xs"
+              aria-label="Generation creative locale"
+            >
+              <span className="rounded-full border border-border bg-muted px-3 py-1">
+                {localePreset.flag} {localePreset.name} ·{" "}
+                {localeIntent.language}
+              </span>
+              <span className="rounded-full border border-border bg-muted px-3 py-1">
+                Tone: {localeIntent.tone}
+              </span>
+              <span className="rounded-full border border-border bg-muted px-3 py-1">
+                Culture: {localeIntent.culturalContext}
+              </span>
             </div>
           ) : null}
           <dl className="mt-5 grid gap-3 sm:grid-cols-2">

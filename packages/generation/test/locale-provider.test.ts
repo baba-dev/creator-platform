@@ -15,34 +15,53 @@ const oman = {
   tone: "professional" as const,
   culturalContext: "auto" as const,
 };
-const persisted = { ...oman, countryCode: "OM", accent: "Omani / Gulf Arabic", catalogVersion: 1 };
+const persisted = {
+  ...oman,
+  countryCode: "OM",
+  accent: "Omani / Gulf Arabic",
+  catalogVersion: 1,
+};
 
 describe("Provider-aware creative locale", () => {
   it("reads normalized snapshots but rejects arbitrary/stale properties", () => {
     expect(readCreativeLocaleIntent(persisted)).toEqual(oman);
-    expect(readCreativeLocaleIntent({ ...oman, language: "ja-JP" })).toBeUndefined();
+    expect(
+      readCreativeLocaleIntent({ ...oman, language: "ja-JP" }),
+    ).toBeUndefined();
     expect(readCreativeLocaleIntent(null)).toBeUndefined();
     expect(readCreativeLocaleIntent([])).toBeUndefined();
   });
 
   it("compiles media direction exactly once at provider submission without editing original", () => {
     const original = "A pearl-white car in a bright showroom.";
-    const compiled = compileCreativeLocaleMediaPrompt(original, persisted, "IMAGE");
+    const compiled = compileCreativeLocaleMediaPrompt(
+      original,
+      persisted,
+      "IMAGE",
+    );
     expect(compiled).toContain(original);
     expect(compiled).toContain("[Creative locale guidance]");
     expect(compiled).toContain("Oman (ar-OM)");
     expect(original).not.toContain("Oman");
-    expect(compileCreativeLocaleMediaPrompt(original, undefined, "IMAGE")).toBe(original);
+    expect(compileCreativeLocaleMediaPrompt(original, undefined, "IMAGE")).toBe(
+      original,
+    );
   });
 
   it("never truncates a user prompt to make room for locale guidance", () => {
     const long = "a".repeat(1990);
-    expect(compileCreativeLocaleMediaPrompt(long, persisted, "VIDEO")).toBe(long);
-    expect(compileCreativeLocaleMediaPrompt("voice", persisted, "VOICE", 20)).toBe("voice");
+    expect(compileCreativeLocaleMediaPrompt(long, persisted, "VIDEO")).toBe(
+      long,
+    );
+    expect(
+      compileCreativeLocaleMediaPrompt("voice", persisted, "VOICE", 20),
+    ).toBe("voice");
   });
 
   it("injects one transient system message per request, not into saved chat turns", () => {
-    const original = [{ role: "user" as const, content: "Write a short poem." }];
+    const original = [
+      { role: "user" as const, content: "Write a short poem." },
+    ];
     const compiled = localeSystemMessages(original, persisted);
     expect(compiled).toHaveLength(2);
     expect(compiled[0]?.role).toBe("system");
@@ -58,7 +77,9 @@ describe("Provider-aware creative locale", () => {
       { key: "eg", locale: "ar-EG" },
       { key: "om", locale: "ar-OM" },
     ];
-    expect(sortVoicesForLocale(voices, persisted).map((voice) => voice.key)).toEqual(["om", "eg", "us"]);
+    expect(
+      sortVoicesForLocale(voices, persisted).map((voice) => voice.key),
+    ).toEqual(["om", "eg", "us"]);
     expect(voices[0]?.key).toBe("us");
     expect(voiceLocaleMatch("ar-EG", "ar-OM")).toBe("language");
     expect(voiceLocaleMatch("en-US", "ar-OM")).toBe("unverified");
@@ -73,10 +94,15 @@ describe("Provider-aware creative locale", () => {
 
   it("binds changed locale into Seed Audio quote context", () => {
     const one = quoteParameters("VOICE", {
-      task: "seed-audio", text: "test", estimatedDurationSeconds: 30, localeIntent: oman,
+      task: "seed-audio",
+      text: "test",
+      estimatedDurationSeconds: 30,
+      localeIntent: oman,
     });
     const other = quoteParameters("VOICE", {
-      task: "seed-audio", text: "test", estimatedDurationSeconds: 30,
+      task: "seed-audio",
+      text: "test",
+      estimatedDurationSeconds: 30,
       localeIntent: { ...oman, tone: "warm" },
     });
     expect(one.localeIntent).toEqual(oman);

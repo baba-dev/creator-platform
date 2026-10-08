@@ -1,6 +1,8 @@
 import { parseMediaEnv } from "@aiwa/config";
-import { withMediaCapacity } from "@aiwa/assets/media-capacity";
-import { boundedMediaArgs } from "./media-policy";
+import {
+  boundedMediaArgs,
+  withMediaCapacity,
+} from "@aiwa/assets/media-capacity";
 import { spawn } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";

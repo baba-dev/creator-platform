@@ -1,4 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
+import type { PrismaClient } from "@aiwa/db";
+import { decryptSecret, encryptSecret } from "../src/crypto";
+import { resolveExternalStorage } from "../src/byos/resolver";
 import {
   ensureGoogleDriveCreatorsFolder,
   getGoogleDriveAuthUrl,
@@ -8,6 +11,7 @@ import {
   ensureOneDriveCreatorsFolder,
   getOneDriveAuthUrl,
   OneDriveAssetStorage,
+  refreshOneDriveAccessToken,
 } from "../src/byos/onedrive";
 
 describe("BYOS Google Drive", () => {
@@ -99,6 +103,109 @@ describe("BYOS OneDrive", () => {
     expect(parsed.hostname).toBe("login.microsoftonline.com");
     expect(parsed.searchParams.get("client_id")).toBe("ms-client-123");
     expect(parsed.searchParams.get("scope")).toContain("Files.ReadWrite");
+  });
+
+  it("returns rotated OneDrive refresh credentials", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          access_token: "access-next",
+          refresh_token: "refresh-next",
+          expires_in: 3600,
+        }),
+      }),
+    );
+    await expect(
+      refreshOneDriveAccessToken({
+        clientId: "client",
+        clientSecret: "secret",
+        refreshToken: "refresh-old",
+      }),
+    ).resolves.toEqual({
+      accessToken: "access-next",
+      refreshToken: "refresh-next",
+      expiresIn: 3600,
+    });
+  });
+
+  it("coordinates refreshes and persists a rotated OneDrive token", async () => {
+    const encryptionKey = "test-storage-encryption-key";
+    const config = {
+      id: "storage-one",
+      organizationId: "org-one",
+      userId: "user-one",
+      provider: "ONEDRIVE" as const,
+      status: "ACTIVE",
+      accountEmail: "owner@example.com",
+      rootFolderId: "root-one",
+      rootFolderName: "Creators-Data",
+      encryptedRefreshToken: encryptSecret("refresh-old", encryptionKey),
+      encryptedAccessToken: null as string | null,
+      accessTokenExpiresAt: null as Date | null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    const update = vi.fn(
+      async ({ data }: { data: Record<string, unknown> }) => {
+        Object.assign(config, data);
+        return config;
+      },
+    );
+    const tx = {
+      $queryRaw: vi.fn(async () => [{ id: config.id }]),
+      externalStorageConfig: {
+        findUnique: vi.fn(async () => config),
+        update,
+      },
+    };
+    const database = {
+      externalStorageConfig: {
+        findUnique: vi.fn(async () => config),
+      },
+      $transaction: async (operation: (client: typeof tx) => unknown) =>
+        operation(tx),
+    } as unknown as PrismaClient;
+    const fetchMock = vi.fn(async (url: string | URL) => {
+      if (String(url).includes("/oauth2/v2.0/token"))
+        return {
+          ok: true,
+          json: async () => ({
+            access_token: "access-next",
+            refresh_token: "refresh-next",
+            expires_in: 3600,
+          }),
+        };
+      return {
+        ok: true,
+        json: async () => ({ quota: { total: 1000, used: 100 } }),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const storage = await resolveExternalStorage(
+      database,
+      config.organizationId,
+      "ONEDRIVE",
+      {
+        storageRoot: "/tmp/assets",
+        encryptionKey,
+        onedriveClientId: "client",
+        onedriveClientSecret: "secret",
+      },
+    );
+    await Promise.all([storage.getQuota!(), storage.getQuota!()]);
+
+    expect(
+      fetchMock.mock.calls.filter(([url]) =>
+        String(url).includes("/oauth2/v2.0/token"),
+      ),
+    ).toHaveLength(1);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(decryptSecret(config.encryptedRefreshToken, encryptionKey)).toBe(
+      "refresh-next",
+    );
   });
 
   it("creates Creators-Data folder in OneDrive root if not found", async () => {

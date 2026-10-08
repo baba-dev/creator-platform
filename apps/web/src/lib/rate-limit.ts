@@ -37,20 +37,26 @@ export interface RateLimiter {
 
 interface MemoryEntry {
   timestamps: number[];
+  windowMs: number;
+  expiresAt: number;
 }
 const memoryFallbackStore = new Map<string, MemoryEntry>();
 const MEMORY_PRUNE_INTERVAL_MS = 5 * 60_000;
 let lastMemoryPrune = 0;
 
-function maybeCleanMemoryStore(now: number, windowMs: number) {
+function maybeCleanMemoryStore(now: number) {
   if (now - lastMemoryPrune < MEMORY_PRUNE_INTERVAL_MS) return;
   lastMemoryPrune = now;
 
   for (const [key, entry] of memoryFallbackStore.entries()) {
-    entry.timestamps = entry.timestamps.filter((t) => now - t < windowMs);
-    if (entry.timestamps.length === 0) {
+    if (entry.expiresAt <= now) {
       memoryFallbackStore.delete(key);
+      continue;
     }
+    entry.timestamps = entry.timestamps.filter(
+      (timestamp) => now - timestamp < entry.windowMs,
+    );
+    if (entry.timestamps.length === 0) memoryFallbackStore.delete(key);
   }
 }
 
@@ -123,12 +129,17 @@ export function rateLimit(options: RateLimitOptions): RateLimiter {
         };
       }
 
-      maybeCleanMemoryStore(now, windowMs);
-      const entry = memoryFallbackStore.get(key) ?? { timestamps: [] };
+      maybeCleanMemoryStore(now);
+      const existingEntry = memoryFallbackStore.get(key);
+      const entry =
+        existingEntry?.windowMs === windowMs
+          ? existingEntry
+          : { timestamps: [], windowMs, expiresAt: now + windowMs };
       entry.timestamps = entry.timestamps.filter((t) => now - t < windowMs);
 
       if (entry.timestamps.length < max) {
         entry.timestamps.push(now);
+        entry.expiresAt = now + windowMs;
         memoryFallbackStore.set(key, entry);
         return {
           allowed: true,

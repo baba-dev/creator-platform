@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
     },
     generationInputAsset: { findMany: vi.fn() },
     asset: { findFirstOrThrow: vi.fn(), findMany: vi.fn() },
+    seedAudioSegment: { findMany: vi.fn(), deleteMany: vi.fn() },
     $transaction: vi.fn(),
   },
   capture: vi.fn(),
@@ -41,6 +42,7 @@ vi.mock("@aiwa/config", () => ({
   parseServerEnv: () => ({
     APP_URL: "https://creator.example.com",
     AUTH_SECRET: "a".repeat(48),
+    ASSET_STORAGE_ROOT: "/tmp/aiwa-generation-tests",
   }),
 }));
 vi.mock("@aiwa/credits", async (importOriginal) => ({
@@ -168,6 +170,8 @@ beforeEach(() => {
       mediaKind: "IMAGE",
     },
   ]);
+  mocks.db.seedAudioSegment.findMany.mockResolvedValue([]);
+  mocks.db.seedAudioSegment.deleteMany.mockResolvedValue({ count: 0 });
   mocks.store.mockResolvedValue({ byteSize: 100n, sha256: "hash" });
   mocks.download.mockResolvedValue(Buffer.from("png"));
   mocks.downloadVideo.mockResolvedValue(Buffer.from("mp4"));

@@ -1,10 +1,14 @@
-import { withMediaCapacity } from "@aiwa/assets/media-capacity";
+import {
+  boundedMediaArgs,
+  withMediaCapacity,
+} from "@aiwa/assets/media-capacity";
+import { parseMediaEnv } from "@aiwa/config";
 import {
   ProviderRequestError,
   type MediaGenerationProvider,
 } from "@aiwa/providers";
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -29,6 +33,14 @@ export type SeedAudioLongFormSegment = {
   prompt: string;
   text: string;
   estimatedDurationSeconds: number;
+};
+
+export type SeedAudioSegmentCheckpoint = {
+  bytes: Buffer;
+  providerRequestId: string;
+  durationSeconds: number;
+  subtitle: SeedAudioSubtitle | null;
+  usage?: Readonly<Record<string, unknown>>;
 };
 
 function splitDirection(textPrompt: string): {
@@ -268,9 +280,13 @@ async function runFfmpeg(args: string[]): Promise<void> {
   await withMediaCapacity(
     () =>
       new Promise<void>((resolve, reject) => {
-        const child = spawn("ffmpeg", args, {
-          stdio: ["ignore", "ignore", "pipe"],
-        });
+        const child = spawn(
+          "ffmpeg",
+          boundedMediaArgs("ffmpeg", args, parseMediaEnv().MEDIA_THREADS),
+          {
+            stdio: ["ignore", "ignore", "pipe"],
+          },
+        );
         let diagnostics = "";
         const timer = setTimeout(() => child.kill("SIGKILL"), 180_000);
         child.stderr.on("data", (chunk: Buffer) => {
@@ -288,6 +304,58 @@ async function runFfmpeg(args: string[]): Promise<void> {
             reject(
               new Error(
                 `Long-form audio stitching failed (${code ?? "unknown"}): ${diagnostics.slice(-1_000)}`,
+              ),
+            );
+        });
+      }),
+  );
+}
+
+async function probeOutputSampleRate(path: string): Promise<number> {
+  return withMediaCapacity(
+    () =>
+      new Promise<number>((resolve, reject) => {
+        const child = spawn(
+          "ffprobe",
+          boundedMediaArgs(
+            "ffprobe",
+            [
+              "-v",
+              "error",
+              "-select_streams",
+              "a:0",
+              "-show_entries",
+              "stream=sample_rate",
+              "-of",
+              "default=noprint_wrappers=1:nokey=1",
+              path,
+            ],
+            parseMediaEnv().MEDIA_THREADS,
+          ),
+          { stdio: ["ignore", "pipe", "pipe"] },
+        );
+        let stdout = "";
+        let stderr = "";
+        const timer = setTimeout(() => child.kill("SIGKILL"), 15_000);
+        child.stdout.on("data", (chunk: Buffer) => {
+          if (stdout.length < 128) stdout += chunk.toString("utf8");
+        });
+        child.stderr.on("data", (chunk: Buffer) => {
+          if (stderr.length < 1_000) stderr += chunk.toString("utf8");
+        });
+        child.on("error", (error) => {
+          clearTimeout(timer);
+          reject(error);
+        });
+        child.on("close", (code) => {
+          clearTimeout(timer);
+          const value = Number(stdout.trim());
+          if (code === 0 && Number.isSafeInteger(value) && value > 0)
+            resolve(value);
+          else
+            reject(
+              new Error(
+                `Stitched audio validation failed (${code ?? "unknown"}): ${stderr.slice(-500)}`,
               ),
             );
         });
@@ -327,13 +395,11 @@ export async function stitchSeedAudioSegments(input: {
       "-hide_banner",
       "-loglevel",
       "error",
-      "-threads",
-      "1",
       ...paths.flatMap((path) => ["-i", path]),
     ];
     const filters: string[] = paths.map(
       (_path, index) =>
-        `[${index}:a]aresample=${input.sampleRate},aformat=sample_fmts=fltp:channel_layouts=stereo,loudnorm=I=-16:LRA=11:TP=-1.5[a${index}]`,
+        `[${index}:a]aformat=sample_fmts=fltp:channel_layouts=stereo,loudnorm=I=-16:LRA=11:TP=-1.5,aresample=${input.sampleRate}[a${index}]`,
     );
     let label = "a0";
     for (let index = 1; index < paths.length; index += 1) {
@@ -344,17 +410,63 @@ export async function stitchSeedAudioSegments(input: {
     }
     args.push("-filter_complex", filters.join(";"), "-map", `[${label}]`);
     if (input.format === "mp3")
-      args.push("-c:a", "libmp3lame", "-b:a", "192k", "-f", "mp3");
+      args.push(
+        "-c:a",
+        "libmp3lame",
+        "-b:a",
+        "192k",
+        "-ar",
+        String(input.sampleRate),
+        "-f",
+        "mp3",
+      );
     else if (input.format === "wav")
-      args.push("-c:a", "pcm_s16le", "-f", "wav");
+      args.push(
+        "-c:a",
+        "pcm_s16le",
+        "-ar",
+        String(input.sampleRate),
+        "-f",
+        "wav",
+      );
     else if (input.format === "pcm")
-      args.push("-c:a", "pcm_s16le", "-f", "s16le");
-    else args.push("-c:a", "libopus", "-b:a", "160k", "-f", "ogg");
+      args.push(
+        "-c:a",
+        "pcm_s16le",
+        "-ar",
+        String(input.sampleRate),
+        "-f",
+        "s16le",
+      );
+    else
+      args.push(
+        "-c:a",
+        "libopus",
+        "-b:a",
+        "160k",
+        "-ar",
+        String(input.sampleRate),
+        "-f",
+        "ogg",
+      );
     args.push("-y", output);
     await runFfmpeg(args);
-    const bytes = await readFile(output);
-    if (!bytes.length || bytes.length > input.maxOutputBytes)
+    const outputStat = await stat(output);
+    if (outputStat.size <= 0 || outputStat.size > input.maxOutputBytes)
       throw new Error("Stitched long-form audio exceeds the storage limit.");
+    if (input.format === "pcm") {
+      if (outputStat.size % 4 !== 0)
+        throw new Error(
+          "Stitched PCM output has an invalid stereo frame size.",
+        );
+    } else {
+      const actualSampleRate = await probeOutputSampleRate(output);
+      if (actualSampleRate !== input.sampleRate)
+        throw new Error(
+          `Stitched audio sample rate ${actualSampleRate} does not match requested ${input.sampleRate}.`,
+        );
+    }
+    const bytes = await readFile(output);
     return {
       bytes,
       crossfadeMs: SEED_AUDIO_CROSSFADE_MS * (paths.length - 1),
@@ -400,6 +512,13 @@ export async function produceSeedAudioLongForm(input: {
   format: SeedAudioFormat;
   sampleRate: number;
   maxOutputBytes: number;
+  loadSegment?: (
+    segment: SeedAudioLongFormSegment,
+  ) => Promise<SeedAudioSegmentCheckpoint | null>;
+  persistSegment?: (
+    segment: SeedAudioLongFormSegment,
+    checkpoint: SeedAudioSegmentCheckpoint,
+  ) => Promise<void>;
 }): Promise<{
   audioBytes: Buffer;
   providerRequestId: string;
@@ -423,6 +542,14 @@ export async function produceSeedAudioLongForm(input: {
   const providerRequestIds: string[] = [];
 
   for (const segment of plan.segments) {
+    const checkpoint = await input.loadSegment?.(segment);
+    if (checkpoint) {
+      buffers.push(checkpoint.bytes);
+      durations.push(checkpoint.durationSeconds);
+      subtitles.push(checkpoint.subtitle);
+      providerRequestIds.push(checkpoint.providerRequestId);
+      continue;
+    }
     let result;
     try {
       result = await input.provider.submit({
@@ -457,11 +584,30 @@ export async function produceSeedAudioLongForm(input: {
           true,
           { code: "INVALID_PROVIDER_RESPONSE" },
         );
-      buffers.push(decodeProviderAudio(result.inlineOutputs[0].dataBase64));
-      durations.push(duration);
-      subtitles.push(subtitleFromUsage(result.rawUsage?.subtitle));
-      providerRequestIds.push(result.providerRequestId);
+      const completed: SeedAudioSegmentCheckpoint = {
+        bytes: decodeProviderAudio(result.inlineOutputs[0].dataBase64),
+        durationSeconds: duration,
+        subtitle: subtitleFromUsage(result.rawUsage?.subtitle),
+        providerRequestId: result.providerRequestId,
+        usage: result.rawUsage,
+      };
+      try {
+        await input.persistSegment?.(segment, completed);
+      } catch (error) {
+        throw new SeedAudioPartialGenerationError(
+          "A provider segment completed but could not be checkpointed. Credits remain reserved for review.",
+          buffers.length + 1,
+          [...providerRequestIds, result.providerRequestId],
+          "LONG_FORM_CHECKPOINT_FAILED",
+          { cause: error },
+        );
+      }
+      buffers.push(completed.bytes);
+      durations.push(completed.durationSeconds);
+      subtitles.push(completed.subtitle);
+      providerRequestIds.push(completed.providerRequestId);
     } catch (error) {
+      if (error instanceof SeedAudioPartialGenerationError) throw error;
       if (buffers.length)
         throw new SeedAudioPartialGenerationError(
           "Long-form generation stopped after one or more provider segments completed. Credits remain reserved for review.",

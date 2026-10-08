@@ -18,6 +18,14 @@ export interface StorageResolverOptions {
 
 type ExternalProvider = "GOOGLE_DRIVE" | "ONEDRIVE";
 
+type RefreshedToken = {
+  accessToken: string;
+  expiresAt: Date;
+  refreshToken?: string;
+};
+
+const tokenRefreshes = new Map<string, Promise<RefreshedToken>>();
+
 export async function resolveExternalStorage(
   db: PrismaClient,
   organizationId: string,
@@ -35,54 +43,128 @@ export async function resolveExternalStorage(
     throw new Error(`External storage provider ${provider} is not connected.`);
   }
 
-  const refreshToken = decryptSecret(
-    config.encryptedRefreshToken,
-    options.encryptionKey,
-  );
+  // Validate the long-lived credential before returning a storage client.
+  decryptSecret(config.encryptedRefreshToken, options.encryptionKey);
+  let cachedAccessToken = config.encryptedAccessToken
+    ? (() => {
+        try {
+          return decryptSecret(
+            config.encryptedAccessToken!,
+            options.encryptionKey!,
+          );
+        } catch {
+          return null;
+        }
+      })()
+    : null;
+  let cachedAccessTokenExpiresAt = config.accessTokenExpiresAt;
+
+  const getAccessToken = async (): Promise<string> => {
+    if (
+      cachedAccessToken &&
+      cachedAccessTokenExpiresAt &&
+      cachedAccessTokenExpiresAt.getTime() > Date.now() + 60_000
+    )
+      return cachedAccessToken;
+
+    let refresh = tokenRefreshes.get(config.id);
+    if (!refresh) {
+      const createdRefresh = db.$transaction(
+        async (tx) => {
+          await tx.$queryRaw`SELECT id FROM ExternalStorageConfig WHERE id = ${config.id} FOR UPDATE`;
+          const fresh = await tx.externalStorageConfig.findUnique({
+            where: { id: config.id },
+          });
+          if (!fresh || fresh.status !== "ACTIVE")
+            throw new Error(
+              `External storage provider ${provider} is not connected.`,
+            );
+          if (
+            fresh.encryptedAccessToken &&
+            fresh.accessTokenExpiresAt &&
+            fresh.accessTokenExpiresAt.getTime() > Date.now() + 60_000
+          ) {
+            return {
+              accessToken: decryptSecret(
+                fresh.encryptedAccessToken,
+                options.encryptionKey!,
+              ),
+              expiresAt: fresh.accessTokenExpiresAt,
+              refreshToken: decryptSecret(
+                fresh.encryptedRefreshToken,
+                options.encryptionKey!,
+              ),
+            };
+          }
+
+          const currentRefreshToken = decryptSecret(
+            fresh.encryptedRefreshToken,
+            options.encryptionKey!,
+          );
+          const refreshed =
+            provider === "GOOGLE_DRIVE"
+              ? await refreshGoogleDriveAccessToken({
+                  clientId: options.googleClientId!,
+                  clientSecret: options.googleClientSecret!,
+                  refreshToken: currentRefreshToken,
+                })
+              : await refreshOneDriveAccessToken({
+                  clientId: options.onedriveClientId!,
+                  clientSecret: options.onedriveClientSecret!,
+                  refreshToken: currentRefreshToken,
+                });
+          const expiresAt = new Date(Date.now() + refreshed.expiresIn * 1000);
+          const replacementRefreshToken =
+            "refreshToken" in refreshed &&
+            typeof refreshed.refreshToken === "string" &&
+            refreshed.refreshToken
+              ? refreshed.refreshToken
+              : currentRefreshToken;
+          await tx.externalStorageConfig.update({
+            where: { id: fresh.id },
+            data: {
+              encryptedAccessToken: encryptSecret(
+                refreshed.accessToken,
+                options.encryptionKey!,
+              ),
+              accessTokenExpiresAt: expiresAt,
+              encryptedRefreshToken: encryptSecret(
+                replacementRefreshToken,
+                options.encryptionKey!,
+              ),
+            },
+          });
+          return {
+            accessToken: refreshed.accessToken,
+            expiresAt,
+            refreshToken: replacementRefreshToken,
+          };
+        },
+        { isolationLevel: "ReadCommitted", timeout: 15_000 },
+      );
+      tokenRefreshes.set(config.id, createdRefresh);
+      void createdRefresh.then(
+        () => {
+          if (tokenRefreshes.get(config.id) === createdRefresh)
+            tokenRefreshes.delete(config.id);
+        },
+        () => {
+          if (tokenRefreshes.get(config.id) === createdRefresh)
+            tokenRefreshes.delete(config.id);
+        },
+      );
+      refresh = createdRefresh;
+    }
+    const resolved = await refresh;
+    cachedAccessToken = resolved.accessToken;
+    cachedAccessTokenExpiresAt = resolved.expiresAt;
+    return resolved.accessToken;
+  };
 
   if (provider === "GOOGLE_DRIVE") {
     if (!options.googleClientId || !options.googleClientSecret) {
       throw new Error("Google Drive OAuth is not configured.");
     }
-
-    const getAccessToken = async (): Promise<string> => {
-      if (
-        config.encryptedAccessToken &&
-        config.accessTokenExpiresAt &&
-        config.accessTokenExpiresAt.getTime() > Date.now() + 60_000
-      ) {
-        try {
-          return decryptSecret(
-            config.encryptedAccessToken,
-            options.encryptionKey!,
-          );
-        } catch {
-          // Refresh using the long-lived refresh token below.
-        }
-      }
-
-      const refreshed = await refreshGoogleDriveAccessToken({
-        clientId: options.googleClientId!,
-        clientSecret: options.googleClientSecret!,
-        refreshToken,
-      });
-      const encryptedAccessToken = encryptSecret(
-        refreshed.accessToken,
-        options.encryptionKey!,
-      );
-      await db.externalStorageConfig
-        .update({
-          where: { id: config.id },
-          data: {
-            encryptedAccessToken,
-            accessTokenExpiresAt: new Date(
-              Date.now() + refreshed.expiresIn * 1000,
-            ),
-          },
-        })
-        .catch(() => undefined);
-      return refreshed.accessToken;
-    };
 
     return new GoogleDriveAssetStorage({
       getAccessToken,
@@ -93,45 +175,6 @@ export async function resolveExternalStorage(
   if (!options.onedriveClientId || !options.onedriveClientSecret) {
     throw new Error("OneDrive OAuth is not configured.");
   }
-
-  const getAccessToken = async (): Promise<string> => {
-    if (
-      config.encryptedAccessToken &&
-      config.accessTokenExpiresAt &&
-      config.accessTokenExpiresAt.getTime() > Date.now() + 60_000
-    ) {
-      try {
-        return decryptSecret(
-          config.encryptedAccessToken,
-          options.encryptionKey!,
-        );
-      } catch {
-        // Refresh using the long-lived refresh token below.
-      }
-    }
-
-    const refreshed = await refreshOneDriveAccessToken({
-      clientId: options.onedriveClientId!,
-      clientSecret: options.onedriveClientSecret!,
-      refreshToken,
-    });
-    const encryptedAccessToken = encryptSecret(
-      refreshed.accessToken,
-      options.encryptionKey!,
-    );
-    await db.externalStorageConfig
-      .update({
-        where: { id: config.id },
-        data: {
-          encryptedAccessToken,
-          accessTokenExpiresAt: new Date(
-            Date.now() + refreshed.expiresIn * 1000,
-          ),
-        },
-      })
-      .catch(() => undefined);
-    return refreshed.accessToken;
-  };
 
   return new OneDriveAssetStorage({
     getAccessToken,

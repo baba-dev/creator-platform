@@ -139,40 +139,42 @@ export async function POST(
     }
 
     await assertQuotedTextModel(input.quotedModelId!, targetModel.id);
-    const job = await createTextJob(session.user.id, {
-      organizationId: thread.organizationId,
-      projectId: thread.projectId,
-      modelId: input.quotedModelId,
-      priceVersionId: input.priceVersionId,
-      quoteToken: input.quoteToken,
-      idempotencyKey: input.idempotencyKey,
-      chatThreadId: threadId,
-      localeIntent: input.localeIntent,
-      chatOptions: {
-        autoVoice: input.autoVoice,
-        voiceKey: thread.persona?.voiceKey || "jasper",
-        speechRate: 1,
+    const job = await createTextJob(
+      session.user.id,
+      {
+        organizationId: thread.organizationId,
+        projectId: thread.projectId,
+        modelId: input.quotedModelId,
+        priceVersionId: input.priceVersionId,
+        quoteToken: input.quoteToken,
+        idempotencyKey: input.idempotencyKey,
+        chatThreadId: threadId,
+        localeIntent: input.localeIntent,
+        chatOptions: {
+          autoVoice: input.autoVoice,
+          voiceKey: thread.persona?.voiceKey || "jasper",
+          speechRate: 1,
+        },
+        messages,
+        temperature: 0.7,
+        maxTokens,
       },
-      messages,
-      temperature: 0.7,
-      maxTokens,
-    });
+      {
+        chatUserMessage: {
+          threadId,
+          clientRequestId: input.idempotencyKey,
+          content: input.content,
+        },
+      },
+    );
 
-    const userMessage = await db.chatMessage.upsert({
+    const userMessage = await db.chatMessage.findUniqueOrThrow({
       where: {
         threadId_clientRequestId_role: {
           threadId,
           clientRequestId: input.idempotencyKey,
           role: "user",
         },
-      },
-      update: {},
-      create: {
-        threadId,
-        clientRequestId: input.idempotencyKey,
-        role: "user",
-        content: input.content,
-        metadata: { generationJobId: job.id },
       },
     });
 
@@ -189,6 +191,7 @@ export async function POST(
       );
 
     let audioJobId: string | undefined;
+    let audioStatus: string | undefined;
     if (input.autoVoice && result.content.trim()) {
       try {
         const now = new Date();
@@ -235,6 +238,7 @@ export async function POST(
             format: "mp3",
           });
           audioJobId = voiceJob.id;
+          audioStatus = voiceJob.status;
         }
       } catch {
         // Text success is durable; optional auto-voice may be retried separately.
@@ -281,7 +285,7 @@ export async function POST(
     return NextResponse.json(
       {
         userMessage,
-        message: { ...assistantMessage, audioJobId },
+        message: { ...assistantMessage, audioJobId, audioStatus },
         audioJobId,
         usage: result.usage,
         chargedCredits: result.chargedCredits,

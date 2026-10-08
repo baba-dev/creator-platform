@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { mediaCommand } from "../src/video-media";
-import { boundedMediaArgs } from "../src/media-policy";
+import { boundedMediaArgs } from "@aiwa/assets/media-capacity";
 
 describe("bounded media subprocesses", () => {
   it("scopes thread limits to every decoder, filters and the output encoder", () => {

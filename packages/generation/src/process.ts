@@ -6,8 +6,10 @@ import {
   videoInputProviderCost,
 } from "@aiwa/credits";
 import { finalizeAssetStorage, releaseAssetStorage } from "@aiwa/assets";
+import { LocalAssetStorage } from "@aiwa/assets/storage";
 import { parseServerEnv } from "@aiwa/config";
-import { db, type Prisma } from "@aiwa/db";
+import { db, Prisma } from "@aiwa/db";
+import { createHash } from "node:crypto";
 import {
   enqueueMail,
   generationCompletedEmail,
@@ -42,7 +44,32 @@ import {
   storeImage,
   storeVideo,
   storedAssetSize,
+  validateAudioBytes,
 } from "./storage";
+
+function seedAudioCheckpointExtension(format: SeedAudioFormat): string {
+  return format === "ogg_opus" ? "ogg" : format;
+}
+
+function seedAudioCheckpointMimeType(
+  format: SeedAudioFormat,
+): "audio/mpeg" | "audio/wav" | "audio/ogg" | "audio/L16" {
+  if (format === "mp3") return "audio/mpeg";
+  if (format === "wav") return "audio/wav";
+  if (format === "ogg_opus") return "audio/ogg";
+  return "audio/L16";
+}
+
+async function removeSeedAudioCheckpoints(jobId: string): Promise<void> {
+  const rows = await db.seedAudioSegment.findMany({
+    where: { generationJobId: jobId },
+    select: { objectKey: true },
+  });
+  const storage = new LocalAssetStorage(parseServerEnv().ASSET_STORAGE_ROOT);
+  for (const row of rows)
+    await storage.delete(row.objectKey).catch(() => undefined);
+  await db.seedAudioSegment.deleteMany({ where: { generationJobId: jobId } });
+}
 
 async function generationRecipient(
   tx: Prisma.TransactionClient,
@@ -1437,7 +1464,7 @@ export async function processVoiceJob(
       await recordStorageFailure(id, error, "audio");
       throw error;
     }
-    await finalizeVoiceJob(
+    const finalized = await finalizeVoiceJob(
       id,
       job,
       { byteSize: BigInt(output.byteSize), sha256: output.sha256 },
@@ -1463,6 +1490,8 @@ export async function processVoiceJob(
         ? (output.longForm as Prisma.InputJsonValue)
         : undefined,
     );
+    if (finalized && output.longForm && typeof output.longForm === "object")
+      await removeSeedAudioCheckpoints(id).catch(() => undefined);
     return;
   }
   if (job.status !== "QUEUED") return;
@@ -1585,6 +1614,10 @@ export async function processVoiceJob(
         );
         const format = payload.format as SeedAudioFormat;
         const sampleRate = Number(payload.sampleRate);
+        const checkpointMimeType = seedAudioCheckpointMimeType(format);
+        const checkpointStorage = new LocalAssetStorage(
+          parseServerEnv().ASSET_STORAGE_ROOT,
+        );
         const produced = await produceSeedAudioLongForm({
           provider,
           idempotencyKey: job.idempotencyKey,
@@ -1596,6 +1629,112 @@ export async function processVoiceJob(
           format,
           sampleRate,
           maxOutputBytes: SEED_AUDIO_LONG_FORM_MAX_OUTPUT_BYTES,
+          loadSegment: async (segment) => {
+            const row = await db.seedAudioSegment.findUnique({
+              where: {
+                generationJobId_position: {
+                  generationJobId: job.id,
+                  position: segment.index,
+                },
+              },
+            });
+            if (!row || row.mimeType !== checkpointMimeType) return null;
+            const bytes = await checkpointStorage.read(row.objectKey);
+            validateAudioBytes(
+              bytes,
+              checkpointMimeType,
+              SEED_AUDIO_LONG_FORM_MAX_OUTPUT_BYTES,
+            );
+            const digest = createHash("sha256").update(bytes).digest("hex");
+            if (
+              BigInt(bytes.byteLength) !== row.byteSize ||
+              digest !== row.sha256 ||
+              row.durationMs <= 0 ||
+              row.durationMs > SEED_AUDIO_NATIVE_MAX_SECONDS * 1000
+            )
+              throw new Error(
+                "Seed Audio checkpoint integrity validation failed.",
+              );
+            return {
+              bytes,
+              providerRequestId: row.providerRequestId,
+              durationSeconds: row.durationMs / 1000,
+              subtitle:
+                row.subtitle &&
+                typeof row.subtitle === "object" &&
+                !Array.isArray(row.subtitle)
+                  ? (row.subtitle as {
+                      text: string;
+                      sentences: Array<{
+                        startMs: number;
+                        endMs: number;
+                        text: string;
+                      }>;
+                      words: Array<{
+                        startMs: number;
+                        endMs: number;
+                        text: string;
+                      }>;
+                    })
+                  : null,
+              usage:
+                row.usage &&
+                typeof row.usage === "object" &&
+                !Array.isArray(row.usage)
+                  ? (row.usage as Record<string, unknown>)
+                  : undefined,
+            };
+          },
+          persistSegment: async (segment, checkpoint) => {
+            validateAudioBytes(
+              checkpoint.bytes,
+              checkpointMimeType,
+              SEED_AUDIO_LONG_FORM_MAX_OUTPUT_BYTES,
+            );
+            const objectKey = `.checkpoints/seed-audio/${job.id}/segment-${segment.index + 1}.${seedAudioCheckpointExtension(format)}`;
+            const storedCheckpoint = await checkpointStorage.put(
+              objectKey,
+              checkpoint.bytes,
+            );
+            await db.seedAudioSegment.upsert({
+              where: {
+                generationJobId_position: {
+                  generationJobId: job.id,
+                  position: segment.index,
+                },
+              },
+              update: {
+                objectKey,
+                mimeType: checkpointMimeType,
+                byteSize: storedCheckpoint.byteSize,
+                sha256: storedCheckpoint.sha256,
+                providerRequestId: checkpoint.providerRequestId,
+                durationMs: Math.round(checkpoint.durationSeconds * 1000),
+                subtitle: checkpoint.subtitle
+                  ? (checkpoint.subtitle as Prisma.InputJsonObject)
+                  : Prisma.JsonNull,
+                usage: checkpoint.usage
+                  ? (checkpoint.usage as Prisma.InputJsonObject)
+                  : Prisma.JsonNull,
+              },
+              create: {
+                generationJobId: job.id,
+                position: segment.index,
+                objectKey,
+                mimeType: checkpointMimeType,
+                byteSize: storedCheckpoint.byteSize,
+                sha256: storedCheckpoint.sha256,
+                providerRequestId: checkpoint.providerRequestId,
+                durationMs: Math.round(checkpoint.durationSeconds * 1000),
+                subtitle: checkpoint.subtitle
+                  ? (checkpoint.subtitle as Prisma.InputJsonObject)
+                  : Prisma.JsonNull,
+                usage: checkpoint.usage
+                  ? (checkpoint.usage as Prisma.InputJsonObject)
+                  : Prisma.JsonNull,
+              },
+            });
+          },
         });
         originalDurationSeconds = produced.providerDurationSeconds;
         playbackDurationSeconds = produced.playbackDurationSeconds;
@@ -1801,7 +1940,7 @@ export async function processVoiceJob(
   });
   if (!persisted.count) return;
 
-  await finalizeVoiceJob(
+  const finalized = await finalizeVoiceJob(
     id,
     job,
     stored,
@@ -1811,6 +1950,13 @@ export async function processVoiceJob(
     playbackDurationSeconds,
     seedAudioLongForm,
   );
+  if (longFormOutput && finalized)
+    await removeSeedAudioCheckpoints(id).catch((error) => {
+      console.error("Seed Audio checkpoint cleanup failed.", {
+        jobId: id,
+        errorName: error instanceof Error ? error.name : "UnknownError",
+      });
+    });
 }
 
 async function finalizeVoiceJob(
@@ -1952,4 +2098,5 @@ async function finalizeVoiceJob(
       // Non-fatal telemetry logging
     }
   }
+  return finalBillableQuantity !== null;
 }

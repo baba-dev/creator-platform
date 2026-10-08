@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { rateLimit } from "./rate-limit";
 import type Redis from "ioredis";
 
@@ -132,5 +132,34 @@ describe("rateLimit", () => {
     expect(response?.status).toBe(503);
     expect(response?.headers.get("Retry-After")).toBe("1");
     expect(response?.headers.get("Cache-Control")).toBe("no-store");
+  });
+
+  it("preserves longer fallback windows when pruning expired buckets", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-08T00:00:00Z"));
+    const unavailableRedis = {
+      eval: async () => {
+        throw new Error("Redis unavailable");
+      },
+    } as unknown as Redis;
+    const short = rateLimit({
+      max: 1,
+      windowMs: 60_000,
+      prefix: "fallback-short-window",
+      redisClient: unavailableRedis,
+    });
+    const long = rateLimit({
+      max: 1,
+      windowMs: 10 * 60_000,
+      prefix: "fallback-long-window",
+      redisClient: unavailableRedis,
+    });
+    await short.evaluate("user");
+    await long.evaluate("user");
+
+    vi.advanceTimersByTime(6 * 60_000);
+    await short.evaluate("prune-trigger");
+    expect((await long.evaluate("user")).allowed).toBe(false);
+    vi.useRealTimers();
   });
 });

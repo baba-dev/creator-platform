@@ -46,6 +46,12 @@ export interface TextJobAdmissionOptions {
    * accounting, but never reserve or capture customer wallet credits.
    */
   sponsored?: boolean;
+  /** Persist the chat turn in the same transaction as job admission. */
+  chatUserMessage?: {
+    threadId: string;
+    clientRequestId: string;
+    content: string;
+  };
 }
 
 export interface TextGenerationResult {
@@ -187,12 +193,38 @@ function payloadObject(value: unknown): Record<string, unknown> {
     : {};
 }
 
+function chatTurnHash(input: {
+  chatThreadId?: string;
+  messages: TextMessage[];
+  chatOptions?: unknown;
+  temperature: number;
+  maxTokens: number;
+}): string | null {
+  if (!input.chatThreadId) return null;
+  const latestUser = [...input.messages]
+    .reverse()
+    .find((message) => message.role === "user");
+  if (!latestUser) return null;
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        threadId: input.chatThreadId,
+        content: latestUser.content,
+        chatOptions: input.chatOptions ?? null,
+        temperature: input.temperature,
+        maxTokens: input.maxTokens,
+      }),
+    )
+    .digest("hex");
+}
+
 function sameIdempotentRequest(
   existing: {
     projectId: string | null;
     templateId: string | null;
     providerModelId: string;
     priceVersionId: string;
+    chatThreadId: string | null;
     requestPayload: unknown;
   },
   input: {
@@ -203,6 +235,7 @@ function sameIdempotentRequest(
     messages: TextMessage[];
     temperature: number;
     maxTokens: number;
+    chatThreadId?: string;
     responseFormat: "text" | "json_object";
     localeIntent?: CreativeLocaleIntent;
     chatOptions?: {
@@ -218,11 +251,16 @@ function sameIdempotentRequest(
     existing.projectId !== (input.projectId ?? null) ||
     existing.templateId !== resolvedTemplateId ||
     existing.providerModelId !== input.modelId ||
-    existing.priceVersionId !== input.priceVersionId
+    existing.priceVersionId !== input.priceVersionId ||
+    (existing.chatThreadId ?? null) !== (input.chatThreadId ?? null)
   )
     return false;
   const existingPayload = payloadObject(existing.requestPayload);
   if ((existingPayload.sponsored === true) !== sponsored) return false;
+  const existingTurnHash = existingPayload.clientTurnHash;
+  const currentTurnHash = chatTurnHash(input);
+  if (typeof existingTurnHash === "string" && currentTurnHash)
+    return existingTurnHash === currentTurnHash;
   const hash = existingPayload.clientRequestHash;
   if (typeof hash === "string") return hash === requestFingerprint(input);
   return (
@@ -293,6 +331,13 @@ export async function createTextJob(
 ) {
   const input = textRequestSchema.parse(raw);
   const sponsored = options.sponsored === true;
+  const chatUserMessage = options.chatUserMessage;
+  if (
+    chatUserMessage &&
+    (input.chatThreadId !== chatUserMessage.threadId ||
+      input.idempotencyKey !== chatUserMessage.clientRequestId)
+  )
+    throw new GenerationError("Chat admission identity does not match.", 400);
   const key = createHash("sha256")
     .update(`${input.organizationId}:${userId}:${input.idempotencyKey}`)
     .digest("hex");
@@ -321,6 +366,25 @@ export async function createTextJob(
             "Request key was already used for different inputs.",
             409,
           );
+        if (chatUserMessage) {
+          await tx.chatMessage.upsert({
+            where: {
+              threadId_clientRequestId_role: {
+                threadId: chatUserMessage.threadId,
+                clientRequestId: chatUserMessage.clientRequestId,
+                role: "user",
+              },
+            },
+            update: {},
+            create: {
+              threadId: chatUserMessage.threadId,
+              clientRequestId: chatUserMessage.clientRequestId,
+              role: "user",
+              content: chatUserMessage.content,
+              metadata: { generationJobId: existing.id },
+            },
+          });
+        }
         return existing;
       }
 
@@ -463,6 +527,9 @@ export async function createTextJob(
               : {}),
             sponsored,
             clientRequestId: input.idempotencyKey,
+            ...(chatTurnHash(input)
+              ? { clientTurnHash: chatTurnHash(input) }
+              : {}),
             ...(input.chatOptions ? { chatOptions: input.chatOptions } : {}),
             clientRequestHash: requestFingerprint(input),
           } as unknown as Prisma.InputJsonObject,
@@ -498,6 +565,17 @@ export async function createTextJob(
           metadata: { mediaKind: "TEXT", sponsored },
         },
       });
+      if (chatUserMessage) {
+        await tx.chatMessage.create({
+          data: {
+            threadId: chatUserMessage.threadId,
+            clientRequestId: chatUserMessage.clientRequestId,
+            role: "user",
+            content: chatUserMessage.content,
+            metadata: { generationJobId: job.id },
+          },
+        });
+      }
       return queuedJob;
     },
     { isolationLevel: "ReadCommitted", timeout: 15_000 },
@@ -997,6 +1075,17 @@ export async function projectTextJobToChat(id: string): Promise<void> {
     };
 
     if (existing) {
+      if (
+        existing.content === content &&
+        existing.tokensUsed === (usage?.totalTokens ?? null) &&
+        existingMetadata.generationJobId === id &&
+        existingMetadata.generationStatus === job.status &&
+        existingMetadata.chargedCredits === Number(job.chargedCredits) &&
+        (existingMetadata.errorCode ?? null) === (job.errorCode ?? null) &&
+        JSON.stringify(existingMetadata.usage ?? null) ===
+          JSON.stringify(usage ?? null)
+      )
+        return;
       await tx.chatMessage.update({
         where: { id: existing.id },
         data: {
@@ -1041,11 +1130,109 @@ export async function reconcileTextChatThread(
     },
     orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
     take: Math.min(Math.max(1, limit), 100),
-    select: { id: true },
+    select: {
+      id: true,
+      status: true,
+      idempotencyKey: true,
+      requestPayload: true,
+    },
   });
-  for (const job of jobs) {
+  const requestIds = jobs.map((job) => {
+    const payload = payloadObject(job.requestPayload);
+    return typeof payload.clientRequestId === "string"
+      ? payload.clientRequestId
+      : job.idempotencyKey;
+  });
+  const messages = requestIds.length
+    ? await db.chatMessage.findMany({
+        where: {
+          threadId,
+          role: "assistant",
+          clientRequestId: { in: requestIds },
+        },
+        select: { clientRequestId: true, metadata: true },
+      })
+    : [];
+  const projectionByRequest = new Map(
+    messages.map((message) => [
+      message.clientRequestId,
+      payloadObject(message.metadata),
+    ]),
+  );
+  for (let index = 0; index < jobs.length; index += 1) {
+    const job = jobs[index]!;
+    const metadata = projectionByRequest.get(requestIds[index]!);
+    if (
+      metadata?.generationJobId === job.id &&
+      metadata.generationStatus === job.status
+    )
+      continue;
     await projectTextJobToChat(job.id);
   }
+}
+
+/** Worker-owned repair for the small set of terminal jobs whose chat side
+ * effect was missed. This keeps read requests free of projection writes. */
+export async function reconcileRecentTextChatProjections(
+  limit = 100,
+): Promise<number> {
+  const jobs = await db.generationJob.findMany({
+    where: {
+      chatThreadId: { not: null },
+      status: { in: ["SUCCEEDED", "FAILED", "CANCELLED", "MANUAL_REVIEW"] },
+      providerModel: { mediaKind: "TEXT" },
+    },
+    orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+    take: Math.min(Math.max(1, limit), 200),
+    select: {
+      id: true,
+      status: true,
+      chatThreadId: true,
+      idempotencyKey: true,
+      requestPayload: true,
+    },
+  });
+  if (!jobs.length) return 0;
+  const identities = jobs.map((job) => {
+    const payload = payloadObject(job.requestPayload);
+    return {
+      ...job,
+      clientRequestId:
+        typeof payload.clientRequestId === "string"
+          ? payload.clientRequestId
+          : job.idempotencyKey,
+    };
+  });
+  const messages = await db.chatMessage.findMany({
+    where: {
+      OR: identities.map((job) => ({
+        threadId: job.chatThreadId!,
+        clientRequestId: job.clientRequestId,
+        role: "assistant" as const,
+      })),
+    },
+    select: { threadId: true, clientRequestId: true, metadata: true },
+  });
+  const projected = new Map(
+    messages.map((message) => [
+      `${message.threadId}\u0000${message.clientRequestId}`,
+      payloadObject(message.metadata),
+    ]),
+  );
+  let repaired = 0;
+  for (const job of identities) {
+    const metadata = projected.get(
+      `${job.chatThreadId!}\u0000${job.clientRequestId}`,
+    );
+    if (
+      metadata?.generationJobId === job.id &&
+      metadata.generationStatus === job.status
+    )
+      continue;
+    await projectTextJobToChat(job.id);
+    repaired += 1;
+  }
+  return repaired;
 }
 
 /**

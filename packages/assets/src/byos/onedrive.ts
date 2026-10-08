@@ -111,7 +111,11 @@ export async function refreshOneDriveAccessToken(input: {
   clientId: string;
   clientSecret: string;
   refreshToken: string;
-}): Promise<{ accessToken: string; expiresIn: number }> {
+}): Promise<{
+  accessToken: string;
+  expiresIn: number;
+  refreshToken?: string;
+}> {
   const body = new URLSearchParams({
     client_id: input.clientId,
     client_secret: input.clientSecret,
@@ -139,11 +143,13 @@ export async function refreshOneDriveAccessToken(input: {
   const data = (await response.json()) as {
     access_token: string;
     expires_in: number;
+    refresh_token?: string;
   };
 
   return {
     accessToken: data.access_token,
     expiresIn: data.expires_in,
+    ...(data.refresh_token ? { refreshToken: data.refresh_token } : {}),
   };
 }
 

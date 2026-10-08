@@ -1,6 +1,5 @@
 import { hasOrganizationPermission } from "@aiwa/authz";
 import { db } from "@aiwa/db";
-import { reconcileTextChatThread } from "@aiwa/generation";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { clientChatModelReference } from "@/lib/chat-model-selection";
@@ -69,15 +68,6 @@ export async function GET(
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
   }
 
-  try {
-    await reconcileTextChatThread(threadId);
-  } catch (error) {
-    console.error("Character-chat projection reconciliation failed.", {
-      threadId,
-      errorName: error instanceof Error ? error.name : "UnknownError",
-    });
-  }
-
   const [newestMessages, discovery] = await Promise.all([
     db.chatMessage.findMany({
       where: { threadId },
@@ -91,33 +81,46 @@ export async function GET(
   const jobIds = messages
     .map((message) => {
       const metadata = message.metadata as Record<string, unknown> | null;
-      return (metadata?.audioJobId ?? metadata?.generationJobId) as
-        string | undefined;
+      return metadata?.audioJobId as string | undefined;
     })
     .filter((id): id is string => typeof id === "string");
 
-  const assets = jobIds.length
-    ? await db.asset.findMany({
-        where: {
-          generationJobId: { in: jobIds },
-          mediaKind: "AUDIO",
-          status: "READY",
-        },
-        select: { id: true, generationJobId: true },
-      })
-    : [];
+  const [assets, audioJobs] = jobIds.length
+    ? await Promise.all([
+        db.asset.findMany({
+          where: {
+            generationJobId: { in: jobIds },
+            mediaKind: "AUDIO",
+            status: "READY",
+          },
+          select: { id: true, generationJobId: true },
+        }),
+        db.generationJob.findMany({
+          where: {
+            id: { in: jobIds },
+            organizationId: thread.organizationId,
+            createdById: session.user.id,
+            providerModel: { mediaKind: "VOICE" },
+          },
+          select: { id: true, status: true, errorCode: true },
+        }),
+      ])
+    : [[], []];
 
   const assetByJobId = new Map(
     assets.map((asset) => [asset.generationJobId, asset.id]),
   );
+  const audioJobById = new Map(audioJobs.map((job) => [job.id, job]));
   const enrichedMessages = messages.map((message) => {
     const metadata = (message.metadata as Record<string, unknown> | null) ?? {};
-    const audioJobId = (metadata.audioJobId ?? metadata.generationJobId) as
-      string | undefined;
+    const audioJobId = metadata.audioJobId as string | undefined;
+    const audioJob = audioJobId ? audioJobById.get(audioJobId) : undefined;
     return {
       ...message,
       audioJobId,
       audioAssetId: audioJobId ? assetByJobId.get(audioJobId) : undefined,
+      audioStatus: audioJob?.status,
+      audioErrorCode: audioJob?.errorCode,
     };
   });
 

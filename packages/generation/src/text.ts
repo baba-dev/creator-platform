@@ -407,6 +407,7 @@ export async function createTextJob(
               text: promptText,
               units: input.maxTokens,
               responseFormat: input.responseFormat,
+              localeIntent: input.localeIntent,
             }),
           },
           credits,

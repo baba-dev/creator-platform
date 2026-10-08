@@ -58,10 +58,13 @@ function validTaskPricing(task: StudioTask, kind: string, provider: string, pric
   return true;
 }
 
-function validTextPricing(provider: string, price: {
-  pricingDimension: string;
-  usageRates: unknown;
-}): boolean {
+function validTextPricing(
+  provider: string,
+  price: {
+    pricingDimension: string;
+    usageRates: unknown;
+  },
+): boolean {
   if (price.pricingDimension !== "TOKEN") return false;
   if (price.usageRates == null) return true; // Legacy fixed-unit TOKEN snapshots.
   try {
@@ -88,11 +91,7 @@ export async function getPixelModelCatalog(
         },
       },
     },
-    orderBy: [
-      { mediaKind: "asc" },
-      { displayName: "asc" },
-      { id: "asc" },
-    ],
+    orderBy: [{ mediaKind: "asc" }, { displayName: "asc" }, { id: "asc" }],
     select: {
       id: true,
       provider: true,
@@ -124,11 +123,17 @@ export async function getPixelModelCatalog(
     const price = row.priceVersions[0];
     if (!row.enabled || !price) return [];
     // A disabled or unconfigured provider is not an available end-user model.
-    if (!getProviderRuntimeReadiness({
-      provider: row.provider,
-      mediaKind: row.mediaKind,
-      providerModelId: row.providerModelId,
-    }, options.environment).configured) return [];
+    if (
+      !getProviderRuntimeReadiness(
+        {
+          provider: row.provider,
+          mediaKind: row.mediaKind,
+          providerModelId: row.providerModelId,
+        },
+        options.environment,
+      ).configured
+    )
+      return [];
 
     const capabilities = publicModelCapabilities(row.capabilities);
     const tasks = listStudioTasksForModel({
@@ -136,37 +141,52 @@ export async function getPixelModelCatalog(
       provider: row.provider,
       mediaKind: row.mediaKind,
       capabilities: capabilities as Record<string, string | number | boolean>,
-    }).filter((task) => validTaskPricing(task, row.mediaKind, row.provider, price));
+    }).filter((task) =>
+      validTaskPricing(task, row.mediaKind, row.provider, price),
+    );
 
     // For TEXT models, do not advertise models without a priced user-facing task.
     // Special media models may use dedicated UIs beyond the Studio task taxonomy.
     if (row.mediaKind === "TEXT" && tasks.length === 0) return [];
 
-    return [{
-      id: row.id,
-      providerModelId: row.providerModelId,
-      name: row.displayName,
-      provider: row.provider,
-      kind: row.mediaKind,
-      description: row.description.slice(0, 600),
-      tasks: tasks.map((task) => STUDIO_TASK_LABELS[task]),
-      capabilities,
-      pricing: {
-        priceVersionId: price.id,
-        dimension: price.pricingDimension,
-        unitQuantity: price.unitQuantity,
-        baseCredits: price.customerCredits.toString(),
-        note: "Published base-unit credits, not a final job quote. Usage, duration, output count and other settings can change the charge.",
+    return [
+      {
+        id: row.id,
+        providerModelId: row.providerModelId,
+        name: row.displayName,
+        provider: row.provider,
+        kind: row.mediaKind,
+        description: row.description.slice(0, 600),
+        tasks: tasks.map((task) => STUDIO_TASK_LABELS[task]),
+        capabilities,
+        pricing: {
+          priceVersionId: price.id,
+          dimension: price.pricingDimension,
+          unitQuantity: price.unitQuantity,
+          baseCredits: price.customerCredits.toString(),
+          note: "Published base-unit credits, not a final job quote. Usage, duration, output count and other settings can change the charge.",
+        },
       },
-    }];
+    ];
   });
 
   const needle = input.query?.trim().toLocaleLowerCase() ?? "";
   const matching = models.filter((model) => {
-    if (input.modelId && model.id !== input.modelId && model.providerModelId !== input.modelId) return false;
+    if (
+      input.modelId &&
+      model.id !== input.modelId &&
+      model.providerModelId !== input.modelId
+    )
+      return false;
     if (!needle) return true;
-    return [model.name, model.providerModelId, model.provider, model.kind, model.description, ...model.tasks]
-      .some((field) => field.toLocaleLowerCase().includes(needle));
+    return [
+      model.name,
+      model.providerModelId,
+      model.provider,
+      model.kind,
+      model.description,
+      ...model.tasks,
+    ].some((field) => field.toLocaleLowerCase().includes(needle));
   });
   const pageSize = Math.max(1, Math.min(MAX_PAGE_SIZE, input.pageSize ?? 10));
   const page = Math.max(1, Math.min(1000, input.page ?? 1));
@@ -178,8 +198,13 @@ export async function getPixelModelCatalog(
     pageSize,
     hasMore: start + pageSize < matching.length,
     nextPage: start + pageSize < matching.length ? page + 1 : null,
-    filter: { kind: input.kind ?? null, query: input.query ?? null, modelId: input.modelId ?? null },
-    scope: "Enabled, currently priced and runtime-configured models. Features are verified for applicable Studio tasks; job admission and final cost require a fresh quote.",
+    filter: {
+      kind: input.kind ?? null,
+      query: input.query ?? null,
+      modelId: input.modelId ?? null,
+    },
+    scope:
+      "Enabled, currently priced and runtime-configured models. Features are verified for applicable Studio tasks; job admission and final cost require a fresh quote.",
     updatedAt: now.toISOString(),
   };
 }

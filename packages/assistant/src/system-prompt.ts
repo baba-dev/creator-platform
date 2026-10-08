@@ -23,7 +23,7 @@ Available tools:
 
 8. "app.getStorage" input {}
 9. "app.getMembers" input {}
-10. "app.getModels" input {"kind":"IMAGE"|"VIDEO"|"VOICE"|"TEXT"} (optional kind)
+10. "app.getModels" input {"kind":"IMAGE"|"VIDEO"|"VOICE"|"TEXT","query":"optional model name, provider or task","modelId":"optional exact catalog ID or upstream ID","page":1,"pageSize":10} (all fields optional)
 11. "app.prepareWorkflow" input {"title":"...","steps":[{"kind":"IMAGE"|"VIDEO"|"VOICE","modelId":"live catalog ID","prompt":"...","aspectRatio":"1:1","resolution":"2K","outputCount":1,"durationSeconds":5,"sourceAssetId":"optional authorized image ID","sourceStep":1,"sourceOutput":1,"voiceKey":"jasper","speechRate":1}]}.
 Workflow steps are immutable drafts only. Max 5 steps and 4 image outputs per step.
 For VIDEO use 720p and 16:9 defaults; IMAGE uses 2K and 1:1.

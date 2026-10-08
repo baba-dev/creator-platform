@@ -7,6 +7,7 @@ import {
 } from "@aiwa/generation";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { creativeLocaleIntentSchema } from "@aiwa/generation/locale";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
 import {
@@ -28,6 +29,7 @@ const brandGenerateSchema = z
     modelId: z.string().min(1).max(100).optional(),
     mode: z.enum(["quote", "generate"]).default("generate"),
     idempotencyKey: z.uuid(),
+    localeIntent: creativeLocaleIntentSchema.optional(),
     quoteToken: z.string().min(1).max(2048).optional(),
     quotedModelId: z.string().min(1).max(100).optional(),
     priceVersionId: z.string().min(1).max(100).optional(),
@@ -125,6 +127,7 @@ ${input.targetMarket ? `Target Market: ${input.targetMarket}` : ""}`;
       priceVersionId: input.priceVersionId,
       quoteToken: input.quoteToken,
       idempotencyKey: input.idempotencyKey,
+      localeIntent: input.localeIntent,
       messages,
       temperature: 0.7,
       maxTokens,

@@ -217,7 +217,12 @@ export function compileCreativeLocaleInstructions(
   intent: CreativeLocaleIntent | undefined,
   kind: "IMAGE" | "VIDEO" | "VOICE" | "TEXT",
 ): string {
-  if (!intent || intent.preset === "auto") return "";
+  if (!intent) return "";
+  if (intent.preset === "auto") {
+    return intent.tone === "natural"
+      ? ""
+      : `Requested tone: ${intent.tone}. Explicit user instructions take precedence.`;
+  }
   const resolved = normalizeCreativeLocaleIntent(intent);
   const locale = CREATIVE_LOCALE_PRESETS.find(
     (item) => item.id === intent.preset,

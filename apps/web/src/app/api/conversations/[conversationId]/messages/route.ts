@@ -583,24 +583,25 @@ export async function POST(
       const workflowService = proposal
         ? await import("@aiwa/orchestration/workflow/service")
         : null;
-      const draft = proposal && workflowService
-        ? await workflowService.CreativeWorkflowService.createWorkflow({
-            threadId: thread.id,
-            organizationId: thread.organizationId,
-            actorId: session.user.id,
-            projectId: thread.projectId,
-            requestKey: input.idempotencyKey,
-            title: proposal.title,
-            steps: proposal.steps.map((step, position) => ({
-              position,
-              task: step.task,
-              title: step.title,
-              modelId: step.modelId,
-              payload: step.payload,
-              dependencies: step.dependencies,
-            })),
-          })
-        : null;
+      const draft =
+        proposal && workflowService
+          ? await workflowService.CreativeWorkflowService.createWorkflow({
+              threadId: thread.id,
+              organizationId: thread.organizationId,
+              actorId: session.user.id,
+              projectId: thread.projectId,
+              requestKey: input.idempotencyKey,
+              title: proposal.title,
+              steps: proposal.steps.map((step, position) => ({
+                position,
+                task: step.task,
+                title: step.title,
+                modelId: step.modelId,
+                payload: step.payload,
+                dependencies: step.dependencies,
+              })),
+            })
+          : null;
       const answer =
         draft && proposal
           ? `Created a review-only draft: ${proposal.title} (${proposal.steps.length} steps). No generation has started and no credits have been charged. Step-by-step execution requires selecting supported models, fresh quotes and explicit approvals.`

@@ -114,6 +114,7 @@ ${input.targetMarket ? `Target Market: ${input.targetMarket}` : ""}`;
         userId: session.user.id,
         modelId: selectedModel.id,
         messages,
+        localeIntent: input.localeIntent,
         maxTokens,
         responseFormat: "json_object",
       });

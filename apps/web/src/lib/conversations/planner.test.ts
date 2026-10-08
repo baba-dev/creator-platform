@@ -67,16 +67,20 @@ describe("Conversational Creative Action Planner", () => {
 
   it("understands explicit first-turn video and speech intents", async () => {
     const emptyContext: ConversationPlannerContext = {
-      ...baseContext, activeOutputGroup: [], selectedAssetId: null,
+      ...baseContext,
+      activeOutputGroup: [],
+      selectedAssetId: null,
     };
     const video = await planConversationTurn({
       userMessage: "Create a cinematic video of desert dunes",
-      organizationId: "org_1", context: emptyContext,
+      organizationId: "org_1",
+      context: emptyContext,
     });
     expect(video.actions[0]?.type).toBe("generate_video");
     const speech = await planConversationTurn({
       userMessage: "Narrate this product launch announcement",
-      organizationId: "org_1", context: emptyContext,
+      organizationId: "org_1",
+      context: emptyContext,
     });
     expect(speech.actions[0]?.type).toBe("generate_speech");
   });

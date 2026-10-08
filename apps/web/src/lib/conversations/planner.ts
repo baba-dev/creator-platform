@@ -534,7 +534,10 @@ export async function planConversationTurn(params: {
 
   // Fresh explicit media requests must not inherit the previous generation's
   // modality or a selected source. A new video/voice intent is not an image edit.
-  const freshVideo = /^(?:please\\s+)?(?:create|generate|make|produce|render)\\s+(?:me\\s+)?(?:an?\\s+)?(?:[\\w-]+\\s+){0,3}(?:video|clip|animation)\\b/i.test(text);
+  const freshVideo =
+    /^(?:please\\s+)?(?:create|generate|make|produce|render)\\s+(?:me\\s+)?(?:an?\\s+)?(?:[\\w-]+\\s+){0,3}(?:video|clip|animation)\\b/i.test(
+      text,
+    );
   if (freshVideo) {
     return {
       version: ACTION_PROTOCOL_VERSION,
@@ -542,7 +545,10 @@ export async function planConversationTurn(params: {
       reasoning: "Explicit new text-to-video request.",
     };
   }
-  const freshSpeech = /^(?:please\\s+)?(?:narrate|read aloud|speak|say|generate speech|create (?:a |an )?voiceover|make (?:a |an )?voiceover)\\b/i.test(text);
+  const freshSpeech =
+    /^(?:please\\s+)?(?:narrate|read aloud|speak|say|generate speech|create (?:a |an )?voiceover|make (?:a |an )?voiceover)\\b/i.test(
+      text,
+    );
   if (freshSpeech) {
     return {
       version: ACTION_PROTOCOL_VERSION,

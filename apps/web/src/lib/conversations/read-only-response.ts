@@ -12,9 +12,7 @@ export function answerCreativeQuestion(
   const model =
     context.currentModelName || context.currentModelId || "the selected model";
   const count = context.activeOutputGroup.length;
-  if (
-    /\b(?:which|what)\s+model\b|\bmodel\s+(?:did|is|was)\b/i.test(lower)
-  ) {
+  if (/\b(?:which|what)\s+model\b|\bmodel\s+(?:did|is|was)\b/i.test(lower)) {
     return `The selected ${context.activeModality.toLowerCase()} model is ${model}${context.currentProvider ? ` (${context.currentProvider})` : ""}. I can help you switch models or open the specialist Studio to compare settings.`;
   }
   if (

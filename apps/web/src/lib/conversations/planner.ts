@@ -121,9 +121,7 @@ export async function planConversationTurn(params: {
 
   // Recognize explicit settings before the asset-reference resolver. A setting
   // patch can use the selected output without asking a misleading question.
-  const resolutionMatch = /\b(480p|720p|1080p|1k|1\.5k|2k|3k|4k)\b/i.exec(
-    text,
-  );
+  const resolutionMatch = /\b(480p|720p|1080p|1k|1\.5k|2k|3k|4k)\b/i.exec(text);
   const resolution = resolutionMatch?.[1]?.toUpperCase().replace(/P$/, "p") as
     "480p" | "720p" | "1080p" | "1K" | "1.5K" | "2K" | "3K" | "4K" | undefined;
   const isResolutionIntent =
@@ -145,9 +143,7 @@ export async function planConversationTurn(params: {
     };
   }
   if (
-    /\b(?:enhance|improve|optimi[sz]e)\s+(?:my |the )?prompt\b/i.test(
-      text,
-    ) ||
+    /\b(?:enhance|improve|optimi[sz]e)\s+(?:my |the )?prompt\b/i.test(text) ||
     /\blast frame\b/i.test(text)
   ) {
     return {
@@ -170,6 +166,13 @@ export async function planConversationTurn(params: {
 
   if (isResolutionIntent || isAspectRatioIntent) {
     const changes: ConversationAction[] = [];
+    const referencedOutput = parseOutputIndex(text);
+    if (referencedOutput !== null) {
+      changes.push({
+        type: "select_asset",
+        target: { kind: "output_index", index: referencedOutput },
+      });
+    }
     if (isAspectRatioIntent && ratio) {
       changes.push({ type: "change_aspect_ratio", aspectRatio: ratio });
     }

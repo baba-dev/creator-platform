@@ -481,8 +481,6 @@ model ModelPriceVersion {
   publicationKey        String?          @unique @db.VarChar(36)
   publicationHash       String?          @db.VarChar(64)
   usageRates            Json?
-  proportional          Boolean                   @default(false)
-  resolutionRates       Json?
   providerCostBasisNote String?          @db.VarChar(255)
   videoInputRate720p    BigInt?
   videoInputRate1080p   BigInt?

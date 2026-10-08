@@ -169,6 +169,7 @@ export class GenerationToolAdapter implements OrchestrationToolAdapter {
         units: input.task.startsWith("image-")
           ? Number(input.payload.outputCount ?? 1)
           : 1,
+        referenceAssetIds: kindForTask(input.task) === "IMAGE" ? [...input.sourceAssetIds] : [],
       },
       ctx.organizationId,
       ctx.userId,

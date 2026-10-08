@@ -86,8 +86,8 @@ export const StepQuoteSchema = z.object({
   priceVersionId: z.string().min(1).max(128),
   pricingDimension: z.enum(["TOKEN", "REQUEST", "CHARACTER", "SECOND"]),
   unitQuantity: z.number().int().positive(),
-  estimatedCredits: z.string().regex(/^\\d{1,38}$/),
-  maximumChargeCredits: z.string().regex(/^\\d{1,38}$/),
+  estimatedCredits: z.string().regex(/^[0-9]{1,38}$/),
+  maximumChargeCredits: z.string().regex(/^[0-9]{1,38}$/),
   requestHash: z.string().regex(/^[a-f0-9]{64}$/),
 });
 export type StepQuote = z.infer<typeof StepQuoteSchema>;

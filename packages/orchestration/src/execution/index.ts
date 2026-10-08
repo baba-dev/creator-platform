@@ -25,27 +25,12 @@ export function evaluateExecutableSteps(
 
   for (const step of workflow.steps) {
     if (
-      step.status !== "AWAITING_APPROVAL" ||
-      step.status === "RUNNING" ||
-      step.status === "QUEUED"
+      step.status !== "AWAITING_APPROVAL"
     ) {
       results.push({
         step,
         canExecute: false,
         blockedReason: `Step already in status ${step.status}`,
-      });
-      continue;
-    }
-
-    if (
-      step.status === "FAILED" ||
-      step.status === "CANCELLED" ||
-      step.status === "MANUAL_REVIEW"
-    ) {
-      results.push({
-        step,
-        canExecute: false,
-        blockedReason: `Step in terminal/manual review state ${step.status}`,
       });
       continue;
     }

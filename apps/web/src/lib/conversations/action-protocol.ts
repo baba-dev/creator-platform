@@ -19,6 +19,7 @@ export const resolutionSchema = z.enum([
   "2K",
   "3K",
   "4K",
+  "480p",
   "720p",
   "1080p",
 ]);

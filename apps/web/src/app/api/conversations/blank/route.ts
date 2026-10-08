@@ -83,7 +83,7 @@ export async function POST(request: Request) {
       createdById: session.user.id,
       threadType: "CREATIVE",
       title: "New conversation",
-      state: initialState,
+      state: initialState as unknown as object,
     },
     select: { id: true, title: true },
   });

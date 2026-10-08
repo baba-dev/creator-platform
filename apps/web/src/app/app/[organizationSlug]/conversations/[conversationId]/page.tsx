@@ -80,7 +80,6 @@ export default async function ConversationPage({
     <CreativeConversationWorkspace
       organizationSlug={organizationSlug}
       organizationId={membership.organizationId}
-      organizationId={membership.organizationId}
       conversationId={thread.id}
       initialTitle={thread.title}
       initialState={thread.state as unknown as ConversationState | null}

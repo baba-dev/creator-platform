@@ -1360,7 +1360,13 @@ function ToolCard({
   const output = (toolResult.output ?? {}) as Record<string, unknown>;
 
   if (toolResult.tool === "app.getModels") {
-    return <PixelModelCatalogCard value={output} onAsk={onAsk} onNavigate={onNavigate} />;
+    return (
+      <PixelModelCatalogCard
+        value={output}
+        onAsk={onAsk}
+        onNavigate={onNavigate}
+      />
+    );
   }
 
   // 1. Balance Tool Card
@@ -1576,11 +1582,7 @@ function ToolCard({
     );
   }
 
-  if (
-    ["app.getStorage", "app.getMembers"].includes(
-      toolResult.tool,
-    )
-  ) {
+  if (["app.getStorage", "app.getMembers"].includes(toolResult.tool)) {
     const entries = (output.members ?? output.models ?? output.connections) as
       Array<Record<string, unknown>> | undefined;
     return (

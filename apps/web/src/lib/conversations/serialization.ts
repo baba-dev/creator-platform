@@ -48,6 +48,7 @@ export interface SerializedConversationDTO {
   updatedAt: string;
   messages: SerializedChatMessageDTO[];
   generationJobs: SerializedGenerationJobDTO[];
+  creativeWorkflows?: unknown[];
 }
 
 export function serializeGenerationJob(job: {
@@ -168,6 +169,7 @@ export function serializeConversationDTO(thread: {
     } | null;
     availableActions?: readonly string[];
   }>;
+  creativeWorkflows?: unknown[];
 }): SerializedConversationDTO {
   return {
     id: thread.id,
@@ -185,5 +187,6 @@ export function serializeConversationDTO(thread: {
         : String(thread.updatedAt),
     messages: (thread.messages ?? []).map(serializeChatMessage),
     generationJobs: (thread.generationJobs ?? []).map(serializeGenerationJob),
+    creativeWorkflows: thread.creativeWorkflows,
   };
 }

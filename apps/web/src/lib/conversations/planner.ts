@@ -7,6 +7,10 @@ import {
 import type { ConversationAction, TurnPlan } from "./action-protocol";
 import { ACTION_PROTOCOL_VERSION } from "./action-protocol";
 import { resolveCreativeToolHandoff } from "./tool-handoff";
+import {
+  classifyIntentDeterministically,
+  compileCreativePlan,
+} from "@aiwa/orchestration/planning";
 
 /**
  * Normalizes aspect ratio synonyms into canonical values.
@@ -100,6 +104,37 @@ export async function planConversationTurn(params: {
         },
       ],
       reasoning: "Specialist feature handoff, no generation dispatched.",
+    };
+  }
+
+  const intentClassification = classifyIntentDeterministically(text);
+  if (
+    intentClassification.intent === "ANSWER" ||
+    intentClassification.intent === "EXPLORE"
+  ) {
+    return {
+      version: ACTION_PROTOCOL_VERSION,
+      actions: [{ type: "answer_question", question: text }],
+      reasoning:
+        "A question or consultation request is not a media generation authorization.",
+    };
+  }
+
+  // Multi-step requests require a reviewed workflow, not an accidental
+  // single media generation. The v3 native executor is feature-gated until
+  // the complete DAG approval and recovery path is proven.
+  if (
+    intentClassification.intent === "MULTI_STEP" &&
+    !/^(?:use|select|pick|take)\b/i.test(text)
+  ) {
+    const proposal = compileCreativePlan({ userPrompt: text });
+    return {
+      version: ACTION_PROTOCOL_VERSION,
+      actions: [
+        { type: "workflow_plan", title: proposal.title, workflow: proposal },
+      ],
+      reasoning:
+        "Create a review-only creative workflow; never auto-dispatch paid steps.",
     };
   }
 

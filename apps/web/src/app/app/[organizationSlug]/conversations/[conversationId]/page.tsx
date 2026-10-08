@@ -55,6 +55,16 @@ export default async function ConversationPage({
           },
         },
       },
+      creativeWorkflows: {
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        include: {
+          steps: {
+            orderBy: { position: "asc" },
+            include: { dependencies: true },
+          },
+        },
+      },
     },
   });
 
@@ -85,6 +95,7 @@ export default async function ConversationPage({
       initialState={thread.state as unknown as ConversationState | null}
       initialMessages={formattedMessages}
       initialJobs={formattedJobs}
+      initialWorkflows={thread.creativeWorkflows}
       canGenerate={canGenerate}
     />
   );

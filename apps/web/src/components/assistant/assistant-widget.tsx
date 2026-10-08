@@ -10,6 +10,7 @@ import {
 } from "@/lib/text-feature-client";
 import { searchKnowledgebase } from "@aiwa/assistant/knowledge";
 import { PixelControls } from "./pixel-controls";
+import { useCreativeLocale } from "@/components/studio/creative-locale-selector";
 import { safePixelRoute } from "./pixel-navigation";
 import { getGenerationErrorPresentation } from "@/lib/generation-error-copy";
 
@@ -338,6 +339,7 @@ function PixelWidget({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const [localeIntent] = useCreativeLocale(organizationId);
   const [open, setOpen] = useState(false);
   const [showInvite, setShowInvite] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -594,6 +596,7 @@ function PixelWidget({
         const page = pathname.split("/")[3] || "home";
         const workspace = {
           page,
+          localeIntent,
           selectedAssetIds: params.get("assetId")
             ? [params.get("assetId")]
             : [],
@@ -700,7 +703,7 @@ function PixelWidget({
         approveRef.current = null;
       }
     },
-    [input, thread, sending, pathname],
+    [input, thread, sending, pathname, localeIntent],
   );
 
   const handleNavigate = useCallback(

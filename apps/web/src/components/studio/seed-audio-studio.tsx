@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  CreativeLocaleSelector,
+  CreativeLocaleButton,
   useCreativeLocale,
 } from "@/components/studio/creative-locale-selector";
 import { sortVoicesForLocale, voiceLocaleMatch } from "@aiwa/generation/locale";
@@ -655,11 +655,6 @@ export function SeedAudioStudio({
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
       <section className="min-w-0 space-y-6">
-        <CreativeLocaleSelector
-          value={localeIntent}
-          onChange={setLocaleIntent}
-          disabled={busy}
-        />
         <div className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-7">
           <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -670,6 +665,8 @@ export function SeedAudioStudio({
                 What do you want Seed Audio to create?
               </h2>
             </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <CreativeLocaleButton value={localeIntent} onChange={setLocaleIntent} disabled={busy} />
             <span
               className={
                 model
@@ -686,6 +683,7 @@ export function SeedAudioStudio({
               />
               {model ? "Seed Audio ready" : "Checking model"}
             </span>
+            </div>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">

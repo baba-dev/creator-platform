@@ -1,5 +1,7 @@
 "use client";
 
+import { CreativeLocaleSelector, useCreativeLocale } from "@/components/studio/creative-locale-selector";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { CreativeSurface, Eyebrow } from "@/components/ui/creative";
@@ -118,6 +120,7 @@ export function ScriptwritingStudio({
   defaultModelId: string | null;
   textModels: StudioModelOption[];
 }) {
+  const [localeIntent, setLocaleIntent] = useCreativeLocale(organizationId);
   const [scripts, setScripts] = useState<ScriptDocument[]>([]);
   const [activeScript, setActiveScript] = useState<ScriptDocument | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -461,6 +464,7 @@ export function ScriptwritingStudio({
         action: aiAction,
         currentScene: currentContext.slice(-1500),
         modelId: selectedTextModel,
+        localeIntent,
       });
       const generatedText = data.content as string;
 
@@ -724,6 +728,7 @@ export function ScriptwritingStudio({
 
   return (
     <div className="mx-auto flex h-[calc(100vh-65px)] max-w-[1600px] flex-col p-4 sm:p-6 lg:p-8">
+      <CreativeLocaleSelector value={localeIntent} onChange={setLocaleIntent} disabled={isGenerating} />
       {/* Studio Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-4">
         <div>

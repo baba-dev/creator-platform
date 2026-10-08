@@ -1,5 +1,7 @@
 "use client";
 
+import { CreativeLocaleSelector, useCreativeLocale } from "@/components/studio/creative-locale-selector";
+
 import type { Route } from "next";
 import Link from "next/link";
 import { useState } from "react";
@@ -33,6 +35,7 @@ export function CreativeDirectorWorkspace({
   defaultModelId: string | null;
   textModels: StudioModelOption[];
 }) {
+  const [localeIntent, setLocaleIntent] = useCreativeLocale(organizationId);
   const [messages, setMessages] = useState<DirectorMessage[]>([
     {
       id: "initial-welcome",
@@ -123,6 +126,7 @@ export function CreativeDirectorWorkspace({
         usage?: { totalTokens?: number };
       }>("/api/director/chat", {
         organizationId,
+        localeIntent,
         modelId: selectedModel,
         messages: nextMessages.map((message) => ({
           role: message.role,
@@ -147,6 +151,7 @@ export function CreativeDirectorWorkspace({
 
   return (
     <div className="mx-auto flex h-[calc(100vh-65px)] max-w-[1600px] flex-col p-4 sm:p-6 lg:p-8">
+      <CreativeLocaleSelector value={localeIntent} onChange={setLocaleIntent} disabled={isGenerating} />
       {/* Studio Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-4">
         <div>

@@ -1,5 +1,7 @@
 "use client";
 
+import { CreativeLocaleSelector, useCreativeLocale } from "@/components/studio/creative-locale-selector";
+
 import type { Route } from "next";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -69,6 +71,7 @@ export function BrandStoryWorkspace({
   storyDefaultModelId: string | null;
   storyModels: StudioModelOption[];
 }) {
+  const [localeIntent, setLocaleIntent] = useCreativeLocale(organizationId);
   const [activeTab, setActiveTab] = useState<"brand" | "story">(initialTab);
 
   // Brand Profiles State
@@ -160,6 +163,7 @@ export function BrandStoryWorkspace({
         vision: brandForm.vision || undefined,
         targetMarket: brandForm.targetMarket || undefined,
         modelId: selectedBrandModel,
+        localeIntent,
       });
       const generated = data.profile;
 
@@ -218,6 +222,7 @@ export function BrandStoryWorkspace({
         genre: storyForm.genre,
         structureType: storyForm.structureType,
         modelId: selectedStoryModel,
+        localeIntent,
       });
 
       // Save story plan
@@ -253,6 +258,7 @@ export function BrandStoryWorkspace({
 
   return (
     <div className="mx-auto flex h-[calc(100vh-65px)] max-w-[1600px] flex-col p-4 sm:p-6 lg:p-8">
+      <CreativeLocaleSelector value={localeIntent} onChange={setLocaleIntent} disabled={isGeneratingBrand || isGeneratingStory} />
       {/* Studio Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-4">
         <div>

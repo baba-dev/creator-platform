@@ -1,5 +1,7 @@
 "use client";
 
+import { CreativeLocaleSelector, useCreativeLocale } from "@/components/studio/creative-locale-selector";
+
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -251,6 +253,7 @@ export function SeedAudioStudio({
   canGenerate: boolean;
   initialTake?: SeedAudioInitialTake | null;
 }) {
+  const [localeIntent, setLocaleIntent] = useCreativeLocale(organizationId);
   const [model, setModel] = useState<Model | null>(null);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [voices, setVoices] = useState<PresetVoice[]>([]);
@@ -418,6 +421,7 @@ export function SeedAudioStudio({
   const quoteRequest = useMemo(
     () => ({
       organizationId,
+      localeIntent,
       modelId: model?.id,
       task: "seed-audio" as const,
       longForm: mode === "LONG",
@@ -436,6 +440,7 @@ export function SeedAudioStudio({
     }),
     [
       organizationId,
+      localeIntent,
       model?.id,
       providerPrompt,
       duration,
@@ -573,6 +578,7 @@ export function SeedAudioStudio({
           organizationId,
           modelId: model.id,
           task: "seed-audio",
+          localeIntent,
           longForm: mode === "LONG",
           workflow: mode,
           sourceText: script.trim(),
@@ -641,6 +647,7 @@ export function SeedAudioStudio({
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
       <section className="min-w-0 space-y-6">
+        <CreativeLocaleSelector value={localeIntent} onChange={setLocaleIntent} disabled={busy} />
         <div className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-7">
           <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
             <div>

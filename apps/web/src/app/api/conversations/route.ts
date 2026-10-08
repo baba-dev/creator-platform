@@ -8,6 +8,7 @@ import {
 } from "@aiwa/generation";
 import { NextResponse, after } from "next/server";
 import { z } from "zod";
+import { creativeLocaleIntentSchema } from "@aiwa/generation/locale";
 
 import { rateLimit } from "@/lib/rate-limit";
 import { getRequestSession } from "@/lib/request-auth";
@@ -43,6 +44,7 @@ const conversationCreateSchema = z.object({
   priceVersionId: z.string().min(1).max(100),
   quoteToken: z.string().min(1).max(2048),
   idempotencyKey: z.string().uuid(),
+  localeIntent: creativeLocaleIntentSchema.optional(),
   aspectRatio: z.string().default("1:1"),
   resolution: z.string().default("2K"),
   outputCount: z.number().int().min(1).max(15).default(1),
@@ -216,6 +218,7 @@ export async function POST(request: Request) {
         priceVersionId: input.priceVersionId,
         quoteToken: input.quoteToken,
         idempotencyKey: input.idempotencyKey,
+        localeIntent: input.localeIntent,
         text: input.prompt,
         voiceKey: input.voiceKey ?? "jasper",
         speechRate: input.speechRate ?? 1.0,
@@ -230,6 +233,7 @@ export async function POST(request: Request) {
         priceVersionId: input.priceVersionId,
         quoteToken: input.quoteToken,
         idempotencyKey: input.idempotencyKey,
+        localeIntent: input.localeIntent,
         prompt: input.prompt,
         durationSeconds: input.durationSeconds ?? 5,
         aspectRatio: input.aspectRatio,
@@ -250,6 +254,7 @@ export async function POST(request: Request) {
         priceVersionId: input.priceVersionId,
         quoteToken: input.quoteToken,
         idempotencyKey: input.idempotencyKey,
+        localeIntent: input.localeIntent,
         prompt: input.prompt,
         aspectRatio: input.aspectRatio,
         resolution: input.resolution,

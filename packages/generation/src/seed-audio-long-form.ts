@@ -559,7 +559,8 @@ export async function produceSeedAudioLongForm(input: {
         mediaKind: "voice",
         input: {
           ...input.baseProviderInput,
-          textPrompt: input.compileSegmentPrompt?.(segment.prompt) ?? segment.prompt,
+          textPrompt:
+            input.compileSegmentPrompt?.(segment.prompt) ?? segment.prompt,
         },
       });
       if (

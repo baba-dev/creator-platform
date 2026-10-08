@@ -177,6 +177,7 @@ export async function getPixelModelCatalog(
     pageSize,
     hasMore: start + pageSize < matching.length,
     nextPage: start + pageSize < matching.length ? page + 1 : null,
+    filter: { kind: input.kind ?? null, query: input.query ?? null, modelId: input.modelId ?? null },
     scope: "Enabled, currently priced and runtime-configured models. Features are verified for applicable Studio tasks; job admission and final cost require a fresh quote.",
     updatedAt: now.toISOString(),
   };

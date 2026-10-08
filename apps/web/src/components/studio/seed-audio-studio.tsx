@@ -370,7 +370,10 @@ export function SeedAudioStudio({
   const selectedAudioAssets = audioIds
     .map((id) => assets.find((asset) => asset.id === id))
     .filter((asset): asset is Asset => Boolean(asset));
-  const rankedVoices = useMemo(() => sortVoicesForLocale(voices, localeIntent), [voices, localeIntent]);
+  const rankedVoices = useMemo(
+    () => sortVoicesForLocale(voices, localeIntent),
+    [voices, localeIntent],
+  );
   const selectedVoices = referenceVoiceKeys
     .map((key) => voices.find((voice) => voice.key === key))
     .filter((voice): voice is PresetVoice => Boolean(voice));
@@ -1143,7 +1146,12 @@ export function SeedAudioStudio({
                           </span>
                           <span className="mt-1 block text-xs text-muted-foreground">
                             {voice.language}
-                            {voiceLocaleMatch(voice.locale, localeIntent.language) === "exact" ? " · Locale match" : ""}
+                            {voiceLocaleMatch(
+                              voice.locale,
+                              localeIntent.language,
+                            ) === "exact"
+                              ? " · Locale match"
+                              : ""}
                           </span>
                         </span>
                       </span>

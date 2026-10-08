@@ -1124,7 +1124,7 @@ export function CreativeConversationWorkspace({
           ) : (
             <div className="py-12 text-center text-sm text-muted-foreground">
               {jobs.length === 0
-                ? "Ready to generate your first creation. Enter a prompt below."
+                ? "Ask a question, sketch an idea or create your first image, video or voice."
                 : "Select a step above to view its output."}
             </div>
           )}
@@ -1325,7 +1325,7 @@ export function CreativeConversationWorkspace({
                 void handleSend();
               }
             }}
-            placeholder="Type your next idea... (e.g. 'Make it 9:16', 'Animate this', 'Try another model')"
+            placeholder="Ask a question or describe what to create…"
             disabled={!canGenerate || isSubmitting || Boolean(planReview)}
             maxLength={4000}
             className="flex-1 resize-none bg-transparent px-2 py-1 text-sm text-foreground outline-hidden placeholder:text-muted-foreground"

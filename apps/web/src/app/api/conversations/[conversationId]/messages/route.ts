@@ -732,7 +732,9 @@ export async function POST(
     let videoWorkflow: "GENERATE" | "FRAME_TO_VIDEO" | "EXTEND" = "GENERATE";
     let extensionDirection: "BEFORE" | "AFTER" | undefined;
     let requestedModelSwitch = false;
-    let needsCapabilityRouting = false;
+    // Empty dashboard conversations have no initial provider job. Discover
+    // the first compatible model at admission rather than persisting a fake one.
+    let needsCapabilityRouting = !plannerContext.currentModelId;
 
     // Apply action patches
     for (const action of plan.actions) {

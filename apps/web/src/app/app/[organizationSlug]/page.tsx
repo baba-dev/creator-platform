@@ -4,6 +4,7 @@ import type { Route } from "next";
 import Link from "next/link";
 
 import { GenerationStudio } from "@/components/studio/generation-studio";
+import { StartConversationButton } from "@/components/conversations/start-conversation-button";
 import { Button } from "@/components/ui/button";
 import { Annotation, Eyebrow } from "@/components/ui/creative";
 import { Icon, type IconName } from "@/components/ui/icon";
@@ -166,11 +167,19 @@ export default async function OrganizationWorkspacePage({
               rough ideas welcome →
             </Annotation>
           </div>
-          <Button asChild className="self-start sm:self-auto">
-            <a href="#create">
-              <Icon name="plus" className="size-4" /> New creation
-            </a>
-          </Button>
+          <div className="flex flex-wrap items-start gap-2">
+            {canGenerate ? (
+              <StartConversationButton
+                organizationId={membership.organizationId}
+                organizationSlug={organizationSlug}
+              />
+            ) : null}
+            <Button asChild className="self-start sm:self-auto">
+              <a href="#create">
+                <Icon name="plus" className="size-4" /> New creation
+              </a>
+            </Button>
+          </div>
         </section>
 
         <section

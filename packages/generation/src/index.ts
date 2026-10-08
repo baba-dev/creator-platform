@@ -18,6 +18,7 @@ import {
 import { VERIFIED_BYTEPLUS_MODELS } from "@aiwa/providers/byteplus";
 import { VERIFIED_ALL_MODELS } from "@aiwa/providers/catalog";
 import { z } from "zod";
+import { creativeLocaleIntentSchema, normalizeCreativeLocaleIntent } from "./locale";
 import { resolvePresetVoice, VoiceResolutionError } from "./voices";
 import {
   planSeedAudioLongForm,
@@ -62,6 +63,7 @@ export const imageRequestSchema = z
     priceVersionId: z.string().min(1).max(100),
     quoteToken: z.string().min(1).max(2048).optional(),
     idempotencyKey: z.uuid(),
+    localeIntent: creativeLocaleIntentSchema.optional(),
     templateId: z.string().min(1).max(100).optional(),
     prompt: z.string().trim().min(1).max(2000),
     aspectRatio: z.enum([
@@ -94,6 +96,7 @@ export const voiceRequestSchema = z
     priceVersionId: z.string().min(1).max(100),
     quoteToken: z.string().min(1).max(2048).optional(),
     idempotencyKey: z.uuid(),
+    localeIntent: creativeLocaleIntentSchema.optional(),
     templateId: z.string().min(1).max(100).optional(),
     text: z.string().trim().min(1).max(4096),
     voiceKey: z.string().trim().min(1).max(100),
@@ -114,6 +117,7 @@ export const seedAudioRequestSchema = z
     priceVersionId: z.string().min(1).max(100),
     quoteToken: z.string().min(1).max(2048).optional(),
     idempotencyKey: z.uuid(),
+    localeIntent: creativeLocaleIntentSchema.optional(),
     textPrompt: z
       .string()
       .trim()
@@ -238,6 +242,7 @@ export const transcriptionRequestSchema = z
     priceVersionId: z.string().min(1).max(100),
     quoteToken: z.string().min(1).max(2048).optional(),
     idempotencyKey: z.uuid(),
+    localeIntent: creativeLocaleIntentSchema.optional(),
     sourceAssetId: z.string().min(1).max(100),
     language: z.string().trim().min(2).max(20).optional(),
     prompt: z.string().trim().max(1000).optional(),
@@ -264,6 +269,7 @@ export const textRequestSchema = z
     priceVersionId: z.string().min(1).max(100),
     quoteToken: z.string().min(1).max(2048).optional(),
     idempotencyKey: z.uuid(),
+    localeIntent: creativeLocaleIntentSchema.optional(),
     templateId: z.string().min(1).max(100).optional(),
     chatThreadId: z.string().min(1).max(100).optional(),
     chatOptions: z
@@ -538,6 +544,7 @@ export async function createImageJob(userId: string, raw: unknown) {
   const input = imageRequestSchema.parse(raw);
   const payload = {
     prompt: input.prompt,
+    ...(input.localeIntent ? { localeIntent: normalizeCreativeLocaleIntent(input.localeIntent) } : {}),
     aspectRatio: input.aspectRatio,
     resolution: input.resolution,
     outputFormat: "png",
@@ -593,6 +600,7 @@ export async function createImageJob(userId: string, raw: unknown) {
             old.outputFormat !== payload.outputFormat ||
             old.watermark !== payload.watermark ||
             old.outputCount !== payload.outputCount ||
+            JSON.stringify(old.localeIntent ?? null) !== JSON.stringify(payload.localeIntent ?? null) ||
             !sameReferences
           )
             throw new GenerationError(
@@ -885,6 +893,7 @@ export async function createVideoJob(userId: string, raw: unknown) {
         schemaVersion: 2,
         workflow: input.workflow,
         prompt: input.prompt,
+        ...(input.localeIntent ? { localeIntent: normalizeCreativeLocaleIntent(input.localeIntent) } : {}),
         sources: input.sources,
         aspectRatio: input.aspectRatio,
         resolution: input.resolution,
@@ -903,6 +912,7 @@ export async function createVideoJob(userId: string, raw: unknown) {
       }
     : {
         prompt: input.prompt,
+        ...(input.localeIntent ? { localeIntent: normalizeCreativeLocaleIntent(input.localeIntent) } : {}),
         aspectRatio: input.aspectRatio,
         resolution: input.resolution,
         durationSeconds: input.durationSeconds,
@@ -1470,6 +1480,7 @@ async function createSeedAudioJob(userId: string, raw: unknown) {
     sourceText: input.sourceText ?? null,
     directorPreset: input.directorPreset ?? null,
     language: input.language ?? null,
+    ...(input.localeIntent ? { localeIntent: normalizeCreativeLocaleIntent(input.localeIntent) } : {}),
     parentGenerationId: input.parentGenerationId ?? null,
     referenceAudioAssetIds: input.referenceAudioAssetIds,
     referenceVoiceKeys: referenceVoices.map((voice) => voice.key),
@@ -1796,6 +1807,7 @@ export async function createVoiceJob(userId: string, raw: unknown) {
   const payload = {
     text: input.text,
     voiceKey: presetVoice.key,
+    ...(input.localeIntent ? { localeIntent: normalizeCreativeLocaleIntent(input.localeIntent) } : {}),
     speaker: presetVoice.speakerId,
     speechRate: input.speechRate,
     ...(input.loudnessRate !== 1 ? { loudnessRate: input.loudnessRate } : {}),
@@ -2007,6 +2019,7 @@ export async function createTranscriptionJob(userId: string, raw: unknown) {
     task: "transcription",
     sourceAssetId: input.sourceAssetId,
     language: input.language ?? null,
+    ...(input.localeIntent ? { localeIntent: normalizeCreativeLocaleIntent(input.localeIntent) } : {}),
     prompt: input.prompt ?? null,
     outputFormats: ["txt", "srt", "vtt"],
   };

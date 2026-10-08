@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { creativeLocaleIntentSchema } from "./locale";
 
 export const videoWorkflowSchema = z.enum([
   "GENERATE",
@@ -54,6 +55,7 @@ export const videoRequestV2Schema = z
     priceVersionId: z.string().min(1).max(100),
     quoteToken: z.string().min(1).max(2048).optional(),
     idempotencyKey: z.uuid(),
+    localeIntent: creativeLocaleIntentSchema.optional(),
     templateId: z.string().min(1).max(100).optional(),
     workflow: videoWorkflowSchema,
     prompt: z.string().trim().max(4000).default(""),
@@ -304,6 +306,7 @@ export const legacyVideoRequestSchema = z
     priceVersionId: z.string().min(1).max(100),
     quoteToken: z.string().min(1).max(2048).optional(),
     idempotencyKey: z.uuid(),
+    localeIntent: creativeLocaleIntentSchema.optional(),
     templateId: z.string().min(1).max(100).optional(),
     prompt: z.string().trim().min(1).max(2000),
     aspectRatio: aspectRatioSchema,
@@ -396,6 +399,7 @@ export function normalizeVideoRequest(
     quoteToken: legacy.quoteToken,
     idempotencyKey: legacy.idempotencyKey,
     templateId: legacy.templateId,
+    localeIntent: legacy.localeIntent,
     workflow,
     prompt: legacy.prompt,
     sources,

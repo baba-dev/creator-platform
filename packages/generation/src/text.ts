@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { normalizeCreativeLocaleIntent, type CreativeLocaleIntent } from "./locale";
 import {
   calculateBillableUnits,
   estimateGeneration,
@@ -148,6 +149,7 @@ function requestFingerprint(input: {
   temperature: number;
   maxTokens: number;
   responseFormat: "text" | "json_object";
+  localeIntent?: CreativeLocaleIntent;
   chatOptions?: {
     autoVoice?: boolean;
     voiceKey?: string;
@@ -162,6 +164,7 @@ function requestFingerprint(input: {
         modelId: input.modelId,
         priceVersionId: input.priceVersionId,
         messages: input.messages,
+        ...(input.localeIntent ? { localeIntent: normalizeCreativeLocaleIntent(input.localeIntent) } : {}),
         temperature: input.temperature,
         maxTokens: input.maxTokens,
         chatOptions: input.chatOptions ?? null,
@@ -196,6 +199,7 @@ function sameIdempotentRequest(
     temperature: number;
     maxTokens: number;
     responseFormat: "text" | "json_object";
+    localeIntent?: CreativeLocaleIntent;
     chatOptions?: {
       autoVoice?: boolean;
       voiceKey?: string;
@@ -439,6 +443,7 @@ export async function createTextJob(
           chatThreadId: input.chatThreadId ?? null,
           requestPayload: {
             messages,
+            ...(input.localeIntent ? { localeIntent: normalizeCreativeLocaleIntent(input.localeIntent) } : {}),
             temperature: input.temperature,
             maxTokens: input.maxTokens,
             ...(input.responseFormat === "json_object"

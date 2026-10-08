@@ -367,6 +367,15 @@ export const quoteRequestSchema = z
   .object({
     organizationId: cuidSchema,
     modelId: z.string().trim().min(1).max(128),
+    localeIntent: z
+      .object({
+        preset: z.enum(["auto", "oman", "uae", "saudi", "egypt", "india", "uk", "usa", "france", "germany", "spain", "brazil", "japan"]),
+        language: z.string().min(2).max(16),
+        tone: z.enum(["natural", "casual", "professional", "energetic", "warm", "luxury", "authoritative"]),
+        culturalContext: z.enum(["auto", "on", "off"]),
+      })
+      .strict()
+      .optional(),
     units: z.coerce.number().int().positive().max(8_192).default(1),
     billableQuantity: z.coerce
       .number()

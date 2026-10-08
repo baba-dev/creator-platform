@@ -9,6 +9,7 @@ import {
 } from "@aiwa/generation";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { creativeLocaleIntentSchema } from "@aiwa/generation/locale";
 
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
@@ -24,6 +25,7 @@ const schema = z
     modelId: z.string().min(1).max(100),
     sourceAssetId: z.string().min(1).max(100),
     language: z.string().trim().min(2).max(20).optional(),
+    localeIntent: creativeLocaleIntentSchema.optional(),
   })
   .strict();
 
@@ -145,6 +147,7 @@ export async function POST(request: Request) {
         transcription: true,
         sourceAssetId: source.id,
         language: input.language,
+        localeIntent: input.localeIntent,
         billableQuantity: billableSeconds,
       }),
     },

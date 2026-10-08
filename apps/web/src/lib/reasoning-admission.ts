@@ -6,6 +6,7 @@ import {
 import { db, Prisma } from "@aiwa/db";
 import { supportsStudioTask } from "@aiwa/providers";
 import {
+  creativeLocaleEnhancementSystemPrompt,
   normalizeCreativeLocaleIntent,
   type CreativeLocaleIntent,
 } from "@aiwa/generation/locale";
@@ -203,7 +204,12 @@ export async function admitReasoningJob(
     try {
       costEstimate = estimateReasoningProviderCost({
         price,
-        promptCharacters: input.systemPrompt.length + input.userPrompt.length,
+        promptCharacters:
+          creativeLocaleEnhancementSystemPrompt(
+            input.systemPrompt,
+            input.localeIntent,
+            input.targetMedia,
+          ).length + input.userPrompt.length,
         maximumOutputTokens: PROMPT_ENHANCEMENT_MAX_OUTPUT_TOKENS,
       });
     } catch {

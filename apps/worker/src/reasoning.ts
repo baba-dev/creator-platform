@@ -2,6 +2,7 @@ import { parseServerEnv } from "@aiwa/config";
 import { settleReasoningProviderCost } from "@aiwa/credits";
 import { db, type Prisma, type ModelProvider } from "@aiwa/db";
 import { requireMembership } from "@aiwa/generation";
+import { creativeLocaleEnhancementSystemPrompt } from "@aiwa/generation/locale";
 import { ProviderRequestError, type ReasoningProvider } from "@aiwa/providers";
 import { createNvidiaProvider } from "@aiwa/providers/nvidia";
 import { createGroqProvider } from "@aiwa/providers/groq";
@@ -250,7 +251,14 @@ export async function processReasoningJob(
     const result = await provider.complete({
       idempotencyKey: dbJob.idempotencyKey,
       modelId: dbJob.providerModel.providerModelId,
-      systemPrompt: payload.systemPrompt,
+      systemPrompt: creativeLocaleEnhancementSystemPrompt(
+        payload.systemPrompt,
+        (dbJob.requestPayload as Record<string, unknown>).localeIntent,
+        (dbJob.requestPayload as Record<string, unknown>).targetMedia ===
+          "VIDEO"
+          ? "VIDEO"
+          : "IMAGE",
+      ),
       userPrompt: payload.userPrompt,
       responseSchemaName: payload.responseSchemaName,
     });

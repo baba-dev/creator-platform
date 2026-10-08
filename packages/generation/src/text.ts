@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import {
   normalizeCreativeLocaleIntent,
+  localeSystemMessages,
+  readCreativeLocaleIntent,
   type CreativeLocaleIntent,
 } from "./locale";
 import {
@@ -447,7 +449,12 @@ export async function createTextJob(
         modelRow.capabilities,
         input.maxTokens,
       );
-      const promptText = messages
+      const effectiveMessages = normalizeTextMessagesForModel(
+        localeSystemMessages(messages, input.localeIntent),
+        modelRow.capabilities,
+        input.maxTokens,
+      );
+      const promptText = effectiveMessages
         .map((message) => `${message.role}: ${message.content}`)
         .join("\n");
       const pricing = estimateGeneration({
@@ -682,9 +689,17 @@ export async function processTextJob(
 
   const payload = payloadObject(job.requestPayload);
   const sponsored = payload.sponsored === true;
-  const messages = Array.isArray(payload.messages)
+  const savedMessages = Array.isArray(payload.messages)
     ? (payload.messages as TextMessage[])
     : [];
+  const messages = normalizeTextMessagesForModel(
+    localeSystemMessages(
+      savedMessages,
+      readCreativeLocaleIntent(payload.localeIntent),
+    ),
+    job.providerModel.capabilities,
+    typeof payload.maxTokens === "number" ? payload.maxTokens : 2048,
+  );
   const temperature =
     typeof payload.temperature === "number" ? payload.temperature : 0.7;
   const maxTokens =

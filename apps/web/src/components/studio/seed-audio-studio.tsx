@@ -4,6 +4,7 @@ import {
   CreativeLocaleSelector,
   useCreativeLocale,
 } from "@/components/studio/creative-locale-selector";
+import { sortVoicesForLocale, voiceLocaleMatch } from "@aiwa/generation/locale";
 
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
@@ -369,6 +370,10 @@ export function SeedAudioStudio({
   const selectedAudioAssets = audioIds
     .map((id) => assets.find((asset) => asset.id === id))
     .filter((asset): asset is Asset => Boolean(asset));
+  const rankedVoices = useMemo(
+    () => sortVoicesForLocale(voices, localeIntent),
+    [voices, localeIntent],
+  );
   const selectedVoices = referenceVoiceKeys
     .map((key) => voices.find((voice) => voice.key === key))
     .filter((voice): voice is PresetVoice => Boolean(voice));
@@ -934,7 +939,7 @@ export function SeedAudioStudio({
                 </div>
               </div>
               <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                {voices.slice(0, 8).map((voice) => {
+                {rankedVoices.slice(0, 8).map((voice) => {
                   const selected = referenceVoiceKeys[0] === voice.key;
                   return (
                     <button
@@ -1107,7 +1112,7 @@ export function SeedAudioStudio({
               </>
             ) : (
               <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {voices.map((voice) => {
+                {rankedVoices.map((voice) => {
                   const selected = referenceVoiceKeys.includes(voice.key);
                   const disabled = !selected && referenceVoiceKeys.length >= 3;
                   return (
@@ -1141,6 +1146,12 @@ export function SeedAudioStudio({
                           </span>
                           <span className="mt-1 block text-xs text-muted-foreground">
                             {voice.language}
+                            {voiceLocaleMatch(
+                              voice.locale,
+                              localeIntent.language,
+                            ) === "exact"
+                              ? " · Locale match"
+                              : ""}
                           </span>
                         </span>
                       </span>

@@ -6,6 +6,10 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import type { TemplateVariable } from "@/lib/templates";
+import {
+  CreativeLocaleSelector,
+  useCreativeLocale,
+} from "@/components/studio/creative-locale-selector";
 
 type ReferenceAsset = {
   id: string;
@@ -32,6 +36,7 @@ export function TemplateComposer({
   referenceAssets: ReferenceAsset[];
 }) {
   const router = useRouter();
+  const [localeIntent, setLocaleIntent] = useCreativeLocale(organizationId);
   const initial = useMemo(
     () =>
       Object.fromEntries(
@@ -58,7 +63,7 @@ export function TemplateComposer({
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ organizationId, values }),
+          body: JSON.stringify({ organizationId, values, localeIntent }),
         },
       );
       const body = (await response.json()) as {
@@ -101,6 +106,11 @@ export function TemplateComposer({
         </div>
       </div>
 
+      <CreativeLocaleSelector
+        value={localeIntent}
+        onChange={setLocaleIntent}
+        disabled={busy}
+      />
       <div className="mt-6 space-y-5">
         {variables.map((variable) => {
           const id = `template-variable-${variable.key}`;

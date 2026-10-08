@@ -3,7 +3,10 @@ import {
   normalizeLegacyTextUsageRatesForProvider,
 } from "@aiwa/credits";
 import { db } from "@aiwa/db";
-import type { CreativeLocaleIntent } from "@aiwa/generation/locale";
+import {
+  localeSystemMessages,
+  type CreativeLocaleIntent,
+} from "@aiwa/generation/locale";
 import {
   GenerationError,
   issueGenerationQuote,
@@ -117,7 +120,12 @@ export async function issueTextFeatureQuote(input: TextFeatureQuoteInput) {
     model.capabilities,
     input.maxTokens,
   );
-  const promptText = messages
+  const effectiveMessages = normalizeTextMessagesForModel(
+    localeSystemMessages(messages, input.localeIntent),
+    model.capabilities,
+    input.maxTokens,
+  );
+  const promptText = effectiveMessages
     .map((message) => `${message.role}: ${message.content}`)
     .join("\n");
   const estimate = estimateGeneration({

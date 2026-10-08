@@ -991,6 +991,7 @@ function PixelWidget({
               ))}
               {thread && (
                 <PixelControls
+                  organizationId={organizationId}
                   threadId={thread.id}
                   refreshKey={refreshKey}
                   onNavigate={handleNavigate}

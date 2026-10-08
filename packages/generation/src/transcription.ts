@@ -1,3 +1,4 @@
+import { transcriptionLanguageHint } from "./locale";
 import { hasOrganizationPermission } from "@aiwa/authz";
 import { finalizeAssetStorage, releaseAssetStorage } from "@aiwa/assets";
 import { resolveAssetStorageForAsset } from "@aiwa/assets/storage";
@@ -206,8 +207,10 @@ export async function processTranscriptionJob(
       audioBytes,
       filename: source.originalFilename ?? `${source.id}.media`,
       mimeType: source.mimeType,
-      language:
-        typeof payload.language === "string" ? payload.language : undefined,
+      language: transcriptionLanguageHint(
+        payload.language,
+        payload.localeIntent,
+      ),
       prompt: typeof payload.prompt === "string" ? payload.prompt : undefined,
     });
     if (!result.text.trim()) {

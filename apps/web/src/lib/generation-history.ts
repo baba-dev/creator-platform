@@ -1,5 +1,6 @@
 import { hasOrganizationPermission } from "@aiwa/authz";
 import { db, type Prisma } from "@aiwa/db";
+import { readCreativeLocaleIntent } from "@aiwa/generation/locale";
 import { z } from "zod";
 
 type SeedAudioTimedItem = {
@@ -271,6 +272,7 @@ export async function listGenerationHistory(
       return {
         ...job,
         task: payload.task === "transcription" ? "transcription" : null,
+        localeIntent: readCreativeLocaleIntent(payload.localeIntent),
         requestPayload: undefined,
         reservedCredits: job.reservedCredits.toString(),
         chargedCredits: job.chargedCredits.toString(),

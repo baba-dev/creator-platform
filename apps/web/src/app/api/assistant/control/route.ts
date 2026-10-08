@@ -10,6 +10,7 @@ import {
   requirePixelAccess,
 } from "@aiwa/assistant";
 import { GenerationError } from "@aiwa/generation";
+import { creativeLocaleIntentSchema } from "@aiwa/generation/locale";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getRequestSession } from "@/lib/request-auth";
@@ -24,6 +25,7 @@ const schema = z.discriminatedUnion("operation", [
       operation: z.literal("quote"),
       actionId: id,
       selectedSourceId: id.optional(),
+      localeIntent: creativeLocaleIntentSchema.optional(),
     })
     .strict(),
   z
@@ -138,7 +140,12 @@ export async function POST(request: Request) {
     if (limited) return limited;
     const result =
       input.operation === "quote"
-        ? await quotePixelAction(ctx, input.actionId, input.selectedSourceId)
+        ? await quotePixelAction(
+            ctx,
+            input.actionId,
+            input.selectedSourceId,
+            input.localeIntent,
+          )
         : input.operation === "execute"
           ? await executePixelAction(ctx, input.actionId, input.quoteId)
           : input.operation === "cancel"

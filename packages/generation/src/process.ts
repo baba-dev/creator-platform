@@ -22,6 +22,7 @@ import {
 } from "@aiwa/providers";
 import { requireMembership } from "./index";
 import { resolvePresetVoice } from "./voices";
+import { compileCreativeLocaleMediaPrompt } from "./locale";
 import { issueProviderMediaGrant } from "./provider-media-grant";
 import {
   produceSeedAudioLongForm,
@@ -233,6 +234,14 @@ async function recordStorageFailure(
       errorMessage: message,
     },
   });
+}
+
+function withoutCreativeLocaleMetadata(
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  const safePayload = { ...payload };
+  delete safePayload.localeIntent;
+  return safePayload;
 }
 
 export async function processVideoSubmitJob(
@@ -468,11 +477,21 @@ export async function processVideoSubmitJob(
       };
     }
 
+    if (typeof providerInput.prompt === "string") {
+      providerInput = {
+        ...providerInput,
+        prompt: compileCreativeLocaleMediaPrompt(
+          providerInput.prompt,
+          videoPayload.localeIntent,
+          "VIDEO",
+        ),
+      };
+    }
     const result = await provider.submit({
       idempotencyKey: job.idempotencyKey,
       modelId: job.providerModel.providerModelId,
       mediaKind: "video",
-      input: providerInput,
+      input: withoutCreativeLocaleMetadata(providerInput),
     });
     if (result.status !== "submitted" || !result.providerRequestId)
       throw new ProviderRequestError(
@@ -1063,7 +1082,16 @@ export async function processImageJob(
         modelId: job.providerModel.providerModelId,
         mediaKind: "image",
         input: {
-          ...(job.requestPayload as Record<string, unknown>),
+          ...withoutCreativeLocaleMetadata(
+            job.requestPayload as Record<string, unknown>,
+          ),
+          prompt: compileCreativeLocaleMediaPrompt(
+            String(
+              (job.requestPayload as Record<string, unknown>).prompt ?? "",
+            ),
+            (job.requestPayload as Record<string, unknown>).localeIntent,
+            "IMAGE",
+          ),
           referenceImages,
         },
       });
@@ -1533,7 +1561,8 @@ export async function processVoiceJob(
   let directAudioBytes: Buffer | undefined;
   try {
     const payload = job.requestPayload as Record<string, unknown>;
-    let providerInput: Record<string, unknown> = payload;
+    let providerInput: Record<string, unknown> =
+      withoutCreativeLocaleMetadata(payload);
     if (payload.task === "seed-audio") {
       const env = parseServerEnv();
       const base = new URL(env.APP_URL);
@@ -1593,7 +1622,12 @@ export async function processVoiceJob(
       }
       providerInput = {
         task: "seed-audio",
-        textPrompt: payload.textPrompt,
+        textPrompt: compileCreativeLocaleMediaPrompt(
+          String(payload.textPrompt ?? ""),
+          payload.localeIntent,
+          "VOICE",
+          3000,
+        ),
         referenceAudioUrls: audioUrls,
         referenceSpeakerIds,
         ...(imageUrl ? { referenceImageUrl: imageUrl } : {}),
@@ -1623,6 +1657,13 @@ export async function processVoiceJob(
           idempotencyKey: job.idempotencyKey,
           modelId: job.providerModel.providerModelId,
           baseProviderInput: providerInput,
+          compileSegmentPrompt: (segment) =>
+            compileCreativeLocaleMediaPrompt(
+              segment,
+              payload.localeIntent,
+              "VOICE",
+              3000,
+            ),
           textPrompt,
           estimatedDurationSeconds,
           expectedMediaType: voiceOutputAsset.mimeType,

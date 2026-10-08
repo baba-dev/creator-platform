@@ -12,6 +12,10 @@ import {
   voiceRequestSchema,
   videoRequestSchema,
 } from "@aiwa/generation";
+import {
+  creativeLocaleIntentSchema,
+  type CreativeLocaleIntent,
+} from "@aiwa/generation/locale";
 import { z } from "zod";
 import { InsufficientCreditsError } from "@aiwa/credits";
 import { AssetQuotaExceededError } from "@aiwa/assets";
@@ -256,6 +260,8 @@ export async function listPixelWorkflows(ctx: AssistantToolContext) {
               estimatedCredits: quote.estimatedCredits,
               modelName: quote.modelName,
               sourceAssetId: quote.sourceAssetId,
+              localeIntent:
+                (quote.request as Record<string, unknown>).localeIntent ?? null,
             }
           : null,
       };
@@ -267,6 +273,7 @@ export async function quotePixelAction(
   ctx: AssistantToolContext,
   actionId: string,
   selectedSourceId?: string,
+  localeIntent?: CreativeLocaleIntent,
 ) {
   const action = await actionFor(ctx, actionId);
   if (
@@ -357,6 +364,9 @@ export async function quotePixelAction(
     modelId: model.id,
     priceVersionId: price.id,
     idempotencyKey: actionKey(action.id),
+    ...(localeIntent
+      ? { localeIntent: creativeLocaleIntentSchema.parse(localeIntent) }
+      : {}),
   };
   const request =
     step.kind === "IMAGE"

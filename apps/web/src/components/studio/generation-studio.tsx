@@ -4,6 +4,11 @@ import {
   CreativeLocaleSelector,
   useCreativeLocale,
 } from "@/components/studio/creative-locale-selector";
+import {
+  creativeLocaleIntentSchema,
+  sortVoicesForLocale,
+  voiceLocaleMatch,
+} from "@aiwa/generation/locale";
 
 import { countBillableCharacters } from "@aiwa/credits/pricing";
 
@@ -310,11 +315,14 @@ export function GenerationStudio({
 
   const availableVoices = useMemo(
     () =>
-      (data?.voices ?? []).filter(
-        (voice) =>
-          !model || voice.supportedModels.includes(model.providerModelId),
+      sortVoicesForLocale(
+        (data?.voices ?? []).filter(
+          (voice) =>
+            !model || voice.supportedModels.includes(model.providerModelId),
+        ),
+        localeIntent,
       ),
-    [data?.voices, model],
+    [data?.voices, model, localeIntent],
   );
   const selectedVoiceKey = availableVoices.some(
     (voice) => voice.key === voiceKey,
@@ -1076,6 +1084,7 @@ export function GenerationStudio({
           templateName?: unknown;
           mediaKind?: unknown;
           prompt?: unknown;
+          localeIntent?: unknown;
           modelId?: unknown;
           referenceAssetIds?: unknown;
           defaults?: {
@@ -1111,6 +1120,10 @@ export function GenerationStudio({
           );
         }
 
+        const preset = creativeLocaleIntentSchema.safeParse(
+          resolved.localeIntent,
+        );
+        if (preset.success) setLocaleIntent(preset.data);
         setActiveMode(mediaKind);
         setModelId(selectedModel.id);
         setTemplateContext({
@@ -1186,7 +1199,7 @@ export function GenerationStudio({
     return () => {
       cancelled = true;
     };
-  }, [data]);
+  }, [data, setLocaleIntent]);
   async function generate() {
     if (!model || busy || isEnhancing || !activeQuote) return;
     setBusy(true);
@@ -1854,9 +1867,25 @@ export function GenerationStudio({
                     <option key={v.key} value={v.key}>
                       {v.displayName} ({v.gender ? `${v.gender} · ` : ""}
                       {v.locale}){v.style ? ` — ${v.style}` : ""}
+                      {voiceLocaleMatch(v.locale, localeIntent.language) ===
+                      "exact"
+                        ? " · Exact locale"
+                        : ""}
                     </option>
                   ))}
                 </select>
+                {localeIntent.language !== "auto" &&
+                selectedVoiceKey &&
+                voiceLocaleMatch(
+                  availableVoices.find((v) => v.key === selectedVoiceKey)
+                    ?.locale ?? "",
+                  localeIntent.language,
+                ) !== "exact" ? (
+                  <p role="status" className="text-xs text-muted-foreground">
+                    Selected voice is not verified for {localeIntent.language}.
+                    A shared language does not guarantee a regional accent.
+                  </p>
+                ) : null}
 
                 <label
                   htmlFor="voice-speech-rate"

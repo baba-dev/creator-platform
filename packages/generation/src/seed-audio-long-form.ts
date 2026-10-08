@@ -506,6 +506,7 @@ export async function produceSeedAudioLongForm(input: {
   idempotencyKey: string;
   modelId: string;
   baseProviderInput: Record<string, unknown>;
+  compileSegmentPrompt?: (prompt: string) => string;
   textPrompt: string;
   estimatedDurationSeconds: number;
   expectedMediaType: string;
@@ -558,7 +559,8 @@ export async function produceSeedAudioLongForm(input: {
         mediaKind: "voice",
         input: {
           ...input.baseProviderInput,
-          textPrompt: segment.prompt,
+          textPrompt:
+            input.compileSegmentPrompt?.(segment.prompt) ?? segment.prompt,
         },
       });
       if (

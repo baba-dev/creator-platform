@@ -100,6 +100,7 @@ export async function getPixelModelCatalog(
       displayName: true,
       description: true,
       mediaKind: true,
+      enabled: true,
       capabilities: true,
       priceVersions: {
         where: {
@@ -121,7 +122,7 @@ export async function getPixelModelCatalog(
 
   const models = rows.flatMap((row) => {
     const price = row.priceVersions[0];
-    if (!price) return [];
+    if (!row.enabled || !price) return [];
     // A disabled or unconfigured provider is not an available end-user model.
     if (!getProviderRuntimeReadiness({
       provider: row.provider,

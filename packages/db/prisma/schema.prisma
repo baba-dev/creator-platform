@@ -1203,6 +1203,7 @@ model ChatThread {
   providerModel  ProviderModel? @relation("ChatThreadProviderModel", fields: [providerModelRecordId], references: [id], onDelete: SetNull)
   messages       ChatMessage[]
   pixelWorkflows     PixelWorkflow[]
+  creativeWorkflows  CreativeWorkflow[]
   assistantReminders AssistantReminder[]
   supportRequests    SupportRequest[]
   generationJobs     GenerationJob[]
@@ -1408,3 +1409,83 @@ model PixelPreference {
   user           User @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@id([organizationId, userId])
 }
+
+// Conversation v3 / Orchestration durable workflow models
+model CreativeWorkflow {
+  id             String                   @id @default(cuid())
+  threadId       String
+  organizationId String
+  projectId      String?
+  requestKey     String                   @db.VarChar(128)
+  title          String                   @db.VarChar(160)
+  revision       Int                      @default(1)
+  status         String                   @default("DRAFT") @db.VarChar(32)
+  metadata       Json?
+  cancelledAt    DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+  thread         ChatThread               @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  steps          CreativeWorkflowStep[]
+  events         CreativeWorkflowEvent[]
+
+  @@unique([threadId, requestKey])
+  @@index([organizationId, status, createdAt])
+  @@index([threadId, createdAt])
+}
+
+model CreativeWorkflowStep {
+  id             String                        @id @default(cuid())
+  workflowId     String
+  position       Int
+  task           String                        @db.VarChar(64)
+  title          String                        @db.VarChar(160)
+  status         String                        @default("DRAFT") @db.VarChar(32)
+  modelId        String?                       @db.VarChar(128)
+  payload        Json
+  quote          Json?
+  jobId          String?                       @db.VarChar(191)
+  outputs        Json?
+  error          String?                       @db.Text
+  approvedAt     DateTime?
+  createdAt      DateTime                      @default(now())
+  updatedAt      DateTime                      @updatedAt
+  workflow       CreativeWorkflow              @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  dependencies   CreativeWorkflowDependency[]  @relation("StepDependencies")
+  dependents     CreativeWorkflowDependency[]  @relation("StepDependents")
+  events         CreativeWorkflowEvent[]
+
+  @@unique([workflowId, position])
+  @@index([workflowId, status])
+  @@index([jobId])
+}
+
+model CreativeWorkflowDependency {
+  id           String               @id @default(cuid())
+  stepId       String
+  sourceStepId String
+  outputIndex  Int                  @default(0)
+  role         String               @db.VarChar(64)
+  createdAt    DateTime             @default(now())
+  step         CreativeWorkflowStep @relation("StepDependencies", fields: [stepId], references: [id], onDelete: Cascade)
+  sourceStep   CreativeWorkflowStep @relation("StepDependents", fields: [sourceStepId], references: [id], onDelete: Cascade)
+
+  @@unique([stepId, sourceStepId, outputIndex])
+  @@index([sourceStepId])
+}
+
+model CreativeWorkflowEvent {
+  id         String                @id @default(cuid())
+  workflowId String
+  stepId     String?
+  type       String                @db.VarChar(64)
+  status     String?               @db.VarChar(32)
+  payload    Json?
+  createdAt  DateTime              @default(now())
+  workflow   CreativeWorkflow      @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  step       CreativeWorkflowStep? @relation(fields: [stepId], references: [id], onDelete: Cascade)
+
+  @@index([workflowId, createdAt])
+  @@index([stepId, createdAt])
+}
+

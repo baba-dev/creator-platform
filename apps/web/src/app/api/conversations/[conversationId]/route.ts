@@ -61,6 +61,18 @@ export async function GET(
           },
         },
       },
+      creativeWorkflows: {
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        include: {
+          steps: {
+            orderBy: { position: "asc" },
+            include: {
+              dependencies: true,
+            },
+          },
+        },
+      },
     },
   });
 
@@ -111,6 +123,7 @@ export async function GET(
       ...job,
       availableActions: availableActions.get(job.id) ?? [],
     })),
+    creativeWorkflows: thread.creativeWorkflows,
   });
 
   return NextResponse.json(

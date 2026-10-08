@@ -23,6 +23,7 @@
     "@aiwa/db": "workspace:*",
     "@aiwa/generation": "workspace:*",
     "@aiwa/mail": "workspace:*",
+    "@aiwa/orchestration": "workspace:*",
     "@aiwa/providers": "workspace:*",
     "@prisma/client": "6.19.3",
     "bullmq": "6.3.5",

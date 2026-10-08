@@ -1,0 +1,42 @@
+{
+  "name": "@aiwa/orchestration",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./contracts": "./src/contracts/index.ts",
+    "./capabilities": "./src/capabilities/index.ts",
+    "./planning": "./src/planning/index.ts",
+    "./workflow": "./src/workflow/index.ts",
+    "./approval": "./src/approval/index.ts",
+    "./execution": "./src/execution/index.ts",
+    "./recovery": "./src/recovery/index.ts",
+    "./adapters": "./src/adapters/index.ts",
+    "./events": "./src/events/index.ts",
+    "./context": "./src/context/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "clean": "rm -rf .turbo",
+    "lint": "eslint src test --max-warnings=0",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aiwa/assets": "workspace:*",
+    "@aiwa/authz": "workspace:*",
+    "@aiwa/config": "workspace:*",
+    "@aiwa/core": "workspace:*",
+    "@aiwa/credits": "workspace:*",
+    "@aiwa/db": "workspace:*",
+    "@aiwa/generation": "workspace:*",
+    "@aiwa/observability": "workspace:*",
+    "@aiwa/organizations": "workspace:*",
+    "@aiwa/providers": "workspace:*",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.11"
+  }
+}

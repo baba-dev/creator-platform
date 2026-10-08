@@ -7,6 +7,7 @@ import {
 import type { ConversationAction, TurnPlan } from "./action-protocol";
 import { ACTION_PROTOCOL_VERSION } from "./action-protocol";
 import { resolveCreativeToolHandoff } from "./tool-handoff";
+import { classifyIntentDeterministically } from "@aiwa/orchestration";
 
 /**
  * Normalizes aspect ratio synonyms into canonical values.
@@ -100,6 +101,19 @@ export async function planConversationTurn(params: {
         },
       ],
       reasoning: "Specialist feature handoff, no generation dispatched.",
+    };
+  }
+
+  const intentClassification = classifyIntentDeterministically(text);
+  if (
+    intentClassification.intent === "ANSWER" ||
+    intentClassification.intent === "EXPLORE"
+  ) {
+    return {
+      version: ACTION_PROTOCOL_VERSION,
+      actions: [{ type: "answer_question", question: text }],
+      reasoning:
+        "A question or consultation request is not a media generation authorization.",
     };
   }
 

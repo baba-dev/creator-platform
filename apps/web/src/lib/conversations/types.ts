@@ -40,6 +40,7 @@ export interface ConversationState {
   activeOutputs: ActiveOutputItem[];
   pendingOperation?: ConversationPendingOperation | null;
   inFlightTurn?: ConversationInFlightTurn | null;
+  activeWorkflowId?: string | null;
   revision?: number;
 }
 

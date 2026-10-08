@@ -139,6 +139,7 @@ export function CreativeConversationWorkspace({
   initialState,
   initialMessages,
   initialJobs,
+  initialWorkflows,
   canGenerate,
 }: {
   organizationSlug: string;
@@ -148,6 +149,7 @@ export function CreativeConversationWorkspace({
   initialState?: ConversationState | null;
   initialMessages: MessageItem[];
   initialJobs: GenerationJobItem[];
+  initialWorkflows?: any[];
   canGenerate: boolean;
 }) {
   const [title, setTitle] = useState(initialTitle);
@@ -155,6 +157,7 @@ export function CreativeConversationWorkspace({
   const [titleDraft, setTitleDraft] = useState(initialTitle);
   const [messages, setMessages] = useState<MessageItem[]>(initialMessages);
   const [jobs, setJobs] = useState<GenerationJobItem[]>(initialJobs);
+  const [workflows, setWorkflows] = useState<any[]>(initialWorkflows ?? []);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [activeAssetId, setActiveAssetId] = useState<string | null>(
     initialState?.activeAssetId ?? initialJobs[0]?.assets[0]?.id ?? null,
@@ -1232,6 +1235,53 @@ export function CreativeConversationWorkspace({
               </div>
             );
           })}
+
+          {/* Orchestration v3 Workflow Plan Board */}
+          {workflows.length > 0 ? (
+            <div className="my-4 rounded-2xl border border-primary/40 bg-card p-4 shadow-sm">
+              <div className="flex items-center justify-between pb-3 border-b border-border/60">
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
+                    Orchestrated Creative Workflow
+                  </span>
+                  <h4 className="text-sm font-semibold text-foreground">
+                    {workflows[0].title}
+                  </h4>
+                </div>
+                <span className="rounded-full bg-primary/10 border border-primary/20 px-2.5 py-0.5 text-[11px] font-medium text-primary">
+                  {workflows[0].status}
+                </span>
+              </div>
+              <div className="mt-3 space-y-2">
+                {workflows[0].steps?.map((step: any, index: number) => (
+                  <div
+                    key={step.id ?? index}
+                    className="flex items-center justify-between rounded-xl border border-border/80 bg-surface-sunken p-2.5 text-xs"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="flex size-5 items-center justify-center rounded-full bg-primary/20 text-[10px] font-bold text-primary">
+                        {index + 1}
+                      </span>
+                      <div>
+                        <p className="font-semibold text-foreground">
+                          {step.title}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {step.task}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-md border border-border bg-card px-2 py-0.5 text-[10px] text-muted-foreground">
+                        {step.status}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           <div ref={messageEndRef} />
         </section>
       </div>

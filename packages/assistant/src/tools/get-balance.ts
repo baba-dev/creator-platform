@@ -18,7 +18,7 @@ export const getBalanceTool: AssistantTool<z.infer<typeof inputSchema>> = {
     const balance = wallet?.balanceCache ?? 0n;
     return {
       balanceCredits: balance.toString(),
-      balanceDisplay: `${balance.toLocaleString()} credits`,
+      balanceDisplay: `${balance.toLocaleString("en-US")} credits`,
     };
   },
 };

@@ -180,6 +180,12 @@ export const clarifyActionSchema = z.object({
     .default([]),
 });
 
+export const workflowPlanActionSchema = z.object({
+  type: z.literal("workflow_plan"),
+  title: z.string().min(1).max(160),
+  workflow: z.record(z.string(), z.unknown()),
+});
+
 export const conversationActionSchema = z.discriminatedUnion("type", [
   selectAssetActionSchema,
   generateImageActionSchema,
@@ -200,6 +206,7 @@ export const conversationActionSchema = z.discriminatedUnion("type", [
   answerQuestionActionSchema,
   openToolActionSchema,
   clarifyActionSchema,
+  workflowPlanActionSchema,
 ]);
 
 export type ConversationAction = z.infer<typeof conversationActionSchema>;

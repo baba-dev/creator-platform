@@ -77,6 +77,44 @@ export async function planConversationTurn(params: {
   const text = userMessage.trim();
   const lower = text.toLowerCase();
   const actions: ConversationAction[] = [];
+
+  // Questions, consultation and capability discovery are NEVER implicit paid
+  // media requests. Interpret them as a read-only conversational turn.
+  const isNonGenerationQuestion =
+    /\\?$/.test(text) ||
+    /^(?:what|why|which|who|where|when|how|explain|describe|help me|tell me|can you tell|could you explain|i want to know|let's plan|lets plan|plan a|suggest|recommend|compare)\\b/i.test(text);
+  if (isNonGenerationQuestion) {
+    return {
+      version: ACTION_PROTOCOL_VERSION,
+      actions: [{ type: "answer_question", question: text }],
+      reasoning: "A question or planning request is not a media generation authorization.",
+    };
+  }
+
+  // Recognize explicit settings before the asset-reference resolver. A setting
+  // patch can use the selected output without asking a misleading question.
+  const resolutionMatch = /\\b(480p|720p|1080p|1k|1\\.5k|2k|3k|4k)\\b/i.exec(text);
+  const resolution = resolutionMatch?.[1]?.toUpperCase().replace(/P$/, "p") as
+    | "480p" | "720p" | "1080p" | "1K" | "1.5K" | "2K" | "3K" | "4K" | undefined;
+  const isResolutionIntent =
+    Boolean(resolution) &&
+    /^(?:make|change|set|switch|render|convert|upscale|increase|decrease|use|output|export)\\b|\\b(?:resolution|quality)\\b/i.test(text);
+  const voiceMatch = /^(?:change|switch|set|use)\\s+(?:the\\s+)?voice\\s+(?:to\\s+)?([a-z][a-z0-9_-]{1,60})[.!]?$/i.exec(text);
+  if (context.activeModality === "VOICE" && voiceMatch) {
+    return {
+      version: ACTION_PROTOCOL_VERSION,
+      actions: [{ type: "change_voice", voiceKey: voiceMatch[1]!.toLowerCase() }],
+      reasoning: "Explicit speech voice change.",
+    };
+  }
+  if (/\\b(?:enhance|improve|optimi[sz]e)\\s+(?:my |the )?prompt\\b/i.test(text) ||
+      /\\blast frame\\b/i.test(text)) {
+    return {
+      version: ACTION_PROTOCOL_VERSION,
+      actions: [{ type: "answer_question", question: text }],
+      reasoning: "Advanced Studio workflow requires an explicit handoff, not an invented billable action.",
+    };
+  }
   const ratio = normalizeAspectRatioPhrase(text);
   const isAspectRatioIntent =
     ratio !== null &&
@@ -87,6 +125,21 @@ export async function planConversationTurn(params: {
       /^(?:9:16|16:9|1:1|4:3|3:4|3:2|2:3|21:9|vertical|portrait|horizontal|landscape|square|widescreen)\.?$/i.test(
         text,
       ));
+
+  if (isResolutionIntent || isAspectRatioIntent) {
+    const changes: ConversationAction[] = [];
+    if (isAspectRatioIntent && ratio) {
+      changes.push({ type: "change_aspect_ratio", aspectRatio: ratio });
+    }
+    if (isResolutionIntent && resolution) {
+      changes.push({ type: "change_resolution", resolution });
+    }
+    return {
+      version: ACTION_PROTOCOL_VERSION,
+      actions: changes,
+      reasoning: "Explicit creative settings adjustment.",
+    };
+  }
 
   // =========================================================
   // 1. Check for Ambiguity / Clarification from Reference Resolver

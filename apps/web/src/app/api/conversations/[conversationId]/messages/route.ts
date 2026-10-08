@@ -19,6 +19,7 @@ import {
   type ContextBuilderJobSummary,
 } from "../../../../../lib/conversations/context-builder";
 import { planConversationTurn } from "../../../../../lib/conversations/planner";
+import { answerCreativeQuestion } from "../../../../../lib/conversations/read-only-response";
 import { findCompatibleAlternativeModel } from "../../../../../lib/conversations/capability-router";
 import type {
   ConversationState,
@@ -41,6 +42,7 @@ const messageInputSchema = z
     mode: z.enum(["plan", "execute"]).default("execute"),
     resumePendingOperation: z.boolean().optional().default(false),
     idempotencyKey: z.string().uuid(),
+    planFingerprint: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   })
   .superRefine((value, context) => {
     if (value.mode === "execute" && value.expectedRevision === undefined) {
@@ -540,9 +542,43 @@ export async function POST(
     const firstAction = plan.actions[0]!;
 
     // =========================================================
+    // Case 0: Explicit non-billable questions and creative consultation.
+    if (firstAction.type === "answer_question") {
+      if (input.mode === "plan") {
+        return NextResponse.json({
+          mode: "plan", billable: false, action: firstAction.type,
+          expectedRevision: currentState.revision ?? 0,
+        });
+      }
+      if (Number(currentState.revision ?? 0) !== input.expectedRevision) {
+        return NextResponse.json({
+          error: "Conversation state was modified. Refresh and try again.",
+          code: "CONVERSATION_CONFLICT",
+        }, { status: 409 });
+      }
+      const userMessage = await upsertUserMessage();
+      const answer = answerCreativeQuestion(firstAction.question, plannerContext);
+      const assistantMessage = await upsertMessage(
+        "assistant",
+        `${input.idempotencyKey}-answer`,
+        answer,
+        { turnStatus: "COMPLETED", actions: [] },
+      );
+      return NextResponse.json({
+        userMessage, assistantMessage, status: 200,
+        revision: currentState.revision ?? 0,
+      });
+    }
+
     // Case 1: Clarification needed (Ambiguity)
     // =========================================================
     if (firstAction.type === "clarify") {
+      if (input.mode === "plan") {
+        return NextResponse.json({
+          mode: "plan", billable: false, action: firstAction.type,
+          expectedRevision: currentState.revision ?? 0,
+        });
+      }
       const nextState = await mutateConversationState(
         conversationId,
         currentState,
@@ -589,6 +625,12 @@ export async function POST(
     // Case 2: State-Only Selection (Zero credits)
     // =========================================================
     if (firstAction.type === "select_asset" && plan.actions.length === 1) {
+      if (input.mode === "plan") {
+        return NextResponse.json({
+          mode: "plan", billable: false, action: firstAction.type,
+          expectedRevision: currentState.revision ?? 0,
+        });
+      }
       let selectedAssetId: string | undefined;
       let label = "Asset selected";
 
@@ -1025,10 +1067,35 @@ export async function POST(
 
     const priceVersion = model.priceVersions[0];
 
+    // Binding the approval to the exact effective spec prevents stale
+    // confirmations from silently executing a different model or prompt.
+    const planFingerprint = createHash("sha256")
+      .update(JSON.stringify({
+        modality: targetModality, modelId: model.id,
+        priceVersionId: priceVersion.id, prompt: targetPrompt,
+        aspectRatio: targetRatio, resolution: targetResolution,
+        outputCount: targetOutputCount, durationSeconds: targetDuration,
+        voiceKey: targetVoiceKey, speechRate: targetSpeechRate,
+        referenceAssetIds: imageReferenceAssetIds,
+        videoWorkflow, firstFrameAssetId, videoSourceAssetId,
+        extensionDirection,
+        sourceGenerationId: sourceJob?.id ?? latestJob?.id ?? null,
+      }))
+      .digest("hex");
+    if (input.mode === "execute" && input.planFingerprint &&
+        input.planFingerprint !== planFingerprint) {
+      throw new GenerationError(
+        "The model, price or creative plan changed. Review the generation again.",
+        409,
+      );
+    }
+
     // If client requested planning mode, return plan parameters before executing billable generation
     if (input.mode === "plan") {
       return NextResponse.json({
         mode: "plan",
+        billable: true,
+        planFingerprint,
         action: firstAction.type,
         targetModality,
         model: {
@@ -1046,6 +1113,16 @@ export async function POST(
         sourceGenerationId: sourceJob?.id ?? latestJob?.id ?? null,
         expectedRevision: currentState.revision ?? 0,
         priceVersionId: priceVersion.id,
+        referenceAssetIds: imageReferenceAssetIds,
+        voiceKey: targetVoiceKey,
+        speechRate: targetSpeechRate,
+        videoWorkflow: targetModality === "VIDEO" ? videoWorkflow : undefined,
+        firstFrameAssetId,
+        videoSourceAssetId,
+        extensionDirection,
+        returnLastFrame:
+          targetModality === "VIDEO" &&
+          (model.capabilities as Record<string, unknown> | null)?.returnLastFrame === true,
       });
     }
 

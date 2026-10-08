@@ -54,6 +54,34 @@ describe("Conversational Creative Action Planner", () => {
     recentTurns: [],
   };
 
+  it("does not turn questions into paid image generation", async () => {
+    const plan = await planConversationTurn({
+      userMessage: "Which model did you use?",
+      organizationId: "org_1", context: baseContext,
+    });
+    expect(plan.actions).toEqual([
+      { type: "answer_question", question: "Which model did you use?" },
+    ]);
+  });
+
+  it("recognizes resolution and voice settings", async () => {
+    const resolution = await planConversationTurn({
+      userMessage: "Set resolution to 4K",
+      organizationId: "org_1", context: baseContext,
+    });
+    expect(resolution.actions).toEqual([
+      { type: "change_resolution", resolution: "4K" },
+    ]);
+    const voice = await planConversationTurn({
+      userMessage: "Change voice to jasper",
+      organizationId: "org_1",
+      context: { ...baseContext, activeModality: "VOICE" },
+    });
+    expect(voice.actions).toEqual([
+      { type: "change_voice", voiceKey: "jasper" },
+    ]);
+  });
+
   it("plans state-only asset selection: 'Use the second image.'", async () => {
     const plan = await planConversationTurn({
       userMessage: "Use the second image.",

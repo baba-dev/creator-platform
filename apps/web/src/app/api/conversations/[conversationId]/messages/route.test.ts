@@ -275,6 +275,39 @@ describe("POST /api/conversations/[conversationId]/messages", () => {
     );
   });
 
+  it("previews a question without reserving or creating a job", async () => {
+    const req = new Request("https://example.com/api/conversations/conv_1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        content: "Which model did you use?",
+        mode: "plan", idempotencyKey: "11111111-1111-4111-8111-111111111111",
+      }),
+    });
+    const res = await POST(req, { params: Promise.resolve({ conversationId: "conv_1" }) });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.billable).toBe(false);
+    expect(mocks.createImageJob).not.toHaveBeenCalled();
+    expect(mocks.db.chatMessage.upsert).not.toHaveBeenCalled();
+  });
+
+  it("responds to a question without starting billable generation", async () => {
+    const req = new Request("https://example.com/api/conversations/conv_1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        content: "Which model did you use?",
+        mode: "execute", expectedRevision: 0,
+        idempotencyKey: "22222222-2222-4222-8222-222222222221",
+      }),
+    });
+    const res = await POST(req, { params: Promise.resolve({ conversationId: "conv_1" }) });
+    expect(res.status).toBe(200);
+    expect(mocks.createImageJob).not.toHaveBeenCalled();
+    expect(mocks.db.chatMessage.upsert).toHaveBeenCalled();
+  });
+
   it("handles state-only selection: 'Use the second image.' with 0 credits", async () => {
     const req = new Request(
       "https://example.com/api/conversations/conv_1/messages",

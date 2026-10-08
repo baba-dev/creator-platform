@@ -13,11 +13,11 @@ export const ProjectContextSnapshotSchema = z.object({
     .optional(),
   locale: z
     .object({
-      language: z.string().default("ar"),
-      region: z.string().default("OM"),
+      language: z.string().default("auto"),
+      region: z.string().default("auto"),
       dialect: z.string().optional(),
     })
-    .default({ language: "ar", region: "OM" }),
+    .default({ language: "auto", region: "auto" }),
   pinnedModelIds: z.record(z.string(), z.string()).default({}),
   recentTurnSummaries: z.array(z.string()).max(10).default([]),
   activeAssetIds: z.array(z.string()).max(14).default([]),
@@ -28,7 +28,7 @@ export type ProjectContextSnapshot = z.infer<
 >;
 
 /**
- * Validates that all active assets referenced in context belong exclusively to the given organization.
+ * Validates the shape of a context snapshot. Asset ownership MUST be resolved through the database before ingestion or execution; this pure function cannot prove tenant access.
  */
 export function buildContextEnvelope(
   snapshot: ProjectContextSnapshot,

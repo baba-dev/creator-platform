@@ -89,6 +89,12 @@ describe("provider tool media retrieval", () => {
         mimeType: "image/png",
       },
       {
+        role: "WATERMARK_IMAGE",
+        position: 1,
+        mediaKind: "IMAGE",
+        mimeType: "image/png",
+      },
+      {
         role: "SOURCE_AUDIO",
         position: 1,
         mediaKind: "AUDIO",
@@ -157,4 +163,30 @@ describe("provider tool media retrieval", () => {
     expect(head.body).toBeNull();
     expect(head.headers.get("Content-Length")).toBe("16");
   });
+});
+
+it("rejects a mismatched or private logo grant", async () => {
+  const row = await mocks.db.providerToolInputAsset.findUnique();
+  for (const patch of [
+    { position: 0 },
+    {
+      asset: {
+        ...row.asset,
+        mediaKind: "IMAGE",
+        mimeType: "image/png",
+        storageOwnerUserId: "other",
+      },
+    },
+  ]) {
+    mocks.db.providerToolInputAsset.findUnique.mockResolvedValueOnce({
+      ...row,
+      role: "WATERMARK_IMAGE",
+      position: 1,
+      asset: { ...row.asset, mediaKind: "IMAGE", mimeType: "image/png" },
+      ...patch,
+    });
+    expect((await HEAD(new Request(url(validGrant())), context)).status).toBe(
+      404,
+    );
+  }
 });

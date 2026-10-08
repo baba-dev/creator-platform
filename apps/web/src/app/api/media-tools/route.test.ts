@@ -2,9 +2,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   session: vi.fn(),
+  membership: vi.fn(),
+  db: {
+    providerTool: { findMany: vi.fn() },
+    asset: { findMany: vi.fn() },
+    providerToolExecution: { findMany: vi.fn() },
+  },
   origin: vi.fn(),
   configured: vi.fn(),
   prepare: vi.fn(),
+  recover: vi.fn(),
   create: vi.fn(),
   check: vi.fn(),
 }));
@@ -24,10 +31,13 @@ vi.mock("@aiwa/generation/media-tools", async (original) => {
   return {
     ...actual,
     prepareMediaToolRequest: mocks.prepare,
+    recoverMediaToolRequest: mocks.recover,
     createProviderToolExecution: mocks.create,
   };
 });
-import { POST } from "./route";
+vi.mock("@aiwa/db", () => ({ db: mocks.db }));
+vi.mock("@aiwa/generation", () => ({ requireMembership: mocks.membership }));
+import { GET, POST } from "./route";
 const body = {
   organizationId: "org",
   toolKey: "crop-image",
@@ -58,6 +68,7 @@ beforeEach(() => {
   mocks.configured.mockReturnValue(true);
   mocks.check.mockResolvedValue(null);
   mocks.prepare.mockResolvedValue(prepared);
+  mocks.recover.mockResolvedValue(null);
   mocks.create.mockResolvedValue({ id: "execution", status: "QUEUED" });
 });
 describe("MediaKit quote acceptance", () => {
@@ -118,5 +129,84 @@ describe("MediaKit quote acceptance", () => {
       sourceAssets: prepared.sourceAssets,
       idempotencyKey,
     });
+  });
+});
+
+it("recovers an accepted request before current-price admission", async () => {
+  mocks.recover.mockResolvedValue({ id: "saved", status: "SUCCEEDED" });
+  const response = await POST(
+    request({
+      ...body,
+      action: "execute",
+      priceVersionId: "retired-price",
+      reservedCredits: "2",
+      idempotencyKey: "50a49a7b-b2f4-4cf4-8050-e167710996d6",
+    }),
+  );
+  expect(response.status).toBe(202);
+  expect(await response.json()).toEqual({
+    execution: { id: "saved", status: "SUCCEEDED" },
+  });
+  expect(mocks.prepare).not.toHaveBeenCalled();
+  expect(mocks.create).not.toHaveBeenCalled();
+});
+
+describe("MediaKit workspace metadata", () => {
+  it("requires membership before reading tenant assets", async () => {
+    mocks.membership.mockRejectedValue(new Error("denied"));
+    const response = await GET(
+      new Request("https://example.com/api/media-tools?organizationId=other"),
+    );
+    expect(response.status).toBe(403);
+    expect(mocks.db.asset.findMany).not.toHaveBeenCalled();
+  });
+  it("projects bounded variants and integer sizes without exposing storage keys", async () => {
+    mocks.membership.mockResolvedValue({ role: "MEMBER" });
+    mocks.db.providerTool.findMany.mockResolvedValue([]);
+    mocks.db.providerToolExecution.findMany.mockResolvedValue([]);
+    mocks.db.asset.findMany.mockResolvedValue([
+      {
+        id: "asset",
+        name: null,
+        originalFilename: "image.png",
+        mediaKind: "IMAGE",
+        mimeType: "image/png",
+        width: 640,
+        height: 480,
+        durationMs: null,
+        byteSize: 1024n,
+        variants: [{ kind: "THUMBNAIL" }],
+      },
+    ]);
+    const response = await GET(
+      new Request("https://example.com/api/media-tools?organizationId=org"),
+    );
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.assets[0]).toMatchObject({
+      name: "image.png",
+      byteSize: "1024",
+      width: 640,
+      variants: [{ kind: "THUMBNAIL" }],
+    });
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+    expect(mocks.db.asset.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          organizationId: "org",
+          OR: [
+            { purpose: { not: "REFERENCE_INPUT" } },
+            { storageOwnerUserId: "user" },
+          ],
+        }),
+        take: 100,
+        select: expect.objectContaining({
+          variants: expect.objectContaining({ select: { kind: true } }),
+        }),
+      }),
+    );
+    const selection = mocks.db.asset.findMany.mock.calls[0]![0].select;
+    expect(selection.objectKey).toBeUndefined();
+    expect(selection.externalFileId).toBeUndefined();
   });
 });

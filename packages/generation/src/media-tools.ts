@@ -35,6 +35,7 @@ import {
 import {
   parseMediaToolInput,
   mediaToolSourceRoles,
+  mediaToolImageInputFits,
   scrollingDurationCeiling,
 } from "./media-tool-input";
 
@@ -75,7 +76,12 @@ export const providerToolExecutionRequestSchema = z
         z
           .object({
             assetId: z.string().min(1).max(128),
-            role: z.enum(["SOURCE_VIDEO", "SOURCE_IMAGE", "SOURCE_AUDIO"]),
+            role: z.enum([
+              "SOURCE_VIDEO",
+              "SOURCE_IMAGE",
+              "SOURCE_AUDIO",
+              "WATERMARK_IMAGE",
+            ]),
             position: z.number().int().min(0).max(9),
           })
           .strict(),
@@ -379,7 +385,10 @@ async function materializeProviderInput(execution: {
   createdById: string;
 }): Promise<Record<string, unknown>> {
   const semantic = toolResultRecord(execution.requestPayload);
-  const roles = mediaToolSourceRoles(execution.providerTool.providerToolId);
+  const roles = mediaToolSourceRoles(
+    execution.providerTool.providerToolId,
+    semantic,
+  );
   const env = parseServerEnv();
   const base = new URL(env.APP_URL);
   if (base.protocol !== "https:")
@@ -402,7 +411,8 @@ async function materializeProviderInput(execution: {
       !asset ||
       asset.organizationId !== execution.organizationId ||
       asset.status !== "READY" ||
-      asset.mediaKind !== role.replace("SOURCE_", "") ||
+      asset.mediaKind !==
+        (role === "WATERMARK_IMAGE" ? "IMAGE" : role.replace("SOURCE_", "")) ||
       (asset.purpose === "REFERENCE_INPUT" &&
         asset.storageOwnerUserId !== execution.createdById)
     ) {
@@ -500,6 +510,21 @@ export async function createProviderToolExecution(
         409,
       );
     }
+    const semanticInput = parseMediaToolInput(tool.providerToolId, input.input);
+    const expectedRoles = mediaToolSourceRoles(
+      tool.providerToolId,
+      semanticInput,
+    );
+    if (
+      input.sourceAssets.length !== expectedRoles.length ||
+      new Set(input.sourceAssets.map((ref) => ref.assetId)).size !==
+        expectedRoles.length ||
+      input.sourceAssets.some(
+        (ref, position) =>
+          ref.role !== expectedRoles[position] || ref.position !== position,
+      )
+    )
+      throw new ProviderToolExecutionError("Select the required source media.");
     let sourceAsset: {
       id: string;
       organizationId: string;
@@ -511,6 +536,8 @@ export async function createProviderToolExecution(
       mimeType: string;
       durationMs: number | null;
       byteSize: bigint;
+      width: number | null;
+      height: number | null;
       generationJob: {
         status: string;
         requestPayload: unknown;
@@ -545,6 +572,8 @@ export async function createProviderToolExecution(
           mimeType: true,
           durationMs: true,
           byteSize: true,
+          width: true,
+          height: true,
           generationJob: {
             select: {
               status: true,
@@ -637,7 +666,7 @@ export async function createProviderToolExecution(
     } else {
       const ref = input.sourceAssets[0];
       if (
-        input.sourceAssets.length !== 1 ||
+        input.sourceAssets.length !== expectedRoles.length ||
         ref?.role !== "SOURCE_IMAGE" ||
         ref.position !== 0
       )
@@ -679,9 +708,44 @@ export async function createProviderToolExecution(
           409,
         );
     }
-    const semanticInput = parseMediaToolInput(tool.providerToolId, input.input);
+    if (
+      sourceAsset &&
+      !mediaToolImageInputFits(
+        semanticInput,
+        sourceAsset.width,
+        sourceAsset.height,
+      )
+    )
+      throw new ProviderToolExecutionError(
+        "Crop exceeds the source dimensions or trusted dimensions are missing.",
+      );
     const extraSources = [];
     for (const ref of input.sourceAssets.slice(1)) {
+      if (ref.role === "WATERMARK_IMAGE") {
+        const logo = await tx.asset.findFirst({
+          where: { id: ref.assetId, organizationId: input.organizationId },
+        });
+        if (
+          !logo ||
+          logo.status !== "READY" ||
+          logo.mediaKind !== "IMAGE" ||
+          !["image/png", "image/jpeg", "image/webp"].includes(logo.mimeType) ||
+          logo.byteSize <= 0n ||
+          logo.byteSize > 5n * 1024n * 1024n ||
+          (logo.purpose === "REFERENCE_INPUT" &&
+            logo.storageOwnerUserId !== userId)
+        )
+          throw new ProviderToolExecutionError(
+            "Logo is unavailable or exceeds 5 MiB.",
+          );
+        extraSources.push({
+          executionId: "",
+          assetId: logo.id,
+          position: ref.position,
+          role: ref.role,
+        });
+        continue;
+      }
       if (ref.role !== "SOURCE_AUDIO" || ref.position !== 1)
         throw new ProviderToolExecutionError("Invalid source role.");
       const audio = await tx.asset.findFirst({
@@ -1576,6 +1640,60 @@ export async function processProviderToolExecution(
   await finalizeSucceededExecution(execution.id);
 }
 
+// Recover an accepted request before consulting today's price or source metadata.
+// Its original reservation and exact semantic snapshot remain authoritative.
+export async function recoverMediaToolRequest(
+  userId: string,
+  params: {
+    organizationId: string;
+    toolKey: string;
+    assetIds: string[];
+    input: unknown;
+    idempotencyKey: string;
+    priceVersionId?: string;
+    reservedCredits?: string;
+  },
+) {
+  await requireToolMembership(db, params.organizationId, userId);
+  const existing = await db.providerToolExecution.findUnique({
+    where: {
+      idempotencyKey: executionKey(
+        params.organizationId,
+        userId,
+        params.idempotencyKey,
+      ),
+    },
+    include: { providerTool: { select: { providerToolId: true } } },
+  });
+  if (!existing) return null;
+  const semantic = parseMediaToolInput(params.toolKey, params.input);
+  const roles = mediaToolSourceRoles(params.toolKey, semantic);
+  const hash = providerToolRequestHash({
+    toolId: existing.providerToolId,
+    priceVersionId: existing.priceVersionId,
+    quotedQuantity: existing.quotedQuantity,
+    payload: semantic,
+    sourceAssets: params.assetIds.map((assetId, position) => ({
+      assetId,
+      position,
+      role: roles[position] ?? "INVALID",
+    })),
+  });
+  if (
+    existing.organizationId !== params.organizationId ||
+    existing.createdById !== userId ||
+    existing.providerTool.providerToolId !== params.toolKey ||
+    params.priceVersionId !== existing.priceVersionId ||
+    params.reservedCredits !== existing.reservedCredits.toString() ||
+    hash !== existing.requestHash
+  )
+    throw new ProviderToolExecutionError(
+      "Request key was already used for different tool inputs.",
+      409,
+    );
+  return existing;
+}
+
 export async function prepareMediaToolRequest(
   userId: string,
   params: {
@@ -1608,7 +1726,7 @@ export async function prepareMediaToolRequest(
   if (!tool || !price || tool.pricingMetric !== price.pricingMetric)
     throw new ProviderToolExecutionError("Tool pricing is unavailable.", 409);
   const semantic = parseMediaToolInput(params.toolKey, params.input);
-  const roles = mediaToolSourceRoles(params.toolKey);
+  const roles = mediaToolSourceRoles(params.toolKey, semantic);
   if (
     params.assetIds.length !== roles.length ||
     new Set(params.assetIds).size !== roles.length
@@ -1625,13 +1743,27 @@ export async function prepareMediaToolRequest(
     });
     if (
       !asset ||
-      asset.mediaKind !== role.replace("SOURCE_", "") ||
+      asset.mediaKind !==
+        (role === "WATERMARK_IMAGE" ? "IMAGE" : role.replace("SOURCE_", "")) ||
       (asset.purpose === "REFERENCE_INPUT" &&
         asset.storageOwnerUserId !== userId)
     )
       throw new ProviderToolExecutionError("Source media is unavailable.", 404);
+    if (
+      role === "WATERMARK_IMAGE" &&
+      (!["image/png", "image/jpeg", "image/webp"].includes(asset.mimeType) ||
+        asset.byteSize <= 0n ||
+        asset.byteSize > 5n * 1024n * 1024n)
+    )
+      throw new ProviderToolExecutionError(
+        "Logo must be PNG, JPEG or WebP and at most 5 MiB.",
+      );
     assets.push(asset);
   }
+  if (!mediaToolImageInputFits(semantic, assets[0]!.width, assets[0]!.height))
+    throw new ProviderToolExecutionError(
+      "Crop exceeds the source dimensions or trusted dimensions are missing.",
+    );
   const durationAsset = params.toolKey === "lip-sync" ? assets[1]! : assets[0]!;
   const quantity =
     tool.pricingMetric === "REQUEST"

@@ -1,49 +1,49 @@
 "use client";
-
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
 import { Button } from "@/components/ui/button";
-import { CreativeSurface, Eyebrow } from "@/components/ui/creative";
+import { CreativeSurface, Eyebrow, Annotation } from "@/components/ui/creative";
 import { Icon } from "@/components/ui/icon";
 import { ProcessFeedback } from "@/components/process/process-feedback";
+import { MediaKitArt } from "./mediakit-art";
+import {
+  AssetButton,
+  AssetPicker,
+  LayoutPreview,
+  MediaKitControls,
+  MediaKitDialog,
+  MediaPreview,
+} from "./mediakit-controls";
+import { MediaKitResult } from "./mediakit-result";
+import {
+  activeStatuses,
+  assetDetail,
+  defaultSettings,
+  mediaInput,
+  presetCrop,
+  sourceKind,
+  toolGroup,
+  type Crop,
+  type MediaAsset,
+  type MediaExecution,
+  type MediaTool,
+  type Settings,
+} from "./mediakit-model";
 
-type Tool = {
-  key: string;
-  name: string;
-  description: string;
-  category: string;
-  available: boolean;
-};
-type Asset = {
-  id: string;
-  name: string;
-  mediaKind: string;
-  mimeType: string;
-  durationMs: number | null;
-};
-type Execution = {
-  id: string;
-  status: string;
-  displayName?: string;
-  providerTool?: { displayName: string };
-  outputAssetId?: string | null;
-  outputMimeType?: string | null;
-  reservedCredits?: string;
-  chargedCredits?: string;
-  errorMessage?: string | null;
-  vqScore?: number | null;
-  segments?: { index: number; start_ms: number; end_ms: number }[];
-};
 type Quote = {
   priceVersionId: string;
   reservedCredits: string;
   quotedQuantity: number;
 };
-const fieldClass =
-  "mt-2 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
-const activeStatuses = ["QUEUED", "SUBMITTING", "PROCESSING"];
-
+class RequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
 async function jsonRequest(url: string, body?: unknown) {
   const response = await fetch(
     url,
@@ -52,15 +52,18 @@ async function jsonRequest(url: string, body?: unknown) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
+          signal: AbortSignal.timeout(30_000),
         }
-      : undefined,
+      : { cache: "no-store", signal: AbortSignal.timeout(30_000) },
   );
   const payload = await response.json();
   if (!response.ok)
-    throw new Error(payload.error ?? "MediaKit request failed.");
+    throw new RequestError(
+      payload.error ?? "MediaKit request failed.",
+      response.status,
+    );
   return payload;
 }
-
 export function MediaKitStudio({
   organizationId,
   organizationSlug,
@@ -70,27 +73,51 @@ export function MediaKitStudio({
   organizationSlug: string;
   canGenerate: boolean;
 }) {
-  const [tools, setTools] = useState<Tool[]>([]);
-  const [assets, setAssets] = useState<Asset[]>([]);
-  const [history, setHistory] = useState<Execution[]>([]);
-  const [toolKey, setToolKey] = useState("");
-  const [source, setSource] = useState("");
-  const [audio, setAudio] = useState("");
-  const [quote, setQuote] = useState<Quote | null>(null);
-  const [execution, setExecution] = useState<Execution | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [feedback, setFeedback] = useState<string | null>(null);
-  const form = useRef<HTMLFormElement>(null);
-  const requestKey = useRef<string | null>(null);
-  const tool = tools.find((item) => item.key === toolKey);
-  const imageSource =
-    tool?.category === "image" || toolKey === "text-to-scrolling-video";
-  const pending =
-    execution &&
-    (activeStatuses.includes(execution.status) ||
-      execution.status === "MANUAL_REVIEW");
+  const [tools, setTools] = useState<MediaTool[]>([]),
+    [assets, setAssets] = useState<MediaAsset[]>([]),
+    [history, setHistory] = useState<MediaExecution[]>([]);
+  const [toolKey, setToolKey] = useState("compress-image"),
+    [group, setGroup] = useState("Image");
+  const [sourceId, setSourceId] = useState(""),
+    [audioId, setAudioId] = useState(""),
+    [logoId, setLogoId] = useState("");
+  const [settings, setSettings] = useState<Settings>({ ...defaultSettings }),
+    [crop, setCrop] = useState<Crop>({ x: 0, y: 0, width: 1, height: 1 });
+  const [quote, setQuote] = useState<Quote | null>(null),
+    [quoteOpen, setQuoteOpen] = useState(false),
+    [picker, setPicker] = useState<"source" | "audio" | "logo" | null>(null);
+  const [execution, setExecution] = useState<MediaExecution | null>(null),
+    [busy, setBusy] = useState(false),
+    [uncertain, setUncertain] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null),
+    [loaded, setLoaded] = useState(false),
+    [reload, setReload] = useState(0);
+  const requestKey = useRef<string | null>(null),
+    submitting = useRef(false);
+  const tool = tools.find((item) => item.key === toolKey),
+    source = assets.find((item) => item.id === sourceId),
+    audio = assets.find((item) => item.id === audioId),
+    logo = assets.find((item) => item.id === logoId);
   const base = `/app/${encodeURIComponent(organizationSlug)}`;
-
+  const locked = busy || uncertain;
+  const pendingForSource = history.some(
+    (item) =>
+      (activeStatuses.includes(item.status) ||
+        item.status === "MANUAL_REVIEW") &&
+      (item.sourceAsset?.id === sourceId ||
+        (item.id === execution?.id && !item.sourceAsset)),
+  );
+  const requiresLogo =
+    toolKey === "add-image-watermark" && settings.watermarkType === "image";
+  const ready = Boolean(
+    source &&
+    tool?.available &&
+    canGenerate &&
+    (!requiresLogo || (logo && logo.id !== source.id)) &&
+    (toolKey !== "lip-sync" || audio) &&
+    (toolKey !== "crop-image" || (source.width && source.height)) &&
+    !pendingForSource,
+  );
   useEffect(() => {
     let disposed = false;
     jsonRequest(
@@ -101,599 +128,592 @@ export function MediaKitStudio({
         setTools(payload.tools);
         setAssets(payload.assets);
         setHistory(payload.executions);
-        setToolKey(
-          (current) =>
-            current ||
-            payload.tools.find((item: Tool) => item.available)?.key ||
-            payload.tools[0]?.key ||
-            "",
-        );
-        const active = payload.executions.find(
-          (item: Execution) =>
-            activeStatuses.includes(item.status) ||
-            item.status === "MANUAL_REVIEW",
-        );
-        if (active) setExecution(active);
+        setLoaded(true);
       })
       .catch((error) => {
-        if (!disposed) setFeedback(error.message);
+        if (!disposed) {
+          setFeedback(error.message);
+          setLoaded(true);
+        }
       });
     return () => {
       disposed = true;
     };
-  }, [organizationId]);
-
+  }, [organizationId, reload]);
+  const pollIds = [
+    ...new Set([
+      ...history
+        .filter(
+          (item) =>
+            activeStatuses.includes(item.status) ||
+            item.status === "MANUAL_REVIEW",
+        )
+        .map((item) => item.id),
+      ...(execution &&
+      (!execution.tool ||
+        activeStatuses.includes(execution.status) ||
+        execution.status === "MANUAL_REVIEW" ||
+        (execution.outputAsset &&
+          !execution.outputAsset.variants.some(
+            (variant) =>
+              variant.kind ===
+              (execution.outputAsset!.mediaKind === "IMAGE"
+                ? "PREVIEW"
+                : "POSTER"),
+          )))
+        ? [execution.id]
+        : []),
+    ]),
+  ]
+    .slice(0, 21)
+    .join(",");
   useEffect(() => {
-    if (!execution?.id) return;
-    let disposed = false;
-    const id = execution.id;
+    if (!pollIds) return;
+    let disposed = false,
+      running = false;
     async function refresh() {
-      try {
-        const payload = await jsonRequest(
-          `/api/media-tools/${encodeURIComponent(id)}`,
+      if (running) return;
+      running = true;
+      const ids = pollIds.split(",");
+      const results = await Promise.allSettled(
+        ids.map((id) =>
+          jsonRequest(`/api/media-tools/${encodeURIComponent(id)}`),
+        ),
+      );
+      if (!disposed) {
+        const updates = results.flatMap((result) =>
+          result.status === "fulfilled"
+            ? [result.value.execution as MediaExecution]
+            : [],
         );
-        if (!disposed) {
-          setExecution(payload.execution);
-          setHistory((items) =>
-            items.map((item) =>
-              item.id === id ? { ...item, ...payload.execution } : item,
-            ),
-          );
-        }
-      } catch (error) {
-        if (!disposed)
+        setHistory((items) =>
+          items.map((item) => ({
+            ...item,
+            ...updates.find((update) => update.id === item.id),
+          })),
+        );
+        setExecution((current) =>
+          current
+            ? {
+                ...current,
+                ...updates.find((update) => update.id === current.id),
+              }
+            : current,
+        );
+        if (results.some((result) => result.status === "rejected"))
           setFeedback(
-            error instanceof Error
-              ? error.message
-              : "Status is temporarily unavailable. Your job continues.",
+            "Some job statuses are temporarily unavailable. Saved jobs continue; status will retry automatically.",
           );
       }
+      running = false;
     }
     void refresh();
-    const timer = activeStatuses.includes(execution.status)
-      ? setInterval(() => void refresh(), 4000)
-      : null;
+    const timer = setInterval(() => void refresh(), 6000);
     return () => {
       disposed = true;
-      if (timer) clearInterval(timer);
+      clearInterval(timer);
     };
-  }, [execution?.id, execution?.status]);
-
-  function invalidateQuote() {
+  }, [pollIds]);
+  function invalidate() {
     setQuote(null);
+    setQuoteOpen(false);
     requestKey.current = null;
+    setFeedback(null);
   }
-  function inputFromForm() {
-    const data = new FormData(form.current!);
-    if (toolKey.startsWith("matte-"))
-      return data.get("format") === "MP4"
-        ? { format: "MP4", background_color: data.get("background_color") }
-        : { format: "WEBM" };
-    if (toolKey === "compress-image")
-      return { quality: Number(data.get("quality")), output_format: "jpeg" };
-    if (toolKey === "crop-image")
-      return {
-        crop_mode: "directional",
-        crop_position: "center",
-        crop_width: Number(data.get("crop_width")),
-        crop_height: Number(data.get("crop_height")),
-        output_format: "png",
-      };
-    if (toolKey === "mosaic-image")
-      return {
-        mosaic_type: "full-image",
-        mosaic_shape: "rectangle",
-        mosaic_step_x: Number(data.get("pixelSize")),
-        mosaic_step_y: Number(data.get("pixelSize")),
-        output_format: "png",
-      };
-    if (toolKey === "add-image-watermark")
-      return {
-        watermark_type: "text",
-        watermark_text: data.get("watermark_text"),
-        watermark_position: data.get("watermark_position"),
-        output_format: "png",
-      };
-    if (toolKey === "text-to-scrolling-video")
-      return {
-        text: data.get("text"),
-        resolution: data.get("resolution"),
-        font_type: data.get("font_type"),
-        font_color: `${data.get("font_color")}FF`,
-        single_roll_duration: Number(data.get("single_roll_duration")),
-        start_hold_duration: 2,
-        end_hold_duration: 2,
-      };
-    return {};
+  function changeSettings(patch: Partial<Settings>) {
+    if (locked) return;
+    invalidate();
+    setSettings((current) => ({ ...current, ...patch }));
   }
-  async function submit(event: React.FormEvent) {
+  function changeCrop(value: Crop) {
+    if (locked) return;
+    invalidate();
+    setCrop(value);
+  }
+  function chooseSource(id: string) {
+    invalidate();
+    setSourceId(id);
+    const asset = assets.find((item) => item.id === id);
+    setCrop(presetCrop(asset?.width ?? 1, asset?.height ?? 1, null));
+  }
+  function chooseTool(key: string) {
+    if (locked) return;
+    invalidate();
+    setToolKey(key);
+    if (source && source.mediaKind !== sourceKind(key)) setSourceId("");
+    setSettings({ ...defaultSettings });
+  }
+  function useOutput(asset: MediaAsset) {
+    if (locked) return;
+    invalidate();
+    setAssets((items) => [
+      asset,
+      ...items.filter((item) => item.id !== asset.id),
+    ]);
+    setSourceId(asset.id);
+    const next =
+      asset.mediaKind === "IMAGE" ? "compress-image" : "assess-video-quality";
+    setToolKey(next);
+    setGroup(toolGroup(next));
+    setSettings({ ...defaultSettings });
+    setCrop(presetCrop(asset.width ?? 1, asset.height ?? 1, null));
+  }
+  function body() {
+    return {
+      organizationId,
+      toolKey,
+      assetIds:
+        toolKey === "lip-sync"
+          ? [sourceId, audioId]
+          : requiresLogo
+            ? [sourceId, logoId]
+            : [sourceId],
+      input: mediaInput(toolKey, settings, crop),
+    };
+  }
+  async function review(event: React.FormEvent) {
     event.preventDefault();
-    if (!tool || !source) return;
+    if (!ready || submitting.current) return;
+    submitting.current = true;
     setBusy(true);
     setFeedback(null);
     try {
-      const body = {
-        organizationId,
-        toolKey,
-        assetIds: toolKey === "lip-sync" ? [source, audio] : [source],
-        input: inputFromForm(),
-      };
-      if (!quote) {
-        const payload = await jsonRequest("/api/media-tools", {
-          ...body,
-          action: "quote",
-        });
-        setQuote(payload.quote);
-        requestKey.current = crypto.randomUUID();
-      } else {
-        const payload = await jsonRequest("/api/media-tools", {
-          ...body,
-          action: "execute",
-          priceVersionId: quote.priceVersionId,
-          reservedCredits: quote.reservedCredits,
-          idempotencyKey: requestKey.current,
-        });
-        setExecution({ ...payload.execution, displayName: tool.name });
-        setHistory((items) => [
-          { ...payload.execution, displayName: tool.name },
-          ...items,
-        ]);
-        invalidateQuote();
-      }
+      const payload = await jsonRequest("/api/media-tools", {
+        ...body(),
+        action: "quote",
+      });
+      setQuote(payload.quote);
+      requestKey.current = crypto.randomUUID();
+      setQuoteOpen(true);
     } catch (error) {
-      if (
-        error instanceof Error &&
-        /quote.*(changed|stale)|refresh/i.test(error.message)
-      )
-        invalidateQuote();
       setFeedback(
         error instanceof Error
           ? error.message
-          : "Request failed. Retry with the same inputs.",
+          : "Quote is unavailable. Try again.",
       );
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   }
-
+  async function execute() {
+    if (!quote || !requestKey.current || submitting.current) return;
+    submitting.current = true;
+    setBusy(true);
+    setFeedback(null);
+    try {
+      const payload = await jsonRequest("/api/media-tools", {
+        ...body(),
+        action: "execute",
+        priceVersionId: quote.priceVersionId,
+        reservedCredits: quote.reservedCredits,
+        idempotencyKey: requestKey.current,
+      });
+      const next = {
+        ...payload.execution,
+        displayName: tool?.name,
+        tool: toolKey,
+        sourceAsset: source,
+      };
+      setExecution(next);
+      setHistory((items) => [
+        next,
+        ...items.filter((item) => item.id !== next.id),
+      ]);
+      setUncertain(false);
+      invalidate();
+    } catch (error) {
+      const ambiguous =
+        uncertain || !(error instanceof RequestError) || error.status >= 500;
+      setUncertain(ambiguous);
+      if (ambiguous) {
+        setQuoteOpen(false);
+        setFeedback(
+          "The response was interrupted. Acceptance is unconfirmed. Retry this same request to recover its saved job; do not start a duplicate.",
+        );
+      } else {
+        setQuoteOpen(false);
+        setQuote(null);
+        requestKey.current = null;
+        setFeedback(error.message);
+      }
+    } finally {
+      submitting.current = false;
+      setBusy(false);
+    }
+  }
   return (
-    <div className="px-4 py-7 sm:px-7 lg:px-9">
-      <Eyebrow>Finishing desk</Eyebrow>
-      <h1 className="mt-3 font-display text-4xl font-semibold tracking-tight">
-        MediaKit Tools
-      </h1>
-      <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-        Polish, protect and prepare your media. Choose a workspace asset, review
-        your credit reservation, and save the finished result to your library.
-      </p>
-      <div className="mt-7 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
-        <CreativeSurface className="p-5">
-          <h2 className="font-display text-xl font-semibold">
-            Choose your tool
-          </h2>
-          <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
-            {tools.map((item) => (
+    <div className="mx-auto max-w-[1600px] px-4 py-7 sm:px-7 lg:px-8">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <Eyebrow>Finishing desk</Eyebrow>
+          <h1 className="mt-3 font-display text-4xl font-semibold tracking-tight">
+            MediaKit <span className="sketch-underline">Tools</span>
+          </h1>
+          <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
+            Small edits. A sharper finish. Choose your media, make it yours, and
+            review credits before processing.
+          </p>
+        </div>
+        <Annotation className="text-primary">
+          A little polish goes a long way
+        </Annotation>
+      </div>
+      {!loaded && (
+        <ProcessFeedback
+          kind="loading"
+          title="Opening your finishing desk"
+          description="Loading tools and workspace media."
+          className="mt-6"
+        />
+      )}
+      {loaded && !tools.length && (
+        <div className="mt-6">
+          <ProcessFeedback
+            kind="recoverable"
+            title="Workspace could not load"
+            description={feedback ?? "Try loading the workspace again."}
+          />
+          <Button
+            type="button"
+            variant="secondary"
+            className="mt-3"
+            onClick={() => {
+              setLoaded(false);
+              setReload((value) => value + 1);
+            }}
+          >
+            Reload workspace
+          </Button>
+        </div>
+      )}
+      <div className="mt-7 grid min-w-0 gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
+        <CreativeSurface className="min-w-0 self-start p-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-display text-lg font-semibold">Your toolkit</h2>
+            <span className="text-xs text-muted-foreground">
+              {tools.length} tools
+            </span>
+          </div>
+          <div
+            className="mt-4 flex flex-wrap gap-1"
+            aria-label="Tool categories"
+          >
+            {["Image", "Video finishing", "Analysis"].map((value) => (
               <button
-                key={item.key}
+                key={value}
                 type="button"
-                disabled={busy}
-                aria-pressed={toolKey === item.key}
-                onClick={() => {
-                  setToolKey(item.key);
-                  setSource("");
-                  setAudio("");
-                  invalidateQuote();
-                }}
-                className={`rounded-xl border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${toolKey === item.key ? "border-primary bg-primary/10" : "border-border bg-background hover:bg-muted"}`}
+                disabled={locked}
+                aria-pressed={group === value}
+                onClick={() => setGroup(value)}
+                className="min-h-10 rounded-lg px-2 py-2 text-xs font-semibold text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-pressed:bg-primary/10 aria-pressed:text-primary"
               >
-                <span className="flex items-center gap-2 text-sm font-semibold">
-                  <Icon
-                    name={item.category === "image" ? "image" : "video"}
-                    className="size-4"
-                  />
-                  {item.name}
-                </span>
-                <span className="mt-1 block text-xs text-muted-foreground">
-                  {item.description}
-                </span>
-                {!item.available ? (
-                  <span className="mt-2 block text-xs text-warning">
-                    Pricing or availability is pending
-                  </span>
-                ) : null}
+                {value}
               </button>
             ))}
           </div>
-        </CreativeSurface>
-        <div className="space-y-5">
-          <CreativeSurface className="p-5 sm:p-6">
-            <h2 className="font-display text-2xl font-semibold">
-              {tool?.name ?? "Loading tools…"}
-            </h2>
-            <form
-              ref={form}
-              key={toolKey}
-              onSubmit={submit}
-              onChange={invalidateQuote}
-              className="mt-5 space-y-4"
-            >
-              <fieldset disabled={busy} className="space-y-4">
-                <label className="block text-sm font-semibold">
-                  {imageSource ? "Source image" : "Source video"}
-                  <select
-                    className={fieldClass}
-                    value={source}
-                    required
-                    onChange={(event) => setSource(event.target.value)}
-                  >
-                    <option value="">Choose a workspace asset</option>
-                    {assets
-                      .filter(
-                        (asset) =>
-                          asset.mediaKind === (imageSource ? "IMAGE" : "VIDEO"),
-                      )
-                      .map((asset) => (
-                        <option key={asset.id} value={asset.id}>
-                          {asset.name}
-                        </option>
-                      ))}
-                  </select>
-                </label>
-                <p className="text-xs text-muted-foreground">
-                  Need new media?{" "}
-                  <Link
-                    href={`${base}/assets` as Route}
-                    className="text-primary underline"
-                  >
-                    Upload it in your Asset Library
-                  </Link>
-                  , then return here.
-                </p>
-                {toolKey === "lip-sync" ? (
-                  <label className="block text-sm font-semibold">
-                    Driving audio
-                    <select
-                      className={fieldClass}
-                      value={audio}
-                      required
-                      onChange={(event) => setAudio(event.target.value)}
-                    >
-                      <option value="">Choose audio</option>
-                      {assets
-                        .filter((asset) => asset.mediaKind === "AUDIO")
-                        .map((asset) => (
-                          <option key={asset.id} value={asset.id}>
-                            {asset.name}
-                          </option>
-                        ))}
-                    </select>
-                  </label>
-                ) : null}
-                {toolKey.startsWith("matte-") ? (
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <label className="text-sm font-semibold">
-                      Output format
-                      <select
-                        name="format"
-                        className={fieldClass}
-                        defaultValue="WEBM"
-                      >
-                        <option value="WEBM">Transparent WebM</option>
-                        <option value="MP4">MP4 with solid background</option>
-                      </select>
-                    </label>
-                    <label className="text-sm font-semibold">
-                      MP4 background
-                      <select
-                        name="background_color"
-                        className={fieldClass}
-                        defaultValue="green"
-                      >
-                        <option value="green">Green</option>
-                        <option value="black">Black</option>
-                        <option value="white">White</option>
-                      </select>
-                    </label>
-                  </div>
-                ) : null}
-                {toolKey === "compress-image" ? (
-                  <label className="block text-sm font-semibold">
-                    JPEG quality (1–100)
-                    <input
-                      name="quality"
-                      className={fieldClass}
-                      type="number"
-                      min="1"
-                      max="100"
-                      defaultValue="80"
-                      required
-                    />
-                  </label>
-                ) : null}
-                {toolKey === "crop-image" ? (
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    {["crop_width", "crop_height"].map((name) => (
-                      <label key={name} className="text-sm font-semibold">
-                        {name === "crop_width" ? "Width" : "Height"} (pixels)
-                        <input
-                          name={name}
-                          className={fieldClass}
-                          type="number"
-                          min="1"
-                          max="10000"
-                          defaultValue="512"
-                          required
-                        />
-                      </label>
-                    ))}
-                  </div>
-                ) : null}
-                {toolKey === "mosaic-image" ? (
-                  <label className="block text-sm font-semibold">
-                    Pixel cell size
-                    <input
-                      name="pixelSize"
-                      className={fieldClass}
-                      type="number"
-                      min="1"
-                      max="1000"
-                      defaultValue="16"
-                      required
-                    />
-                  </label>
-                ) : null}
-                {toolKey === "add-image-watermark" ? (
-                  <>
-                    <label className="block text-sm font-semibold">
-                      Watermark text
-                      <input
-                        name="watermark_text"
-                        className={fieldClass}
-                        maxLength={200}
-                        placeholder="© Your brand"
-                        required
-                      />
-                    </label>
-                    <label className="block text-sm font-semibold">
-                      Position
-                      <select
-                        name="watermark_position"
-                        className={fieldClass}
-                        defaultValue="bottom_right"
-                      >
-                        {[
-                          "bottom_right",
-                          "bottom_left",
-                          "top_right",
-                          "top_left",
-                          "center",
-                        ].map((position) => (
-                          <option key={position} value={position}>
-                            {position.replaceAll("_", " ")}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </>
-                ) : null}
-                {toolKey === "text-to-scrolling-video" ? (
-                  <>
-                    <label className="block text-sm font-semibold">
-                      Scrolling text
-                      <textarea
-                        name="text"
-                        className={fieldClass}
-                        rows={6}
-                        maxLength={2000}
-                        required
-                      />
-                    </label>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <label className="text-sm font-semibold">
-                        Resolution
-                        <select
-                          name="resolution"
-                          className={fieldClass}
-                          defaultValue="720p"
-                        >
-                          {["360p", "480p", "720p", "1080p"].map((value) => (
-                            <option key={value}>{value}</option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="text-sm font-semibold">
-                        Seconds per page
-                        <input
-                          name="single_roll_duration"
-                          type="number"
-                          min="0.5"
-                          max="60"
-                          step="0.5"
-                          defaultValue="3"
-                          className={fieldClass}
-                          required
-                        />
-                      </label>
-                      <label className="text-sm font-semibold">
-                        Font
-                        <select
-                          name="font_type"
-                          className={fieldClass}
-                          defaultValue="inter"
-                        >
-                          <option value="inter">Inter</option>
-                          <option value="roboto">Roboto</option>
-                          <option value="source_han_serif">
-                            Source Han Serif
-                          </option>
-                        </select>
-                      </label>
-                      <label className="text-sm font-semibold">
-                        Text color
-                        <input
-                          name="font_color"
-                          type="color"
-                          defaultValue="#1F1F1F"
-                          className={fieldClass}
-                        />
-                      </label>
-                    </div>
-                  </>
-                ) : null}
-                {quote ? (
-                  <div
-                    role="status"
-                    className="rounded-xl border border-primary/30 bg-primary/5 p-4 text-sm"
-                  >
-                    <p className="font-semibold">
-                      Reserve up to {quote.reservedCredits} credits
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Final charge follows successful processing and output
-                      storage. Unused credits are released.
-                      {toolKey.startsWith("matte-") ||
-                      toolKey === "text-to-scrolling-video"
-                        ? " This ceiling includes the highest resolution tariff; final output duration and resolution determine the charge."
-                        : ""}
-                    </p>
-                  </div>
-                ) : null}
-                <Button
-                  type="submit"
-                  disabled={
-                    busy || Boolean(pending) || !canGenerate || !tool?.available
-                  }
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-2">
+            {tools
+              .filter((item) => toolGroup(item.key) === group)
+              .map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  disabled={locked}
+                  aria-pressed={toolKey === item.key}
+                  onClick={() => chooseTool(item.key)}
+                  title={item.description}
+                  className="flex min-w-0 flex-col items-start rounded-2xl border border-border bg-background p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-pressed:border-primary aria-pressed:bg-primary/5 disabled:opacity-60"
                 >
-                  {busy
-                    ? "Working…"
-                    : quote
-                      ? `Run · reserve ${quote.reservedCredits} credits`
-                      : "Review credit quote"}
-                </Button>
+                  <MediaKitArt
+                    tool={item.key}
+                    className={`mb-3 size-10 ${toolKey === item.key ? "text-primary" : "text-muted-foreground"}`}
+                  />
+                  <span className="text-xs font-semibold leading-5">
+                    {item.name}
+                  </span>
+                  {!item.available && (
+                    <span className="mt-1 text-[10px] text-warning">
+                      Unavailable
+                    </span>
+                  )}
+                </button>
+              ))}
+          </div>
+          <p className="mt-4 text-xs leading-5 text-muted-foreground">
+            Compatible source media stays selected when you switch tools.
+          </p>
+          <Link
+            href={`${base}/assets` as Route}
+            className="mt-4 flex min-h-10 items-center gap-2 text-sm font-semibold text-primary"
+          >
+            <Icon name="upload" className="size-4" />
+            Upload media
+          </Link>
+        </CreativeSurface>
+        <div className="min-w-0 space-y-5">
+          <CreativeSurface className="min-w-0 overflow-hidden">
+            <div className="flex items-start gap-3 border-b border-border p-5">
+              <MediaKitArt
+                tool={toolKey}
+                className="size-10 shrink-0 text-primary"
+              />
+              <div className="min-w-0">
+                <h2 className="font-display text-2xl font-semibold">
+                  {tool?.name ?? "Choose a tool"}
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {tool?.description}
+                </p>
+              </div>
+            </div>
+            <form
+              onSubmit={review}
+              className="grid min-w-0 xl:grid-cols-[minmax(0,1fr)_300px]"
+            >
+              <div className="min-w-0 p-4 sm:p-5">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    {[
+                      "crop-image",
+                      "add-image-watermark",
+                      "text-to-scrolling-video",
+                    ].includes(toolKey)
+                      ? "Layout guide"
+                      : "Source preview"}
+                  </span>
+                  {source && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={locked}
+                      onClick={() => setPicker("source")}
+                    >
+                      Change media
+                    </Button>
+                  )}
+                </div>
+                <LayoutPreview
+                  tool={toolKey}
+                  source={source}
+                  settings={settings}
+                  crop={crop}
+                  logo={logo}
+                  disabled={locked}
+                  onCrop={changeCrop}
+                />
+                <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                  {[
+                    "crop-image",
+                    "add-image-watermark",
+                    "text-to-scrolling-video",
+                  ].includes(toolKey)
+                    ? "Guide only. Final sizing, typography and encoding are determined during processing."
+                    : "This is your source media. The finished result appears below after processing."}
+                </p>
+                {toolKey === "lip-sync" && audio && (
+                  <div className="mt-4 overflow-hidden rounded-xl border border-border">
+                    <MediaPreview asset={audio} />
+                  </div>
+                )}
+              </div>
+              <fieldset
+                disabled={locked}
+                className="min-w-0 space-y-4 border-t border-border bg-muted/20 p-5 xl:border-l xl:border-t-0"
+              >
+                <AssetButton
+                  asset={source}
+                  label={`Source ${sourceKind(toolKey).toLowerCase()}`}
+                  disabled={locked}
+                  onClick={() => setPicker("source")}
+                />
+                {toolKey === "lip-sync" && (
+                  <AssetButton
+                    asset={audio}
+                    label="Driving audio · MP3 or WAV"
+                    disabled={locked}
+                    onClick={() => setPicker("audio")}
+                  />
+                )}
+                <MediaKitControls
+                  tool={toolKey}
+                  settings={settings}
+                  onChange={changeSettings}
+                  source={source}
+                  crop={crop}
+                  onCrop={changeCrop}
+                  logo={logo}
+                  chooseLogo={() => setPicker("logo")}
+                />
+                <div className="border-t border-border pt-4">
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={!ready || locked}
+                  >
+                    {busy ? "Working…" : "Review credit quote"}
+                    <Icon name="arrow" className="size-4" />
+                  </Button>
+                  <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                    {!canGenerate
+                      ? "Your workspace role cannot start processing."
+                      : !tool?.available
+                        ? "This tool’s pricing or availability is pending."
+                        : pendingForSource
+                          ? "This source has unsettled work. Wait for its saved job to finish."
+                          : "No credits reserved until you confirm. Finished media is saved to your Asset Library."}
+                  </p>
+                </div>
               </fieldset>
             </form>
-            {feedback ? (
-              <p role="status" className="mt-4 text-sm text-muted-foreground">
-                {feedback}
-              </p>
-            ) : null}
           </CreativeSurface>
-          {execution ? (
-            <CreativeSurface className="p-5">
-              <h2 className="font-display text-xl font-semibold">
-                {execution.displayName ?? "Tool result"}
-              </h2>
-              <p role="status" className="mt-2 text-sm">
-                {execution.status.replaceAll("_", " ")}
-              </p>
-              {activeStatuses.includes(execution.status) ? (
-                <ProcessFeedback
-                  kind="loading"
-                  title="Processing your media"
-                  description="Your saved job continues in the background. You can leave this page and return to Recent work."
-                  className="mt-3"
-                />
-              ) : execution.status === "MANUAL_REVIEW" ? (
-                <ProcessFeedback
-                  kind="delayed"
-                  title="Operator review needed"
-                  description="Credits remain reserved. Avoid submitting this work again while the result is being reviewed."
-                  className="mt-3"
-                />
-              ) : null}
-              <p className="mt-2 text-xs text-muted-foreground">
-                Job {execution.id}. Work continues when you leave this page.
-              </p>
-              {execution.errorMessage ? (
-                <p className="mt-3 text-sm text-warning">
-                  {execution.errorMessage}
-                </p>
-              ) : null}
-              {execution.status === "MANUAL_REVIEW" ? (
-                <p className="mt-2 text-sm">
-                  Credits remain reserved for operator review. Avoid submitting
-                  this work again.
-                </p>
-              ) : null}
-              {execution.vqScore != null ? (
-                <p className="mt-3 font-semibold">
-                  Video quality score: {execution.vqScore} / 100
-                </p>
-              ) : null}
-              {execution.segments?.length ? (
-                <div className="mt-3 max-h-64 overflow-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr>
-                        <th className="text-left">Segment</th>
-                        <th className="text-left">Start (ms)</th>
-                        <th className="text-left">End (ms)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {execution.segments.map((segment) => (
-                        <tr key={segment.index}>
-                          <td>{segment.index + 1}</td>
-                          <td>{segment.start_ms}</td>
-                          <td>{segment.end_ms}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : null}
-              {execution.outputAssetId ? (
-                <div className="mt-4 flex flex-wrap gap-3">
-                  <Button asChild>
-                    <a
-                      href={`/api/assets/${encodeURIComponent(execution.outputAssetId)}?download=1`}
-                    >
-                      Download result
-                    </a>
-                  </Button>
-                  <Button asChild variant="secondary">
-                    <Link href={`${base}/assets` as Route}>
-                      Open Asset Library
-                    </Link>
-                  </Button>
-                </div>
-              ) : null}
-              {execution.status === "SUCCEEDED" ? (
-                <p className="mt-3 text-sm text-success">
-                  Saved successfully · {execution.chargedCredits} credits
-                  charged
-                </p>
-              ) : null}
-            </CreativeSurface>
-          ) : null}
-          {history.length ? (
-            <CreativeSurface className="p-5">
+          {feedback && (
+            <ProcessFeedback
+              kind={uncertain ? "delayed" : "recoverable"}
+              title={uncertain ? "Recover your request" : "Workspace update"}
+              description={feedback}
+            />
+          )}
+          {uncertain && (
+            <Button
+              type="button"
+              disabled={busy}
+              onClick={() => void execute()}
+            >
+              {busy ? "Recovering…" : "Retry the same request"}
+            </Button>
+          )}
+          {execution && (
+            <MediaKitResult
+              key={execution.id}
+              execution={execution}
+              base={base}
+              onUse={useOutput}
+            />
+          )}
+          <CreativeSurface className="min-w-0 p-5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="font-display text-xl font-semibold">
                 Recent work
               </h2>
-              <div className="mt-3 space-y-2">
+              <span className="text-xs text-muted-foreground">
+                Saved jobs · continues in the background
+              </span>
+            </div>
+            {history.length ? (
+              <div className="mt-4 space-y-2">
                 {history.map((item) => (
                   <button
                     key={item.id}
                     type="button"
+                    aria-pressed={item.id === execution?.id}
                     onClick={() => setExecution(item)}
-                    className="flex w-full justify-between gap-3 rounded-lg border border-border p-3 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="flex min-h-12 w-full flex-wrap items-center justify-between gap-2 rounded-xl border border-border p-3 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-pressed:border-primary"
                   >
-                    <span>
+                    <span className="font-semibold">
                       {item.displayName ??
                         item.providerTool?.displayName ??
                         "MediaKit job"}
                     </span>
-                    <span className="text-muted-foreground">
+                    <span className="text-xs text-muted-foreground">
                       {item.status.replaceAll("_", " ")}
                     </span>
                   </button>
                 ))}
               </div>
-            </CreativeSurface>
-          ) : null}
+            ) : (
+              <p className="mt-4 text-sm text-muted-foreground">
+                Your finished edits and active jobs will appear here.
+              </p>
+            )}
+          </CreativeSurface>
         </div>
       </div>
+      <AssetPicker
+        open={picker !== null}
+        kind={
+          picker === "audio"
+            ? "AUDIO"
+            : picker === "logo"
+              ? "IMAGE"
+              : sourceKind(toolKey)
+        }
+        assets={
+          picker === "logo"
+            ? assets.filter(
+                (asset) =>
+                  asset.id !== sourceId &&
+                  Number(asset.byteSize) <= 5 * 1024 * 1024 &&
+                  ["image/png", "image/jpeg", "image/webp"].includes(
+                    asset.mimeType,
+                  ),
+              )
+            : assets
+        }
+        selected={
+          picker === "audio" ? audioId : picker === "logo" ? logoId : sourceId
+        }
+        onClose={() => setPicker(null)}
+        onSelect={(id) => {
+          if (locked) return;
+          if (picker === "source") chooseSource(id);
+          else {
+            invalidate();
+            if (picker === "audio") setAudioId(id);
+            else setLogoId(id);
+          }
+        }}
+      />
+      <MediaKitDialog
+        open={quoteOpen}
+        title="Review processing credits"
+        onClose={() => {
+          if (!busy) setQuoteOpen(false);
+        }}
+      >
+        {quote && (
+          <>
+            <p className="text-sm font-semibold">{tool?.name}</p>
+            <p className="mt-2 break-words text-sm text-muted-foreground">
+              {source?.name} · {source ? assetDetail(source) : ""}
+            </p>
+            <div className="my-5 rounded-2xl border border-primary/30 bg-primary/5 p-5">
+              <p className="text-sm text-muted-foreground">Reserve up to</p>
+              <p className="mt-2 font-display text-3xl font-semibold tabular-nums">
+                {quote.reservedCredits} credits
+              </p>
+              <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                Final charges follow successful processing and storage. Unused
+                reserved credits are released.
+                {toolKey.startsWith("matte-") ||
+                toolKey === "text-to-scrolling-video"
+                  ? " This ceiling includes the highest resolution tariff; final duration and resolution determine the charge."
+                  : ""}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <Button
+                type="button"
+                disabled={busy}
+                onClick={() => void execute()}
+              >
+                {busy
+                  ? "Submitting…"
+                  : `Process · up to ${quote.reservedCredits} credits`}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={busy}
+                onClick={() => setQuoteOpen(false)}
+              >
+                Keep editing
+              </Button>
+            </div>
+          </>
+        )}
+      </MediaKitDialog>
     </div>
   );
 }

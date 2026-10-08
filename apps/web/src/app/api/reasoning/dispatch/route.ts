@@ -2,6 +2,7 @@ import { hasOrganizationPermission } from "@aiwa/authz";
 import { db, Prisma } from "@aiwa/db";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { creativeLocaleIntentSchema, normalizeCreativeLocaleIntent } from "@aiwa/generation/locale";
 
 import { getRequestSession } from "@/lib/request-auth";
 import {
@@ -41,6 +42,7 @@ const requestSchema = z
     targetMedia: z.enum(["IMAGE", "VIDEO"]),
     idempotencyKey: z.uuid(),
     modelId: z.string().min(1).max(191).optional(),
+    localeIntent: creativeLocaleIntentSchema.optional(),
   })
   .strict();
 
@@ -79,6 +81,7 @@ async function existingResponse(
   userPrompt: string,
   targetMedia: "IMAGE" | "VIDEO",
   requestedModelId?: string,
+  localeIntent?: unknown,
 ) {
   const existing = await db.reasoningJob.findUnique({
     where: { idempotencyKey },
@@ -99,6 +102,7 @@ async function existingResponse(
     task?: unknown;
     userPrompt?: unknown;
     targetMedia?: unknown;
+    localeIntent?: unknown;
   };
   const sameModel =
     requestedModelId === undefined ||
@@ -109,6 +113,7 @@ async function existingResponse(
     payload.task !== "prompt-enhancement" ||
     payload.userPrompt !== userPrompt ||
     payload.targetMedia !== targetMedia ||
+    JSON.stringify(payload.localeIntent ?? null) !== JSON.stringify(localeIntent ?? null) ||
     !sameModel
   )
     return NextResponse.json(
@@ -176,6 +181,7 @@ export async function POST(request: Request) {
       parsed.userPrompt,
       parsed.targetMedia,
       parsed.modelId,
+      parsed.localeIntent ? normalizeCreativeLocaleIntent(parsed.localeIntent) : undefined,
     );
     if (previous) return previous;
 
@@ -209,6 +215,7 @@ export async function POST(request: Request) {
         idempotencyKey,
         userPrompt: parsed.userPrompt,
         targetMedia: parsed.targetMedia,
+        localeIntent: parsed.localeIntent,
         systemPrompt: promptEnhancementSystemPrompt(parsed.targetMedia),
       });
 
@@ -243,6 +250,7 @@ export async function POST(request: Request) {
           parsed.userPrompt,
           parsed.targetMedia,
           parsed.modelId,
+          parsed.localeIntent ? normalizeCreativeLocaleIntent(parsed.localeIntent) : undefined,
         );
         if (raced) return raced;
       }

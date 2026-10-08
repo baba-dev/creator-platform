@@ -49,7 +49,11 @@ export function toolResultContent(result: ToolCallResult): string {
   if (result.tool === "app.getMembers")
     return "Here are the members you have permission to view. Open Members to manage access.";
   if (result.tool === "app.getModels")
-    return "I found " + String(output.total ?? 0) + " currently available models matching your request. The live cards show provider, tasks, capabilities and published base-unit credits; request a fresh quote for the actual job.";
+    return (
+      "I found " +
+      String(output.total ?? 0) +
+      " currently available models matching your request. The live cards show provider, tasks, capabilities and published base-unit credits; request a fresh quote for the actual job."
+    );
   if (result.tool === "app.prepareWorkflow")
     return `Prepared “${String(output.title)}”. Review each step and its quote before approving. Nothing has been submitted yet.`;
   if (result.tool === "app.navigate")
@@ -91,19 +95,46 @@ export async function localPixelReply(
     call = { tool: "app.getStorage", input: {} };
   if (/^(show (me )?(our |my )?(team )?members|team members)$/.test(text))
     call = { tool: "app.getMembers", input: {} };
-  const modelPage = /^(?:show|list|next) (?:(image|video|voice|text) )?(?:available )?models page (\\d{1,3})(?: for (.+))?$/.exec(text);
+  const modelPage =
+    /^(?:show|list|next) (?:(image|video|voice|text) )?(?:available )?models page (\\d{1,3})(?: for (.+))?$/.exec(
+      text,
+    );
   const modelDetail = /^show model details for (.+)$/.exec(text);
-  const modelHelp = /^(?:what is|tell me about|explain|details (?:on|for)|what can) (.+)$/.exec(text);
-  const isModelFamily = /\\b(seedream|seedance|seed.?tts|seed.?audio|omnihuman|nemotron|llama|gemini|groq|cloudflare|dola|flux|whisper|gpt.?oss|qwen|model)\\b/i;
-  const modelList = /^(?:(?:what|which) (?:image |video |voice |text |speech |chat )?models (?:are available|can i use)|(?:show|list) (?:me )?(?:all |available |the )?(?:image |video |voice |text |speech |chat )?models|show more models)$/.test(text);
-  const modelKind = /\\b(image|video|voice|speech|text|chat) models\\b/.exec(text)?.[1];
+  const modelHelp =
+    /^(?:what is|tell me about|explain|details (?:on|for)|what can) (.+)$/.exec(
+      text,
+    );
+  const isModelFamily =
+    /\\b(seedream|seedance|seed.?tts|seed.?audio|omnihuman|nemotron|llama|gemini|groq|cloudflare|dola|flux|whisper|gpt.?oss|qwen|model)\\b/i;
+  const modelList =
+    /^(?:(?:what|which) (?:image |video |voice |text |speech |chat )?models (?:are available|can i use)|(?:show|list) (?:me )?(?:all |available |the )?(?:image |video |voice |text |speech |chat )?models|show more models)$/.test(
+      text,
+    );
+  const modelKind = /\\b(image|video|voice|speech|text|chat) models\\b/.exec(
+    text,
+  )?.[1];
   const selectedKind = modelPage?.[1] ?? modelKind;
-  const kind = selectedKind === "image" ? "IMAGE" : selectedKind === "video" ? "VIDEO" :
-    ["speech", "voice"].includes(selectedKind ?? "") ? "VOICE" :
-    ["text", "chat"].includes(selectedKind ?? "") ? "TEXT" : undefined;
-  if (modelList || modelPage || modelDetail || (modelHelp && isModelFamily.test(modelHelp[1] ?? ""))) {
+  const kind =
+    selectedKind === "image"
+      ? "IMAGE"
+      : selectedKind === "video"
+        ? "VIDEO"
+        : ["speech", "voice"].includes(selectedKind ?? "")
+          ? "VOICE"
+          : ["text", "chat"].includes(selectedKind ?? "")
+            ? "TEXT"
+            : undefined;
+  if (
+    modelList ||
+    modelPage ||
+    modelDetail ||
+    (modelHelp && isModelFamily.test(modelHelp[1] ?? ""))
+  ) {
     const detail = modelDetail?.[1]?.trim();
-    const search = modelHelp?.[1]?.replace(/^(?:the )?/, "").replace(/ (?:model|models)$/, "").trim();
+    const search = modelHelp?.[1]
+      ?.replace(/^(?:the )?/, "")
+      .replace(/ (?:model|models)$/, "")
+      .trim();
     call = {
       tool: "app.getModels",
       input: {
@@ -111,7 +142,9 @@ export async function localPixelReply(
         ...(modelPage ? { page: Number(modelPage[2]) } : {}),
         ...(detail ? { modelId: detail } : {}),
         ...(modelPage?.[3] ? { query: modelPage[3] } : {}),
-        ...(!detail && !modelList && !modelPage && search ? { query: search } : {}),
+        ...(!detail && !modelList && !modelPage && search
+          ? { query: search }
+          : {}),
       },
     };
   }

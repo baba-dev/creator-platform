@@ -91,15 +91,16 @@ export async function localPixelReply(
     call = { tool: "app.getStorage", input: {} };
   if (/^(show (me )?(our |my )?(team )?members|team members)$/.test(text))
     call = { tool: "app.getMembers", input: {} };
-  const modelPage = /^(?:show|list|next) (?:available )?models page (\\d{1,3})$/.exec(text);
+  const modelPage = /^(?:show|list|next) (?:(image|video|voice|text) )?(?:available )?models page (\\d{1,3})(?: for (.+))?$/.exec(text);
   const modelDetail = /^show model details for (.+)$/.exec(text);
   const modelHelp = /^(?:what is|tell me about|explain|details (?:on|for)|what can) (.+)$/.exec(text);
   const isModelFamily = /\\b(seedream|seedance|seed.?tts|seed.?audio|omnihuman|nemotron|llama|gemini|groq|cloudflare|dola|flux|whisper|gpt.?oss|qwen|model)\\b/i;
   const modelList = /^(?:(?:what|which) (?:image |video |voice |text |speech |chat )?models (?:are available|can i use)|(?:show|list) (?:me )?(?:all |available |the )?(?:image |video |voice |text |speech |chat )?models|show more models)$/.test(text);
   const modelKind = /\\b(image|video|voice|speech|text|chat) models\\b/.exec(text)?.[1];
-  const kind = modelKind === "image" ? "IMAGE" : modelKind === "video" ? "VIDEO" :
-    ["speech", "voice"].includes(modelKind ?? "") ? "VOICE" :
-    ["text", "chat"].includes(modelKind ?? "") ? "TEXT" : undefined;
+  const selectedKind = modelPage?.[1] ?? modelKind;
+  const kind = selectedKind === "image" ? "IMAGE" : selectedKind === "video" ? "VIDEO" :
+    ["speech", "voice"].includes(selectedKind ?? "") ? "VOICE" :
+    ["text", "chat"].includes(selectedKind ?? "") ? "TEXT" : undefined;
   if (modelList || modelPage || modelDetail || (modelHelp && isModelFamily.test(modelHelp[1] ?? ""))) {
     const detail = modelDetail?.[1]?.trim();
     const search = modelHelp?.[1]?.replace(/^(?:the )?/, "").replace(/ (?:model|models)$/, "").trim();
@@ -107,9 +108,10 @@ export async function localPixelReply(
       tool: "app.getModels",
       input: {
         ...(kind ? { kind } : {}),
-        ...(modelPage ? { page: Number(modelPage[1]) } : {}),
+        ...(modelPage ? { page: Number(modelPage[2]) } : {}),
         ...(detail ? { modelId: detail } : {}),
-        ...(!detail && !modelList && search ? { query: search } : {}),
+        ...(modelPage?.[3] ? { query: modelPage[3] } : {}),
+        ...(!detail && !modelList && !modelPage && search ? { query: search } : {}),
       },
     };
   }

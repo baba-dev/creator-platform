@@ -254,3 +254,87 @@ export function compileCreativeLocaleInstructions(
   );
   return output.join(" ");
 }
+
+/**
+ * Parse the durable locale snapshot: jobs include catalog-derived fields which
+ * aren't accepted in the public strict request schema. Never trust unknown JSON.
+ */
+export function readCreativeLocaleIntent(value: unknown): CreativeLocaleIntent | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  const parsed = creativeLocaleIntentSchema.safeParse({
+    preset: record.preset,
+    language: record.language,
+    tone: record.tone,
+    culturalContext: record.culturalContext,
+  });
+  return parsed.success ? parsed.data : undefined;
+}
+
+/**
+ * Compile once at provider dispatch, never into editable prompt history.
+ * If a provider has a strict prompt limit, do not truncate the user's text.
+ */
+export function compileCreativeLocaleMediaPrompt(
+  prompt: string,
+  persistedIntent: unknown,
+  kind: "IMAGE" | "VIDEO" | "VOICE",
+  maxLength = 2000,
+): string {
+  const intent = readCreativeLocaleIntent(persistedIntent);
+  const instruction = compileCreativeLocaleInstructions(intent, kind);
+  if (!instruction) return prompt;
+  const compiled = `${prompt}\n\n[Creative locale guidance]\n${instruction}`;
+  return compiled.length <= maxLength ? compiled : prompt;
+}
+
+/** Only rank verified voices. Same-language voices aren't marketed as regional accents. */
+export function voiceLocaleMatch(
+  voiceLocale: string,
+  requestedLocale: string,
+): "exact" | "language" | "unverified" {
+  if (requestedLocale === "auto") return "unverified";
+  if (voiceLocale.toLowerCase() === requestedLocale.toLowerCase()) return "exact";
+  if (voiceLocale.split("-")[0]?.toLowerCase() === requestedLocale.split("-")[0]?.toLowerCase()) {
+    return "language";
+  }
+  return "unverified";
+}
+
+export function sortVoicesForLocale<T extends { key: string; locale: string }>(
+  voices: readonly T[],
+  persistedIntent: unknown,
+): T[] {
+  const intent = readCreativeLocaleIntent(persistedIntent);
+  if (!intent || intent.language === "auto") return [...voices];
+  const rank = { exact: 0, language: 1, unverified: 2 };
+  return [...voices].sort((a, b) =>
+    rank[voiceLocaleMatch(a.locale, intent.language)] - rank[voiceLocaleMatch(b.locale, intent.language)]
+  );
+}
+
+/** One ephemeral system turn, not another copy in every conversation user turn. */
+export function localeSystemMessages<T extends { role: "system" | "user" | "assistant"; content: string }>(
+  messages: readonly T[],
+  persistedIntent: unknown,
+): Array<T | { role: "system"; content: string }> {
+  const intent = readCreativeLocaleIntent(persistedIntent);
+  const instruction = compileCreativeLocaleInstructions(intent, "TEXT");
+  if (!instruction) return [...messages];
+  return [
+    { role: "system", content: `Creative locale metadata for this response only. ${instruction}` },
+    ...messages,
+  ];
+}
+
+/** Transcription providers typically accept a language code without a region. */
+export function transcriptionLanguageHint(
+  rawLanguage: unknown,
+  persistedIntent: unknown,
+): string | undefined {
+  if (typeof rawLanguage === "string" && rawLanguage.trim()) return rawLanguage;
+  const intent = readCreativeLocaleIntent(persistedIntent);
+  if (!intent || intent.language === "auto") return undefined;
+  const base = intent.language.split("-")[0]?.toLowerCase();
+  return base && /^[a-z]{2,3}$/.test(base) ? base : undefined;
+}

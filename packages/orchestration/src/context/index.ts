@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SourceRoleSchema, type SourceRole } from "../contracts/index";
+import { SourceRoleSchema } from "../contracts/index";
 
 export const ProjectContextSnapshotSchema = z.object({
   organizationId: z.string().min(1).max(128),

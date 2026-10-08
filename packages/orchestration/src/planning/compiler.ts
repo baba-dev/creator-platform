@@ -1,11 +1,4 @@
 import { z } from "zod";
-import {
-  type WorkflowGraph,
-  type OrchestrationTask,
-  type SourceRole,
-  classifyIntentDeterministically,
-} from "@aiwa/orchestration";
-import { textModelIds } from "@aiwa/generation";
 
 export const StageBPlanOutputSchema = z.object({
   title: z.string().min(1).max(160),
@@ -41,7 +34,7 @@ export function compileCreativePlan(params: {
   userPrompt: string;
   locale?: string;
 }): StageBPlanOutput {
-  const { userPrompt, locale = "ar-OM" } = params;
+  const { userPrompt } = params;
   const lower = userPrompt.toLowerCase();
 
   // If perfume advertising campaign pattern is matched

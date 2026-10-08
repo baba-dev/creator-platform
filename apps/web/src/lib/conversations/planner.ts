@@ -191,9 +191,18 @@ export async function planConversationTurn(params: {
     /^(?:please\s+)?(?:create|generate|draw|make)\s+(?:me\s+)?(?:an?\s+)?(?:image|picture|illustration|photo)\s+(?:of|showing|with)\b/i.test(
       text,
     );
+  // First-turn video/voice requests have no media reference to resolve.
+  // Do not let the word "video" or "this" trigger a false asset clarification.
+  const isFreshVideoIntent =
+    /^(?:please\\s+)?(?:create|generate|make|produce|render)\\s+(?:me\\s+)?(?:an?\\s+)?(?:[\\w-]+\\s+){0,3}(?:video|clip|animation)\\b/i.test(text) &&
+    !/\\b(?:from this|use this|first frame|selected image|previous image)\\b/i.test(text);
+  const isFreshSpeechIntent =
+    /^(?:please\\s+)?(?:narrate|read aloud|speak|say|generate speech|create (?:a |an )?voiceover|make (?:a |an )?voiceover)\\b/i.test(text);
   const hasReferenceWord =
     !isAspectRatioIntent &&
     !isFreshCreationIntent &&
+    !isFreshVideoIntent &&
+    !isFreshSpeechIntent &&
     /\b(?:image|picture|output|this|that|it|animate|variation|variations|first\s+frame|last\s+frame|video|extend)\b/i.test(
       lower,
     );
@@ -534,22 +543,14 @@ export async function planConversationTurn(params: {
 
   // Fresh explicit media requests must not inherit the previous generation's
   // modality or a selected source. A new video/voice intent is not an image edit.
-  const freshVideo =
-    /^(?:please\\s+)?(?:create|generate|make|produce|render)\\s+(?:me\\s+)?(?:an?\\s+)?(?:[\\w-]+\\s+){0,3}(?:video|clip|animation)\\b/i.test(
-      text,
-    );
-  if (freshVideo) {
+  if (isFreshVideoIntent) {
     return {
       version: ACTION_PROTOCOL_VERSION,
       actions: [{ type: "generate_video", prompt: text, workflow: "GENERATE" }],
       reasoning: "Explicit new text-to-video request.",
     };
   }
-  const freshSpeech =
-    /^(?:please\\s+)?(?:narrate|read aloud|speak|say|generate speech|create (?:a |an )?voiceover|make (?:a |an )?voiceover)\\b/i.test(
-      text,
-    );
-  if (freshSpeech) {
+  if (isFreshSpeechIntent) {
     return {
       version: ACTION_PROTOCOL_VERSION,
       actions: [{ type: "generate_speech", text }],

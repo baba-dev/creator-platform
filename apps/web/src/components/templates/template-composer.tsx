@@ -6,7 +6,10 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import type { TemplateVariable } from "@/lib/templates";
-import { CreativeLocaleSelector, useCreativeLocale } from "@/components/studio/creative-locale-selector";
+import {
+  CreativeLocaleSelector,
+  useCreativeLocale,
+} from "@/components/studio/creative-locale-selector";
 
 type ReferenceAsset = {
   id: string;
@@ -103,7 +106,11 @@ export function TemplateComposer({
         </div>
       </div>
 
-      <CreativeLocaleSelector value={localeIntent} onChange={setLocaleIntent} disabled={busy} />
+      <CreativeLocaleSelector
+        value={localeIntent}
+        onChange={setLocaleIntent}
+        disabled={busy}
+      />
       <div className="mt-6 space-y-5">
         {variables.map((variable) => {
           const id = `template-variable-${variable.key}`;

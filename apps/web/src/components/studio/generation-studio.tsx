@@ -1,6 +1,9 @@
 "use client";
 
-import { CreativeLocaleSelector, useCreativeLocale } from "@/components/studio/creative-locale-selector";
+import {
+  CreativeLocaleSelector,
+  useCreativeLocale,
+} from "@/components/studio/creative-locale-selector";
 
 import { countBillableCharacters } from "@aiwa/credits/pricing";
 
@@ -1490,7 +1493,11 @@ export function GenerationStudio({
       className="paper-sheet relative w-full min-w-0 rounded-[28px] border border-border p-5 sm:p-7"
     >
       <Tape className="-top-1 right-16 hidden rotate-6 sm:block" />
-      <CreativeLocaleSelector value={localeIntent} onChange={setLocaleIntent} disabled={busy || isEnhancing} />
+      <CreativeLocaleSelector
+        value={localeIntent}
+        onChange={setLocaleIntent}
+        disabled={busy || isEnhancing}
+      />
       <Eyebrow>
         {variant === "quick"
           ? "Quick create"

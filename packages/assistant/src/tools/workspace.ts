@@ -1,6 +1,7 @@
 import { db } from "@aiwa/db";
 import { z } from "zod";
 import type { AssistantTool } from "./types";
+import { getPixelModelCatalog } from "../model-knowledge";
 
 export const getStorageTool: AssistantTool = {
   description: "Read workspace storage usage and safe connection status",
@@ -51,35 +52,15 @@ export const getMembersTool: AssistantTool = {
 };
 
 export const getModelsTool: AssistantTool = {
-  description:
-    "Read current enabled, priced models; model IDs are needed for workflow drafts",
-  inputSchema: z
-    .object({ kind: z.enum(["IMAGE", "VIDEO", "VOICE", "TEXT"]).optional() })
-    .strict(),
+  description: "Read live available models with detailed capabilities, tasks, provider and published customer pricing; filter/search/paginate or look up a canonical model ID",
+  inputSchema: z.object({
+    kind: z.enum(["IMAGE", "VIDEO", "VOICE", "TEXT"]).optional(),
+    query: z.string().trim().max(100).optional(),
+    modelId: z.string().min(1).max(191).optional(),
+    page: z.number().int().min(1).max(1000).optional(),
+    pageSize: z.number().int().min(1).max(20).optional(),
+  }).strict(),
   async execute(input) {
-    const { kind } = input as { kind?: "IMAGE" | "VIDEO" | "VOICE" | "TEXT" };
-    const now = new Date();
-    const models = await db.providerModel.findMany({
-      where: {
-        enabled: true,
-        ...(kind ? { mediaKind: kind } : {}),
-        priceVersions: {
-          some: {
-            effectiveFrom: { lte: now },
-            OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
-          },
-        },
-      },
-      orderBy: [{ mediaKind: "asc" }, { displayName: "asc" }],
-      take: 30,
-      select: {
-        id: true,
-        displayName: true,
-        mediaKind: true,
-        provider: true,
-        capabilities: true,
-      },
-    });
-    return { models };
+    return getPixelModelCatalog(input);
   },
 };

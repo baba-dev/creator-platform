@@ -1,7 +1,7 @@
 import { db } from "@aiwa/db";
 import { z } from "zod";
 import type { AssistantTool } from "./types";
-import { getPixelModelCatalog } from "../model-knowledge";
+import { getPixelModelCatalog, type PixelModelQuery } from "../model-knowledge";
 
 export const getStorageTool: AssistantTool = {
   description: "Read workspace storage usage and safe connection status",
@@ -61,6 +61,6 @@ export const getModelsTool: AssistantTool = {
     pageSize: z.number().int().min(1).max(20).optional(),
   }).strict(),
   async execute(input) {
-    return getPixelModelCatalog(input);
+    return getPixelModelCatalog(input as PixelModelQuery);
   },
 };

@@ -49,8 +49,17 @@ describe("Provider-aware creative locale", () => {
   });
 
   it("preserves tone with automatic country without inventing a region", () => {
-    const autoWarm = { preset: "auto" as const, language: "auto", tone: "warm" as const, culturalContext: "auto" as const };
-    const result = compileCreativeLocaleMediaPrompt("A simple greeting", autoWarm, "VIDEO");
+    const autoWarm = {
+      preset: "auto" as const,
+      language: "auto",
+      tone: "warm" as const,
+      culturalContext: "auto" as const,
+    };
+    const result = compileCreativeLocaleMediaPrompt(
+      "A simple greeting",
+      autoWarm,
+      "VIDEO",
+    );
     expect(result).toContain("Requested tone: warm");
     expect(result).not.toContain("Target audience locale: Auto");
   });

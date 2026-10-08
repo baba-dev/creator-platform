@@ -2,7 +2,10 @@ import { hasOrganizationPermission } from "@aiwa/authz";
 import { db, Prisma } from "@aiwa/db";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { creativeLocaleIntentSchema, normalizeCreativeLocaleIntent } from "@aiwa/generation/locale";
+import {
+  creativeLocaleIntentSchema,
+  normalizeCreativeLocaleIntent,
+} from "@aiwa/generation/locale";
 
 import { getRequestSession } from "@/lib/request-auth";
 import {
@@ -113,7 +116,8 @@ async function existingResponse(
     payload.task !== "prompt-enhancement" ||
     payload.userPrompt !== userPrompt ||
     payload.targetMedia !== targetMedia ||
-    JSON.stringify(payload.localeIntent ?? null) !== JSON.stringify(localeIntent ?? null) ||
+    JSON.stringify(payload.localeIntent ?? null) !==
+      JSON.stringify(localeIntent ?? null) ||
     !sameModel
   )
     return NextResponse.json(
@@ -181,7 +185,9 @@ export async function POST(request: Request) {
       parsed.userPrompt,
       parsed.targetMedia,
       parsed.modelId,
-      parsed.localeIntent ? normalizeCreativeLocaleIntent(parsed.localeIntent) : undefined,
+      parsed.localeIntent
+        ? normalizeCreativeLocaleIntent(parsed.localeIntent)
+        : undefined,
     );
     if (previous) return previous;
 
@@ -250,7 +256,9 @@ export async function POST(request: Request) {
           parsed.userPrompt,
           parsed.targetMedia,
           parsed.modelId,
-          parsed.localeIntent ? normalizeCreativeLocaleIntent(parsed.localeIntent) : undefined,
+          parsed.localeIntent
+            ? normalizeCreativeLocaleIntent(parsed.localeIntent)
+            : undefined,
         );
         if (raced) return raced;
       }

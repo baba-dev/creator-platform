@@ -1,5 +1,7 @@
 "use client";
 
+import { CreativeLocaleSelector, useCreativeLocale } from "@/components/studio/creative-locale-selector";
+
 import { countBillableCharacters } from "@aiwa/credits/pricing";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -163,6 +165,7 @@ export function GenerationStudio({
   initialSpeechRate?: number;
 }) {
   const router = useRouter();
+  const [localeIntent, setLocaleIntent] = useCreativeLocale(organizationId);
   const [data, setData] = useState<Studio | null>(null);
   const [activeMode, setActiveMode] = useState<MediaKind>(initialMode);
   const [modelId, setModelId] = useState("");
@@ -543,6 +546,7 @@ export function GenerationStudio({
   const activePriceVersionId = model?.priceVersionId;
   const quoteRequestKey = JSON.stringify({
     organizationId,
+    localeIntent,
     modelId: activeModelId,
     ...(activeMode === "VOICE"
       ? { text: voiceText }
@@ -1191,6 +1195,7 @@ export function GenerationStudio({
         projectId: selectedProjectId || null,
         modelId: model.id,
         priceVersionId: model.priceVersionId,
+        localeIntent,
         text: voiceText.trim(),
         voiceKey: selectedVoiceKey,
         speechRate,
@@ -1208,6 +1213,7 @@ export function GenerationStudio({
         projectId: selectedProjectId || null,
         modelId: model.id,
         priceVersionId: model.priceVersionId,
+        localeIntent,
         prompt,
         aspectRatio: selectedRatio,
         resolution: selectedResolution,
@@ -1248,6 +1254,7 @@ export function GenerationStudio({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             organizationId,
+            localeIntent,
             projectId: selectedProjectId || undefined,
             templateId: templateContext?.id || undefined,
             prompt: model.mediaKind === "VOICE" ? voiceText.trim() : prompt,
@@ -1398,6 +1405,7 @@ export function GenerationStudio({
     const fingerprint = JSON.stringify({
       organizationId,
       sourcePrompt,
+      localeIntent,
       targetMedia: model.mediaKind,
       promptEnhancementModelId,
     });
@@ -1416,6 +1424,7 @@ export function GenerationStudio({
         body: JSON.stringify({
           organizationId,
           userPrompt: sourcePrompt,
+          localeIntent,
           targetMedia: model.mediaKind,
           idempotencyKey: enhancementAttempt.current.key,
           modelId: promptEnhancementModelId,
@@ -1481,6 +1490,7 @@ export function GenerationStudio({
       className="paper-sheet relative w-full min-w-0 rounded-[28px] border border-border p-5 sm:p-7"
     >
       <Tape className="-top-1 right-16 hidden rotate-6 sm:block" />
+      <CreativeLocaleSelector value={localeIntent} onChange={setLocaleIntent} disabled={busy || isEnhancing} />
       <Eyebrow>
         {variant === "quick"
           ? "Quick create"

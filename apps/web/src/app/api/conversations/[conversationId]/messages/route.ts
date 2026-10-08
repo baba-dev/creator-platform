@@ -20,6 +20,8 @@ import {
 } from "../../../../../lib/conversations/context-builder";
 import { planConversationTurn } from "../../../../../lib/conversations/planner";
 import { answerCreativeQuestion } from "../../../../../lib/conversations/read-only-response";
+import { describeCreativeHandoff } from "../../../../../lib/conversations/tool-handoff";
+import { WORKSPACE_TOOLS } from "@/lib/workspace-tools";
 import { findCompatibleAlternativeModel } from "../../../../../lib/conversations/capability-router";
 import type {
   ConversationState,
@@ -543,7 +545,7 @@ export async function POST(
 
     // =========================================================
     // Case 0: Explicit non-billable questions and creative consultation.
-    if (firstAction.type === "answer_question") {
+    if (firstAction.type === "answer_question" || firstAction.type === "open_tool") {
       if (input.mode === "plan") {
         return NextResponse.json({
           mode: "plan", billable: false, action: firstAction.type,
@@ -557,12 +559,22 @@ export async function POST(
         }, { status: 409 });
       }
       const userMessage = await upsertUserMessage();
-      const answer = answerCreativeQuestion(firstAction.question, plannerContext);
+      const handoff = firstAction.type === "open_tool"
+        ? WORKSPACE_TOOLS.find((tool) => tool.id === firstAction.toolId)
+        : null;
+      const answer = handoff
+        ? describeCreativeHandoff(handoff)
+        : firstAction.type === "answer_question"
+          ? answerCreativeQuestion(firstAction.question, plannerContext)
+          : "The requested tool is unavailable.";
       const assistantMessage = await upsertMessage(
         "assistant",
         `${input.idempotencyKey}-answer`,
         answer,
-        { turnStatus: "COMPLETED", actions: [] },
+        {
+          turnStatus: "COMPLETED", actions: [],
+          ...(handoff ? { handoffToolId: handoff.id } : {}),
+        },
       );
       return NextResponse.json({
         userMessage, assistantMessage, status: 200,

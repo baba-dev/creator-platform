@@ -54,6 +54,16 @@ describe("Conversational Creative Action Planner", () => {
     recentTurns: [],
   };
 
+  it("hands off specialized tasks without billing", async () => {
+    const plan = await planConversationTurn({
+      userMessage: "Please transcribe this audio",
+      organizationId: "org_1", context: baseContext,
+    });
+    expect(plan.actions).toEqual([
+      { type: "open_tool", toolId: "transcription" },
+    ]);
+  });
+
   it("does not turn questions into paid image generation", async () => {
     const plan = await planConversationTurn({
       userMessage: "Which model did you use?",

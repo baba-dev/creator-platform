@@ -7,6 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Eyebrow } from "@/components/ui/creative";
 import { Icon } from "@/components/ui/icon";
 import { ProcessFeedback } from "@/components/process/process-feedback";
+import {
+  WORKSPACE_TOOLS,
+  getWorkspaceBase,
+  getWorkspaceItemHref,
+} from "@/lib/workspace-tools";
 import type {
   ClarificationOption,
   ConversationState,
@@ -28,6 +33,7 @@ interface MessageItem {
       options: ClarificationOption[];
     };
     effectiveSpec?: Record<string, unknown>;
+    handoffToolId?: string;
   } | null;
 }
 
@@ -1150,6 +1156,19 @@ export function CreativeConversationWorkspace({
                   }`}
                 >
                   <p className="whitespace-pre-wrap">{message.content}</p>
+                  {meta?.handoffToolId ? (() => {
+                    const tool = WORKSPACE_TOOLS.find((item) => item.id === meta.handoffToolId);
+                    return tool ? (
+                      <Link
+                        href={getWorkspaceItemHref(getWorkspaceBase(organizationSlug), tool) as Route}
+                        className="mt-3 inline-flex min-h-9 items-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20"
+                      >
+                        <Icon name={tool.icon} className="size-4" />
+                        Open {tool.shortTitle}
+                        <Icon name="arrow" className="size-3" />
+                      </Link>
+                    ) : null;
+                  })() : null}
 
                   {/* Clarification prompt & interactive choices */}
                   {clarification?.options &&
@@ -1282,6 +1301,23 @@ export function CreativeConversationWorkspace({
             </div>
           </section>
         ) : null}
+        {/* Specialist tasks reuse the canonical app navigation registry. */}
+        <div className="mb-2 flex items-center gap-2 overflow-x-auto pb-1 text-xs" aria-label="Specialist workbenches">
+          <span className="shrink-0 text-muted-foreground">Open a workbench:</span>
+          {["image-studio", "video-studio", "audio-generation", "transcription", "creative-director"].map((toolId) => {
+            const tool = WORKSPACE_TOOLS.find((item) => item.id === toolId);
+            return tool ? (
+              <Link
+                key={tool.id}
+                href={getWorkspaceItemHref(getWorkspaceBase(organizationSlug), tool) as Route}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 font-medium text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
+              >
+                <Icon name={tool.icon} className="size-3.5" />
+                {tool.shortTitle}
+              </Link>
+            ) : null;
+          })}
+        </div>
         {/* Quick Action Smart Chips */}
         <div className="flex flex-wrap items-center justify-between gap-2 pb-2 text-xs">
           <div className="flex flex-wrap items-center gap-1.5">

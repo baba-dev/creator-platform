@@ -141,6 +141,16 @@ export const enhancePromptActionSchema = z.object({
   prompt: z.string().trim().min(1).max(4000).optional(),
 });
 
+// Workbench handoffs cannot dispatch paid generation jobs.
+export const openToolActionSchema = z.object({
+  type: z.literal("open_tool"),
+  toolId: z.enum([
+    "transcription", "audio-generation", "spokesperson", "voice-casting",
+    "video-editor", "precision-image", "scriptwriter", "creative-director",
+    "brand-story", "character-chat",
+  ]),
+});
+
 // Read-only answers never dispatch a billable generation job.
 export const answerQuestionActionSchema = z.object({
   type: z.literal("answer_question"),
@@ -180,6 +190,7 @@ export const conversationActionSchema = z.discriminatedUnion("type", [
   retryGenerationActionSchema,
   enhancePromptActionSchema,
   answerQuestionActionSchema,
+  openToolActionSchema,
   clarifyActionSchema,
 ]);
 

@@ -6,6 +6,7 @@ import {
 } from "./reference-resolver";
 import type { ConversationAction, TurnPlan } from "./action-protocol";
 import { ACTION_PROTOCOL_VERSION } from "./action-protocol";
+import { resolveCreativeToolHandoff } from "./tool-handoff";
 
 /**
  * Normalizes aspect ratio synonyms into canonical values.
@@ -77,6 +78,21 @@ export async function planConversationTurn(params: {
   const text = userMessage.trim();
   const lower = text.toLowerCase();
   const actions: ConversationAction[] = [];
+
+  const handoff = resolveCreativeToolHandoff(text);
+  if (handoff) {
+    return {
+      version: ACTION_PROTOCOL_VERSION,
+      actions: [{
+        type: "open_tool",
+        toolId: handoff.id as "transcription" | "audio-generation" |
+          "spokesperson" | "voice-casting" | "video-editor" |
+          "precision-image" | "scriptwriter" | "creative-director" |
+          "brand-story" | "character-chat",
+      }],
+      reasoning: "Specialist feature handoff, no generation dispatched.",
+    };
+  }
 
   // Questions, consultation and capability discovery are NEVER implicit paid
   // media requests. Interpret them as a read-only conversational turn.

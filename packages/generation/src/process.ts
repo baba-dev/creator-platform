@@ -472,7 +472,11 @@ export async function processVideoSubmitJob(
     if (typeof providerInput.prompt === "string") {
       providerInput = {
         ...providerInput,
-        prompt: compileCreativeLocaleMediaPrompt(providerInput.prompt, videoPayload.localeIntent, "VIDEO"),
+        prompt: compileCreativeLocaleMediaPrompt(
+          providerInput.prompt,
+          videoPayload.localeIntent,
+          "VIDEO",
+        ),
       };
     }
     const result = await provider.submit({
@@ -1072,7 +1076,9 @@ export async function processImageJob(
         input: {
           ...(job.requestPayload as Record<string, unknown>),
           prompt: compileCreativeLocaleMediaPrompt(
-            String((job.requestPayload as Record<string, unknown>).prompt ?? ""),
+            String(
+              (job.requestPayload as Record<string, unknown>).prompt ?? "",
+            ),
             (job.requestPayload as Record<string, unknown>).localeIntent,
             "IMAGE",
           ),
@@ -1606,7 +1612,10 @@ export async function processVoiceJob(
       providerInput = {
         task: "seed-audio",
         textPrompt: compileCreativeLocaleMediaPrompt(
-          String(payload.textPrompt ?? ""), payload.localeIntent, "VOICE", 3000,
+          String(payload.textPrompt ?? ""),
+          payload.localeIntent,
+          "VOICE",
+          3000,
         ),
         referenceAudioUrls: audioUrls,
         referenceSpeakerIds,
@@ -1637,7 +1646,13 @@ export async function processVoiceJob(
           idempotencyKey: job.idempotencyKey,
           modelId: job.providerModel.providerModelId,
           baseProviderInput: providerInput,
-          compileSegmentPrompt: (segment) => compileCreativeLocaleMediaPrompt(segment, payload.localeIntent, "VOICE", 3000),
+          compileSegmentPrompt: (segment) =>
+            compileCreativeLocaleMediaPrompt(
+              segment,
+              payload.localeIntent,
+              "VOICE",
+              3000,
+            ),
           textPrompt,
           estimatedDurationSeconds,
           expectedMediaType: voiceOutputAsset.mimeType,

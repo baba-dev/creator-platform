@@ -259,8 +259,11 @@ export function compileCreativeLocaleInstructions(
  * Parse the durable locale snapshot: jobs include catalog-derived fields which
  * aren't accepted in the public strict request schema. Never trust unknown JSON.
  */
-export function readCreativeLocaleIntent(value: unknown): CreativeLocaleIntent | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+export function readCreativeLocaleIntent(
+  value: unknown,
+): CreativeLocaleIntent | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    return undefined;
   const record = value as Record<string, unknown>;
   const parsed = creativeLocaleIntentSchema.safeParse({
     preset: record.preset,
@@ -294,8 +297,12 @@ export function voiceLocaleMatch(
   requestedLocale: string,
 ): "exact" | "language" | "unverified" {
   if (requestedLocale === "auto") return "unverified";
-  if (voiceLocale.toLowerCase() === requestedLocale.toLowerCase()) return "exact";
-  if (voiceLocale.split("-")[0]?.toLowerCase() === requestedLocale.split("-")[0]?.toLowerCase()) {
+  if (voiceLocale.toLowerCase() === requestedLocale.toLowerCase())
+    return "exact";
+  if (
+    voiceLocale.split("-")[0]?.toLowerCase() ===
+    requestedLocale.split("-")[0]?.toLowerCase()
+  ) {
     return "language";
   }
   return "unverified";
@@ -308,13 +315,17 @@ export function sortVoicesForLocale<T extends { key: string; locale: string }>(
   const intent = readCreativeLocaleIntent(persistedIntent);
   if (!intent || intent.language === "auto") return [...voices];
   const rank = { exact: 0, language: 1, unverified: 2 };
-  return [...voices].sort((a, b) =>
-    rank[voiceLocaleMatch(a.locale, intent.language)] - rank[voiceLocaleMatch(b.locale, intent.language)]
+  return [...voices].sort(
+    (a, b) =>
+      rank[voiceLocaleMatch(a.locale, intent.language)] -
+      rank[voiceLocaleMatch(b.locale, intent.language)],
   );
 }
 
 /** One ephemeral system turn, not another copy in every conversation user turn. */
-export function localeSystemMessages<T extends { role: "system" | "user" | "assistant"; content: string }>(
+export function localeSystemMessages<
+  T extends { role: "system" | "user" | "assistant"; content: string },
+>(
   messages: readonly T[],
   persistedIntent: unknown,
 ): Array<T | { role: "system"; content: string }> {
@@ -322,7 +333,10 @@ export function localeSystemMessages<T extends { role: "system" | "user" | "assi
   const instruction = compileCreativeLocaleInstructions(intent, "TEXT");
   if (!instruction) return [...messages];
   return [
-    { role: "system", content: `Creative locale metadata for this response only. ${instruction}` },
+    {
+      role: "system",
+      content: `Creative locale metadata for this response only. ${instruction}`,
+    },
     ...messages,
   ];
 }

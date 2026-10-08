@@ -22,6 +22,7 @@ import {
 } from "@aiwa/providers";
 import { requireMembership } from "./index";
 import { resolvePresetVoice } from "./voices";
+import { compileCreativeLocaleMediaPrompt } from "./locale";
 import { issueProviderMediaGrant } from "./provider-media-grant";
 import {
   produceSeedAudioLongForm,
@@ -468,6 +469,12 @@ export async function processVideoSubmitJob(
       };
     }
 
+    if (typeof providerInput.prompt === "string") {
+      providerInput = {
+        ...providerInput,
+        prompt: compileCreativeLocaleMediaPrompt(providerInput.prompt, videoPayload.localeIntent, "VIDEO"),
+      };
+    }
     const result = await provider.submit({
       idempotencyKey: job.idempotencyKey,
       modelId: job.providerModel.providerModelId,
@@ -1064,6 +1071,11 @@ export async function processImageJob(
         mediaKind: "image",
         input: {
           ...(job.requestPayload as Record<string, unknown>),
+          prompt: compileCreativeLocaleMediaPrompt(
+            String((job.requestPayload as Record<string, unknown>).prompt ?? ""),
+            (job.requestPayload as Record<string, unknown>).localeIntent,
+            "IMAGE",
+          ),
           referenceImages,
         },
       });
@@ -1593,7 +1605,9 @@ export async function processVoiceJob(
       }
       providerInput = {
         task: "seed-audio",
-        textPrompt: payload.textPrompt,
+        textPrompt: compileCreativeLocaleMediaPrompt(
+          String(payload.textPrompt ?? ""), payload.localeIntent, "VOICE", 3000,
+        ),
         referenceAudioUrls: audioUrls,
         referenceSpeakerIds,
         ...(imageUrl ? { referenceImageUrl: imageUrl } : {}),

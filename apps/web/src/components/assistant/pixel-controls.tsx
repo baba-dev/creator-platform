@@ -369,6 +369,9 @@ export function PixelControls({
                     {action.quote.estimatedCredits} credits; maximum{" "}
                     {action.quote.maximumChargeCredits} credits. Quote expires{" "}
                     {new Date(action.quote.expiresAt).toLocaleTimeString()}.
+                    {action.quote.localeIntent ? (
+                      <> Locale frozen at quote: {action.quote.localeIntent.language} · {action.quote.localeIntent.tone}. </>
+                    ) : null}
                     {action.quote.sourceAssetId && (
                       <>
                         {" "}

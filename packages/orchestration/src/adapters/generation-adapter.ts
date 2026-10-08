@@ -29,7 +29,7 @@ function kindForTask(task: OrchestrationTask): Kind {
   throw new Error("Unsupported generation task.");
 }
 
-function requestFor(ctx: ToolAdapterContext, input: ToolAdapterEstimateInput, priceVersionId: string) {
+export function buildGenerationAdmissionRequest(ctx: ToolAdapterContext, input: ToolAdapterEstimateInput, priceVersionId: string) {
   const common = {
     organizationId: ctx.organizationId,
     modelId: input.modelId,
@@ -90,7 +90,7 @@ export class GenerationToolAdapter implements OrchestrationToolAdapter {
     if (input.sourceAssetIds.length > 14 || new Set(input.sourceAssetIds).size !== input.sourceAssetIds.length)
       return { valid: false, error: "Invalid or repeated source assets." };
     try {
-      requestFor({organizationId: "validation", userId: "validation", idempotencyKey: "00000000-0000-4000-8000-000000000000"}, {...input, modelId: input.modelId ?? "validation"}, "validation");
+      buildGenerationAdmissionRequest({organizationId: "validation", userId: "validation", idempotencyKey: "00000000-0000-4000-8000-000000000000"}, {...input, modelId: input.modelId ?? "validation"}, "validation");
       return {valid: true};
     } catch (e) {
       return {valid: false, error: e instanceof Error ? e.message : "Invalid generation request."};
@@ -110,7 +110,7 @@ export class GenerationToolAdapter implements OrchestrationToolAdapter {
     });
     const price = model?.priceVersions[0];
     if (!model || !price) throw new Error("Model or active pricing unavailable.");
-    const request = requestFor(ctx, input, price.id);
+    const request = buildGenerationAdmissionRequest(ctx, input, price.id);
     const estimate = await estimateAuthorizedGeneration(
       model, price,
       {...request, units: input.task.startsWith("image-") ? Number(input.payload.outputCount ?? 1) : 1},
@@ -141,7 +141,7 @@ export class GenerationToolAdapter implements OrchestrationToolAdapter {
   async admit(ctx: ToolAdapterContext, input: ToolAdapterAdmitInput) {
     if (!this.supportedTasks.includes(input.task) || input.modelId !== input.quote.modelId)
       throw new Error("The approved model does not match the request.");
-    const request = requestFor(ctx, {...input, modelId: input.modelId}, input.quote.priceVersionId);
+    const request = buildGenerationAdmissionRequest(ctx, {...input, modelId: input.modelId}, input.quote.priceVersionId);
     const expectedHash = computeCanonicalRequestHash({
       task: input.task, modelId: input.modelId, payload: input.payload, sourceAssetIds: input.sourceAssetIds,
     });

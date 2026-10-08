@@ -1,17 +1,10 @@
 import { z } from "zod";
 import {
   StepStatusSchema,
-  SourceRoleSchema,
   StepQuoteSchema,
   StepDependencyInputSchema,
   StepOutputSchema,
   OrchestrationTaskSchema,
-  type StepStatus,
-  type SourceRole,
-  type StepQuote,
-  type StepDependencyInput,
-  type StepOutput,
-  type OrchestrationTask,
 } from "../contracts/index";
 
 export const MAX_WORKFLOW_STEPS = 5;
@@ -62,6 +55,7 @@ export function validateWorkflowGraphDAG(workflow: WorkflowGraph): {
   valid: boolean;
   error?: string;
 } {
+  const positions = new Set<number>();
   const stepIds = new Set<string>();
   const idToPosition = new Map<string, number>();
 
@@ -69,10 +63,15 @@ export function validateWorkflowGraphDAG(workflow: WorkflowGraph): {
     if (stepIds.has(step.id)) {
       return { valid: false, error: `Duplicate step id: ${step.id}` };
     }
+    if (positions.has(step.position)) return {valid: false, error: "Duplicate step position."};
+    positions.add(step.position);
     stepIds.add(step.id);
     idToPosition.set(step.id, step.position);
   }
 
+  for (let i=0; i<workflow.steps.length; i++) {
+    if (!positions.has(i)) return {valid: false, error: "Step positions must be consecutive."};
+  }
   for (const step of workflow.steps) {
     for (const dep of step.dependencies) {
       if (dep.sourceStepId === step.id) {

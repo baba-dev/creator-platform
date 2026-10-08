@@ -25,7 +25,7 @@ export function evaluateExecutableSteps(
 
   for (const step of workflow.steps) {
     if (
-      step.status === "SUCCEEDED" ||
+      step.status !== "AWAITING_APPROVAL" ||
       step.status === "RUNNING" ||
       step.status === "QUEUED"
     ) {
@@ -70,7 +70,7 @@ export function evaluateExecutableSteps(
       const output = sourceStep.outputs.find(
         (o) => o.outputIndex === dep.outputIndex,
       );
-      if (!output) {
+      if (!output || !output.assetId) {
         depsSatisfied = false;
         missingDepReason = `Dependency step ${dep.sourceStepId} did not produce output at index ${dep.outputIndex}.`;
         break;
@@ -87,7 +87,7 @@ export function evaluateExecutableSteps(
     }
 
     // Dependencies satisfied! Check approval status
-    if (!step.approvedAt) {
+    if (!step.approvedAt || !step.quote) {
       results.push({
         step,
         canExecute: false,

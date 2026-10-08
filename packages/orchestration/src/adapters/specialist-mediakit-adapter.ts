@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { db } from "@aiwa/db";
 import { quoteProviderToolPrice } from "@aiwa/credits";
 import { createProviderToolExecution, issueGenerationQuote } from "@aiwa/generation";

@@ -1,5 +1,6 @@
 import { db } from "@aiwa/db";
 import { priceCredits } from "@aiwa/generation";
+import { creativeLocaleIntentSchema } from "@aiwa/generation/locale";
 import { resolveTemplateSchema } from "@aiwa/validation";
 import { NextResponse } from "next/server";
 import { getRequestSession } from "@/lib/request-auth";
@@ -22,7 +23,7 @@ export async function POST(
     );
 
   const { slug } = await context.params;
-  const parsed = resolveTemplateSchema.safeParse(
+  const parsed = resolveTemplateSchema.extend({ localeIntent: creativeLocaleIntentSchema.optional() }).safeParse(
     await request.json().catch(() => null),
   );
   if (!parsed.success)
@@ -144,6 +145,7 @@ export async function POST(
           templateName: template.name,
           mediaKind: template.mediaKind,
           prompt: resolved.prompt,
+          localeIntent: parsed.data.localeIntent,
           referenceAssetIds: resolved.referenceAssetIds,
           defaults,
           modelId: model.id,

@@ -1658,6 +1658,7 @@ async function createSeedAudioJob(userId: string, raw: unknown) {
               referenceAudioAssetIds: input.referenceAudioAssetIds,
               referenceVoiceKeys: referenceVoices.map((voice) => voice.key),
               referenceImageAssetId: input.referenceImageAssetId,
+              localeIntent: input.localeIntent,
             }),
           },
           credits,

@@ -1199,7 +1199,7 @@ export function GenerationStudio({
     return () => {
       cancelled = true;
     };
-  }, [data]);
+  }, [data, setLocaleIntent]);
   async function generate() {
     if (!model || busy || isEnhancing || !activeQuote) return;
     setBusy(true);

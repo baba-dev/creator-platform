@@ -29,6 +29,14 @@ const STUDIO_ROUTES: Record<string, string> = {
   TEXT: "/chat",
 };
 
+function modelStudioRoute(model: PixelModel): string | null {
+  if (model.kind === "VOICE" || model.mediaKind === "VOICE") {
+    if (/seed.?audio/i.test(model.providerModelId)) return "/audio";
+    if (/transcri|whisper/i.test(model.providerModelId) || (model.tasks ?? []).includes("Transcription")) return "/speech/transcription";
+  }
+  return STUDIO_ROUTES[model.kind ?? model.mediaKind ?? ""] ?? null;
+}
+
 function capabilityLabel(key: string) {
   return key.replace(/^task:/, "").replace(/([a-z])([A-Z])/g, "$1 $2").replaceAll(/[-_]/g, " ");
 }
@@ -123,8 +131,8 @@ export function PixelModelCatalogCard({
                   </dl>
                 </details>
                 <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
-                  {STUDIO_ROUTES[model.kind ?? model.mediaKind ?? ""] && (
-                    <button type="button" className="min-h-9 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground hover:bg-muted" onClick={() => onNavigate(STUDIO_ROUTES[model.kind ?? model.mediaKind ?? ""]!)}>
+                  {modelStudioRoute(model) && (
+                    <button type="button" className="min-h-9 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground hover:bg-muted" onClick={() => onNavigate(modelStudioRoute(model)!)}>
                       Open studio
                     </button>
                   )}

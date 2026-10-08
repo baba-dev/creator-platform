@@ -120,6 +120,7 @@ export async function POST(
         userId: session.user.id,
         modelId: selectedModel.id,
         messages,
+        localeIntent: input.localeIntent,
         maxTokens,
       });
       return NextResponse.json({ quote });

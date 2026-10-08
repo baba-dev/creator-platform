@@ -19,6 +19,7 @@ export const resolutionSchema = z.enum([
   "2K",
   "3K",
   "4K",
+  "480p",
   "720p",
   "1080p",
 ]);
@@ -141,6 +142,29 @@ export const enhancePromptActionSchema = z.object({
   prompt: z.string().trim().min(1).max(4000).optional(),
 });
 
+// Workbench handoffs cannot dispatch paid generation jobs.
+export const openToolActionSchema = z.object({
+  type: z.literal("open_tool"),
+  toolId: z.enum([
+    "transcription",
+    "audio-generation",
+    "spokesperson",
+    "voice-casting",
+    "video-editor",
+    "precision-image",
+    "scriptwriter",
+    "creative-director",
+    "brand-story",
+    "character-chat",
+  ]),
+});
+
+// Read-only answers never dispatch a billable generation job.
+export const answerQuestionActionSchema = z.object({
+  type: z.literal("answer_question"),
+  question: z.string().trim().min(1).max(4000),
+});
+
 export const clarifyActionSchema = z.object({
   type: z.literal("clarify"),
   question: z.string().min(1).max(500),
@@ -173,6 +197,8 @@ export const conversationActionSchema = z.discriminatedUnion("type", [
   changeSpeakingRateActionSchema,
   retryGenerationActionSchema,
   enhancePromptActionSchema,
+  answerQuestionActionSchema,
+  openToolActionSchema,
   clarifyActionSchema,
 ]);
 

@@ -54,6 +54,67 @@ describe("Conversational Creative Action Planner", () => {
     recentTurns: [],
   };
 
+  it("hands off specialized tasks without billing", async () => {
+    const plan = await planConversationTurn({
+      userMessage: "Please transcribe this audio",
+      organizationId: "org_1",
+      context: baseContext,
+    });
+    expect(plan.actions).toEqual([
+      { type: "open_tool", toolId: "transcription" },
+    ]);
+  });
+
+  it("understands explicit first-turn video and speech intents", async () => {
+    const emptyContext: ConversationPlannerContext = {
+      ...baseContext,
+      activeOutputGroup: [],
+      selectedAssetId: null,
+    };
+    const video = await planConversationTurn({
+      userMessage: "Create a cinematic video of desert dunes",
+      organizationId: "org_1",
+      context: emptyContext,
+    });
+    expect(video.actions[0]?.type).toBe("generate_video");
+    const speech = await planConversationTurn({
+      userMessage: "Narrate this product launch announcement",
+      organizationId: "org_1",
+      context: emptyContext,
+    });
+    expect(speech.actions[0]?.type).toBe("generate_speech");
+  });
+
+  it("does not turn questions into paid image generation", async () => {
+    const plan = await planConversationTurn({
+      userMessage: "Which model did you use?",
+      organizationId: "org_1",
+      context: baseContext,
+    });
+    expect(plan.actions).toEqual([
+      { type: "answer_question", question: "Which model did you use?" },
+    ]);
+  });
+
+  it("recognizes resolution and voice settings", async () => {
+    const resolution = await planConversationTurn({
+      userMessage: "Set resolution to 4K",
+      organizationId: "org_1",
+      context: baseContext,
+    });
+    expect(resolution.actions).toEqual([
+      { type: "change_resolution", resolution: "4K" },
+    ]);
+    const voice = await planConversationTurn({
+      userMessage: "Change voice to jasper",
+      organizationId: "org_1",
+      context: { ...baseContext, activeModality: "VOICE" },
+    });
+    expect(voice.actions).toEqual([
+      { type: "change_voice", voiceKey: "jasper" },
+    ]);
+  });
+
   it("plans state-only asset selection: 'Use the second image.'", async () => {
     const plan = await planConversationTurn({
       userMessage: "Use the second image.",

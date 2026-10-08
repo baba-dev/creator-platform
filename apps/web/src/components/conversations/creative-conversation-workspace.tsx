@@ -7,6 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Eyebrow } from "@/components/ui/creative";
 import { Icon } from "@/components/ui/icon";
 import { ProcessFeedback } from "@/components/process/process-feedback";
+import {
+  WORKSPACE_TOOLS,
+  getWorkspaceBase,
+  getWorkspaceItemHref,
+} from "@/lib/workspace-tools";
 import type {
   ClarificationOption,
   ConversationState,
@@ -28,6 +33,7 @@ interface MessageItem {
       options: ClarificationOption[];
     };
     effectiveSpec?: Record<string, unknown>;
+    handoffToolId?: string;
   } | null;
 }
 
@@ -56,6 +62,53 @@ interface GenerationJobItem {
   }>;
 }
 
+type PlannedGeneration = {
+  mode: "plan";
+  billable: true;
+  planFingerprint: string;
+  action: string;
+  targetModality: CreativeModality;
+  model: { id: string; provider: string; displayName: string };
+  priceVersionId: string;
+  prompt: string;
+  settings: {
+    aspectRatio: string;
+    resolution: string;
+    outputCount: number;
+    durationSeconds: number;
+  };
+  referenceAssetIds?: string[];
+  voiceKey?: string;
+  videoWorkflow?: "GENERATE" | "FRAME_TO_VIDEO" | "EXTEND";
+  firstFrameAssetId?: string;
+  videoSourceAssetId?: string;
+  extensionDirection?: "BEFORE" | "AFTER";
+  returnLastFrame?: boolean;
+};
+
+type GenerationQuote = {
+  priceVersionId: string;
+  expiresAt: string;
+  estimatedCredits: string;
+  estimatedOmr: string;
+  reservationCredits: string;
+  maximumChargeOmr: string;
+  settlement: "FIXED" | "ACTUAL_USAGE";
+};
+
+type PlanReview = {
+  prompt: string;
+  idempotencyKey: string;
+  selectedAssetId?: string;
+  sourceGenerationId?: string;
+  expectedRevision: number;
+  resumePendingOperation: boolean;
+  plan: PlannedGeneration;
+  quote: GenerationQuote;
+  canAfford: boolean;
+  canSpend: boolean;
+};
+
 function retryBoundedDerivative(
   image: HTMLImageElement,
   baseUrl: string,
@@ -80,6 +133,7 @@ function retryBoundedDerivative(
 
 export function CreativeConversationWorkspace({
   organizationSlug,
+  organizationId,
   conversationId,
   initialTitle,
   initialState,
@@ -88,7 +142,7 @@ export function CreativeConversationWorkspace({
   canGenerate,
 }: {
   organizationSlug: string;
-  organizationId?: string;
+  organizationId: string;
   conversationId: string;
   initialTitle: string;
   initialState?: ConversationState | null;
@@ -116,6 +170,7 @@ export function CreativeConversationWorkspace({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshError, setRefreshError] = useState(false);
+  const [planReview, setPlanReview] = useState<PlanReview | null>(null);
 
   const activeJob = jobs.find((j) => j.id === selectedJobId) ?? jobs[0] ?? null;
   const isJobPending =
@@ -383,11 +438,12 @@ export function CreativeConversationWorkspace({
     textToSend?: string,
     selectedAssetOverride?: string,
     resumePendingOperation = false,
+    approvedPlan?: PlanReview,
   ) {
-    const prompt = (textToSend ?? inputPrompt).trim();
-    if (!prompt || isSubmitting) return;
+    const prompt = (approvedPlan?.prompt ?? textToSend ?? inputPrompt).trim();
+    if (!prompt || isSubmitting || (planReview && !approvedPlan)) return;
 
-    const wasTypedDraft = !textToSend;
+    const wasTypedDraft = !textToSend && !approvedPlan;
     setIsSubmitting(true);
     setError(null);
     if (wasTypedDraft) {
@@ -398,44 +454,145 @@ export function CreativeConversationWorkspace({
       const focusedJob =
         jobs.find((job) => job.id === selectedJobId) ?? jobs[0] ?? null;
       const focusedAssetId =
+        approvedPlan?.selectedAssetId ??
         selectedAssetOverride ??
         (activeAssetId &&
         focusedJob?.assets.some((asset) => asset.id === activeAssetId)
           ? activeAssetId
           : focusedJob?.assets[0]?.id) ??
         undefined;
+      const sourceGenerationId =
+        approvedPlan?.sourceGenerationId ?? focusedJob?.id;
 
       const idempotencyKey =
-        pendingTurnRef.current &&
+        approvedPlan?.idempotencyKey ??
+        (pendingTurnRef.current &&
         pendingTurnRef.current.prompt === prompt &&
         pendingTurnRef.current.assetId === focusedAssetId &&
-        pendingTurnRef.current.sourceGenerationId === focusedJob?.id &&
+        pendingTurnRef.current.sourceGenerationId === sourceGenerationId &&
         pendingTurnRef.current.resumePendingOperation === resumePendingOperation
           ? pendingTurnRef.current.key
-          : crypto.randomUUID();
+          : crypto.randomUUID());
 
       pendingTurnRef.current = {
         key: idempotencyKey,
         prompt,
         assetId: focusedAssetId,
-        sourceGenerationId: focusedJob?.id,
+        sourceGenerationId,
         resumePendingOperation,
       };
 
-      const res = await fetch(`/api/conversations/${conversationId}/messages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content: prompt,
-          selectedAssetId: focusedAssetId,
-          sourceGenerationId: focusedJob?.id,
-          expectedRevision: conversationRevision,
-          resumePendingOperation,
-          idempotencyKey,
-        }),
-      });
+      const turnPayload = {
+        content: prompt,
+        selectedAssetId: focusedAssetId,
+        sourceGenerationId,
+        expectedRevision:
+          approvedPlan?.expectedRevision ?? conversationRevision,
+        resumePendingOperation,
+        idempotencyKey,
+      };
+      const endpoint = `/api/conversations/${encodeURIComponent(conversationId)}/messages`;
+      const submit = (mode: "plan" | "execute", planFingerprint?: string) =>
+        fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...turnPayload, mode, planFingerprint }),
+        });
+      let res = await submit(
+        approvedPlan ? "execute" : "plan",
+        approvedPlan?.plan.planFingerprint,
+      );
+      let data = await res.json();
 
-      const data = await res.json();
+      if (res.ok && !approvedPlan && data.mode === "plan") {
+        if (data.billable === true) {
+          const plan = data as PlannedGeneration;
+          const sources =
+            plan.videoWorkflow === "EXTEND" && plan.videoSourceAssetId
+              ? [
+                  {
+                    assetId: plan.videoSourceAssetId,
+                    role: "SOURCE_VIDEO",
+                    position: 0,
+                  },
+                ]
+              : plan.firstFrameAssetId
+                ? [
+                    {
+                      assetId: plan.firstFrameAssetId,
+                      role: "FIRST_FRAME",
+                      position: 0,
+                    },
+                  ]
+                : [];
+          const quoteRequest = {
+            organizationId,
+            modelId: plan.model.id,
+            ...(plan.targetModality === "VOICE"
+              ? { text: plan.prompt }
+              : {
+                  aspectRatio: plan.settings.aspectRatio,
+                  resolution: plan.settings.resolution,
+                }),
+            ...(plan.targetModality === "IMAGE"
+              ? {
+                  units: plan.settings.outputCount,
+                  referenceAssetIds: plan.referenceAssetIds ?? [],
+                }
+              : {}),
+            ...(plan.targetModality === "VIDEO"
+              ? {
+                  schemaVersion: 2,
+                  workflow: plan.videoWorkflow ?? "GENERATE",
+                  sources,
+                  durationSeconds: plan.settings.durationSeconds,
+                  generateAudio: false,
+                  outputFormat: "mp4",
+                  returnLastFrame: plan.returnLastFrame === true,
+                  ...(plan.extensionDirection
+                    ? { extensionDirection: plan.extensionDirection }
+                    : {}),
+                }
+              : {}),
+          };
+          const quoteResponse = await fetch("/api/quotes", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(quoteRequest),
+          });
+          const quoted = (await quoteResponse.json()) as {
+            error?: string;
+            quote?: GenerationQuote;
+            wallet?: { canAfford: boolean };
+            budget?: { canSpend: boolean };
+          };
+          if (!quoteResponse.ok || !quoted.quote) {
+            throw new Error(quoted.error ?? "Generation quote is unavailable.");
+          }
+          if (quoted.quote.priceVersionId !== plan.priceVersionId) {
+            throw new Error(
+              "The model price changed. Please review your request again.",
+            );
+          }
+          setPlanReview({
+            prompt,
+            idempotencyKey,
+            selectedAssetId: focusedAssetId,
+            sourceGenerationId,
+            expectedRevision: turnPayload.expectedRevision,
+            resumePendingOperation,
+            plan,
+            quote: quoted.quote,
+            canAfford: quoted.wallet?.canAfford === true,
+            canSpend: quoted.budget?.canSpend === true,
+          });
+          return;
+        }
+        // Read-only turns and clarification require no billing approval.
+        // Persist them through the same idempotent execution boundary.
+        res = await submit("execute");
+        data = await res.json();
+      }
       if (!res.ok) {
         const needsRefresh =
           data.code === "CONVERSATION_CONFLICT" ||
@@ -457,6 +614,7 @@ export function CreativeConversationWorkspace({
       }
 
       pendingTurnRef.current = null;
+      setPlanReview(null);
       if (typeof data.revision === "number") {
         setConversationRevision(data.revision);
       }
@@ -491,9 +649,10 @@ export function CreativeConversationWorkspace({
       }
       await refreshConversation();
     } catch (err) {
-      if (wasTypedDraft) {
+      if (wasTypedDraft || approvedPlan) {
         setInputPrompt(prompt);
       }
+      if (approvedPlan) setPlanReview(null);
       setError(err instanceof Error ? err.message : "Turn failed.");
     } finally {
       setIsSubmitting(false);
@@ -992,7 +1151,7 @@ export function CreativeConversationWorkspace({
           ) : (
             <div className="py-12 text-center text-sm text-muted-foreground">
               {jobs.length === 0
-                ? "Ready to generate your first creation. Enter a prompt below."
+                ? "Ask a question, sketch an idea or create your first image, video or voice."
                 : "Select a step above to view its output."}
             </div>
           )}
@@ -1018,6 +1177,28 @@ export function CreativeConversationWorkspace({
                   }`}
                 >
                   <p className="whitespace-pre-wrap">{message.content}</p>
+                  {meta?.handoffToolId
+                    ? (() => {
+                        const tool = WORKSPACE_TOOLS.find(
+                          (item) => item.id === meta.handoffToolId,
+                        );
+                        return tool ? (
+                          <Link
+                            href={
+                              getWorkspaceItemHref(
+                                getWorkspaceBase(organizationSlug),
+                                tool,
+                              ) as Route
+                            }
+                            className="mt-3 inline-flex min-h-9 items-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20"
+                          >
+                            <Icon name={tool.icon} className="size-4" />
+                            Open {tool.shortTitle}
+                            <Icon name="arrow" className="size-3" />
+                          </Link>
+                        ) : null;
+                      })()
+                    : null}
 
                   {/* Clarification prompt & interactive choices */}
                   {clarification?.options &&
@@ -1081,6 +1262,124 @@ export function CreativeConversationWorkspace({
 
       {/* Sticky Bottom Composer */}
       <footer className="pt-2 border-t border-border/70">
+        {planReview ? (
+          <section
+            role="region"
+            aria-label="Review generation before spending credits"
+            className="mb-3 space-y-3 rounded-2xl border border-primary/30 bg-card p-4 shadow-sm"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <Eyebrow>Review before generating</Eyebrow>
+                <p className="mt-1 text-sm font-semibold text-foreground">
+                  {planReview.plan.model.displayName} ·{" "}
+                  {planReview.plan.targetModality.toLowerCase()}
+                </p>
+                <p className="mt-1 line-clamp-2 break-words text-xs text-muted-foreground">
+                  {planReview.plan.prompt}
+                </p>
+              </div>
+              <span className="rounded-lg border border-border bg-surface-sunken px-2.5 py-1 text-xs text-muted-foreground">
+                {planReview.plan.settings.aspectRatio} ·{" "}
+                {planReview.plan.settings.resolution}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
+              <span>
+                Estimated:{" "}
+                <strong className="tabular-nums text-foreground">
+                  {planReview.quote.estimatedCredits} credits
+                </strong>
+              </span>
+              <span>
+                Maximum reservation:{" "}
+                <strong className="tabular-nums text-foreground">
+                  {planReview.quote.reservationCredits} credits
+                </strong>
+              </span>
+              <span className="text-muted-foreground">
+                {planReview.quote.settlement === "ACTUAL_USAGE"
+                  ? "Final cost settles from actual usage"
+                  : "Fixed quote"}
+              </span>
+            </div>
+            {!planReview.canAfford || !planReview.canSpend ? (
+              <p className="text-xs font-medium text-destructive" role="alert">
+                {!planReview.canAfford
+                  ? "Insufficient wallet credits for this generation."
+                  : "Your organization spending allowance does not permit this generation."}
+              </p>
+            ) : null}
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={isSubmitting}
+                onClick={() => {
+                  setInputPrompt(planReview.prompt);
+                  pendingTurnRef.current = null;
+                  setPlanReview(null);
+                }}
+              >
+                Adjust request
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={
+                  isSubmitting ||
+                  !planReview.canAfford ||
+                  !planReview.canSpend ||
+                  Date.parse(planReview.quote.expiresAt) <= Date.now()
+                }
+                onClick={() =>
+                  void handleSend(
+                    planReview.prompt,
+                    planReview.selectedAssetId,
+                    planReview.resumePendingOperation,
+                    planReview,
+                  )
+                }
+              >
+                {isSubmitting ? "Submitting…" : "Confirm & create"}
+              </Button>
+            </div>
+          </section>
+        ) : null}
+        {/* Specialist tasks reuse the canonical app navigation registry. */}
+        <div
+          className="mb-2 flex items-center gap-2 overflow-x-auto pb-1 text-xs"
+          aria-label="Specialist workbenches"
+        >
+          <span className="shrink-0 text-muted-foreground">
+            Open a workbench:
+          </span>
+          {[
+            "image-studio",
+            "video-studio",
+            "audio-generation",
+            "transcription",
+            "creative-director",
+          ].map((toolId) => {
+            const tool = WORKSPACE_TOOLS.find((item) => item.id === toolId);
+            return tool ? (
+              <Link
+                key={tool.id}
+                href={
+                  getWorkspaceItemHref(
+                    getWorkspaceBase(organizationSlug),
+                    tool,
+                  ) as Route
+                }
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 font-medium text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
+              >
+                <Icon name={tool.icon} className="size-3.5" />
+                {tool.shortTitle}
+              </Link>
+            ) : null;
+          })}
+        </div>
         {/* Quick Action Smart Chips */}
         <div className="flex flex-wrap items-center justify-between gap-2 pb-2 text-xs">
           <div className="flex flex-wrap items-center gap-1.5">
@@ -1124,8 +1423,8 @@ export function CreativeConversationWorkspace({
                 void handleSend();
               }
             }}
-            placeholder="Type your next idea... (e.g. 'Make it 9:16', 'Animate this', 'Try another model')"
-            disabled={!canGenerate || isSubmitting}
+            placeholder="Ask a question or describe what to create…"
+            disabled={!canGenerate || isSubmitting || Boolean(planReview)}
             maxLength={4000}
             className="flex-1 resize-none bg-transparent px-2 py-1 text-sm text-foreground outline-hidden placeholder:text-muted-foreground"
           />
@@ -1149,10 +1448,15 @@ export function CreativeConversationWorkspace({
               type="button"
               size="sm"
               onClick={() => void handleSend()}
-              disabled={!inputPrompt.trim() || !canGenerate || isSubmitting}
+              disabled={
+                !inputPrompt.trim() ||
+                !canGenerate ||
+                isSubmitting ||
+                Boolean(planReview)
+              }
               aria-busy={isSubmitting}
             >
-              {isSubmitting ? "Planning…" : "Send"}
+              {isSubmitting ? "Checking…" : "Send"}
             </Button>
           </div>
         </div>

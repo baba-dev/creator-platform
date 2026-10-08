@@ -44,6 +44,7 @@ export interface ConversationPlannerContext {
   activeModality: CreativeModality;
   currentModelId?: string | null;
   currentProvider?: string | null;
+  currentModelName?: string | null;
   currentSettings: ConversationEffectiveSettings;
   activeOutputGroup: ActiveOutputItem[];
   selectedAssetId?: string | null;
@@ -197,6 +198,10 @@ export function buildPlannerContext(
       contextualJob?.providerModel?.provider ??
       latestJob?.providerModel?.provider ??
       existingState?.currentProvider ??
+      null,
+    currentModelName:
+      contextualJob?.providerModel?.displayName ??
+      latestJob?.providerModel?.displayName ??
       null,
     currentSettings,
     activeOutputGroup,

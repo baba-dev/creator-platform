@@ -12,7 +12,7 @@ import {
   voiceRequestSchema,
   videoRequestSchema,
 } from "@aiwa/generation";
-import { creativeLocaleIntentSchema, normalizeCreativeLocaleIntent, type CreativeLocaleIntent } from "@aiwa/generation/locale";
+import { creativeLocaleIntentSchema, type CreativeLocaleIntent } from "@aiwa/generation/locale";
 import { z } from "zod";
 import { InsufficientCreditsError } from "@aiwa/credits";
 import { AssetQuotaExceededError } from "@aiwa/assets";
@@ -360,7 +360,7 @@ export async function quotePixelAction(
     modelId: model.id,
     priceVersionId: price.id,
     idempotencyKey: actionKey(action.id),
-    ...(localeIntent ? { localeIntent: normalizeCreativeLocaleIntent(creativeLocaleIntentSchema.parse(localeIntent)) } : {}),
+    ...(localeIntent ? { localeIntent: creativeLocaleIntentSchema.parse(localeIntent) } : {}),
   };
   const request =
     step.kind === "IMAGE"

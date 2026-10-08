@@ -18,7 +18,10 @@ import {
 import { VERIFIED_BYTEPLUS_MODELS } from "@aiwa/providers/byteplus";
 import { VERIFIED_ALL_MODELS } from "@aiwa/providers/catalog";
 import { z } from "zod";
-import { creativeLocaleIntentSchema, normalizeCreativeLocaleIntent } from "./locale";
+import {
+  creativeLocaleIntentSchema,
+  normalizeCreativeLocaleIntent,
+} from "./locale";
 import { resolvePresetVoice, VoiceResolutionError } from "./voices";
 import {
   planSeedAudioLongForm,
@@ -544,7 +547,9 @@ export async function createImageJob(userId: string, raw: unknown) {
   const input = imageRequestSchema.parse(raw);
   const payload = {
     prompt: input.prompt,
-    ...(input.localeIntent ? { localeIntent: normalizeCreativeLocaleIntent(input.localeIntent) } : {}),
+    ...(input.localeIntent
+      ? { localeIntent: normalizeCreativeLocaleIntent(input.localeIntent) }
+      : {}),
     aspectRatio: input.aspectRatio,
     resolution: input.resolution,
     outputFormat: "png",
@@ -600,7 +605,8 @@ export async function createImageJob(userId: string, raw: unknown) {
             old.outputFormat !== payload.outputFormat ||
             old.watermark !== payload.watermark ||
             old.outputCount !== payload.outputCount ||
-            JSON.stringify(old.localeIntent ?? null) !== JSON.stringify(payload.localeIntent ?? null) ||
+            JSON.stringify(old.localeIntent ?? null) !==
+              JSON.stringify(payload.localeIntent ?? null) ||
             !sameReferences
           )
             throw new GenerationError(
@@ -893,7 +899,9 @@ export async function createVideoJob(userId: string, raw: unknown) {
         schemaVersion: 2,
         workflow: input.workflow,
         prompt: input.prompt,
-        ...(input.localeIntent ? { localeIntent: normalizeCreativeLocaleIntent(input.localeIntent) } : {}),
+        ...(input.localeIntent
+          ? { localeIntent: normalizeCreativeLocaleIntent(input.localeIntent) }
+          : {}),
         sources: input.sources,
         aspectRatio: input.aspectRatio,
         resolution: input.resolution,
@@ -912,7 +920,9 @@ export async function createVideoJob(userId: string, raw: unknown) {
       }
     : {
         prompt: input.prompt,
-        ...(input.localeIntent ? { localeIntent: normalizeCreativeLocaleIntent(input.localeIntent) } : {}),
+        ...(input.localeIntent
+          ? { localeIntent: normalizeCreativeLocaleIntent(input.localeIntent) }
+          : {}),
         aspectRatio: input.aspectRatio,
         resolution: input.resolution,
         durationSeconds: input.durationSeconds,
@@ -1480,7 +1490,9 @@ async function createSeedAudioJob(userId: string, raw: unknown) {
     sourceText: input.sourceText ?? null,
     directorPreset: input.directorPreset ?? null,
     language: input.language ?? null,
-    ...(input.localeIntent ? { localeIntent: normalizeCreativeLocaleIntent(input.localeIntent) } : {}),
+    ...(input.localeIntent
+      ? { localeIntent: normalizeCreativeLocaleIntent(input.localeIntent) }
+      : {}),
     parentGenerationId: input.parentGenerationId ?? null,
     referenceAudioAssetIds: input.referenceAudioAssetIds,
     referenceVoiceKeys: referenceVoices.map((voice) => voice.key),
@@ -1807,7 +1819,9 @@ export async function createVoiceJob(userId: string, raw: unknown) {
   const payload = {
     text: input.text,
     voiceKey: presetVoice.key,
-    ...(input.localeIntent ? { localeIntent: normalizeCreativeLocaleIntent(input.localeIntent) } : {}),
+    ...(input.localeIntent
+      ? { localeIntent: normalizeCreativeLocaleIntent(input.localeIntent) }
+      : {}),
     speaker: presetVoice.speakerId,
     speechRate: input.speechRate,
     ...(input.loudnessRate !== 1 ? { loudnessRate: input.loudnessRate } : {}),
@@ -2019,7 +2033,9 @@ export async function createTranscriptionJob(userId: string, raw: unknown) {
     task: "transcription",
     sourceAssetId: input.sourceAssetId,
     language: input.language ?? null,
-    ...(input.localeIntent ? { localeIntent: normalizeCreativeLocaleIntent(input.localeIntent) } : {}),
+    ...(input.localeIntent
+      ? { localeIntent: normalizeCreativeLocaleIntent(input.localeIntent) }
+      : {}),
     prompt: input.prompt ?? null,
     outputFormats: ["txt", "srt", "vtt"],
   };

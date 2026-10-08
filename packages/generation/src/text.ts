@@ -450,7 +450,9 @@ export async function createTextJob(
         input.maxTokens,
       );
       const effectiveMessages = normalizeTextMessagesForModel(
-        localeSystemMessages(messages, input.localeIntent), modelRow.capabilities, input.maxTokens,
+        localeSystemMessages(messages, input.localeIntent),
+        modelRow.capabilities,
+        input.maxTokens,
       );
       const promptText = effectiveMessages
         .map((message) => `${message.role}: ${message.content}`)
@@ -691,7 +693,10 @@ export async function processTextJob(
     ? (payload.messages as TextMessage[])
     : [];
   const messages = normalizeTextMessagesForModel(
-    localeSystemMessages(savedMessages, readCreativeLocaleIntent(payload.localeIntent)),
+    localeSystemMessages(
+      savedMessages,
+      readCreativeLocaleIntent(payload.localeIntent),
+    ),
     job.providerModel.capabilities,
     typeof payload.maxTokens === "number" ? payload.maxTokens : 2048,
   );

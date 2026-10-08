@@ -1252,11 +1252,16 @@ export function CreativeConversationWorkspace({
               <div className="flex items-center justify-between pb-3 border-b border-border/60">
                 <div>
                   <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
-                    Orchestrated Creative Workflow
+                    Creative Workflow Draft
                   </span>
                   <h4 className="text-sm font-semibold text-foreground">
                     {workflows[0].title}
                   </h4>
+                  {workflows[0].status === "DRAFT" ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Preview only. No provider job runs without a verified quote and explicit approval.
+                    </p>
+                  ) : null}
                 </div>
                 <span className="rounded-full bg-primary/10 border border-primary/20 px-2.5 py-0.5 text-[11px] font-medium text-primary">
                   {workflows[0].status}

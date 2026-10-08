@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { db, type Prisma } from "@aiwa/db";
 import { hasOrganizationPermission } from "@aiwa/authz";
 import { quoteParameters, verifyGenerationQuote } from "@aiwa/generation";
@@ -79,7 +80,7 @@ async function assertActor(
       createdById: userId,
       threadType: "CREATIVE",
     },
-    select: { id: true },
+    select: { id: true, projectId: true },
   });
   if (!thread) throw new Error("Creative conversation unavailable.");
   const member = await tx.membership.findUnique({
@@ -92,6 +93,7 @@ async function assertActor(
     !hasOrganizationPermission(member.role, "generation:create")
   )
     throw new Error("Not authorized to create paid generation workflows.");
+  return thread;
 }
 
 const NEXT: Record<string, readonly string[]> = {
@@ -125,13 +127,18 @@ export class CreativeWorkflowService {
           throw new Error("Step dependency must point to an earlier step.");
       }
     }
+    const requestHash = createHash("sha256")
+      .update(JSON.stringify({ ...input, steps: sorted }))
+      .digest("hex");
     return db.$transaction(async (tx) => {
-      await assertActor(
+      const thread = await assertActor(
         tx,
         input.organizationId,
         input.actorId,
         input.threadId,
       );
+      if ((thread.projectId ?? null) !== (input.projectId ?? null))
+        throw new Error("Workflow project does not match its conversation.");
       if (input.projectId) {
         const project = await tx.project.findFirst({
           where: {
@@ -153,6 +160,9 @@ export class CreativeWorkflowService {
         },
       });
       if (existing) {
+        const metadata = existing.metadata as Record<string, unknown> | null;
+        if (metadata?.requestHash !== requestHash)
+          throw new Error("Request key was reused for a different workflow.");
         return tx.creativeWorkflow.findUnique({
           where: { id: existing.id },
           include: {
@@ -173,6 +183,7 @@ export class CreativeWorkflowService {
           title: input.title,
           revision: 1,
           status: "DRAFT",
+          metadata: { requestHash },
         },
       });
       const created = [];

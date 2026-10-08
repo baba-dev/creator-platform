@@ -2064,7 +2064,12 @@ export async function createTranscriptionJob(userId: string, raw: unknown) {
           previous.task !== "transcription" ||
           previous.sourceAssetId !== input.sourceAssetId ||
           previous.language !== (input.language ?? null) ||
-          JSON.stringify(previous.localeIntent ?? null) !== JSON.stringify(input.localeIntent ? normalizeCreativeLocaleIntent(input.localeIntent) : null) ||
+          JSON.stringify(previous.localeIntent ?? null) !==
+            JSON.stringify(
+              input.localeIntent
+                ? normalizeCreativeLocaleIntent(input.localeIntent)
+                : null,
+            ) ||
           previous.prompt !== (input.prompt ?? null)
         ) {
           throw new GenerationError(

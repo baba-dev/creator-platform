@@ -47,8 +47,14 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
-  if (parsed.data.localeIntent && !creativeLocaleIntentSchema.safeParse(parsed.data.localeIntent).success) {
-    return NextResponse.json({ error: "Invalid creative locale." }, { status: 400 });
+  if (
+    parsed.data.localeIntent &&
+    !creativeLocaleIntentSchema.safeParse(parsed.data.localeIntent).success
+  ) {
+    return NextResponse.json(
+      { error: "Invalid creative locale." },
+      { status: 400 },
+    );
   }
 
   const { organizationId, modelId, referenceVideoAssetId } = parsed.data;

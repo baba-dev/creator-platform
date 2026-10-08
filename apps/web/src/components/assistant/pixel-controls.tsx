@@ -2,10 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  CreativeLocaleSelector,
-  useCreativeLocale,
-} from "@/components/studio/creative-locale-selector";
+import { useCreativeLocale } from "@/components/studio/creative-locale-selector";
 import type { CreativeLocaleIntent } from "@aiwa/generation/locale";
 import Image from "next/image";
 
@@ -72,7 +69,7 @@ export function PixelControls({
   showPreferences: boolean;
   onClosePreferences: () => void;
 }) {
-  const [localeIntent, setLocaleIntent] = useCreativeLocale(organizationId);
+  const [localeIntent] = useCreativeLocale(organizationId);
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [preferences, setPreferences] = useState<Preferences>(defaults);
   const [brands, setBrands] = useState<Array<{ id: string; name: string }>>([]);
@@ -167,11 +164,6 @@ export function PixelControls({
 
   return (
     <div className="space-y-3 text-sm [&_button]:min-h-11 [&_button]:h-auto [&_button]:whitespace-normal [&_button]:py-2">
-      <CreativeLocaleSelector
-        value={localeIntent}
-        onChange={setLocaleIntent}
-        disabled={busy}
-      />
       <details
         data-pixel-preferences
         hidden={!showPreferences}

@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  CreativeLocaleSelector,
+  CreativeLocaleButton,
   useCreativeLocale,
 } from "@/components/studio/creative-locale-selector";
 import {
@@ -1506,11 +1506,6 @@ export function GenerationStudio({
       className="paper-sheet relative w-full min-w-0 rounded-[28px] border border-border p-5 sm:p-7"
     >
       <Tape className="-top-1 right-16 hidden rotate-6 sm:block" />
-      <CreativeLocaleSelector
-        value={localeIntent}
-        onChange={setLocaleIntent}
-        disabled={busy || isEnhancing}
-      />
       <Eyebrow>
         {variant === "quick"
           ? "Quick create"
@@ -1835,6 +1830,13 @@ export function GenerationStudio({
                   {estimatedUnits === 1 ? "" : "s"}
                 </div>
               </div>
+              <div className="flex justify-end">
+                <CreativeLocaleButton
+                  value={localeIntent}
+                  onChange={setLocaleIntent}
+                  disabled={busy}
+                />
+              </div>
 
               <div className={variant === "quick" ? "hidden" : "space-y-4"}>
                 <div className="flex items-center justify-between">
@@ -2066,7 +2068,14 @@ export function GenerationStudio({
                       ? "Optional: subtle smile, natural gestures, steady eye contact…"
                       : "A cinematic product photograph in warm Omani desert light…"
                   }
-                  className="min-h-44 w-full rounded-2xl border border-input bg-card p-4 pb-14 text-foreground placeholder:text-muted-foreground"
+                  className="min-h-44 w-full rounded-2xl border border-input bg-card p-4 text-foreground placeholder:text-muted-foreground"
+                />
+              </div>
+              <div className="mt-2 flex flex-wrap justify-end gap-2">
+                <CreativeLocaleButton
+                  value={localeIntent}
+                  onChange={setLocaleIntent}
+                  disabled={busy || isEnhancing}
                 />
                 <Button
                   type="button"
@@ -2082,7 +2091,6 @@ export function GenerationStudio({
                     !prompt.trim()
                   }
                   aria-busy={isEnhancing}
-                  className="absolute bottom-3 right-3"
                 >
                   {isEnhancing ? (
                     <>

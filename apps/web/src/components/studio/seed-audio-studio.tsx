@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  CreativeLocaleSelector,
+  CreativeLocaleButton,
   useCreativeLocale,
 } from "@/components/studio/creative-locale-selector";
 import { sortVoicesForLocale, voiceLocaleMatch } from "@aiwa/generation/locale";
@@ -655,11 +655,6 @@ export function SeedAudioStudio({
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
       <section className="min-w-0 space-y-6">
-        <CreativeLocaleSelector
-          value={localeIntent}
-          onChange={setLocaleIntent}
-          disabled={busy}
-        />
         <div className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-7">
           <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -670,22 +665,29 @@ export function SeedAudioStudio({
                 What do you want Seed Audio to create?
               </h2>
             </div>
-            <span
-              className={
-                model
-                  ? "inline-flex min-h-8 items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 text-xs font-semibold text-primary"
-                  : "inline-flex min-h-8 items-center gap-2 rounded-full border border-border bg-muted px-3 text-xs font-semibold text-muted-foreground"
-              }
-            >
+            <div className="flex flex-wrap items-center gap-2">
+              <CreativeLocaleButton
+                value={localeIntent}
+                onChange={setLocaleIntent}
+                disabled={busy}
+              />
               <span
                 className={
                   model
-                    ? "size-2 rounded-full bg-primary"
-                    : "size-2 rounded-full bg-muted-foreground/40"
+                    ? "inline-flex min-h-8 items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 text-xs font-semibold text-primary"
+                    : "inline-flex min-h-8 items-center gap-2 rounded-full border border-border bg-muted px-3 text-xs font-semibold text-muted-foreground"
                 }
-              />
-              {model ? "Seed Audio ready" : "Checking model"}
-            </span>
+              >
+                <span
+                  className={
+                    model
+                      ? "size-2 rounded-full bg-primary"
+                      : "size-2 rounded-full bg-muted-foreground/40"
+                  }
+                />
+                {model ? "Seed Audio ready" : "Checking model"}
+              </span>
+            </div>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">

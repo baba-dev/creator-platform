@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  CreativeLocaleSelector,
+  CreativeLocaleButton,
   useCreativeLocale,
 } from "@/components/studio/creative-locale-selector";
 
@@ -338,11 +338,6 @@ export function TranscriptionStudio({
 
   return (
     <section className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-6">
-      <CreativeLocaleSelector
-        value={localeIntent}
-        onChange={setLocaleIntent}
-        disabled={busy || uploadBusy}
-      />
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <Eyebrow>Speech / transcription</Eyebrow>
@@ -355,9 +350,16 @@ export function TranscriptionStudio({
             pricing and billing.
           </p>
         </div>
-        <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-          {models.length} {models.length === 1 ? "model" : "models"} ready
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <CreativeLocaleButton
+            value={localeIntent}
+            onChange={setLocaleIntent}
+            disabled={busy || uploadBusy}
+          />
+          <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+            {models.length} {models.length === 1 ? "model" : "models"} ready
+          </span>
+        </div>
       </div>
 
       <div className="mt-6 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.7fr)]">

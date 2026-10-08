@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  CreativeLocaleSelector,
+  CreativeLocaleButton,
   useCreativeLocale,
 } from "@/components/studio/creative-locale-selector";
 
@@ -706,11 +706,6 @@ export function CharacterChatWorkspace({
 
   return (
     <div className="mx-auto flex h-[calc(100vh-65px)] max-w-[1600px] flex-col p-4 sm:p-6 lg:p-8">
-      <CreativeLocaleSelector
-        value={localeIntent}
-        onChange={setLocaleIntent}
-        disabled={isSending}
-      />
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-4">
         <div>
@@ -730,7 +725,12 @@ export function CharacterChatWorkspace({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <CreativeLocaleButton
+            value={localeIntent}
+            onChange={setLocaleIntent}
+            disabled={isSending}
+          />
           {/* Model Selector */}
           <div className="relative">
             <select

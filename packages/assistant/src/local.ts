@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { creativeLocaleIntentSchema } from "@aiwa/generation/locale";
 import { searchKnowledgebase } from "./kb/search";
 import { executeAssistantTool } from "./tools/registry";
 import type { AssistantToolContext, ToolCallResult } from "./tools/types";
@@ -28,6 +29,7 @@ export const pixelWorkspaceSchema = z
       .optional(),
     selectedAssetIds: z.array(z.string().min(1).max(100)).max(4).default([]),
     conversationId: z.string().min(1).max(100).optional(),
+    localeIntent: creativeLocaleIntentSchema.optional(),
   })
   .strict();
 

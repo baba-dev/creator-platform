@@ -123,7 +123,10 @@ export async function planConversationTurn(params: {
   // Multi-step requests require a reviewed workflow, not an accidental
   // single media generation. The v3 native executor is feature-gated until
   // the complete DAG approval and recovery path is proven.
-  if (intentClassification.intent === "MULTI_STEP") {
+  if (
+    intentClassification.intent === "MULTI_STEP" &&
+    !/^(?:use|select|pick|take)\b/i.test(text)
+  ) {
     const proposal = compileCreativePlan({ userPrompt: text });
     return {
       version: ACTION_PROTOCOL_VERSION,

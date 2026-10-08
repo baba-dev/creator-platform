@@ -352,3 +352,22 @@ export function transcriptionLanguageHint(
   const base = intent.language.split("-")[0]?.toLowerCase();
   return base && /^[a-z]{2,3}$/.test(base) ? base : undefined;
 }
+
+/**
+ * Prompt enhancement sees locale as a separate system instruction, never as
+ * repeated user prompt text. The same result is used for preflight costing.
+ */
+export function creativeLocaleEnhancementSystemPrompt(
+  baseSystemPrompt: string,
+  persistedIntent: unknown,
+  kind: "IMAGE" | "VIDEO",
+): string {
+  const intent = readCreativeLocaleIntent(persistedIntent);
+  const direction = compileCreativeLocaleInstructions(intent, kind);
+  if (!direction) return baseSystemPrompt;
+  return [
+    baseSystemPrompt,
+    direction,
+    "Locale is metadata for downstream generation, not text to pad the rewritten prompt. Keep the enhanced prompt natural; do not add repetitive regional or cultural descriptions unless explicitly requested.",
+  ].join(" ");
+}

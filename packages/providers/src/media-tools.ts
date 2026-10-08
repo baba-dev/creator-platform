@@ -4,7 +4,7 @@ export type ProviderToolStatus =
 export type ProviderToolExecutionMode = "async" | "sync";
 
 export type ProviderToolPricingMetric =
-  "REQUEST" | "INPUT_SECOND" | "OUTPUT_SECOND";
+  "REQUEST" | "INPUT_SECOND" | "OUTPUT_SECOND" | "INPUT_BYTE";
 
 export interface ProviderToolDescriptor {
   readonly id: string;

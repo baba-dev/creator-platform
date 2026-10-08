@@ -23,6 +23,8 @@ function serializePrice(price: ProviderToolPriceVersion) {
     customerCredits: price.customerCredits.toString(),
     pricingMetric: price.pricingMetric,
     unitQuantity: price.unitQuantity,
+    proportional: price.proportional,
+    resolutionRates: price.resolutionRates,
     targetMarginBps: price.targetMarginBps,
     creditsPerBaisa: price.creditsPerBaisa.toString(),
     fxBaisaNumerator: price.fxBaisaNumerator.toString(),
@@ -95,6 +97,9 @@ export async function PATCH(
         !activePrice ||
         activePrice.providerCostMicroUsd <= 0n ||
         activePrice.pricingMetric !== tool.pricingMetric ||
+        ((tool.capabilities as Record<string, unknown>).resolutionPricing &&
+          !activePrice.resolutionRates) ||
+        (tool.pricingMetric === "INPUT_BYTE" && !activePrice.proportional) ||
         (usesOutputPresenceBilling(tool.capabilities) &&
           (activePrice.providerCostNoOutputMicroUsd === null ||
             activePrice.providerCostNoOutputMicroUsd <= 0n ||
@@ -187,6 +192,35 @@ export async function PATCH(
     );
   }
 
+  const capabilities = tool.capabilities as Record<string, unknown>;
+  const tiers =
+    capabilities.resolutionPricing === "matting"
+      ? ["720p", "1080p", "1440p", "2160p"]
+      : capabilities.resolutionPricing === "scrolling"
+        ? ["360p", "480p", "720p", "1080p"]
+        : [];
+  if (
+    (tool.pricingMetric === "INPUT_BYTE" && !input.proportional) ||
+    (tiers.length > 0 &&
+      (!input.proportional ||
+        !input.resolutionRates ||
+        Object.keys(input.resolutionRates).length !== tiers.length ||
+        tiers.some(
+          (tier) =>
+            !input.resolutionRates?.[tier] ||
+            BigInt(input.resolutionRates[tier]!) > input.providerCostMicroUsd,
+        ))) ||
+    (tiers.length === 0 && input.resolutionRates !== undefined)
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "Publish proportional pricing and a complete resolution tariff bounded by the maximum provider cost.",
+      },
+      { status: 400 },
+    );
+  }
+
   const fxBaisaNumerator =
     input.fxBaisaNumerator ?? DEFAULT_FX_RATE.baisaNumerator;
   const fxBaisaDenominator =
@@ -214,6 +248,14 @@ export async function PATCH(
             input.providerCostNoOutputMicroUsd ?? null,
           pricingMetric: tool.pricingMetric,
           unitQuantity: input.unitQuantity,
+          proportional: input.proportional,
+          resolutionRates: input.resolutionRates
+            ? Object.fromEntries(
+                Object.entries(input.resolutionRates).sort(([a], [b]) =>
+                  a.localeCompare(b),
+                ),
+              )
+            : undefined,
           targetMarginBps: input.targetMarginBps,
           fxBaisaNumerator,
           fxBaisaDenominator,
@@ -286,6 +328,14 @@ export async function PATCH(
           targetMarginBps: input.targetMarginBps,
           pricingMetric: tool.pricingMetric,
           unitQuantity: input.unitQuantity,
+          proportional: input.proportional,
+          resolutionRates: input.resolutionRates
+            ? Object.fromEntries(
+                Object.entries(input.resolutionRates).sort(([a], [b]) =>
+                  a.localeCompare(b),
+                ),
+              )
+            : undefined,
           creditsPerBaisa: 1n,
           providerCostBasisNote: input.providerCostBasisNote,
           effectiveFrom: now,

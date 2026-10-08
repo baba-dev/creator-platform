@@ -79,6 +79,45 @@ function url(grant: string) {
 const context = { params: Promise.resolve({ assetId: "asset1" }) };
 
 describe("provider tool media retrieval", () => {
+  it("serves only correctly snapshotted image and audio roles", async () => {
+    const row = await mocks.db.providerToolInputAsset.findUnique();
+    for (const media of [
+      {
+        role: "SOURCE_IMAGE",
+        position: 0,
+        mediaKind: "IMAGE",
+        mimeType: "image/png",
+      },
+      {
+        role: "SOURCE_AUDIO",
+        position: 1,
+        mediaKind: "AUDIO",
+        mimeType: "audio/mpeg",
+      },
+    ]) {
+      mocks.db.providerToolInputAsset.findUnique.mockResolvedValueOnce({
+        ...row,
+        role: media.role,
+        position: media.position,
+        asset: {
+          ...row.asset,
+          mediaKind: media.mediaKind,
+          mimeType: media.mimeType,
+        },
+      });
+      const response = await HEAD(new Request(url(validGrant())), context);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("Content-Type")).toBe(media.mimeType);
+    }
+    mocks.db.providerToolInputAsset.findUnique.mockResolvedValueOnce({
+      ...row,
+      role: "SOURCE_IMAGE",
+      asset: { ...row.asset, mediaKind: "AUDIO", mimeType: "audio/mpeg" },
+    });
+    expect((await GET(new Request(url(validGrant())), context)).status).toBe(
+      404,
+    );
+  });
   it("rejects unsigned requests before touching persistence", async () => {
     const response = await GET(new Request(url("bad")), context);
     expect(response.status).toBe(404);

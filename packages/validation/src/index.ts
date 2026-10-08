@@ -977,7 +977,19 @@ export const publishProviderToolPriceVersionSchema = z
     providerCostMicroUsd: positiveDatabaseBigIntSchema,
     providerCostNoOutputMicroUsd: positiveDatabaseBigIntSchema.optional(),
     targetMarginBps: z.number().int().min(0).max(9999),
-    unitQuantity: z.coerce.number().int().positive().max(86_400).default(1),
+    unitQuantity: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(1_073_741_824)
+      .default(1),
+    proportional: z.boolean().default(false),
+    resolutionRates: z
+      .record(
+        z.string().regex(/^(360|480|720|1080|1440|2160)p$/),
+        z.string().regex(/^[1-9]\d{0,15}$/),
+      )
+      .optional(),
     fxBaisaNumerator: positiveDatabaseBigIntSchema.optional(),
     fxBaisaDenominator: positiveDatabaseBigIntSchema.optional(),
     creditsPerBaisa: positiveDatabaseBigIntSchema.optional(),

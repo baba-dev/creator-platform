@@ -39,4 +39,9 @@ describe("Pixel creative locale context", () => {
       pixelWorkspaceSchema.parse({ page: "home" }).localeIntent,
     ).toBeUndefined();
   });
+  it("accepts the MediaKit workspace page", () => {
+    expect(pixelWorkspaceSchema.parse({ page: "media-tools" }).page).toBe(
+      "media-tools",
+    );
+  });
 });

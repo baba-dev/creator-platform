@@ -35,6 +35,22 @@
     ]
   },
   {
+    "key": "mediakit-tools",
+    "title": "MediaKit Tools",
+    "summary": "Process workspace images and videos with compression, crop, pixelation, watermark, face blur, portrait or green-screen matting, lip sync, scrolling text, quality assessment, smoothness and semantic segmentation. Review the live credit reservation before running. Finished outputs are saved to the Asset Library; recent jobs survive navigation. Availability depends on current administrator pricing and enabled tools. Manual-review jobs retain reserved credits and should not be resubmitted.",
+    "route": "/media-tools",
+    "keywords": [
+      "mediakit",
+      "matting",
+      "compression",
+      "watermark",
+      "pixelation",
+      "scrolling",
+      "segmentation",
+      "lip sync"
+    ]
+  },
+  {
     "key": "templates",
     "title": "Generation Templates",
     "summary": "Use pre-built templates for common workflows \u2014 fill in variables and generate in one click.",

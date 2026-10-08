@@ -91,6 +91,7 @@ describe("spokesperson MediaKit execution status", () => {
         errorCode: null,
         errorMessage: null,
         vqScore: 72.5,
+        segments: null,
         outputAssetId: null,
         outputMimeType: null,
         completedAt: "2026-10-07T10:00:00.000Z",

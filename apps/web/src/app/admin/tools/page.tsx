@@ -51,6 +51,11 @@ export default async function ProviderToolsAdminPage() {
               price.providerCostNoOutputMicroUsd?.toString() ?? null,
             customerCredits: price.customerCredits.toString(),
             unitQuantity: price.unitQuantity,
+            proportional: price.proportional,
+            resolutionRates: price.resolutionRates as Record<
+              string,
+              string
+            > | null,
             targetMarginBps: price.targetMarginBps,
             providerCostBasisNote: price.providerCostBasisNote,
           }

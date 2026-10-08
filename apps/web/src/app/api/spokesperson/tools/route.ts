@@ -135,7 +135,7 @@ async function loadOmniHumanVideo(
 function quote(
   price: {
     providerCostMicroUsd: bigint;
-    pricingMetric: "REQUEST" | "INPUT_SECOND" | "OUTPUT_SECOND";
+    pricingMetric: "REQUEST" | "INPUT_SECOND" | "OUTPUT_SECOND" | "INPUT_BYTE";
     unitQuantity: number;
     fxBaisaNumerator: bigint;
     fxBaisaDenominator: bigint;
@@ -147,6 +147,8 @@ function quote(
 ) {
   return quoteProviderToolPrice({
     providerCostMicroUsd,
+    proportional: (price as typeof price & { proportional?: boolean })
+      .proportional,
     pricingMetric: price.pricingMetric,
     unitQuantity: price.unitQuantity,
     billableQuantity: quantity,

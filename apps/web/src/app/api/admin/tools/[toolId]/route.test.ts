@@ -63,6 +63,73 @@ beforeEach(() => {
 });
 
 describe("MediaKit admin controls", () => {
+  it("requires byte pricing to prorate usage", async () => {
+    mocks.db.providerTool.findUnique.mockResolvedValue({
+      ...tool,
+      pricingMetric: "INPUT_BYTE",
+    });
+    const response = await PATCH(
+      request({
+        idempotencyKey: "50a49a7b-b2f4-4cf4-8050-e167710996d6",
+        providerCostMicroUsd: "10000",
+        targetMarginBps: 2000,
+        unitQuantity: 1073741824,
+      }),
+      context,
+    );
+    expect(response.status).toBe(400);
+    expect(mocks.tx.providerToolPriceVersion.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects incomplete or unbounded matting tariffs", async () => {
+    mocks.db.providerTool.findUnique.mockResolvedValue({
+      ...tool,
+      capabilities: { resolutionPricing: "matting" },
+    });
+    const response = await PATCH(
+      request({
+        idempotencyKey: "50a49a7b-b2f4-4cf4-8050-e167710996d6",
+        providerCostMicroUsd: "300000",
+        targetMarginBps: 2000,
+        unitQuantity: 60,
+        proportional: true,
+        resolutionRates: { "720p": "300000" },
+      }),
+      context,
+    );
+    expect(response.status).toBe(400);
+    expect(mocks.tx.providerToolPriceVersion.create).not.toHaveBeenCalled();
+  });
+
+  it("snapshots all matting tariffs alongside proportional pricing", async () => {
+    mocks.db.providerTool.findUnique.mockResolvedValue({
+      ...tool,
+      capabilities: { resolutionPricing: "matting" },
+    });
+    const resolutionRates = {
+      "720p": "300000",
+      "1080p": "450000",
+      "1440p": "900000",
+      "2160p": "1200000",
+    };
+    const response = await PATCH(
+      request({
+        idempotencyKey: "50a49a7b-b2f4-4cf4-8050-e167710996d6",
+        providerCostMicroUsd: "1200000",
+        targetMarginBps: 2000,
+        unitQuantity: 60,
+        proportional: true,
+        resolutionRates,
+      }),
+      context,
+    );
+    expect(response.status).toBe(200);
+    expect(mocks.tx.providerToolPriceVersion.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ proportional: true, resolutionRates }),
+      }),
+    );
+  });
   it("requires a valid active price before enablement", async () => {
     mocks.db.providerToolPriceVersion.findFirst.mockResolvedValue(null);
     const response = await PATCH(request({ enabled: true }), context);

@@ -42,8 +42,13 @@ export const BYTEPLUS_MEDIAKIT_TOOLS: readonly ProviderToolDescriptor[] = [
     category: "video",
     executionMode: "async",
     endpoint: "/api/v1/tools/matte-portrait-video",
-    pricingMetric: "INPUT_SECOND",
-    capabilities: { videoInput: true, alphaOutput: true, outputVideo: true },
+    pricingMetric: "OUTPUT_SECOND",
+    capabilities: {
+      videoInput: true,
+      resolutionPricing: "matting",
+      alphaOutput: true,
+      outputVideo: true,
+    },
   },
   {
     id: "matte-greenscreen-video",
@@ -53,8 +58,13 @@ export const BYTEPLUS_MEDIAKIT_TOOLS: readonly ProviderToolDescriptor[] = [
     category: "video",
     executionMode: "async",
     endpoint: "/api/v1/tools/matte-greenscreen-video",
-    pricingMetric: "INPUT_SECOND",
-    capabilities: { videoInput: true, alphaOutput: true, outputVideo: true },
+    pricingMetric: "OUTPUT_SECOND",
+    capabilities: {
+      videoInput: true,
+      resolutionPricing: "matting",
+      alphaOutput: true,
+      outputVideo: true,
+    },
   },
   {
     id: "semantic-segment",
@@ -106,7 +116,13 @@ export const BYTEPLUS_MEDIAKIT_TOOLS: readonly ProviderToolDescriptor[] = [
     executionMode: "async",
     endpoint: "/api/v1/tools/text-to-scrolling-video",
     pricingMetric: "OUTPUT_SECOND",
-    capabilities: { textInput: true, outputVideo: true, verticalOutput: true },
+    capabilities: {
+      textInput: true,
+      imageInput: true,
+      resolutionPricing: "scrolling",
+      outputVideo: true,
+      verticalOutput: true,
+    },
   },
   {
     id: "compress-image",
@@ -116,7 +132,7 @@ export const BYTEPLUS_MEDIAKIT_TOOLS: readonly ProviderToolDescriptor[] = [
     category: "image",
     executionMode: "sync",
     endpoint: "/api/v1/tools-sync/compress-image",
-    pricingMetric: "REQUEST",
+    pricingMetric: "INPUT_BYTE",
     capabilities: { imageInput: true, imageOutput: true },
   },
   {
@@ -138,7 +154,7 @@ export const BYTEPLUS_MEDIAKIT_TOOLS: readonly ProviderToolDescriptor[] = [
     category: "image",
     executionMode: "sync",
     endpoint: "/api/v1/tools-sync/crop-image",
-    pricingMetric: "REQUEST",
+    pricingMetric: "INPUT_BYTE",
     capabilities: { imageInput: true, imageOutput: true },
   },
   {
@@ -160,7 +176,7 @@ export const BYTEPLUS_MEDIAKIT_TOOLS: readonly ProviderToolDescriptor[] = [
     category: "image",
     executionMode: "sync",
     endpoint: "/api/v1/tools-sync/mosaic-image",
-    pricingMetric: "REQUEST",
+    pricingMetric: "INPUT_BYTE",
     capabilities: { imageInput: true, imageOutput: true },
   },
   {
@@ -171,7 +187,7 @@ export const BYTEPLUS_MEDIAKIT_TOOLS: readonly ProviderToolDescriptor[] = [
     category: "image",
     executionMode: "sync",
     endpoint: "/api/v1/tools-sync/add-image-watermark",
-    pricingMetric: "REQUEST",
+    pricingMetric: "INPUT_BYTE",
     capabilities: { imageInput: true, imageOutput: true, watermark: true },
   },
 ] as const;
@@ -339,7 +355,7 @@ function sanitizeInput(
   }
 
   const schema =
-    toolId === "matte-portrait-video"
+    toolId === "matte-portrait-video" || toolId === "matte-greenscreen-video"
       ? portraitMattingInputSchema
       : toolId === "assess-video-quality"
         ? videoQualityInputSchema

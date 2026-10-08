@@ -24,6 +24,7 @@ export const pixelWorkspaceSchema = z
         "brand-assistants",
         "story-planning",
         "spokesperson",
+        "media-tools",
         "conversations",
       ])
       .optional(),
@@ -103,9 +104,10 @@ export async function localPixelReply(
     chat: "CHAT",
     projects: "PROJECTS",
     templates: "TEMPLATES",
+    mediakit: "MEDIAKIT",
   };
   const navigation =
-    /^(?:open|go to|take me to) (image|video|speech|assets|history|storage|members|chat|projects|templates)(?: studio| page)?$/.exec(
+    /^(?:open|go to|take me to) (image|video|speech|assets|history|storage|members|chat|projects|templates|mediakit)(?: studio| page| tools)?$/.exec(
       text,
     );
   if (navigation?.[1])

@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@aiwa/assets": "workspace:*",
+    "@aiwa/authz": "workspace:*",
     "@aiwa/config": "workspace:*",
     "@aiwa/core": "workspace:*",
     "@aiwa/credits": "workspace:*",

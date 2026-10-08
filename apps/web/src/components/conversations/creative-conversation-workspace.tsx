@@ -1255,9 +1255,9 @@ export function CreativeConversationWorkspace({
                     Creative Workflow Draft
                   </span>
                   <h4 className="text-sm font-semibold text-foreground">
-                    {workflows[0].title}
+                    {workflows[0]?.title}
                   </h4>
-                  {workflows[0].status === "DRAFT" ? (
+                  {workflows[0]?.status === "DRAFT" ? (
                     <p className="mt-1 text-xs text-muted-foreground">
                       Preview only. No provider job runs without a verified
                       quote and explicit approval.
@@ -1265,11 +1265,11 @@ export function CreativeConversationWorkspace({
                   ) : null}
                 </div>
                 <span className="rounded-full bg-primary/10 border border-primary/20 px-2.5 py-0.5 text-[11px] font-medium text-primary">
-                  {workflows[0].status}
+                  {workflows[0]?.status}
                 </span>
               </div>
               <div className="mt-3 space-y-2">
-                {workflows[0].steps?.map((step, index) => (
+                {workflows[0]?.steps?.map((step, index) => (
                   <div
                     key={step.id ?? index}
                     className="flex items-center justify-between rounded-xl border border-border/80 bg-surface-sunken p-2.5 text-xs"

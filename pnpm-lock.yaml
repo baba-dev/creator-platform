@@ -141,6 +141,9 @@ importers:
       '@aiwa/assets':
         specifier: workspace:*
         version: link:../../packages/assets
+      '@aiwa/authz':
+        specifier: workspace:*
+        version: link:../../packages/authz
       '@aiwa/config':
         specifier: workspace:*
         version: link:../../packages/config

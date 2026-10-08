@@ -207,7 +207,10 @@ export async function processTranscriptionJob(
       audioBytes,
       filename: source.originalFilename ?? `${source.id}.media`,
       mimeType: source.mimeType,
-      language: transcriptionLanguageHint(payload.language, payload.localeIntent),
+      language: transcriptionLanguageHint(
+        payload.language,
+        payload.localeIntent,
+      ),
       prompt: typeof payload.prompt === "string" ? payload.prompt : undefined,
     });
     if (!result.text.trim()) {

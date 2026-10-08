@@ -4,7 +4,7 @@ import {
   CreativeLocaleSelector,
   useCreativeLocale,
 } from "@/components/studio/creative-locale-selector";
-import { sortVoicesForLocale, voiceLocaleMatch } from "@aiwa/generation/locale";
+import { creativeLocaleIntentSchema, sortVoicesForLocale, voiceLocaleMatch } from "@aiwa/generation/locale";
 
 import { countBillableCharacters } from "@aiwa/credits/pricing";
 
@@ -1077,6 +1077,7 @@ export function GenerationStudio({
           templateName?: unknown;
           mediaKind?: unknown;
           prompt?: unknown;
+          localeIntent?: unknown;
           modelId?: unknown;
           referenceAssetIds?: unknown;
           defaults?: {
@@ -1112,6 +1113,8 @@ export function GenerationStudio({
           );
         }
 
+        const preset = creativeLocaleIntentSchema.safeParse(resolved.localeIntent);
+        if (preset.success) setLocaleIntent(preset.data);
         setActiveMode(mediaKind);
         setModelId(selectedModel.id);
         setTemplateContext({

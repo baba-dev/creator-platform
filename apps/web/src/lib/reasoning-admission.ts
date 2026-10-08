@@ -204,7 +204,12 @@ export async function admitReasoningJob(
     try {
       costEstimate = estimateReasoningProviderCost({
         price,
-        promptCharacters: creativeLocaleEnhancementSystemPrompt(input.systemPrompt, input.localeIntent, input.targetMedia).length + input.userPrompt.length,
+        promptCharacters:
+          creativeLocaleEnhancementSystemPrompt(
+            input.systemPrompt,
+            input.localeIntent,
+            input.targetMedia,
+          ).length + input.userPrompt.length,
         maximumOutputTokens: PROMPT_ENHANCEMENT_MAX_OUTPUT_TOKENS,
       });
     } catch {

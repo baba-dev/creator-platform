@@ -254,7 +254,10 @@ export async function processReasoningJob(
       systemPrompt: creativeLocaleEnhancementSystemPrompt(
         payload.systemPrompt,
         (dbJob.requestPayload as Record<string, unknown>).localeIntent,
-        (dbJob.requestPayload as Record<string, unknown>).targetMedia === "VIDEO" ? "VIDEO" : "IMAGE",
+        (dbJob.requestPayload as Record<string, unknown>).targetMedia ===
+          "VIDEO"
+          ? "VIDEO"
+          : "IMAGE",
       ),
       userPrompt: payload.userPrompt,
       responseSchemaName: payload.responseSchemaName,

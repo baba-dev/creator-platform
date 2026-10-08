@@ -30,6 +30,7 @@ import {
   recoverReservedTextJobs,
   processTranscriptionJob,
   projectTextJobToChat,
+  reconcileRecentTextChatProjections,
 } from "@aiwa/generation";
 import { processProviderToolExecution } from "@aiwa/generation/media-tools";
 import { mailJobId } from "@aiwa/mail";
@@ -1145,6 +1146,7 @@ async function dispatchProviderTools() {
 }
 
 let generationDispatching = false;
+let lastChatProjectionRepairAt = 0;
 let generationSubmitCursor: string | null = null;
 let generationPollCursor: string | null = null;
 const GENERATION_BATCH_SIZE = 100;
@@ -1155,6 +1157,16 @@ async function dispatchGeneration() {
   try {
     await reapExpiredRecoveryJobs();
     await recoverReservedTextJobs();
+    if (Date.now() - lastChatProjectionRepairAt >= 60_000) {
+      lastChatProjectionRepairAt = Date.now();
+      try {
+        await reconcileRecentTextChatProjections(100);
+      } catch (error) {
+        log("error", "Character-chat projection repair deferred", {
+          errorName: error instanceof Error ? error.name : "UnknownError",
+        });
+      }
+    }
 
     // 1. Fetch new submissions with keyset cursor rotation
     const submitWhere: Prisma.GenerationJobWhereInput = {

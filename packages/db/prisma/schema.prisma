@@ -648,6 +648,7 @@ model GenerationJob {
   chatThread                 ChatThread?            @relation(fields: [chatThreadId], references: [id], onDelete: SetNull)
   assets                     Asset[]
   inputAssets                GenerationInputAsset[]
+  seedAudioSegments          SeedAudioSegment[]
 
   @@unique([providerModelId, providerRequestId])
   @@index([organizationId, status, createdAt])
@@ -658,6 +659,30 @@ model GenerationJob {
   @@index([status, updatedAt])
   @@index([parentGenerationId])
   @@index([chatThreadId])
+}
+
+/// Private, restart-safe checkpoints for billable long-form Seed Audio work.
+/// These rows are not customer assets; the final GenerationJob Asset remains
+/// the canonical output. Checkpoints are deleted only after the final output is
+/// durably stored and settled.
+model SeedAudioSegment {
+  id                String        @id @default(cuid())
+  generationJobId   String
+  position          Int
+  objectKey         String        @unique @db.VarChar(191)
+  mimeType          String        @db.VarChar(64)
+  byteSize          BigInt
+  sha256            String        @db.Char(64)
+  providerRequestId String        @db.VarChar(191)
+  durationMs        Int
+  subtitle          Json?
+  usage             Json?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  generationJob     GenerationJob @relation(fields: [generationJobId], references: [id], onDelete: Cascade)
+
+  @@unique([generationJobId, position])
+  @@index([generationJobId, createdAt])
 }
 
 model GenerationTemplate {

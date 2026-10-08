@@ -14,6 +14,7 @@ describe("Security headers middleware", () => {
     expect(headers.get("Permissions-Policy")).toContain("camera=()");
 
     const csp = headers.get("Content-Security-Policy");
+    expect(csp).toContain("media-src 'self' blob:");
     expect(csp).toBeTruthy();
     expect(csp).toContain("default-src 'self'");
     expect(csp).toContain("frame-ancestors 'none'");

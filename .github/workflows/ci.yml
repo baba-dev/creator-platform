@@ -270,10 +270,58 @@ jobs:
           retention-days: 3
           if-no-files-found: error
 
+  browser_smoke:
+    name: browser-smoke
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    env:
+      AUTH_SECRET: ci-only-auth-secret-at-least-32-characters-long
+      DATABASE_URL: mysql://creator:ci-only@127.0.0.1:3306/creator_platform
+      APP_ENV: staging
+      APP_URL: http://127.0.0.1:3100
+      APP_VERSION: ${{ github.sha }}
+      SIGNUPS_ENABLED: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.19.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run browser smoke journeys
+        run: pnpm test:e2e
+
+      - name: Upload browser traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-smoke-traces-${{ github.run_id }}
+          path: test-results
+          retention-days: 3
+          if-no-files-found: ignore
+
   quality:
     name: quality
     if: always()
-    needs: [static, test, build_release]
+    needs: [static, test, build_release, browser_smoke]
     runs-on: ubuntu-22.04
     timeout-minutes: 5
     steps:
@@ -282,7 +330,9 @@ jobs:
           STATIC_RESULT: ${{ needs.static.result }}
           TEST_RESULT: ${{ needs.test.result }}
           BUILD_RESULT: ${{ needs.build_release.result }}
+          BROWSER_RESULT: ${{ needs.browser_smoke.result }}
         run: |
           test "$STATIC_RESULT" = "success"
           test "$TEST_RESULT" = "success"
           test "$BUILD_RESULT" = "success"
+          test "$BROWSER_RESULT" = "success"

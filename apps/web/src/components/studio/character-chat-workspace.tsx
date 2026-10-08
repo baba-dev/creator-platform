@@ -46,6 +46,8 @@ interface ChatMessage {
   createdAt: string;
   audioJobId?: string | null;
   audioAssetId?: string | null;
+  audioStatus?: string | null;
+  audioErrorCode?: string | null;
   metadata?: {
     chargedCredits?: number;
     generationJobId?: string;
@@ -589,7 +591,12 @@ export function CharacterChatWorkspace({
           ) {
             setMessages(data.thread.messages);
             const anyPending = data.thread.messages.some(
-              (m: ChatMessage) => m.audioJobId && !m.audioAssetId,
+              (m: ChatMessage) =>
+                m.audioJobId &&
+                !m.audioAssetId &&
+                !["FAILED", "CANCELLED", "MANUAL_REVIEW"].includes(
+                  m.audioStatus ?? "QUEUED",
+                ),
             );
             if (!anyPending) return;
           }
@@ -622,6 +629,7 @@ export function CharacterChatWorkspace({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             voiceKey: selectedPersona?.voiceKey || "jasper",
+            requestKey: crypto.randomUUID(),
           }),
         },
       );
@@ -632,7 +640,9 @@ export function CharacterChatWorkspace({
       const data = await res.json();
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === message.id ? { ...m, audioJobId: data.jobId } : m,
+          m.id === message.id
+            ? { ...m, audioJobId: data.jobId, audioStatus: data.status }
+            : m,
         ),
       );
       pollVoiceJob(activeThreadId);
@@ -967,12 +977,36 @@ export function CharacterChatWorkspace({
                               voiceName="Seed TTS 2.0"
                               className="mt-2.5 max-w-lg"
                             />
-                          ) : msg.audioJobId || synthesizingMsgId === msg.id ? (
+                          ) : synthesizingMsgId === msg.id ||
+                            (msg.audioJobId &&
+                              ![
+                                "FAILED",
+                                "CANCELLED",
+                                "MANUAL_REVIEW",
+                              ].includes(msg.audioStatus ?? "QUEUED")) ? (
                             <div className="mt-2.5 flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-primary">
                               <span className="size-2 animate-ping rounded-full bg-primary" />
                               <span className="text-[11px] font-medium">
                                 Synthesizing voice reply (Seed TTS 2.0)...
                               </span>
+                            </div>
+                          ) : msg.audioJobId ? (
+                            <div className="mt-2.5 flex items-center justify-between gap-3 rounded-xl border border-destructive/25 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                              <span>
+                                Voice generation did not complete
+                                {msg.audioErrorCode
+                                  ? ` (${msg.audioErrorCode})`
+                                  : "."}
+                              </span>
+                              {canGenerate ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSynthesizeMessage(msg)}
+                                  className="shrink-0 rounded-full border border-destructive/30 px-2.5 py-1 text-[11px] font-semibold"
+                                >
+                                  Retry voice
+                                </button>
+                              ) : null}
                             </div>
                           ) : canGenerate ? (
                             <div className="mt-2.5 flex items-center justify-between border-t border-border/50 pt-2">

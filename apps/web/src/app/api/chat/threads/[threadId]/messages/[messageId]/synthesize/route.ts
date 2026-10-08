@@ -15,6 +15,7 @@ import { hasTrustedMutationOrigin } from "@/lib/request-security";
 const synthesizeChatVoiceSchema = z.object({
   voiceKey: z.string().trim().max(100).optional(),
   speechRate: z.number().min(0.5).max(2.0).default(1.0),
+  requestKey: z.uuid().optional(),
 });
 
 export async function POST(
@@ -138,6 +139,7 @@ export async function POST(
         voiceKeyToUse,
         String(input.speechRate),
         message.content,
+        input.requestKey ?? "initial",
       ].join("\u0000"),
     );
     const job = await createVoiceJob(session.user.id, {

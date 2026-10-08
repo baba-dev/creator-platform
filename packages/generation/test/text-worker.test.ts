@@ -118,6 +118,10 @@ function admissionTx(existing: unknown = null) {
     wallet: {
       findUnique: vi.fn().mockResolvedValue({ id: "wallet_1" }),
     },
+    chatMessage: {
+      create: vi.fn().mockResolvedValue({ id: "message_1" }),
+      upsert: vi.fn().mockResolvedValue({ id: "message_1" }),
+    },
     project: {
       findUnique: vi.fn(),
     },
@@ -245,6 +249,34 @@ describe("durable text generation billing", () => {
           priceVersionId: "pv_1",
         }),
       }),
+    );
+  });
+
+  it("persists a chat user turn inside the admission transaction", async () => {
+    const tx = admissionTx();
+    mocks.db.$transaction.mockImplementationOnce(async (callback) =>
+      callback(tx),
+    );
+    const input = { ...validInput, chatThreadId: "thread_1" };
+
+    await createTextJob("user_1", input, {
+      chatUserMessage: {
+        threadId: "thread_1",
+        clientRequestId: validInput.idempotencyKey,
+        content: "Greetings!",
+      },
+    });
+
+    expect(tx.chatMessage.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        threadId: "thread_1",
+        clientRequestId: validInput.idempotencyKey,
+        content: "Greetings!",
+        metadata: { generationJobId: "job_text_1" },
+      }),
+    });
+    expect(tx.chatMessage.create.mock.invocationCallOrder[0]).toBeGreaterThan(
+      mocks.credits.reserveCreditsForJob.mock.invocationCallOrder[0]!,
     );
   });
 

@@ -23,6 +23,38 @@ export interface AssembledAudioResult {
   totalClipsCount: number;
 }
 
+export const MAX_AUDIO_ASSEMBLY_CLIP_BYTES = 25 * 1024 * 1024;
+export const MAX_AUDIO_ASSEMBLY_WORKING_BYTES = 120 * 1024 * 1024;
+export const MAX_AUDIO_ASSEMBLY_DURATION_SECONDS = 30 * 60;
+
+export function audioAssemblyFitsBudget(input: {
+  downloadedBytes: number;
+  decodedBytes: number;
+  decodedSamples: number;
+  clipDownloadBytes: number;
+  clipDecodedBytes: number;
+  clipSamples: number;
+  existingClipCount: number;
+  pauseSamples: number;
+  sampleRate: number;
+}): boolean {
+  const totalDownloads = input.downloadedBytes + input.clipDownloadBytes;
+  const totalDecodedBytes = input.decodedBytes + input.clipDecodedBytes;
+  const totalSamples =
+    input.decodedSamples +
+    input.clipSamples +
+    input.pauseSamples * input.existingClipCount;
+  const durationSeconds = totalSamples / input.sampleRate;
+  const mergedFloatBytes = totalSamples * 2 * 4;
+  const encodedPcmBytes = totalSamples * 2 * 2 + 44;
+  return (
+    totalDownloads <= MAX_AUDIO_ASSEMBLY_WORKING_BYTES &&
+    durationSeconds <= MAX_AUDIO_ASSEMBLY_DURATION_SECONDS &&
+    totalDecodedBytes + mergedFloatBytes + encodedPcmBytes <=
+      MAX_AUDIO_ASSEMBLY_WORKING_BYTES
+  );
+}
+
 /**
  * Encodes an AudioBuffer into a standard 16-bit PCM WAV Blob.
  */
@@ -123,6 +155,10 @@ export async function assembleMasterStoryAudio({
   try {
     // 1. Fetch and decode each clip
     const decodedBuffers: AudioBuffer[] = [];
+    let downloadedBytes = 0;
+    let decodedBytes = 0;
+    let decodedSamples = 0;
+    const pauseSamples = Math.floor(pauseDurationSeconds * sampleRate);
     for (const clip of clips) {
       const res = await fetch(clip.url);
       if (!res.ok) {
@@ -131,19 +167,46 @@ export async function assembleMasterStoryAudio({
         );
       }
       const length = Number(res.headers.get("content-length") ?? 0);
-      if (Number.isFinite(length) && length > 25 * 1024 * 1024) {
+      if (
+        Number.isFinite(length) &&
+        (length > MAX_AUDIO_ASSEMBLY_CLIP_BYTES ||
+          downloadedBytes + length > MAX_AUDIO_ASSEMBLY_WORKING_BYTES)
+      ) {
         throw new Error("A dialogue clip exceeds the 25 MB assembly limit.");
       }
       const arrayBuf = await res.arrayBuffer();
-      if (arrayBuf.byteLength > 25 * 1024 * 1024) {
+      if (
+        arrayBuf.byteLength > MAX_AUDIO_ASSEMBLY_CLIP_BYTES ||
+        downloadedBytes + arrayBuf.byteLength > MAX_AUDIO_ASSEMBLY_WORKING_BYTES
+      ) {
         throw new Error("A dialogue clip exceeds the 25 MB assembly limit.");
       }
+      downloadedBytes += arrayBuf.byteLength;
       const decoded = await audioCtx.decodeAudioData(arrayBuf);
+      const clipDecodedBytes = decoded.length * decoded.numberOfChannels * 4;
+      if (
+        !audioAssemblyFitsBudget({
+          downloadedBytes: downloadedBytes - arrayBuf.byteLength,
+          decodedBytes,
+          decodedSamples,
+          clipDownloadBytes: arrayBuf.byteLength,
+          clipDecodedBytes,
+          clipSamples: decoded.length,
+          existingClipCount: decodedBuffers.length,
+          pauseSamples,
+          sampleRate,
+        })
+      ) {
+        throw new Error(
+          "Master audio is too large for safe in-browser assembly. Export a smaller scene or fewer clips.",
+        );
+      }
+      decodedBytes += clipDecodedBytes;
+      decodedSamples += decoded.length;
       decodedBuffers.push(decoded);
     }
 
     // 2. Compute total sample length
-    const pauseSamples = Math.floor(pauseDurationSeconds * sampleRate);
     let totalSamples = 0;
 
     for (let i = 0; i < decodedBuffers.length; i++) {
@@ -154,11 +217,7 @@ export async function assembleMasterStoryAudio({
     }
 
     const durationSeconds = totalSamples / sampleRate;
-    const estimatedWorkingBytes = totalSamples * 2 * 4;
-    if (
-      durationSeconds > 30 * 60 ||
-      estimatedWorkingBytes > 120 * 1024 * 1024
-    ) {
+    if (durationSeconds > MAX_AUDIO_ASSEMBLY_DURATION_SECONDS) {
       throw new Error(
         "Master audio is too large for safe in-browser assembly. Export a smaller scene or fewer clips.",
       );

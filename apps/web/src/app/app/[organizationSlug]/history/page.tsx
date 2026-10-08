@@ -236,7 +236,14 @@ export default async function HistoryPage({
                   · {job.project?.name ?? "No project"} · {job.createdBy.name} ·{" "}
                   {job.createdAt.toLocaleString()}
                   {job.localeIntent && job.localeIntent.preset !== "auto" ? (
-                    <> · {CREATIVE_LOCALE_PRESETS.find((preset) => preset.id === job.localeIntent?.preset)?.flag ?? "🌐"} {job.localeIntent.language}</>
+                    <>
+                      {" "}
+                      ·{" "}
+                      {CREATIVE_LOCALE_PRESETS.find(
+                        (preset) => preset.id === job.localeIntent?.preset,
+                      )?.flag ?? "🌐"}{" "}
+                      {job.localeIntent.language}
+                    </>
                   ) : null}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">

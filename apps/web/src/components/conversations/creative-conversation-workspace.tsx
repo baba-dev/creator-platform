@@ -1259,7 +1259,8 @@ export function CreativeConversationWorkspace({
                   </h4>
                   {workflows[0].status === "DRAFT" ? (
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Preview only. No provider job runs without a verified quote and explicit approval.
+                      Preview only. No provider job runs without a verified
+                      quote and explicit approval.
                     </p>
                   ) : null}
                 </div>

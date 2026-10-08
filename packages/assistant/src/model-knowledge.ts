@@ -19,35 +19,61 @@ export interface PixelModelQuery {
 }
 
 const MAX_PAGE_SIZE = 20;
-const OMIT_CAPABILITY = /(?:secret|password|credential|access.?key|api.?key|bearer|authorization|private.?key|endpoint|base.?url)/i;
+const OMIT_CAPABILITY =
+  /(?:secret|password|credential|access.?key|api.?key|bearer|authorization|private.?key|endpoint|base.?url)/i;
 
 // Capabilities are provider/admin-maintained data. Expose only bounded primitive
 // public metadata; never copy arbitrary nested objects or credentials into Pixel.
-export function publicModelCapabilities(value: unknown): Record<string, string | number | boolean | string[]> {
+export function publicModelCapabilities(
+  value: unknown,
+): Record<string, string | number | boolean | string[]> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const result: Record<string, string | number | boolean | string[]> = {};
   for (const [key, raw] of Object.entries(value).slice(0, 100)) {
-    if (!/^[a-zA-Z][a-zA-Z0-9:._/-]{0,63}$/.test(key) || OMIT_CAPABILITY.test(key)) continue;
+    if (
+      !/^[a-zA-Z][a-zA-Z0-9:._/-]{0,63}$/.test(key) ||
+      OMIT_CAPABILITY.test(key)
+    )
+      continue;
     if (typeof raw === "boolean") result[key] = raw;
     else if (typeof raw === "number" && Number.isFinite(raw)) result[key] = raw;
     else if (typeof raw === "string" && raw.length <= 160) result[key] = raw;
-    else if (Array.isArray(raw) && raw.length <= 16 &&
-      raw.every((item) => typeof item === "string" && item.length <= 60)) {
+    else if (
+      Array.isArray(raw) &&
+      raw.length <= 16 &&
+      raw.every((item) => typeof item === "string" && item.length <= 60)
+    ) {
       result[key] = raw;
     }
   }
   return result;
 }
 
-function validTaskPricing(task: StudioTask, kind: string, provider: string, price: {
-  pricingDimension: string;
-  usageRates: unknown;
-}): boolean {
-  if (["chat", "character-chat", "scriptwriting", "creative-director", "brand-strategy", "story-planning"].includes(task)) {
+function validTaskPricing(
+  task: StudioTask,
+  kind: string,
+  provider: string,
+  price: {
+    pricingDimension: string;
+    usageRates: unknown;
+  },
+): boolean {
+  if (
+    [
+      "chat",
+      "character-chat",
+      "scriptwriting",
+      "creative-director",
+      "brand-strategy",
+      "story-planning",
+    ].includes(task)
+  ) {
     return kind === "TEXT" && validTextPricing(provider, price);
   }
   if (task === "prompt-enhancement") {
-    return price.pricingDimension === "REQUEST" || validTextPricing(provider, price);
+    return (
+      price.pricingDimension === "REQUEST" || validTextPricing(provider, price)
+    );
   }
   if (task === "speech-synthesis") {
     return ["CHARACTER", "REQUEST"].includes(price.pricingDimension);

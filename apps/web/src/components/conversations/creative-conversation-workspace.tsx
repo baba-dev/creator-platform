@@ -37,6 +37,13 @@ interface MessageItem {
   } | null;
 }
 
+interface CreativeWorkflowBoardItem {
+  id: string;
+  title: string;
+  status: string;
+  steps: Array<{id: string; task: string; title: string; status: string}>;
+}
+
 interface GenerationJobItem {
   id: string;
   status: string;
@@ -149,7 +156,7 @@ export function CreativeConversationWorkspace({
   initialState?: ConversationState | null;
   initialMessages: MessageItem[];
   initialJobs: GenerationJobItem[];
-  initialWorkflows?: any[];
+  initialWorkflows?: CreativeWorkflowBoardItem[];
   canGenerate: boolean;
 }) {
   const [title, setTitle] = useState(initialTitle);
@@ -157,7 +164,7 @@ export function CreativeConversationWorkspace({
   const [titleDraft, setTitleDraft] = useState(initialTitle);
   const [messages, setMessages] = useState<MessageItem[]>(initialMessages);
   const [jobs, setJobs] = useState<GenerationJobItem[]>(initialJobs);
-  const [workflows, setWorkflows] = useState<any[]>(initialWorkflows ?? []);
+  const [workflows, setWorkflows] = useState<CreativeWorkflowBoardItem[]>(initialWorkflows ?? []);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [activeAssetId, setActiveAssetId] = useState<string | null>(
     initialState?.activeAssetId ?? initialJobs[0]?.assets[0]?.id ?? null,
@@ -1253,7 +1260,7 @@ export function CreativeConversationWorkspace({
                 </span>
               </div>
               <div className="mt-3 space-y-2">
-                {workflows[0].steps?.map((step: any, index: number) => (
+                {workflows[0].steps?.map((step, index) => (
                   <div
                     key={step.id ?? index}
                     className="flex items-center justify-between rounded-xl border border-border/80 bg-surface-sunken p-2.5 text-xs"

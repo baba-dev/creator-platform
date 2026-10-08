@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { CreativeLocaleSelector, useCreativeLocale } from "@/components/studio/creative-locale-selector";
+import {
+  CreativeLocaleSelector,
+  useCreativeLocale,
+} from "@/components/studio/creative-locale-selector";
 import type { CreativeLocaleIntent } from "@aiwa/generation/locale";
 import Image from "next/image";
 
@@ -136,7 +139,11 @@ export function PixelControls({
       const response = await fetch("/api/assistant/control", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ threadId, ...payload, ...(payload.operation === "quote" ? { localeIntent } : {}) }),
+        body: JSON.stringify({
+          threadId,
+          ...payload,
+          ...(payload.operation === "quote" ? { localeIntent } : {}),
+        }),
       });
       const data = (await response.json()) as {
         error?: string;
@@ -160,7 +167,11 @@ export function PixelControls({
 
   return (
     <div className="space-y-3 text-sm [&_button]:min-h-11 [&_button]:h-auto [&_button]:whitespace-normal [&_button]:py-2">
-      <CreativeLocaleSelector value={localeIntent} onChange={setLocaleIntent} disabled={busy} />
+      <CreativeLocaleSelector
+        value={localeIntent}
+        onChange={setLocaleIntent}
+        disabled={busy}
+      />
       <details
         data-pixel-preferences
         hidden={!showPreferences}

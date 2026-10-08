@@ -204,7 +204,7 @@ function CreativeLocaleDialog({
                 id={titleId + "-description"}
                 className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground"
               >
-                Choose who you're creating for. We'll carry your selection
+                Choose who you&apos;re creating for. We&apos;ll carry your selection
                 across studios without changing your original prompt.
               </p>
             </div>

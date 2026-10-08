@@ -9,6 +9,7 @@ import { formatBaisa } from "@/lib/format-baisa";
 import { db } from "@aiwa/db";
 import { checkMemberSpendingBudget } from "@aiwa/organizations";
 import { quoteRequestSchema } from "@aiwa/validation";
+import { creativeLocaleIntentSchema } from "@aiwa/generation/locale";
 import { NextResponse } from "next/server";
 
 import { getRequestSession } from "@/lib/request-auth";
@@ -44,6 +45,10 @@ export async function POST(request: Request): Promise<NextResponse> {
       { error: "Invalid quote parameters.", details: parsed.error.format() },
       { status: 400 },
     );
+  }
+
+  if (parsed.data.localeIntent && !creativeLocaleIntentSchema.safeParse(parsed.data.localeIntent).success) {
+    return NextResponse.json({ error: "Invalid creative locale." }, { status: 400 });
   }
 
   const { organizationId, modelId, referenceVideoAssetId } = parsed.data;

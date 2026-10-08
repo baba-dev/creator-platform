@@ -8,7 +8,10 @@ vi.mock("@aiwa/db", () => ({
   db: { providerModel: { findMany: mocked.findMany } },
 }));
 
-import { getPixelModelCatalog, publicModelCapabilities } from "../src/model-knowledge";
+import {
+  getPixelModelCatalog,
+  publicModelCapabilities,
+} from "../src/model-knowledge";
 
 const now = new Date("2026-10-09T00:00:00.000Z");
 const environment = {
@@ -18,13 +21,15 @@ const environment = {
 };
 
 function price(dimension = "REQUEST", credits = 35n) {
-  return [{
-    id: "price-1",
-    pricingDimension: dimension,
-    customerCredits: credits,
-    unitQuantity: 1,
-    usageRates: null,
-  }];
+  return [
+    {
+      id: "price-1",
+      pricingDimension: dimension,
+      customerCredits: credits,
+      unitQuantity: 1,
+      usageRates: null,
+    },
+  ];
 }
 
 function row(id: string, overrides: Record<string, unknown> = {}) {
@@ -36,7 +41,11 @@ function row(id: string, overrides: Record<string, unknown> = {}) {
     description: "Image generation model " + id,
     mediaKind: "IMAGE",
     enabled: true,
-    capabilities: { resolution: "2K", "task:image-generation": true, maxReferences: 10 },
+    capabilities: {
+      resolution: "2K",
+      "task:image-generation": true,
+      maxReferences: 10,
+    },
     priceVersions: price(),
     ...overrides,
   };
@@ -49,9 +58,17 @@ describe("Pixel live model knowledge", () => {
   });
 
   it("lists beyond the old 30-model limit and pages without dropping results", async () => {
-    mocked.findMany.mockResolvedValue(Array.from({ length: 45 }, (_, i) => row(String(i))));
-    const first = await getPixelModelCatalog({ page: 1, pageSize: 20 }, { now, environment });
-    const third = await getPixelModelCatalog({ page: 3, pageSize: 20 }, { now, environment });
+    mocked.findMany.mockResolvedValue(
+      Array.from({ length: 45 }, (_, i) => row(String(i))),
+    );
+    const first = await getPixelModelCatalog(
+      { page: 1, pageSize: 20 },
+      { now, environment },
+    );
+    const third = await getPixelModelCatalog(
+      { page: 3, pageSize: 20 },
+      { now, environment },
+    );
     expect(first.total).toBe(45);
     expect(first.models).toHaveLength(20);
     expect(first.hasMore).toBe(true);
@@ -86,21 +103,36 @@ describe("Pixel live model knowledge", () => {
     const result = await getPixelModelCatalog({}, { now, environment });
     expect(result.models.map((model) => model.id)).toContain("ready");
     expect(result.models.map((model) => model.id)).toContain("good-text");
-    expect(result.models.map((model) => model.id)).not.toContain("not-configured");
+    expect(result.models.map((model) => model.id)).not.toContain(
+      "not-configured",
+    );
     expect(result.models.map((model) => model.id)).not.toContain("bad-text");
-    expect(result.models[0]?.pricing).not.toHaveProperty("providerCostMicroUsd");
-    expect(result.models.find((model) => model.id === "good-text")?.tasks).toContain("Chat");
+    expect(result.models[0]?.pricing).not.toHaveProperty(
+      "providerCostMicroUsd",
+    );
+    expect(
+      result.models.find((model) => model.id === "good-text")?.tasks,
+    ).toContain("Chat");
   });
 
   it("supports exact model detail lookup and case-insensitive search", async () => {
     mocked.findMany.mockResolvedValue([
-      row("a", { providerModelId: "seedream-5-pro", displayName: "Seedream 5 Pro" }),
+      row("a", {
+        providerModelId: "seedream-5-pro",
+        displayName: "Seedream 5 Pro",
+      }),
       row("b"),
     ]);
-    const selected = await getPixelModelCatalog({ modelId: "seedream-5-pro" }, { now, environment });
+    const selected = await getPixelModelCatalog(
+      { modelId: "seedream-5-pro" },
+      { now, environment },
+    );
     expect(selected.models).toHaveLength(1);
     expect(selected.models[0]?.id).toBe("a");
-    const named = await getPixelModelCatalog({ query: "SEEDREAM 5 PRO" }, { now, environment });
+    const named = await getPixelModelCatalog(
+      { query: "SEEDREAM 5 PRO" },
+      { now, environment },
+    );
     expect(named.models).toHaveLength(1);
     expect(named.filter.query).toBe("SEEDREAM 5 PRO");
   });

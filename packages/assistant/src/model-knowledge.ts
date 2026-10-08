@@ -27,7 +27,7 @@ export function publicModelCapabilities(value: unknown): Record<string, string |
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const result: Record<string, string | number | boolean | string[]> = {};
   for (const [key, raw] of Object.entries(value).slice(0, 100)) {
-    if (!/^[a-zA-Z][a-zA-Z0-9:_-]{0,63}$/.test(key) || OMIT_CAPABILITY.test(key)) continue;
+    if (!/^[a-zA-Z][a-zA-Z0-9:._/-]{0,63}$/.test(key) || OMIT_CAPABILITY.test(key)) continue;
     if (typeof raw === "boolean") result[key] = raw;
     else if (typeof raw === "number" && Number.isFinite(raw)) result[key] = raw;
     else if (typeof raw === "string" && raw.length <= 160) result[key] = raw;

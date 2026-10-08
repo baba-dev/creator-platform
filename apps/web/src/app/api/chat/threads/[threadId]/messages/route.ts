@@ -132,6 +132,7 @@ export async function POST(
         userId: session.user.id,
         modelId: targetModel.id,
         messages,
+        localeIntent: input.localeIntent,
         maxTokens,
       });
       return NextResponse.json({ quote });

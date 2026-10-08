@@ -279,7 +279,12 @@ export class CreativeWorkflowService {
             !Array.isArray(item) &&
             (item as Record<string, unknown>).outputIndex === dep.outputIndex,
         );
-        if (!output || typeof output !== "object" || Array.isArray(output) || typeof output.assetId !== "string")
+        if (
+          !output ||
+          typeof output !== "object" ||
+          Array.isArray(output) ||
+          typeof output.assetId !== "string"
+        )
           throw new Error("Source output unavailable.");
         const asset = await tx.asset.findFirst({
           where: {

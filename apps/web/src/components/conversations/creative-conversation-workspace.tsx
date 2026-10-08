@@ -41,7 +41,7 @@ interface CreativeWorkflowBoardItem {
   id: string;
   title: string;
   status: string;
-  steps: Array<{id: string; task: string; title: string; status: string}>;
+  steps: Array<{ id: string; task: string; title: string; status: string }>;
 }
 
 interface GenerationJobItem {
@@ -164,7 +164,9 @@ export function CreativeConversationWorkspace({
   const [titleDraft, setTitleDraft] = useState(initialTitle);
   const [messages, setMessages] = useState<MessageItem[]>(initialMessages);
   const [jobs, setJobs] = useState<GenerationJobItem[]>(initialJobs);
-  const [workflows, setWorkflows] = useState<CreativeWorkflowBoardItem[]>(initialWorkflows ?? []);
+  const [workflows, setWorkflows] = useState<CreativeWorkflowBoardItem[]>(
+    initialWorkflows ?? [],
+  );
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [activeAssetId, setActiveAssetId] = useState<string | null>(
     initialState?.activeAssetId ?? initialJobs[0]?.assets[0]?.id ?? null,

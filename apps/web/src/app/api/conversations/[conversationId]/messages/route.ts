@@ -10,7 +10,10 @@ import {
 } from "@aiwa/generation";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { CreativeWorkflowService, StageBPlanOutputSchema } from "@aiwa/orchestration";
+import {
+  CreativeWorkflowService,
+  StageBPlanOutputSchema,
+} from "@aiwa/orchestration";
 
 import { rateLimit } from "@/lib/rate-limit";
 import { getRequestSession } from "@/lib/request-auth";
@@ -576,9 +579,10 @@ export async function POST(
         firstAction.type === "open_tool"
           ? WORKSPACE_TOOLS.find((tool) => tool.id === firstAction.toolId)
           : null;
-      const proposal = firstAction.type === "workflow_plan"
-        ? StageBPlanOutputSchema.parse(firstAction.workflow)
-        : null;
+      const proposal =
+        firstAction.type === "workflow_plan"
+          ? StageBPlanOutputSchema.parse(firstAction.workflow)
+          : null;
       const draft = proposal
         ? await CreativeWorkflowService.createWorkflow({
             threadId: thread.id,
@@ -597,13 +601,14 @@ export async function POST(
             })),
           })
         : null;
-      const answer = draft && proposal
-        ? `Created a review-only draft: ${proposal.title} (${proposal.steps.length} steps). No generation has started and no credits have been charged. Step-by-step execution requires selecting supported models, fresh quotes and explicit approvals.`
-        : handoff
-          ? describeCreativeHandoff(handoff)
-          : firstAction.type === "answer_question"
-            ? answerCreativeQuestion(firstAction.question, plannerContext)
-            : "The requested tool is unavailable.";
+      const answer =
+        draft && proposal
+          ? `Created a review-only draft: ${proposal.title} (${proposal.steps.length} steps). No generation has started and no credits have been charged. Step-by-step execution requires selecting supported models, fresh quotes and explicit approvals.`
+          : handoff
+            ? describeCreativeHandoff(handoff)
+            : firstAction.type === "answer_question"
+              ? answerCreativeQuestion(firstAction.question, plannerContext)
+              : "The requested tool is unavailable.";
       const assistantMessage = await upsertMessage(
         "assistant",
         `${input.idempotencyKey}-answer`,

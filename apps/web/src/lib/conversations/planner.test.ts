@@ -56,12 +56,15 @@ describe("Conversational Creative Action Planner", () => {
 
   it("never turns an unapproved multi-step campaign into a single paid generation", async () => {
     const plan = await planConversationTurn({
-      userMessage: "Generate images and a video and voiceover for a perfume campaign",
+      userMessage:
+        "Generate images and a video and voiceover for a perfume campaign",
       organizationId: "org_1",
       context: baseContext,
     });
     expect(plan.actions[0]?.type).toBe("workflow_plan");
-    expect(plan.actions.some(action => action.type.startsWith("generate_"))).toBe(false);
+    expect(
+      plan.actions.some((action) => action.type.startsWith("generate_")),
+    ).toBe(false);
   });
 
   it("hands off specialized tasks without billing", async () => {

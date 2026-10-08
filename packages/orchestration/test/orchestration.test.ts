@@ -283,8 +283,23 @@ describe("@aiwa/orchestration contracts & workflow engine", () => {
     expect(event.payload.normalParam).toBe("safe-value");
     expect(event.payload.apiKey).toBe("[REDACTED]");
     expect(event.payload.customerUrl).toBe("[REDACTED]");
-    const nested = createSafeWorkflowEvent({id: "nested", workflowId: "wf-1", type: "STEP_STARTED", payload: {details: {apiToken: "secrets", data: [{video_url: "https://private.invalid/video.mp4"}]}}});
-    expect((nested.payload.details as {apiToken: string}).apiToken).toBe("[REDACTED]");
-    expect(((nested.payload.details as {data: Array<{video_url: string}>}).data[0]!).video_url).toBe("[REDACTED]");
+    const nested = createSafeWorkflowEvent({
+      id: "nested",
+      workflowId: "wf-1",
+      type: "STEP_STARTED",
+      payload: {
+        details: {
+          apiToken: "secrets",
+          data: [{ video_url: "https://private.invalid/video.mp4" }],
+        },
+      },
+    });
+    expect((nested.payload.details as { apiToken: string }).apiToken).toBe(
+      "[REDACTED]",
+    );
+    expect(
+      (nested.payload.details as { data: Array<{ video_url: string }> })
+        .data[0]!.video_url,
+    ).toBe("[REDACTED]");
   });
 });

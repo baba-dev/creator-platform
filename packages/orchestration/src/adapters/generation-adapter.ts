@@ -161,24 +161,51 @@ export class GenerationToolAdapter implements OrchestrationToolAdapter {
     const price = model?.priceVersions[0];
     if (!model || !price)
       throw new Error("Model or active pricing unavailable.");
-    const task: StudioTask = kindForTask(input.task) === "IMAGE"
-      ? "image-generation" : kindForTask(input.task) === "VIDEO"
-        ? "video-generation" : "speech-synthesis";
-    const capabilities = (model.capabilities ?? {}) as Record<string, boolean | string | number>;
-    if (!supportsStudioTask({
-      id: model.providerModelId, provider: model.provider,
-      mediaKind: model.mediaKind, capabilities,
-    }, task)) throw new Error("Model does not advertise the requested Studio task.");
-    if (kindForTask(input.task) === "VIDEO" && capabilities.talkingAvatar === true)
-      throw new Error("Talking-avatar models require the dedicated spokesperson workflow.");
-    if (input.sourceAssetIds.length && kindForTask(input.task) === "IMAGE" &&
-      capabilities.referenceImages !== true)
+    const task: StudioTask =
+      kindForTask(input.task) === "IMAGE"
+        ? "image-generation"
+        : kindForTask(input.task) === "VIDEO"
+          ? "video-generation"
+          : "speech-synthesis";
+    const capabilities = (model.capabilities ?? {}) as Record<
+      string,
+      boolean | string | number
+    >;
+    if (
+      !supportsStudioTask(
+        {
+          id: model.providerModelId,
+          provider: model.provider,
+          mediaKind: model.mediaKind,
+          capabilities,
+        },
+        task,
+      )
+    )
+      throw new Error("Model does not advertise the requested Studio task.");
+    if (
+      kindForTask(input.task) === "VIDEO" &&
+      capabilities.talkingAvatar === true
+    )
+      throw new Error(
+        "Talking-avatar models require the dedicated spokesperson workflow.",
+      );
+    if (
+      input.sourceAssetIds.length &&
+      kindForTask(input.task) === "IMAGE" &&
+      capabilities.referenceImages !== true
+    )
       throw new Error("This image model does not support reference media.");
-    if (input.sourceAssetIds.length && kindForTask(input.task) === "VIDEO" &&
-      capabilities.firstFrame !== true)
+    if (
+      input.sourceAssetIds.length &&
+      kindForTask(input.task) === "VIDEO" &&
+      capabilities.firstFrame !== true
+    )
       throw new Error("This video model does not support first-frame input.");
-    if (kindForTask(input.task) === "IMAGE" &&
-      Number(input.payload.outputCount ?? 1) > 4)
+    if (
+      kindForTask(input.task) === "IMAGE" &&
+      Number(input.payload.outputCount ?? 1) > 4
+    )
       throw new Error("Orchestrated image steps are limited to four outputs.");
     const request = buildGenerationAdmissionRequest(ctx, input, price.id);
     const estimate = await estimateAuthorizedGeneration(
@@ -189,7 +216,8 @@ export class GenerationToolAdapter implements OrchestrationToolAdapter {
         units: input.task.startsWith("image-")
           ? Number(input.payload.outputCount ?? 1)
           : 1,
-        referenceAssetIds: kindForTask(input.task) === "IMAGE" ? [...input.sourceAssetIds] : [],
+        referenceAssetIds:
+          kindForTask(input.task) === "IMAGE" ? [...input.sourceAssetIds] : [],
       },
       ctx.organizationId,
       ctx.userId,

@@ -51,7 +51,7 @@ export function compileCreativePlan(params: {
         {
           task: "image-generation",
           title: "Visual Concept #1 (Image)",
-          
+
           payload: {
             prompt: `${userPrompt} - Concept 1: Modern luxury perfume bottle packaging in Oman setting.`,
             aspectRatio: "9:16",
@@ -63,7 +63,7 @@ export function compileCreativePlan(params: {
         {
           task: "video-generation",
           title: "Animate Bottle Concept (Video)",
-          
+
           payload: {
             prompt:
               "Cinematic camera orbiting luxury perfume bottle with subtle golden mist and atmospheric lighting.",
@@ -81,7 +81,7 @@ export function compileCreativePlan(params: {
         {
           task: "speech-synthesis",
           title: "Omani Arabic Narration (Voice)",
-          
+
           payload: {
             text: "عطر فاخر يجسد أصالة عمان وأناقة الحاضر.",
             voiceKey: "jasper",

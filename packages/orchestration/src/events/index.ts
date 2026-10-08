@@ -41,17 +41,26 @@ export function createSafeWorkflowEvent(params: {
 }): WorkflowEvent {
   const safePayload: Record<string, unknown> = {};
   const scrub = (key: string, value: unknown, depth: number): unknown => {
-    if (/key|secret|token|password|auth|url|prompt|content|body|headers|cookie|credential/i.test(key))
+    if (
+      /key|secret|token|password|auth|url|prompt|content|body|headers|cookie|credential/i.test(
+        key,
+      )
+    )
       return "[REDACTED]";
     if (depth > 3) return "[REDACTED]";
     if (typeof value === "string")
-      return value.length > 160 || /https?:\/\/|(?:bearer|basic)\s+|sk-[a-z0-9_-]{10,}/i.test(value)
-        ? "[REDACTED]" : value;
+      return value.length > 160 ||
+        /https?:\/\/|(?:bearer|basic)\s+|sk-[a-z0-9_-]{10,}/i.test(value)
+        ? "[REDACTED]"
+        : value;
     if (Array.isArray(value))
-      return value.slice(0, 16).map(item => scrub("", item, depth + 1));
+      return value.slice(0, 16).map((item) => scrub("", item, depth + 1));
     if (value && typeof value === "object")
-      return Object.fromEntries(Object.entries(value as Record<string, unknown>)
-        .slice(0, 24).map(([k, v]) => [k, scrub(k, v, depth + 1)]));
+      return Object.fromEntries(
+        Object.entries(value as Record<string, unknown>)
+          .slice(0, 24)
+          .map(([k, v]) => [k, scrub(k, v, depth + 1)]),
+      );
     return typeof value === "number" && !Number.isFinite(value) ? null : value;
   };
   for (const [key, value] of Object.entries(params.payload ?? {}).slice(0, 24))

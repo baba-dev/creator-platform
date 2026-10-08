@@ -24,9 +24,7 @@ export function evaluateExecutableSteps(
   const results: ExecutionCandidate[] = [];
 
   for (const step of workflow.steps) {
-    if (
-      step.status !== "AWAITING_APPROVAL"
-    ) {
+    if (step.status !== "AWAITING_APPROVAL") {
       results.push({
         step,
         canExecute: false,

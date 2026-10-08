@@ -7,7 +7,10 @@ import {
 import type { ConversationAction, TurnPlan } from "./action-protocol";
 import { ACTION_PROTOCOL_VERSION } from "./action-protocol";
 import { resolveCreativeToolHandoff } from "./tool-handoff";
-import { classifyIntentDeterministically, compileCreativePlan } from "@aiwa/orchestration";
+import {
+  classifyIntentDeterministically,
+  compileCreativePlan,
+} from "@aiwa/orchestration";
 
 /**
  * Normalizes aspect ratio synonyms into canonical values.
@@ -124,8 +127,11 @@ export async function planConversationTurn(params: {
     const proposal = compileCreativePlan({ userPrompt: text });
     return {
       version: ACTION_PROTOCOL_VERSION,
-      actions: [{ type: "workflow_plan", title: proposal.title, workflow: proposal }],
-      reasoning: "Create a review-only creative workflow; never auto-dispatch paid steps.",
+      actions: [
+        { type: "workflow_plan", title: proposal.title, workflow: proposal },
+      ],
+      reasoning:
+        "Create a review-only creative workflow; never auto-dispatch paid steps.",
     };
   }
 

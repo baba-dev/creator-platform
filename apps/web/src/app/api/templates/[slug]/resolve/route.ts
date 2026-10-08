@@ -23,9 +23,9 @@ export async function POST(
     );
 
   const { slug } = await context.params;
-  const parsed = resolveTemplateSchema.extend({ localeIntent: creativeLocaleIntentSchema.optional() }).safeParse(
-    await request.json().catch(() => null),
-  );
+  const parsed = resolveTemplateSchema
+    .extend({ localeIntent: creativeLocaleIntentSchema.optional() })
+    .safeParse(await request.json().catch(() => null));
   if (!parsed.success)
     return NextResponse.json(
       { error: "Invalid template input." },

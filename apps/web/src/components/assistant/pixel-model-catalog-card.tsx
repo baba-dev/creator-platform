@@ -66,14 +66,26 @@ export function PixelModelCatalogCard({
   const models = Array.isArray(result.models) ? result.models : [];
   const page = result.page ?? 1;
   return (
-    <section className="w-full max-w-lg min-w-0 rounded-2xl border border-border bg-card p-3 shadow-2xs" aria-label="Available AI models">
+    <section
+      className="w-full max-w-lg min-w-0 rounded-2xl border border-border bg-card p-3 shadow-2xs"
+      aria-label="Available AI models"
+    >
       <div className="flex items-center justify-between gap-2 pb-2">
         <div className="flex min-w-0 items-center gap-2">
-          <svg className="size-5 shrink-0 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+          <svg
+            className="size-5 shrink-0 text-primary"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            aria-hidden="true"
+          >
             <rect x="3" y="7" width="18" height="13" rx="3" />
             <path d="M12 3v4M8 12h.01M16 12h.01M8 16h8" strokeLinecap="round" />
           </svg>
-          <h4 className="text-sm font-semibold text-foreground">Live AI model catalog</h4>
+          <h4 className="text-sm font-semibold text-foreground">
+            Live AI model catalog
+          </h4>
         </div>
         <span className="shrink-0 rounded-full bg-muted px-2 py-1 text-[11px] tabular-nums text-muted-foreground">
           {result.total ?? models.length} found
@@ -81,7 +93,8 @@ export function PixelModelCatalogCard({
       </div>
       {models.length === 0 ? (
         <p className="py-3 text-xs text-muted-foreground">
-          No configured, enabled and actively priced model matches this search. Try another name or category.
+          No configured, enabled and actively priced model matches this search.
+          Try another name or category.
         </p>
       ) : (
         <div className="max-h-[28rem] space-y-2 overflow-y-auto pr-0.5">
@@ -146,10 +159,29 @@ export function PixelModelCatalogCard({
         </div>
       )}
       <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/70 pt-2">
-        <span className="text-[11px] text-muted-foreground">Page {page}{result.hasMore ? " · more available" : ""}</span>
+        <span className="text-[11px] text-muted-foreground">
+          Page {page}
+          {result.hasMore ? " · more available" : ""}
+        </span>
         <div className="flex gap-2">
-          {page > 1 && <button type="button" className="min-h-9 rounded-lg border border-border px-3 text-xs hover:bg-muted" onClick={() => onAsk(pageRequest(page - 1, result.filter))}>Previous</button>}
-          {result.hasMore && <button type="button" className="min-h-9 rounded-lg border border-border px-3 text-xs hover:bg-muted" onClick={() => onAsk(pageRequest(page + 1, result.filter))}>Next</button>}
+          {page > 1 && (
+            <button
+              type="button"
+              className="min-h-9 rounded-lg border border-border px-3 text-xs hover:bg-muted"
+              onClick={() => onAsk(pageRequest(page - 1, result.filter))}
+            >
+              Previous
+            </button>
+          )}
+          {result.hasMore && (
+            <button
+              type="button"
+              className="min-h-9 rounded-lg border border-border px-3 text-xs hover:bg-muted"
+              onClick={() => onAsk(pageRequest(page + 1, result.filter))}
+            >
+              Next
+            </button>
+          )}
         </div>
       </div>
     </section>

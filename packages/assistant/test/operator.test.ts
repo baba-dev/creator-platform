@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
     chatThread: { findFirst: vi.fn() },
     asset: { findMany: vi.fn(), findFirst: vi.fn() },
     generationJob: { findMany: vi.fn(), findFirst: vi.fn() },
-    providerModel: { findFirst: vi.fn() },
+    providerModel: { findFirst: vi.fn(), findMany: vi.fn() },
     pixelWorkflow: {
       findUnique: vi.fn(),
       findFirst: vi.fn(),
@@ -201,6 +201,20 @@ describe("Pixel operator security and durable actions", () => {
       (await localPixelReply("How do I connect OneDrive?", ctx))?.content,
     ).toContain("Storage");
     expect(await localPixelReply("Generate a new campaign", ctx)).toBeNull();
+  });
+
+  it("answers named model questions and paginated model queries without an AI provider", async () => {
+    mocks.db.providerModel.findMany.mockResolvedValue([]);
+    const detail = await localPixelReply("What is Seedream 5 Pro?", ctx);
+    expect(detail?.toolResults[0]?.tool).toBe("app.getModels");
+    expect(detail?.toolResults[0]?.input).toMatchObject({
+      query: "seedream 5 pro",
+    });
+    const nextPage = await localPixelReply("Show image models page 2", ctx);
+    expect(nextPage?.toolResults[0]?.input).toMatchObject({
+      kind: "IMAGE",
+      page: 2,
+    });
   });
 
   it("rejects future source steps and oversized workflows", () => {

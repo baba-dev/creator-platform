@@ -190,12 +190,20 @@ export async function buildAssistantMessages(
   );
   // Model guidance is dynamic. Avoid spending tokens and database work on
   // catalog snapshots for unrelated prompts, and never imply a page is complete.
-  const modelQuestion = /\\b(models?|seedream|seedance|omnihuman|nemotron|llama|gemini|groq|dola|flux|whisper|gpt.?oss|qwen)\\b/i.test(input.userMessage);
-  const mentionedFamily = /\\b(seedream|seedance|omnihuman|nemotron|llama|gemini|groq|dola|flux|whisper|gpt.?oss|qwen)\\b/i.exec(input.userMessage)?.[1];
-  const modelCatalog = modelQuestion ? await getPixelModelCatalog({
-    ...(mentionedFamily ? { query: mentionedFamily } : {}),
-    pageSize: 20,
-  }) : undefined;
+  const modelQuestion =
+    /\\b(models?|seedream|seedance|omnihuman|nemotron|llama|gemini|groq|dola|flux|whisper|gpt.?oss|qwen)\\b/i.test(
+      input.userMessage,
+    );
+  const mentionedFamily =
+    /\\b(seedream|seedance|omnihuman|nemotron|llama|gemini|groq|dola|flux|whisper|gpt.?oss|qwen)\\b/i.exec(
+      input.userMessage,
+    )?.[1];
+  const modelCatalog = modelQuestion
+    ? await getPixelModelCatalog({
+        ...(mentionedFamily ? { query: mentionedFamily } : {}),
+        pageSize: 20,
+      })
+    : undefined;
   const historyRaw = await db.chatMessage.findMany({
     where: {
       threadId: input.threadId,

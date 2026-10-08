@@ -15,14 +15,18 @@ function storageKey(organizationId: string) {
 
 /** One browser-wide preference per workspace, shared by all Studio surfaces. */
 export function useCreativeLocale(organizationId: string) {
-  const [intent, setIntent] = useState<CreativeLocaleIntent>(DEFAULT_CREATIVE_LOCALE);
+  const [intent, setIntent] = useState<CreativeLocaleIntent>(
+    DEFAULT_CREATIVE_LOCALE,
+  );
 
   useEffect(() => {
     const key = storageKey(organizationId);
     const load = () => {
       try {
         const stored = window.localStorage.getItem(key);
-        const parsed = stored ? creativeLocaleIntentSchema.safeParse(JSON.parse(stored)) : null;
+        const parsed = stored
+          ? creativeLocaleIntentSchema.safeParse(JSON.parse(stored))
+          : null;
         setIntent(parsed?.success ? parsed.data : DEFAULT_CREATIVE_LOCALE);
       } catch {
         setIntent(DEFAULT_CREATIVE_LOCALE);
@@ -43,21 +47,30 @@ export function useCreativeLocale(organizationId: string) {
     };
   }, [organizationId]);
 
-  const update = useCallback((next: CreativeLocaleIntent) => {
-    const parsed = creativeLocaleIntentSchema.parse(next);
-    setIntent(parsed);
-    try {
-      const key = storageKey(organizationId);
-      if (parsed.preset === "auto" && parsed.tone === "natural" && parsed.culturalContext === "auto") {
-        window.localStorage.removeItem(key);
-      } else {
-        window.localStorage.setItem(key, JSON.stringify(parsed));
+  const update = useCallback(
+    (next: CreativeLocaleIntent) => {
+      const parsed = creativeLocaleIntentSchema.parse(next);
+      setIntent(parsed);
+      try {
+        const key = storageKey(organizationId);
+        if (
+          parsed.preset === "auto" &&
+          parsed.tone === "natural" &&
+          parsed.culturalContext === "auto"
+        ) {
+          window.localStorage.removeItem(key);
+        } else {
+          window.localStorage.setItem(key, JSON.stringify(parsed));
+        }
+        window.dispatchEvent(
+          new CustomEvent(CHANGE_EVENT, { detail: { key } }),
+        );
+      } catch {
+        // Storage can be disabled by browser policy; in-memory selection still works.
       }
-      window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: { key } }));
-    } catch {
-      // Storage can be disabled by browser policy; in-memory selection still works.
-    }
-  }, [organizationId]);
+    },
+    [organizationId],
+  );
 
   return [intent, update] as const;
 }
@@ -71,7 +84,9 @@ export function CreativeLocaleSelector({
   onChange: (value: CreativeLocaleIntent) => void;
   disabled?: boolean;
 }) {
-  const current = CREATIVE_LOCALE_PRESETS.find((entry) => entry.id === value.preset) ?? CREATIVE_LOCALE_PRESETS[0];
+  const current =
+    CREATIVE_LOCALE_PRESETS.find((entry) => entry.id === value.preset) ??
+    CREATIVE_LOCALE_PRESETS[0];
   const selectPreset = (preset: (typeof CREATIVE_LOCALE_PRESETS)[number]) => {
     onChange({
       ...value,
@@ -84,22 +99,45 @@ export function CreativeLocaleSelector({
     <details className="group my-4 rounded-2xl border border-border bg-card shadow-sm">
       <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-2xl px-4 py-3 focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
         <span className="flex min-w-0 items-center gap-3">
-          <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-border bg-background text-2xl" aria-hidden="true">{current.flag}</span>
+          <span
+            className="grid size-10 shrink-0 place-items-center rounded-xl border border-border bg-background text-2xl"
+            aria-hidden="true"
+          >
+            {current.flag}
+          </span>
           <span className="min-w-0">
-            <span className="block text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">Creative locale</span>
+            <span className="block text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
+              Creative locale
+            </span>
             <span className="block truncate text-sm font-semibold text-foreground">
-              {current.name} · {value.language === "auto" ? "Auto-detect" : current.languages.find((entry) => entry.code === value.language)?.label ?? value.language} · {value.tone}
+              {current.name} ·{" "}
+              {value.language === "auto"
+                ? "Auto-detect"
+                : (current.languages.find(
+                    (entry) => entry.code === value.language,
+                  )?.label ?? value.language)}{" "}
+              · {value.tone}
             </span>
           </span>
         </span>
-        <span className="shrink-0 text-xs font-semibold text-primary group-open:rotate-180" aria-hidden="true">⌄</span>
+        <span
+          className="shrink-0 text-xs font-semibold text-primary group-open:rotate-180"
+          aria-hidden="true"
+        >
+          ⌄
+        </span>
       </summary>
       <div className="space-y-4 border-t border-border px-4 pb-4 pt-4">
         <p className="text-xs leading-5 text-muted-foreground">
-          Choose your audience and language. Saved for this workspace across all creation tools until you reset it.
-          Accents depend on the selected voice model.
+          Choose your audience and language. Saved for this workspace across all
+          creation tools until you reset it. Accents depend on the selected
+          voice model.
         </p>
-        <div className="flex gap-2 overflow-x-auto pb-2" role="group" aria-label="Creative locale country">
+        <div
+          className="flex gap-2 overflow-x-auto pb-2"
+          role="group"
+          aria-label="Creative locale country"
+        >
           {CREATIVE_LOCALE_PRESETS.map((preset) => (
             <button
               key={preset.id}
@@ -115,7 +153,9 @@ export function CreativeLocaleSelector({
                   : "border-border bg-background text-foreground hover:border-primary/50"
               }`}
             >
-              <span className="text-2xl" aria-hidden="true">{preset.flag}</span>
+              <span className="text-2xl" aria-hidden="true">
+                {preset.flag}
+              </span>
               <span className="max-w-20 truncate">{preset.name}</span>
             </button>
           ))}
@@ -127,10 +167,16 @@ export function CreativeLocaleSelector({
               disabled={disabled || value.preset === "auto"}
               aria-label="Creative locale language"
               value={value.language}
-              onChange={(event) => onChange({ ...value, language: event.target.value })}
+              onChange={(event) =>
+                onChange({ ...value, language: event.target.value })
+              }
               className="min-h-11 rounded-xl border border-input bg-background px-3 text-sm"
             >
-              {current.languages.map((entry) => <option key={entry.code} value={entry.code}>{entry.label}</option>)}
+              {current.languages.map((entry) => (
+                <option key={entry.code} value={entry.code}>
+                  {entry.label}
+                </option>
+              ))}
             </select>
           </label>
           <label className="flex flex-col gap-1 text-xs font-semibold text-foreground">
@@ -139,11 +185,28 @@ export function CreativeLocaleSelector({
               disabled={disabled}
               aria-label="Creative locale tone"
               value={value.tone}
-              onChange={(event) => onChange({ ...value, tone: event.target.value as CreativeLocaleIntent["tone"] })}
+              onChange={(event) =>
+                onChange({
+                  ...value,
+                  tone: event.target.value as CreativeLocaleIntent["tone"],
+                })
+              }
               className="min-h-11 rounded-xl border border-input bg-background px-3 text-sm"
             >
-              {(["natural", "casual", "professional", "energetic", "warm", "luxury", "authoritative"] as const).map((tone) => (
-                <option key={tone} value={tone}>{tone.charAt(0).toUpperCase() + tone.slice(1)}</option>
+              {(
+                [
+                  "natural",
+                  "casual",
+                  "professional",
+                  "energetic",
+                  "warm",
+                  "luxury",
+                  "authoritative",
+                ] as const
+              ).map((tone) => (
+                <option key={tone} value={tone}>
+                  {tone.charAt(0).toUpperCase() + tone.slice(1)}
+                </option>
               ))}
             </select>
           </label>
@@ -153,7 +216,13 @@ export function CreativeLocaleSelector({
               disabled={disabled}
               aria-label="Cultural context influence"
               value={value.culturalContext}
-              onChange={(event) => onChange({ ...value, culturalContext: event.target.value as CreativeLocaleIntent["culturalContext"] })}
+              onChange={(event) =>
+                onChange({
+                  ...value,
+                  culturalContext: event.target
+                    .value as CreativeLocaleIntent["culturalContext"],
+                })
+              }
               className="min-h-11 rounded-xl border border-input bg-background px-3 text-sm"
             >
               <option value="auto">As relevant</option>

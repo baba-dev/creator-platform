@@ -80,7 +80,13 @@ export function useCreativeLocale(organizationId: string) {
 
 type LocalePreset = (typeof CREATIVE_LOCALE_PRESETS)[number];
 
-function LocaleFlag({ preset, size = "small" }: { preset: LocalePreset; size?: "small" | "large" }) {
+function LocaleFlag({
+  preset,
+  size = "small",
+}: {
+  preset: LocalePreset;
+  size?: "small" | "large";
+}) {
   if (!preset.countryCode) {
     return (
       <span className="grid size-9 place-items-center rounded-lg bg-primary/10 text-primary" aria-hidden="true">
@@ -102,7 +108,13 @@ function LocaleFlag({ preset, size = "small" }: { preset: LocalePreset; size?: "
   );
 }
 
-function HelpTooltip({ label, explanation }: { label: string; explanation: string }) {
+function HelpTooltip({
+  label,
+  explanation,
+}: {
+  label: string;
+  explanation: string;
+}) {
   const tooltipId = useId();
 
   return (
@@ -139,7 +151,9 @@ function CreativeLocaleDialog({
   const [draft, setDraft] = useState(value);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
-  const current = CREATIVE_LOCALE_PRESETS.find((item) => item.id === draft.preset) ?? CREATIVE_LOCALE_PRESETS[0];
+  const current =
+    CREATIVE_LOCALE_PRESETS.find((item) => item.id === draft.preset) ??
+    CREATIVE_LOCALE_PRESETS[0];
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -233,7 +247,7 @@ function CreativeLocaleDialog({
         </section>
 
         <section className="grid gap-4 border-t border-border pt-5 sm:grid-cols-3" aria-label="Creative language and style">
-          <label className="flex min-w-0 flex-col gap-2 text-xs font-semibold">
+          <div className="flex min-w-0 flex-col gap-2 text-xs font-semibold">
             <span className="flex items-center gap-2">
               Language
               <HelpTooltip label="language" explanation="Choose the language used for generated words or speech. Image-only requests aren't translated; voice accents depend on the selected model." />
@@ -249,8 +263,8 @@ function CreativeLocaleDialog({
                 <option key={entry.code} value={entry.code}>{entry.label}</option>
               ))}
             </select>
-          </label>
-          <label className="flex min-w-0 flex-col gap-2 text-xs font-semibold">
+          </div>
+          <div className="flex min-w-0 flex-col gap-2 text-xs font-semibold">
             <span className="flex items-center gap-2">
               Tone
               <HelpTooltip label="tone" explanation="Sets the overall creative voice: natural, relaxed, professional, energetic, warm, premium, or authoritative. Your explicit prompt always wins." />
@@ -265,8 +279,8 @@ function CreativeLocaleDialog({
                 <option key={tone} value={tone}>{tone.charAt(0).toUpperCase() + tone.slice(1)}</option>
               ))}
             </select>
-          </label>
-          <label className="flex min-w-0 flex-col gap-2 text-xs font-semibold">
+          </div>
+          <div className="flex min-w-0 flex-col gap-2 text-xs font-semibold">
             <span className="flex items-center gap-2">
               Cultural context
               <HelpTooltip label="cultural context" explanation="Controls whether generation should draw on local culture when relevant. It won't inject stereotypes, landmarks, or costumes into unrelated prompts." />
@@ -281,7 +295,7 @@ function CreativeLocaleDialog({
               <option value="on">Include when appropriate</option>
               <option value="off">Off</option>
             </select>
-          </label>
+          </div>
         </section>
       </div>
 
@@ -317,7 +331,9 @@ export function CreativeLocaleButton({
   className?: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const current = CREATIVE_LOCALE_PRESETS.find((entry) => entry.id === value.preset) ?? CREATIVE_LOCALE_PRESETS[0];
+  const current =
+    CREATIVE_LOCALE_PRESETS.find((entry) => entry.id === value.preset) ??
+    CREATIVE_LOCALE_PRESETS[0];
 
   return (
     <>

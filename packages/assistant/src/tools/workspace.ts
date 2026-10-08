@@ -52,14 +52,17 @@ export const getMembersTool: AssistantTool = {
 };
 
 export const getModelsTool: AssistantTool = {
-  description: "Read live available models with detailed capabilities, tasks, provider and published customer pricing; filter/search/paginate or look up a canonical model ID",
-  inputSchema: z.object({
-    kind: z.enum(["IMAGE", "VIDEO", "VOICE", "TEXT"]).optional(),
-    query: z.string().trim().max(100).optional(),
-    modelId: z.string().min(1).max(191).optional(),
-    page: z.number().int().min(1).max(1000).optional(),
-    pageSize: z.number().int().min(1).max(20).optional(),
-  }).strict(),
+  description:
+    "Read live available models with detailed capabilities, tasks, provider and published customer pricing; filter/search/paginate or look up a canonical model ID",
+  inputSchema: z
+    .object({
+      kind: z.enum(["IMAGE", "VIDEO", "VOICE", "TEXT"]).optional(),
+      query: z.string().trim().max(100).optional(),
+      modelId: z.string().min(1).max(191).optional(),
+      page: z.number().int().min(1).max(1000).optional(),
+      pageSize: z.number().int().min(1).max(20).optional(),
+    })
+    .strict(),
   async execute(input) {
     return getPixelModelCatalog(input as PixelModelQuery);
   },

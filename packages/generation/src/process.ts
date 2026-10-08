@@ -236,7 +236,9 @@ async function recordStorageFailure(
   });
 }
 
-function withoutCreativeLocaleMetadata(payload: Record<string, unknown>): Record<string, unknown> {
+function withoutCreativeLocaleMetadata(
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
   const safePayload = { ...payload };
   delete safePayload.localeIntent;
   return safePayload;
@@ -1080,7 +1082,9 @@ export async function processImageJob(
         modelId: job.providerModel.providerModelId,
         mediaKind: "image",
         input: {
-          ...withoutCreativeLocaleMetadata(job.requestPayload as Record<string, unknown>),
+          ...withoutCreativeLocaleMetadata(
+            job.requestPayload as Record<string, unknown>,
+          ),
           prompt: compileCreativeLocaleMediaPrompt(
             String(
               (job.requestPayload as Record<string, unknown>).prompt ?? "",
@@ -1557,7 +1561,8 @@ export async function processVoiceJob(
   let directAudioBytes: Buffer | undefined;
   try {
     const payload = job.requestPayload as Record<string, unknown>;
-    let providerInput: Record<string, unknown> = withoutCreativeLocaleMetadata(payload);
+    let providerInput: Record<string, unknown> =
+      withoutCreativeLocaleMetadata(payload);
     if (payload.task === "seed-audio") {
       const env = parseServerEnv();
       const base = new URL(env.APP_URL);

@@ -1,6 +1,9 @@
 "use client";
 
-import { CreativeLocaleSelector, useCreativeLocale } from "@/components/studio/creative-locale-selector";
+import {
+  CreativeLocaleSelector,
+  useCreativeLocale,
+} from "@/components/studio/creative-locale-selector";
 
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
@@ -647,7 +650,11 @@ export function SeedAudioStudio({
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
       <section className="min-w-0 space-y-6">
-        <CreativeLocaleSelector value={localeIntent} onChange={setLocaleIntent} disabled={busy} />
+        <CreativeLocaleSelector
+          value={localeIntent}
+          onChange={setLocaleIntent}
+          disabled={busy}
+        />
         <div className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-7">
           <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
             <div>

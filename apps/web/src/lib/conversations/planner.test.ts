@@ -57,7 +57,8 @@ describe("Conversational Creative Action Planner", () => {
   it("hands off specialized tasks without billing", async () => {
     const plan = await planConversationTurn({
       userMessage: "Please transcribe this audio",
-      organizationId: "org_1", context: baseContext,
+      organizationId: "org_1",
+      context: baseContext,
     });
     expect(plan.actions).toEqual([
       { type: "open_tool", toolId: "transcription" },
@@ -83,7 +84,8 @@ describe("Conversational Creative Action Planner", () => {
   it("does not turn questions into paid image generation", async () => {
     const plan = await planConversationTurn({
       userMessage: "Which model did you use?",
-      organizationId: "org_1", context: baseContext,
+      organizationId: "org_1",
+      context: baseContext,
     });
     expect(plan.actions).toEqual([
       { type: "answer_question", question: "Which model did you use?" },
@@ -93,7 +95,8 @@ describe("Conversational Creative Action Planner", () => {
   it("recognizes resolution and voice settings", async () => {
     const resolution = await planConversationTurn({
       userMessage: "Set resolution to 4K",
-      organizationId: "org_1", context: baseContext,
+      organizationId: "org_1",
+      context: baseContext,
     });
     expect(resolution.actions).toEqual([
       { type: "change_resolution", resolution: "4K" },

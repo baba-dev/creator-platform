@@ -44,7 +44,10 @@ const messageInputSchema = z
     mode: z.enum(["plan", "execute"]).default("execute"),
     resumePendingOperation: z.boolean().optional().default(false),
     idempotencyKey: z.string().uuid(),
-    planFingerprint: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+    planFingerprint: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
   })
   .superRefine((value, context) => {
     if (value.mode === "execute" && value.expectedRevision === undefined) {
@@ -545,23 +548,32 @@ export async function POST(
 
     // =========================================================
     // Case 0: Explicit non-billable questions and creative consultation.
-    if (firstAction.type === "answer_question" || firstAction.type === "open_tool") {
+    if (
+      firstAction.type === "answer_question" ||
+      firstAction.type === "open_tool"
+    ) {
       if (input.mode === "plan") {
         return NextResponse.json({
-          mode: "plan", billable: false, action: firstAction.type,
+          mode: "plan",
+          billable: false,
+          action: firstAction.type,
           expectedRevision: currentState.revision ?? 0,
         });
       }
       if (Number(currentState.revision ?? 0) !== input.expectedRevision) {
-        return NextResponse.json({
-          error: "Conversation state was modified. Refresh and try again.",
-          code: "CONVERSATION_CONFLICT",
-        }, { status: 409 });
+        return NextResponse.json(
+          {
+            error: "Conversation state was modified. Refresh and try again.",
+            code: "CONVERSATION_CONFLICT",
+          },
+          { status: 409 },
+        );
       }
       const userMessage = await upsertUserMessage();
-      const handoff = firstAction.type === "open_tool"
-        ? WORKSPACE_TOOLS.find((tool) => tool.id === firstAction.toolId)
-        : null;
+      const handoff =
+        firstAction.type === "open_tool"
+          ? WORKSPACE_TOOLS.find((tool) => tool.id === firstAction.toolId)
+          : null;
       const answer = handoff
         ? describeCreativeHandoff(handoff)
         : firstAction.type === "answer_question"
@@ -572,12 +584,15 @@ export async function POST(
         `${input.idempotencyKey}-answer`,
         answer,
         {
-          turnStatus: "COMPLETED", actions: [],
+          turnStatus: "COMPLETED",
+          actions: [],
           ...(handoff ? { handoffToolId: handoff.id } : {}),
         },
       );
       return NextResponse.json({
-        userMessage, assistantMessage, status: 200,
+        userMessage,
+        assistantMessage,
+        status: 200,
         revision: currentState.revision ?? 0,
       });
     }
@@ -587,7 +602,9 @@ export async function POST(
     if (firstAction.type === "clarify") {
       if (input.mode === "plan") {
         return NextResponse.json({
-          mode: "plan", billable: false, action: firstAction.type,
+          mode: "plan",
+          billable: false,
+          action: firstAction.type,
           expectedRevision: currentState.revision ?? 0,
         });
       }
@@ -639,7 +656,9 @@ export async function POST(
     if (firstAction.type === "select_asset" && plan.actions.length === 1) {
       if (input.mode === "plan") {
         return NextResponse.json({
-          mode: "plan", billable: false, action: firstAction.type,
+          mode: "plan",
+          billable: false,
+          action: firstAction.type,
           expectedRevision: currentState.revision ?? 0,
         });
       }
@@ -1084,20 +1103,32 @@ export async function POST(
     // Binding the approval to the exact effective spec prevents stale
     // confirmations from silently executing a different model or prompt.
     const planFingerprint = createHash("sha256")
-      .update(JSON.stringify({
-        modality: targetModality, modelId: model.id,
-        priceVersionId: priceVersion.id, prompt: targetPrompt,
-        aspectRatio: targetRatio, resolution: targetResolution,
-        outputCount: targetOutputCount, durationSeconds: targetDuration,
-        voiceKey: targetVoiceKey, speechRate: targetSpeechRate,
-        referenceAssetIds: imageReferenceAssetIds,
-        videoWorkflow, firstFrameAssetId, videoSourceAssetId,
-        extensionDirection,
-        sourceGenerationId: sourceJob?.id ?? latestJob?.id ?? null,
-      }))
+      .update(
+        JSON.stringify({
+          modality: targetModality,
+          modelId: model.id,
+          priceVersionId: priceVersion.id,
+          prompt: targetPrompt,
+          aspectRatio: targetRatio,
+          resolution: targetResolution,
+          outputCount: targetOutputCount,
+          durationSeconds: targetDuration,
+          voiceKey: targetVoiceKey,
+          speechRate: targetSpeechRate,
+          referenceAssetIds: imageReferenceAssetIds,
+          videoWorkflow,
+          firstFrameAssetId,
+          videoSourceAssetId,
+          extensionDirection,
+          sourceGenerationId: sourceJob?.id ?? latestJob?.id ?? null,
+        }),
+      )
       .digest("hex");
-    if (input.mode === "execute" && input.planFingerprint &&
-        input.planFingerprint !== planFingerprint) {
+    if (
+      input.mode === "execute" &&
+      input.planFingerprint &&
+      input.planFingerprint !== planFingerprint
+    ) {
       throw new GenerationError(
         "The model, price or creative plan changed. Review the generation again.",
         409,
@@ -1136,7 +1167,8 @@ export async function POST(
         extensionDirection,
         returnLastFrame:
           targetModality === "VIDEO" &&
-          (model.capabilities as Record<string, unknown> | null)?.returnLastFrame === true,
+          (model.capabilities as Record<string, unknown> | null)
+            ?.returnLastFrame === true,
       });
     }
 

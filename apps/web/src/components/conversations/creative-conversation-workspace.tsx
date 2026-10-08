@@ -486,7 +486,8 @@ export function CreativeConversationWorkspace({
         content: prompt,
         selectedAssetId: focusedAssetId,
         sourceGenerationId,
-        expectedRevision: approvedPlan?.expectedRevision ?? conversationRevision,
+        expectedRevision:
+          approvedPlan?.expectedRevision ?? conversationRevision,
         resumePendingOperation,
         idempotencyKey,
       };
@@ -497,7 +498,10 @@ export function CreativeConversationWorkspace({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ...turnPayload, mode, planFingerprint }),
         });
-      let res = await submit(approvedPlan ? "execute" : "plan", approvedPlan?.plan.planFingerprint);
+      let res = await submit(
+        approvedPlan ? "execute" : "plan",
+        approvedPlan?.plan.planFingerprint,
+      );
       let data = await res.json();
 
       if (res.ok && !approvedPlan && data.mode === "plan") {
@@ -505,9 +509,21 @@ export function CreativeConversationWorkspace({
           const plan = data as PlannedGeneration;
           const sources =
             plan.videoWorkflow === "EXTEND" && plan.videoSourceAssetId
-              ? [{ assetId: plan.videoSourceAssetId, role: "SOURCE_VIDEO", position: 0 }]
+              ? [
+                  {
+                    assetId: plan.videoSourceAssetId,
+                    role: "SOURCE_VIDEO",
+                    position: 0,
+                  },
+                ]
               : plan.firstFrameAssetId
-                ? [{ assetId: plan.firstFrameAssetId, role: "FIRST_FRAME", position: 0 }]
+                ? [
+                    {
+                      assetId: plan.firstFrameAssetId,
+                      role: "FIRST_FRAME",
+                      position: 0,
+                    },
+                  ]
                 : [];
           const quoteRequest = {
             organizationId,
@@ -554,14 +570,19 @@ export function CreativeConversationWorkspace({
             throw new Error(quoted.error ?? "Generation quote is unavailable.");
           }
           if (quoted.quote.priceVersionId !== plan.priceVersionId) {
-            throw new Error("The model price changed. Please review your request again.");
+            throw new Error(
+              "The model price changed. Please review your request again.",
+            );
           }
           setPlanReview({
-            prompt, idempotencyKey, selectedAssetId: focusedAssetId,
+            prompt,
+            idempotencyKey,
+            selectedAssetId: focusedAssetId,
             sourceGenerationId,
             expectedRevision: turnPayload.expectedRevision,
             resumePendingOperation,
-            plan, quote: quoted.quote,
+            plan,
+            quote: quoted.quote,
             canAfford: quoted.wallet?.canAfford === true,
             canSpend: quoted.budget?.canSpend === true,
           });
@@ -1156,19 +1177,28 @@ export function CreativeConversationWorkspace({
                   }`}
                 >
                   <p className="whitespace-pre-wrap">{message.content}</p>
-                  {meta?.handoffToolId ? (() => {
-                    const tool = WORKSPACE_TOOLS.find((item) => item.id === meta.handoffToolId);
-                    return tool ? (
-                      <Link
-                        href={getWorkspaceItemHref(getWorkspaceBase(organizationSlug), tool) as Route}
-                        className="mt-3 inline-flex min-h-9 items-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20"
-                      >
-                        <Icon name={tool.icon} className="size-4" />
-                        Open {tool.shortTitle}
-                        <Icon name="arrow" className="size-3" />
-                      </Link>
-                    ) : null;
-                  })() : null}
+                  {meta?.handoffToolId
+                    ? (() => {
+                        const tool = WORKSPACE_TOOLS.find(
+                          (item) => item.id === meta.handoffToolId,
+                        );
+                        return tool ? (
+                          <Link
+                            href={
+                              getWorkspaceItemHref(
+                                getWorkspaceBase(organizationSlug),
+                                tool,
+                              ) as Route
+                            }
+                            className="mt-3 inline-flex min-h-9 items-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20"
+                          >
+                            <Icon name={tool.icon} className="size-4" />
+                            Open {tool.shortTitle}
+                            <Icon name="arrow" className="size-3" />
+                          </Link>
+                        ) : null;
+                      })()
+                    : null}
 
                   {/* Clarification prompt & interactive choices */}
                   {clarification?.options &&
@@ -1242,25 +1272,35 @@ export function CreativeConversationWorkspace({
               <div className="min-w-0">
                 <Eyebrow>Review before generating</Eyebrow>
                 <p className="mt-1 text-sm font-semibold text-foreground">
-                  {planReview.plan.model.displayName} · {planReview.plan.targetModality.toLowerCase()}
+                  {planReview.plan.model.displayName} ·{" "}
+                  {planReview.plan.targetModality.toLowerCase()}
                 </p>
                 <p className="mt-1 line-clamp-2 break-words text-xs text-muted-foreground">
                   {planReview.plan.prompt}
                 </p>
               </div>
               <span className="rounded-lg border border-border bg-surface-sunken px-2.5 py-1 text-xs text-muted-foreground">
-                {planReview.plan.settings.aspectRatio} · {planReview.plan.settings.resolution}
+                {planReview.plan.settings.aspectRatio} ·{" "}
+                {planReview.plan.settings.resolution}
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
               <span>
-                Estimated: <strong className="tabular-nums text-foreground">{planReview.quote.estimatedCredits} credits</strong>
+                Estimated:{" "}
+                <strong className="tabular-nums text-foreground">
+                  {planReview.quote.estimatedCredits} credits
+                </strong>
               </span>
               <span>
-                Maximum reservation: <strong className="tabular-nums text-foreground">{planReview.quote.reservationCredits} credits</strong>
+                Maximum reservation:{" "}
+                <strong className="tabular-nums text-foreground">
+                  {planReview.quote.reservationCredits} credits
+                </strong>
               </span>
               <span className="text-muted-foreground">
-                {planReview.quote.settlement === "ACTUAL_USAGE" ? "Final cost settles from actual usage" : "Fixed quote"}
+                {planReview.quote.settlement === "ACTUAL_USAGE"
+                  ? "Final cost settles from actual usage"
+                  : "Fixed quote"}
               </span>
             </div>
             {!planReview.canAfford || !planReview.canSpend ? (
@@ -1287,14 +1327,20 @@ export function CreativeConversationWorkspace({
               <Button
                 type="button"
                 size="sm"
-                disabled={isSubmitting || !planReview.canAfford || !planReview.canSpend ||
-                  Date.parse(planReview.quote.expiresAt) <= Date.now()}
-                onClick={() => void handleSend(
-                  planReview.prompt,
-                  planReview.selectedAssetId,
-                  planReview.resumePendingOperation,
-                  planReview,
-                )}
+                disabled={
+                  isSubmitting ||
+                  !planReview.canAfford ||
+                  !planReview.canSpend ||
+                  Date.parse(planReview.quote.expiresAt) <= Date.now()
+                }
+                onClick={() =>
+                  void handleSend(
+                    planReview.prompt,
+                    planReview.selectedAssetId,
+                    planReview.resumePendingOperation,
+                    planReview,
+                  )
+                }
               >
                 {isSubmitting ? "Submitting…" : "Confirm & create"}
               </Button>
@@ -1302,14 +1348,30 @@ export function CreativeConversationWorkspace({
           </section>
         ) : null}
         {/* Specialist tasks reuse the canonical app navigation registry. */}
-        <div className="mb-2 flex items-center gap-2 overflow-x-auto pb-1 text-xs" aria-label="Specialist workbenches">
-          <span className="shrink-0 text-muted-foreground">Open a workbench:</span>
-          {["image-studio", "video-studio", "audio-generation", "transcription", "creative-director"].map((toolId) => {
+        <div
+          className="mb-2 flex items-center gap-2 overflow-x-auto pb-1 text-xs"
+          aria-label="Specialist workbenches"
+        >
+          <span className="shrink-0 text-muted-foreground">
+            Open a workbench:
+          </span>
+          {[
+            "image-studio",
+            "video-studio",
+            "audio-generation",
+            "transcription",
+            "creative-director",
+          ].map((toolId) => {
             const tool = WORKSPACE_TOOLS.find((item) => item.id === toolId);
             return tool ? (
               <Link
                 key={tool.id}
-                href={getWorkspaceItemHref(getWorkspaceBase(organizationSlug), tool) as Route}
+                href={
+                  getWorkspaceItemHref(
+                    getWorkspaceBase(organizationSlug),
+                    tool,
+                  ) as Route
+                }
                 className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 font-medium text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
               >
                 <Icon name={tool.icon} className="size-3.5" />
@@ -1386,7 +1448,12 @@ export function CreativeConversationWorkspace({
               type="button"
               size="sm"
               onClick={() => void handleSend()}
-              disabled={!inputPrompt.trim() || !canGenerate || isSubmitting || Boolean(planReview)}
+              disabled={
+                !inputPrompt.trim() ||
+                !canGenerate ||
+                isSubmitting ||
+                Boolean(planReview)
+              }
               aria-busy={isSubmitting}
             >
               {isSubmitting ? "Checking…" : "Send"}

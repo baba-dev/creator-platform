@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 
 export function StartConversationButton({
-  organizationId, organizationSlug,
+  organizationId,
+  organizationSlug,
 }: {
   organizationId: string;
   organizationSlug: string;
@@ -48,7 +49,9 @@ export function StartConversationButton({
         `/app/${encodeURIComponent(organizationSlug)}/conversations/${encodeURIComponent(result.conversationId)}` as Route,
       );
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Connection unavailable.");
+      setError(
+        cause instanceof Error ? cause.message : "Connection unavailable.",
+      );
     } finally {
       setBusy(false);
     }
@@ -66,7 +69,11 @@ export function StartConversationButton({
         <Icon name="chat" className="size-4" />
         {busy ? "Opening…" : "Start conversation"}
       </Button>
-      {error ? <p className="max-w-64 text-xs text-destructive" role="alert">{error}</p> : null}
+      {error ? (
+        <p className="max-w-64 text-xs text-destructive" role="alert">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

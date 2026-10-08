@@ -145,9 +145,16 @@ export const enhancePromptActionSchema = z.object({
 export const openToolActionSchema = z.object({
   type: z.literal("open_tool"),
   toolId: z.enum([
-    "transcription", "audio-generation", "spokesperson", "voice-casting",
-    "video-editor", "precision-image", "scriptwriter", "creative-director",
-    "brand-story", "character-chat",
+    "transcription",
+    "audio-generation",
+    "spokesperson",
+    "voice-casting",
+    "video-editor",
+    "precision-image",
+    "scriptwriter",
+    "creative-director",
+    "brand-story",
+    "character-chat",
   ]),
 });
 

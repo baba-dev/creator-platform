@@ -1,5 +1,7 @@
 "use client";
 
+import { CreativeLocaleSelector, useCreativeLocale } from "@/components/studio/creative-locale-selector";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -113,6 +115,7 @@ export function TranscriptionStudio({
   models: StudioModelOption[];
   defaultModelId: string | null;
 }) {
+  const [localeIntent, setLocaleIntent] = useCreativeLocale(organizationId);
   const [assets, setAssets] = useState<SourceAsset[]>([]);
   const [jobs, setJobs] = useState<TranscriptionJob[]>([]);
   const [selectedModelId, setSelectedModelId] = useState(
@@ -174,6 +177,7 @@ export function TranscriptionStudio({
             modelId: selectedModelId,
             sourceAssetId,
             ...(language.trim() ? { language: language.trim() } : {}),
+            localeIntent,
           }),
         });
         const data = (await response.json().catch(() => ({}))) as {
@@ -203,7 +207,7 @@ export function TranscriptionStudio({
       }
     }, 250);
     return () => clearTimeout(timer);
-  }, [organizationId, selectedModelId, sourceAssetId, language]);
+  }, [organizationId, selectedModelId, sourceAssetId, language, localeIntent]);
 
   async function upload(file: File) {
     if (!canUpload) return;
@@ -288,6 +292,7 @@ export function TranscriptionStudio({
           idempotencyKey: crypto.randomUUID(),
           sourceAssetId,
           ...(language.trim() ? { language: language.trim() } : {}),
+            localeIntent,
         }),
       });
       const data = (await response.json().catch(() => ({}))) as {
@@ -330,6 +335,7 @@ export function TranscriptionStudio({
 
   return (
     <section className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-6">
+      <CreativeLocaleSelector value={localeIntent} onChange={setLocaleIntent} disabled={busy || uploadBusy} />
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <Eyebrow>Speech / transcription</Eyebrow>

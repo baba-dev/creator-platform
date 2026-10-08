@@ -1637,6 +1637,7 @@ export async function processVoiceJob(
           idempotencyKey: job.idempotencyKey,
           modelId: job.providerModel.providerModelId,
           baseProviderInput: providerInput,
+          compileSegmentPrompt: (segment) => compileCreativeLocaleMediaPrompt(segment, payload.localeIntent, "VOICE", 3000),
           textPrompt,
           estimatedDurationSeconds,
           expectedMediaType: voiceOutputAsset.mimeType,

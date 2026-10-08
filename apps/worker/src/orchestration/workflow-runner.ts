@@ -1,18 +1,13 @@
 import { createHash } from "node:crypto";
 import { hasOrganizationPermission } from "@aiwa/authz";
 import { db } from "@aiwa/db";
-import {
-  computeCanonicalRequestHash,
-  evaluateExecutableSteps,
-  evaluateStepRecovery,
-  validateWorkflowGraphDAG,
-  CreativeWorkflowService,
-  GenerationToolAdapter,
-  SpecialistMediaKitAdapter,
-  type WorkflowGraph,
-  type WorkflowStepAction,
-  type OrchestrationTask,
-} from "@aiwa/orchestration";
+import { computeCanonicalRequestHash } from "@aiwa/orchestration/approval";
+import { evaluateExecutableSteps } from "@aiwa/orchestration/execution";
+import { evaluateStepRecovery } from "@aiwa/orchestration/recovery";
+import { validateWorkflowGraphDAG, type WorkflowGraph, type WorkflowStepAction } from "@aiwa/orchestration/workflow";
+import { CreativeWorkflowService } from "@aiwa/orchestration/workflow/service";
+import { GenerationToolAdapter, SpecialistMediaKitAdapter } from "@aiwa/orchestration/adapters";
+import type { OrchestrationTask } from "@aiwa/orchestration/contracts";
 
 const generationAdapter = new GenerationToolAdapter();
 const specialistAdapter = new SpecialistMediaKitAdapter();

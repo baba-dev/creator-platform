@@ -7,8 +7,8 @@ import {
   OrchestrationTaskSchema,
 } from "../contracts/index";
 
-export const MAX_WORKFLOW_STEPS = 5;
-export const MAX_IMAGES_PER_STEP = 4;
+import { MAX_WORKFLOW_STEPS } from "./limits";
+export { MAX_WORKFLOW_STEPS, MAX_IMAGES_PER_STEP } from "./limits";
 
 export const WorkflowStepActionSchema = z.object({
   id: z.string().min(1).max(128),

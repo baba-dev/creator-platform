@@ -10,10 +10,7 @@ import {
 } from "@aiwa/generation";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import {
-  CreativeWorkflowService,
-  StageBPlanOutputSchema,
-} from "@aiwa/orchestration";
+import { StageBPlanOutputSchema } from "@aiwa/orchestration/planning";
 
 import { rateLimit } from "@/lib/rate-limit";
 import { getRequestSession } from "@/lib/request-auth";
@@ -583,8 +580,11 @@ export async function POST(
         firstAction.type === "workflow_plan"
           ? StageBPlanOutputSchema.parse(firstAction.workflow)
           : null;
-      const draft = proposal
-        ? await CreativeWorkflowService.createWorkflow({
+      const workflowService = proposal
+        ? await import("@aiwa/orchestration/workflow/service")
+        : null;
+      const draft = proposal && workflowService
+        ? await workflowService.CreativeWorkflowService.createWorkflow({
             threadId: thread.id,
             organizationId: thread.organizationId,
             actorId: session.user.id,

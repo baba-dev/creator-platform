@@ -15,7 +15,7 @@ import {
   type StepQuote,
   type StepStatus,
 } from "../contracts/index";
-import { MAX_WORKFLOW_STEPS } from "./index";
+import { MAX_WORKFLOW_STEPS } from "./limits";
 import {
   buildGenerationAdmissionRequest,
   GenerationToolAdapter,

@@ -10,7 +10,7 @@ import { resolveCreativeToolHandoff } from "./tool-handoff";
 import {
   classifyIntentDeterministically,
   compileCreativePlan,
-} from "@aiwa/orchestration";
+} from "@aiwa/orchestration/planning";
 
 /**
  * Normalizes aspect ratio synonyms into canonical values.

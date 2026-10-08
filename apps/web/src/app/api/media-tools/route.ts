@@ -5,6 +5,7 @@ import { requireMembership } from "@aiwa/generation";
 import {
   createProviderToolExecution,
   prepareMediaToolRequest,
+  recoverMediaToolRequest,
   ProviderToolExecutionError,
 } from "@aiwa/generation/media-tools";
 import { isBytePlusMediaKitConfigured } from "@aiwa/providers/byteplus";
@@ -13,6 +14,11 @@ import { z } from "zod";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
 import { rateLimit } from "@/lib/rate-limit";
+
+import {
+  mediaToolAssetSelect,
+  serializeMediaToolAsset,
+} from "../../../lib/media-tool-assets";
 
 const limiter = rateLimit({
   max: 20,
@@ -69,13 +75,7 @@ export async function GET(request: Request) {
             { storageOwnerUserId: session.user.id },
           ],
         },
-        select: {
-          id: true,
-          name: true,
-          mediaKind: true,
-          mimeType: true,
-          durationMs: true,
-        },
+        select: mediaToolAssetSelect,
         orderBy: { createdAt: "desc" },
         take: 100,
       }),
@@ -84,7 +84,8 @@ export async function GET(request: Request) {
         select: {
           id: true,
           status: true,
-          providerTool: { select: { displayName: true } },
+          providerTool: { select: { displayName: true, providerToolId: true } },
+          createdAt: true,
         },
         orderBy: { createdAt: "desc" },
         take: 20,
@@ -102,7 +103,7 @@ export async function GET(request: Request) {
             tool.enabled &&
             tool.priceVersions[0]?.pricingMetric === tool.pricingMetric,
         })),
-        assets,
+        assets: assets.map(serializeMediaToolAsset),
         executions,
       },
       { headers: { "Cache-Control": "private, no-store" } },
@@ -139,6 +140,17 @@ export async function POST(request: Request) {
     );
   try {
     const input = schema.parse(JSON.parse(text));
+    if (input.action === "execute" && input.idempotencyKey) {
+      const existing = await recoverMediaToolRequest(session.user.id, {
+        ...input,
+        idempotencyKey: input.idempotencyKey,
+      });
+      if (existing)
+        return NextResponse.json(
+          { execution: { id: existing.id, status: existing.status } },
+          { status: 202 },
+        );
+    }
     const prepared = await prepareMediaToolRequest(session.user.id, input);
     if (input.action === "quote")
       return NextResponse.json({

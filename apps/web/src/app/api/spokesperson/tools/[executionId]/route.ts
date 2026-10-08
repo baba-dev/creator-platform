@@ -4,6 +4,11 @@ import { NextResponse } from "next/server";
 
 import { getRequestSession } from "@/lib/request-auth";
 
+import {
+  mediaToolAssetSelect,
+  serializeMediaToolAsset,
+} from "../../../../../lib/media-tool-assets";
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ executionId: string }> },
@@ -26,10 +31,24 @@ export async function GET(
     where: { id: executionId },
     include: {
       providerTool: { select: { providerToolId: true, displayName: true } },
+      inputAssets: {
+        where: {
+          position: 0,
+          asset: {
+            status: "READY",
+            OR: [
+              { purpose: { not: "REFERENCE_INPUT" } },
+              { storageOwnerUserId: session.user.id },
+            ],
+          },
+        },
+        take: 1,
+        select: { asset: { select: mediaToolAssetSelect } },
+      },
       outputAssets: {
         where: { status: "READY" },
         orderBy: { providerToolOutputIndex: "asc" },
-        select: { id: true, mimeType: true, durationMs: true },
+        select: mediaToolAssetSelect,
       },
     },
   });
@@ -93,6 +112,12 @@ export async function GET(
             : null,
         outputAssetId: execution.outputAssets[0]?.id ?? null,
         outputMimeType: execution.outputAssets[0]?.mimeType ?? null,
+        sourceAsset: execution.inputAssets?.[0]?.asset
+          ? serializeMediaToolAsset(execution.inputAssets[0].asset)
+          : null,
+        outputAsset: execution.outputAssets[0]
+          ? serializeMediaToolAsset(execution.outputAssets[0])
+          : null,
         completedAt: execution.completedAt?.toISOString() ?? null,
       },
     },

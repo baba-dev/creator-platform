@@ -67,16 +67,25 @@ async function serve(request: Request, assetId: string, head: boolean) {
   if (
     !asset ||
     !execution ||
-    !["SOURCE_VIDEO", "SOURCE_IMAGE", "SOURCE_AUDIO"].includes(input.role) ||
-    input.position !== (input.role === "SOURCE_AUDIO" ? 1 : 0) ||
+    ![
+      "SOURCE_VIDEO",
+      "SOURCE_IMAGE",
+      "SOURCE_AUDIO",
+      "WATERMARK_IMAGE",
+    ].includes(input.role) ||
+    input.position !==
+      (["SOURCE_AUDIO", "WATERMARK_IMAGE"].includes(input.role) ? 1 : 0) ||
     asset.organizationId !== execution.organizationId ||
     !["SUBMITTING", "PROCESSING"].includes(execution.status) ||
     asset.status !== "READY" ||
-    asset.mediaKind !== input.role.replace("SOURCE_", "") ||
+    asset.mediaKind !==
+      (input.role === "WATERMARK_IMAGE"
+        ? "IMAGE"
+        : input.role.replace("SOURCE_", "")) ||
     !(
       input.role === "SOURCE_VIDEO"
         ? ["video/mp4", "video/quicktime"]
-        : input.role === "SOURCE_IMAGE"
+        : ["SOURCE_IMAGE", "WATERMARK_IMAGE"].includes(input.role)
           ? ["image/png", "image/jpeg", "image/webp"]
           : ["audio/mpeg", "audio/wav", "audio/x-wav"]
     ).includes(asset.mimeType) ||
@@ -101,7 +110,12 @@ async function serve(request: Request, assetId: string, head: boolean) {
     if (
       !Number.isSafeInteger(size) ||
       size <= 0 ||
-      size > MAX_PROVIDER_VIDEO_BYTES
+      size >
+        (input.role === "WATERMARK_IMAGE"
+          ? 5 * 1024 * 1024
+          : input.role === "SOURCE_IMAGE"
+            ? 35 * 1024 * 1024
+            : MAX_PROVIDER_VIDEO_BYTES)
     )
       return new Response(null, { status: 503 });
 

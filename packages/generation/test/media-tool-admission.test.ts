@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => {
     tx,
     db: {
       $transaction: vi.fn(),
+      membership: tx.membership,
       providerToolExecution: { findUnique: vi.fn(), updateMany: vi.fn() },
     },
     reserve: vi.fn(),
@@ -49,6 +50,7 @@ vi.mock("../src/storage", async (original) => ({
 import {
   createProviderToolExecution,
   processProviderToolExecution,
+  recoverMediaToolRequest,
 } from "../src/media-tools";
 
 const request = {
@@ -100,6 +102,8 @@ beforeEach(() => {
     mediaKind: "IMAGE",
     mimeType: "image/png",
     byteSize: 1024n,
+    width: 640,
+    height: 480,
   });
   mocks.tx.wallet.findUnique.mockResolvedValue({ id: "wallet" });
   mocks.tx.providerToolExecution.create.mockImplementation(({ data }) => ({
@@ -209,5 +213,115 @@ describe("MediaKit admission protects source assets and reservations", () => {
     expect(await createProviderToolExecution("user", request)).toBe(execution);
     expect(mocks.reserve).not.toHaveBeenCalled();
     expect(mocks.storage).not.toHaveBeenCalled();
+  });
+});
+
+describe("visual edits admission", () => {
+  it("rejects a crop beyond canonical dimensions before any reservation", async () => {
+    const tool = await mocks.tx.providerTool.findFirst();
+    mocks.tx.providerTool.findFirst.mockResolvedValue({
+      ...tool,
+      providerToolId: "crop-image",
+    });
+    await expect(
+      createProviderToolExecution("user", {
+        ...request,
+        input: {
+          crop_mode: "custom",
+          custom_x1: 0,
+          custom_y1: 0,
+          custom_x2: 641,
+          custom_y2: 480,
+        },
+      }),
+    ).rejects.toThrow(/dimensions/);
+    expect(mocks.reserve).not.toHaveBeenCalled();
+  });
+  it.each(["private", "oversized"])(
+    "rejects a %s logo before any reservation",
+    async (reason) => {
+      const tool = await mocks.tx.providerTool.findFirst();
+      mocks.tx.providerTool.findFirst.mockResolvedValue({
+        ...tool,
+        providerToolId: "add-image-watermark",
+      });
+      const source = await mocks.tx.asset.findFirst();
+      mocks.tx.asset.findFirst
+        .mockResolvedValueOnce(source)
+        .mockResolvedValueOnce({
+          ...source,
+          id: "logo",
+          storageOwnerUserId: reason === "private" ? "other" : "user",
+          byteSize: reason === "oversized" ? 5n * 1024n * 1024n + 1n : 1024n,
+        });
+      await expect(
+        createProviderToolExecution("user", {
+          ...request,
+          input: { watermark_type: "image" },
+          sourceAssets: [
+            ...request.sourceAssets,
+            { assetId: "logo", role: "WATERMARK_IMAGE", position: 1 },
+          ],
+        }),
+      ).rejects.toThrow(/Logo/);
+      expect(mocks.reserve).not.toHaveBeenCalled();
+    },
+  );
+  it("persists both logo/source identities with one original-byte reservation", async () => {
+    const tool = await mocks.tx.providerTool.findFirst();
+    mocks.tx.providerTool.findFirst.mockResolvedValue({
+      ...tool,
+      providerToolId: "add-image-watermark",
+    });
+    const source = await mocks.tx.asset.findFirst();
+    mocks.tx.asset.findFirst
+      .mockResolvedValueOnce(source)
+      .mockResolvedValueOnce({ ...source, id: "logo" });
+    await createProviderToolExecution("user", {
+      ...request,
+      input: { watermark_type: "image" },
+      sourceAssets: [
+        ...request.sourceAssets,
+        { assetId: "logo", role: "WATERMARK_IMAGE", position: 1 },
+      ],
+    });
+    expect(mocks.tx.providerToolInputAsset.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          assetId: "logo",
+          position: 1,
+          role: "WATERMARK_IMAGE",
+        }),
+      }),
+    );
+    expect(mocks.reserve).toHaveBeenCalledTimes(1);
+  });
+  it("recovers the same accepted request even after its price retires", async () => {
+    const input = { quality: 80, output_format: "jpeg" };
+    const execution = await createProviderToolExecution("user", {
+      ...request,
+      input,
+    });
+    mocks.db.providerToolExecution.findUnique.mockResolvedValue({
+      ...execution,
+      providerTool: { providerToolId: "compress-image" },
+    });
+    mocks.reserve.mockClear();
+    const params = {
+      organizationId: "org",
+      toolKey: "compress-image",
+      assetIds: ["image"],
+      input,
+      idempotencyKey: request.idempotencyKey,
+      priceVersionId: "price",
+      reservedCredits: execution.reservedCredits.toString(),
+    };
+    expect((await recoverMediaToolRequest("user", params))?.id).toBe(
+      "execution",
+    );
+    await expect(
+      recoverMediaToolRequest("user", { ...params, input: { quality: 70 } }),
+    ).rejects.toThrow(/different/);
+    expect(mocks.reserve).not.toHaveBeenCalled();
   });
 });

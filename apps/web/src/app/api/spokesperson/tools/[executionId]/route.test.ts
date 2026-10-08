@@ -94,8 +94,33 @@ describe("spokesperson MediaKit execution status", () => {
         segments: null,
         outputAssetId: null,
         outputMimeType: null,
+        sourceAsset: null,
+        outputAsset: null,
         completedAt: "2026-10-07T10:00:00.000Z",
       },
     });
   });
+});
+
+it("filters another creator's private input even for a workspace owner", async () => {
+  mocks.requireMembership.mockResolvedValue({ role: "ORGANIZATION_OWNER" });
+  await GET(request, context());
+  expect(mocks.db.providerToolExecution.findUnique).toHaveBeenCalledWith(
+    expect.objectContaining({
+      include: expect.objectContaining({
+        inputAssets: expect.objectContaining({
+          where: {
+            position: 0,
+            asset: {
+              status: "READY",
+              OR: [
+                { purpose: { not: "REFERENCE_INPUT" } },
+                { storageOwnerUserId: "user-1" },
+              ],
+            },
+          },
+        }),
+      }),
+    }),
+  );
 });

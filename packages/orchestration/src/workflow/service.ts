@@ -273,7 +273,7 @@ export class CreativeWorkflowService {
           ? dep.sourceStep.outputs
           : [];
         const output = outputs.find(
-          (item): item is Record<string, unknown> =>
+          (item) =>
             !!item &&
             typeof item === "object" &&
             !Array.isArray(item) &&

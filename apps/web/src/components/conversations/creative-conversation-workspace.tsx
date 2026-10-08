@@ -298,6 +298,7 @@ export function CreativeConversationWorkspace({
         }
         setMessages(data.conversation.messages);
         setJobs(data.conversation.generationJobs ?? []);
+        setWorkflows(data.conversation.creativeWorkflows ?? []);
         if (
           data.conversation.state &&
           Object.prototype.hasOwnProperty.call(

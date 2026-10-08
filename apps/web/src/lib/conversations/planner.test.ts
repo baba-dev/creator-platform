@@ -60,7 +60,7 @@ describe("Conversational Creative Action Planner", () => {
       organizationId: "org_1",
       context: baseContext,
     });
-    expect(plan.actions[0]?.type).toBe("answer_question");
+    expect(plan.actions[0]?.type).toBe("workflow_plan");
     expect(plan.actions.some(action => action.type.startsWith("generate_"))).toBe(false);
   });
 

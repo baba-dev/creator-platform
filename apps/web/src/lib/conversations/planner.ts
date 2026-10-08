@@ -7,7 +7,7 @@ import {
 import type { ConversationAction, TurnPlan } from "./action-protocol";
 import { ACTION_PROTOCOL_VERSION } from "./action-protocol";
 import { resolveCreativeToolHandoff } from "./tool-handoff";
-import { classifyIntentDeterministically } from "@aiwa/orchestration";
+import { classifyIntentDeterministically, compileCreativePlan } from "@aiwa/orchestration";
 
 /**
  * Normalizes aspect ratio synonyms into canonical values.
@@ -121,10 +121,11 @@ export async function planConversationTurn(params: {
   // single media generation. The v3 native executor is feature-gated until
   // the complete DAG approval and recovery path is proven.
   if (intentClassification.intent === "MULTI_STEP") {
+    const proposal = compileCreativePlan({ userPrompt: text });
     return {
       version: ACTION_PROTOCOL_VERSION,
-      actions: [{type: "answer_question", question: text}],
-      reasoning: "Complex creative work requires a reviewed multi-step plan before any paid admission.",
+      actions: [{ type: "workflow_plan", title: proposal.title, workflow: proposal }],
+      reasoning: "Create a review-only creative workflow; never auto-dispatch paid steps.",
     };
   }
 

@@ -117,6 +117,17 @@ export async function planConversationTurn(params: {
     };
   }
 
+  // Multi-step requests require a reviewed workflow, not an accidental
+  // single media generation. The v3 native executor is feature-gated until
+  // the complete DAG approval and recovery path is proven.
+  if (intentClassification.intent === "MULTI_STEP") {
+    return {
+      version: ACTION_PROTOCOL_VERSION,
+      actions: [{type: "answer_question", question: text}],
+      reasoning: "Complex creative work requires a reviewed multi-step plan before any paid admission.",
+    };
+  }
+
   // Questions, consultation and capability discovery are NEVER implicit paid
   // media requests. Interpret them as a read-only conversational turn.
   const isNonGenerationQuestion =

@@ -10,6 +10,7 @@ import {
 } from "@/lib/text-feature-client";
 import { searchKnowledgebase } from "@aiwa/assistant/knowledge";
 import { PixelControls } from "./pixel-controls";
+import { PixelModelCatalogCard } from "./pixel-model-catalog-card";
 import { useCreativeLocale } from "@/components/studio/creative-locale-selector";
 import { safePixelRoute } from "./pixel-navigation";
 import { getGenerationErrorPresentation } from "@/lib/generation-error-copy";
@@ -60,6 +61,7 @@ const MASCOT_CONFUSED =
   "/brand/mascots/creators-mascot-confused-long-wait-motion-arranged.svg";
 
 const QUICK_ACTIONS = [
+  { label: "✨ Explore AI models", message: "What models are available?" },
   { label: "💳 My balance", message: "What is my current credit balance?" },
   { label: "🎬 Recent jobs", message: "Show me my recent generation jobs." },
   {
@@ -982,6 +984,7 @@ function PixelWidget({
                   key={msg.id}
                   message={msg}
                   onNavigate={handleNavigate}
+                  onAsk={(question) => void handleSend(question)}
                   onCancelReminder={(reminderId) => {
                     fetch(
                       `/api/assistant/reminders?id=${encodeURIComponent(reminderId)}`,
@@ -1249,10 +1252,12 @@ function EmptyState({
 function MessageBubble({
   message,
   onNavigate,
+  onAsk,
   onCancelReminder,
 }: {
   message: AssistantMessage;
   onNavigate: (route: string) => void;
+  onAsk: (question: string) => void;
   onCancelReminder: (id: string) => void;
 }) {
   const isUser = message.role === "user";
@@ -1301,6 +1306,7 @@ function MessageBubble({
             key={i}
             toolResult={tr}
             onNavigate={onNavigate}
+            onAsk={onAsk}
             onCancelReminder={onCancelReminder}
           />
         ))}
@@ -1334,10 +1340,12 @@ function MessageBubble({
 function ToolCard({
   toolResult,
   onNavigate,
+  onAsk,
   onCancelReminder,
 }: {
   toolResult: NonNullable<AssistantMessage["toolResults"]>[number];
   onNavigate: (route: string) => void;
+  onAsk: (question: string) => void;
   onCancelReminder: (id: string) => void;
 }) {
   if (toolResult.error) {
@@ -1350,6 +1358,16 @@ function ToolCard({
   }
 
   const output = (toolResult.output ?? {}) as Record<string, unknown>;
+
+  if (toolResult.tool === "app.getModels") {
+    return (
+      <PixelModelCatalogCard
+        value={output}
+        onAsk={onAsk}
+        onNavigate={onNavigate}
+      />
+    );
+  }
 
   // 1. Balance Tool Card
   if (toolResult.tool === "app.getBalance") {
@@ -1564,11 +1582,7 @@ function ToolCard({
     );
   }
 
-  if (
-    ["app.getStorage", "app.getMembers", "app.getModels"].includes(
-      toolResult.tool,
-    )
-  ) {
+  if (["app.getStorage", "app.getMembers"].includes(toolResult.tool)) {
     const entries = (output.members ?? output.models ?? output.connections) as
       Array<Record<string, unknown>> | undefined;
     return (

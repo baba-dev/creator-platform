@@ -62,7 +62,9 @@ export function usePromptEnhancementModel(
   }, [organizationId]);
 
   useEffect(() => {
-    void refresh();
+    const initialRefresh = window.setTimeout(() => {
+      void refresh();
+    }, 0);
     const onChange = (event: Event) => {
       if ((event as CustomEvent<string>).detail === organizationId)
         void refresh();
@@ -73,6 +75,7 @@ export function usePromptEnhancementModel(
     window.addEventListener(PROMPT_ENHANCEMENT_MODEL_CHANGED, onChange);
     window.addEventListener("focus", onFocus);
     return () => {
+      window.clearTimeout(initialRefresh);
       window.removeEventListener(PROMPT_ENHANCEMENT_MODEL_CHANGED, onChange);
       window.removeEventListener("focus", onFocus);
     };

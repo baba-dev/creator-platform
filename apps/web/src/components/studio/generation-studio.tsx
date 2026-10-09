@@ -1409,11 +1409,6 @@ export function GenerationStudio({
     }
   }
 
-  useEffect(() => {
-    enhancementAttempt.current = null;
-    setEnhancementAttribution(null);
-  }, [promptEnhancementModelId]);
-
   async function enhancePrompt() {
     const sourcePrompt = prompt.trim();
     if (

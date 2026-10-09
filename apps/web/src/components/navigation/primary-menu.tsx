@@ -169,7 +169,9 @@ export function PrimaryMenu({ slug }: { slug: string }) {
             }`}
           >
             <Icon name={mediaToolsItem.icon} className="size-3.5" />
-            <span className="hidden xl:inline">{mediaToolsItem.shortTitle}</span>
+            <span className="hidden xl:inline">
+              {mediaToolsItem.shortTitle}
+            </span>
           </Link>
         </>
       ) : null}

@@ -152,3 +152,15 @@ it("checks source capabilities consistently for pickers and quote admission", ()
     }),
   ).toMatch(/dimensions/);
 });
+
+it.each([
+  "compress-image",
+  "slim-image",
+  "face-blur-image",
+  "crop-image",
+  "mosaic-image",
+  "add-image-watermark",
+  "text-to-scrolling-video",
+])("uses an image source for %s", (key) => {
+  expect(mediaToolSourceRoles(key)).toEqual(["SOURCE_IMAGE"]);
+});

@@ -96,7 +96,7 @@ export async function localPixelReply(
   if (/^(show (me )?(our |my )?(team )?members|team members)$/.test(text))
     call = { tool: "app.getMembers", input: {} };
   const modelPage =
-    /^(?:show|list|next) (?:(image|video|voice|text) )?(?:available )?models page (\\d{1,3})(?: for (.+))?$/.exec(
+    /^(?:show|list|next) (?:(image|video|voice|text) )?(?:available )?models page (\d{1,3})(?: for (.+))?$/.exec(
       text,
     );
   const modelDetail = /^show model details for (.+)$/.exec(text);
@@ -105,12 +105,12 @@ export async function localPixelReply(
       text,
     );
   const isModelFamily =
-    /\\b(seedream|seedance|seed.?tts|seed.?audio|omnihuman|nemotron|llama|gemini|groq|cloudflare|dola|flux|whisper|gpt.?oss|qwen|model)\\b/i;
+    /\b(seedream|seedance|seed.?tts|seed.?audio|omnihuman|nemotron|llama|gemini|groq|cloudflare|dola|flux|whisper|gpt.?oss|qwen|model)\b/i;
   const modelList =
     /^(?:(?:what|which) (?:image |video |voice |text |speech |chat )?models (?:are available|can i use)|(?:show|list) (?:me )?(?:all |available |the )?(?:image |video |voice |text |speech |chat )?models|show more models)$/.test(
       text,
     );
-  const modelKind = /\\b(image|video|voice|speech|text|chat) models\\b/.exec(
+  const modelKind = /\b(image|video|voice|speech|text|chat) models\b/.exec(
     text,
   )?.[1];
   const selectedKind = modelPage?.[1] ?? modelKind;

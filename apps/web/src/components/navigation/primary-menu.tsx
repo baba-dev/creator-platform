@@ -6,16 +6,15 @@ import type { Route } from "next";
 import { usePathname } from "next/navigation";
 import { Icon } from "@/components/ui/icon";
 import {
-  WORKSPACE_SECONDARY_ITEMS,
   WORKSPACE_TOOL_CATEGORIES,
   getWorkspaceBase,
   getWorkspaceItemHref,
   isWorkspaceCategoryActive,
 } from "@/lib/workspace-tools";
 
-const historyItem = WORKSPACE_SECONDARY_ITEMS.find(
-  (item) => item.id === "history",
-);
+const mediaToolsItem = WORKSPACE_TOOL_CATEGORIES.flatMap(
+  (category) => category.items,
+).find((item) => item.id === "mediakit");
 
 export function PrimaryMenu({ slug }: { slug: string }) {
   const [openCategory, setOpenCategory] = useState<string | null>(null);
@@ -157,20 +156,20 @@ export function PrimaryMenu({ slug }: { slug: string }) {
         );
       })}
 
-      {historyItem ? (
+      {mediaToolsItem ? (
         <>
           <div className="mx-1 h-4 w-px bg-border/60" aria-hidden="true" />
           <Link
-            href={getWorkspaceItemHref(base, historyItem) as Route}
-            title={historyItem.title}
+            href={getWorkspaceItemHref(base, mediaToolsItem) as Route}
+            title={mediaToolsItem.title}
             className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold transition focus-visible:outline-2 focus-visible:outline-ring ${
-              pathname.startsWith(getWorkspaceItemHref(base, historyItem))
+              pathname === getWorkspaceItemHref(base, mediaToolsItem)
                 ? "bg-card text-foreground shadow-xs ring-1 ring-border"
                 : "text-muted-foreground hover:bg-card/70 hover:text-foreground"
             }`}
           >
-            <Icon name={historyItem.icon} className="size-3.5" />
-            <span className="hidden xl:inline">{historyItem.shortTitle}</span>
+            <Icon name={mediaToolsItem.icon} className="size-3.5" />
+            <span className="hidden xl:inline">{mediaToolsItem.shortTitle}</span>
           </Link>
         </>
       ) : null}

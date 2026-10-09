@@ -10,13 +10,19 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@aiwa/db", () => ({
   db: {
     providerModel: { findMany: mocks.list },
-    promptEnhancementPreference: { findUnique: mocks.preference, upsert: mocks.upsert, deleteMany: mocks.deleteMany },
+    promptEnhancementPreference: {
+      findUnique: mocks.preference,
+      upsert: mocks.upsert,
+      deleteMany: mocks.deleteMany,
+    },
   },
 }));
 vi.mock("@aiwa/providers", () => ({
   getProviderRuntimeReadiness: () => ({ configured: true }),
   supportsStudioTask: () => true,
-  STUDIO_TASK_DEFAULT_PROVIDER_MODEL_IDS: { "prompt-enhancement": "preferred-upstream" },
+  STUDIO_TASK_DEFAULT_PROVIDER_MODEL_IDS: {
+    "prompt-enhancement": "preferred-upstream",
+  },
 }));
 vi.mock("@aiwa/credits", () => ({
   parseTextUsageRatesForProvider: vi.fn(),
@@ -37,14 +43,20 @@ const ctx = {
 
 const models = [
   {
-    id: "a", displayName: "Fast Reasoning", provider: "GROQ",
-    providerModelId: "preferred-upstream", mediaKind: "TEXT",
+    id: "a",
+    displayName: "Fast Reasoning",
+    provider: "GROQ",
+    providerModelId: "preferred-upstream",
+    mediaKind: "TEXT",
     capabilities: { "task:prompt-enhancement": true },
     priceVersions: [{ pricingDimension: "REQUEST", usageRates: null }],
   },
   {
-    id: "b", displayName: "High Quality", provider: "GEMINI",
-    providerModelId: "gemini-pro", mediaKind: "TEXT",
+    id: "b",
+    displayName: "High Quality",
+    provider: "GEMINI",
+    providerModelId: "gemini-pro",
+    mediaKind: "TEXT",
     capabilities: { "task:prompt-enhancement": true },
     priceVersions: [{ pricingDimension: "REQUEST", usageRates: null }],
   },
@@ -70,21 +82,32 @@ describe("Pixel Prompt Enhance model selection", () => {
   });
 
   it("allows a unique provider alias and persists an exact model ID", async () => {
-    const result = (await setPromptEnhancementModelTool.execute({ model: "gemini" }, ctx)) as {
+    const result = (await setPromptEnhancementModelTool.execute(
+      { model: "gemini" },
+      ctx,
+    )) as {
       selected: { id: string };
     };
     expect(result.selected.id).toBe("b");
     expect(mocks.upsert).toHaveBeenCalledWith({
-      where: { organizationId_userId: { organizationId: "org-1", userId: "user-1" } },
+      where: {
+        organizationId_userId: { organizationId: "org-1", userId: "user-1" },
+      },
       create: { organizationId: "org-1", userId: "user-1", modelId: "b" },
       update: { modelId: "b" },
     });
   });
 
   it("does not mutate anything for unavailable or ambiguous input", async () => {
-    const missing = (await setPromptEnhancementModelTool.execute({ model: "not-real" }, ctx)) as { unavailable: boolean };
+    const missing = (await setPromptEnhancementModelTool.execute(
+      { model: "not-real" },
+      ctx,
+    )) as { unavailable: boolean };
     expect(missing.unavailable).toBe(true);
-    const ambiguous = (await setPromptEnhancementModelTool.execute({ model: "i" }, ctx)) as { ambiguous: boolean };
+    const ambiguous = (await setPromptEnhancementModelTool.execute(
+      { model: "i" },
+      ctx,
+    )) as { ambiguous: boolean };
     expect(ambiguous.ambiguous).toBe(true);
     expect(mocks.upsert).not.toHaveBeenCalled();
   });

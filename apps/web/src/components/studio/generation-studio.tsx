@@ -2083,7 +2083,10 @@ export function GenerationStudio({
                     !prompt.trim()
                   }
                   aria-busy={isEnhancing}
-                  title={promptEnhancementPreferenceError ?? "Improve this prompt using your selected Prompt Enhance model"}
+                  title={
+                    promptEnhancementPreferenceError ??
+                    "Improve this prompt using your selected Prompt Enhance model"
+                  }
                 >
                   {isEnhancing ? (
                     <>

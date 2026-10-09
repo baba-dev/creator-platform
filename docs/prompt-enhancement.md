@@ -115,16 +115,20 @@ After applying the reasoning-cost migration and restarting web/worker services:
    actively priced, and show runtime Ready.
 2. For token-priced reasoning models, confirm input/output rates use
    `text-token-v1`.
-3. Open the top-right user menu → Prompt Enhance Model and confirm the selector lists only eligible configured models.
-4. Set a model in this menu, then open Image and Video Studio. Both use the chosen model without showing a model selector next to the prompt.
-5. Ask Pixel to show or change the Prompt Enhance model; verify the setting persists for this user and workspace across reloads.
-6. Enhance the same prompt with two different providers and confirm each job reports the exact selected provider/model.
-5. Confirm the resulting prompt is replaced without any workspace credit
+3. Open the top-right user menu → Prompt Enhance Model and confirm the selector
+   lists only eligible configured models.
+4. Set a model in this menu, then open Image and Video Studio. Both use the
+   chosen model without showing a model selector next to the prompt.
+5. Ask Pixel to show or change the Prompt Enhance model; verify the setting
+   persists for this user and workspace across reloads.
+6. Enhance the same prompt with two different providers and confirm each job
+   reports the exact selected provider/model.
+7. Confirm the resulting prompt is replaced without any workspace credit
    reservation or capture.
-6. For a finance-capable account, confirm estimated/actual provider cost and
+8. For a finance-capable account, confirm estimated/actual provider cost and
    cost basis appear in the status response; ordinary users must not receive
    those commercial fields.
-7. Disable a selected model after queueing and confirm the pinned job fails
+9. Disable a selected model after queueing and confirm the pinned job fails
    rather than switching to another provider.
-8. Remove one provider's credentials and confirm it disappears from fresh
-   discovery while prior idempotent jobs remain retrievable.
+10. Remove one provider's credentials and confirm it disappears from fresh
+    discovery while prior idempotent jobs remain retrievable.

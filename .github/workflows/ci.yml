@@ -84,7 +84,7 @@ jobs:
     timeout-minutes: 60
     services:
       mariadb:
-        image: mariadb:10.6
+        image: public.ecr.aws/docker/library/mariadb:10.6
         env:
           MARIADB_ROOT_PASSWORD: ci-root-only
           MARIADB_DATABASE: creator_platform
@@ -95,7 +95,7 @@ jobs:
           --health-cmd="healthcheck.sh --connect --innodb_initialized"
           --health-interval=5s --health-timeout=5s --health-retries=20
       redis:
-        image: redis:7
+        image: public.ecr.aws/docker/library/redis:7
         ports: ["127.0.0.1:6379:6379"]
         options: >-
           --health-cmd="redis-cli ping" --health-interval=5s --health-timeout=5s
@@ -163,7 +163,7 @@ jobs:
     timeout-minutes: 45
     services:
       mariadb:
-        image: mariadb:10.6
+        image: public.ecr.aws/docker/library/mariadb:10.6
         env:
           MARIADB_ROOT_PASSWORD: ci-root-only
           MARIADB_DATABASE: creator_platform
@@ -174,7 +174,7 @@ jobs:
           --health-cmd="healthcheck.sh --connect --innodb_initialized"
           --health-interval=5s --health-timeout=5s --health-retries=20
       redis:
-        image: redis:7
+        image: public.ecr.aws/docker/library/redis:7
         ports: ["127.0.0.1:6379:6379"]
         options: >-
           --health-cmd="redis-cli ping" --health-interval=5s --health-timeout=5s

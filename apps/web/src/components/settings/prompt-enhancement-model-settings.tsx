@@ -4,9 +4,21 @@ import { Button } from "@/components/ui/button";
 import { StudioModelSelect } from "@/components/studio/studio-model-select";
 import { usePromptEnhancementModel } from "@/lib/use-prompt-enhancement-model";
 
-export function PromptEnhancementModelSettings({ organizationId }: { organizationId: string }) {
-  const { modelId, defaultModelId, models, loading, saving, error, savedModelUnavailable, save } =
-    usePromptEnhancementModel(organizationId);
+export function PromptEnhancementModelSettings({
+  organizationId,
+}: {
+  organizationId: string;
+}) {
+  const {
+    modelId,
+    defaultModelId,
+    models,
+    loading,
+    saving,
+    error,
+    savedModelUnavailable,
+    save,
+  } = usePromptEnhancementModel(organizationId);
 
   return (
     <div className="space-y-4">
@@ -17,14 +29,17 @@ export function PromptEnhancementModelSettings({ organizationId }: { organizatio
         <StudioModelSelect
           models={models}
           value={modelId ?? ""}
-          onChange={(value) => { void save(value); }}
+          onChange={(value) => {
+            void save(value);
+          }}
           disabled={loading || saving}
           ariaLabel="Preferred Prompt Enhance model"
           className="w-full"
         />
         <p className="mt-2 text-xs leading-5 text-muted-foreground">
-          Used across Image and Video Studio. This changes only the model that improves your prompts,
-          not the model that generates your media. Prompt Enhance does not charge workspace credits.
+          Used across Image and Video Studio. This changes only the model that
+          improves your prompts, not the model that generates your media. Prompt
+          Enhance does not charge workspace credits.
         </p>
       </div>
       {savedModelUnavailable && (
@@ -32,14 +47,26 @@ export function PromptEnhancementModelSettings({ organizationId }: { organizatio
           Your saved model is unavailable. The current default is being used.
         </p>
       )}
-      {error && <p className="text-xs text-destructive" role="alert">{error}</p>}
-      {loading && <p className="text-xs text-muted-foreground">Loading available models…</p>}
+      {error && (
+        <p className="text-xs text-destructive" role="alert">
+          {error}
+        </p>
+      )}
+      {loading && (
+        <p className="text-xs text-muted-foreground">
+          Loading available models…
+        </p>
+      )}
       <Button
         type="button"
         variant="secondary"
         size="sm"
-        disabled={loading || saving || !models.length || modelId === defaultModelId}
-        onClick={() => { void save(null); }}
+        disabled={
+          loading || saving || !models.length || modelId === defaultModelId
+        }
+        onClick={() => {
+          void save(null);
+        }}
       >
         {saving ? "Saving…" : "Restore default model"}
       </Button>

@@ -12,7 +12,10 @@ import { db } from "@aiwa/db";
 import { createHash } from "node:crypto";
 import { getStorageTool, getMembersTool, getModelsTool } from "./workspace";
 import { pixelWorkflowSchema, preparePixelWorkflow } from "../workflows";
-import { getPromptEnhancementModelTool, setPromptEnhancementModelTool } from "./prompt-enhancement-model";
+import {
+  getPromptEnhancementModelTool,
+  setPromptEnhancementModelTool,
+} from "./prompt-enhancement-model";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const ASSISTANT_TOOLS: Record<string, AssistantTool<any, any>> = {
@@ -73,8 +76,12 @@ export async function executeAssistantTool(
     )
   )
     throw new Error("Ask explicitly for a reminder before scheduling one.");
-  if (name === "app.setPromptEnhancementModel" &&
-    !/\b(?:set|use|change|switch|reset|restore)\b[\s\S]*\b(?:prompt enhance|prompt enhancement|enhance prompt)\b/i.test(ctx.userMessage ?? "")) {
+  if (
+    name === "app.setPromptEnhancementModel" &&
+    !/\b(?:set|use|change|switch|reset|restore)\b[\s\S]*\b(?:prompt enhance|prompt enhancement|enhance prompt)\b/i.test(
+      ctx.userMessage ?? "",
+    )
+  ) {
     throw new Error("Ask explicitly to change the Prompt Enhance model.");
   }
   const input = tool.inputSchema.parse(raw);

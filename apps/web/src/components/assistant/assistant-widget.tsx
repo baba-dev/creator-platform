@@ -688,14 +688,17 @@ function PixelWidget({
           },
         ]);
         setRefreshKey((value) => value + 1);
-        if (typedResult.toolResults?.some((item) =>
-          item.tool === "app.setPromptEnhancementModel" &&
-          !item.error &&
-          typeof item.output === "object" &&
-          item.output !== null &&
-          "selected" in item.output &&
-          item.output.selected !== null
-        )) {
+        if (
+          typedResult.toolResults?.some(
+            (item) =>
+              item.tool === "app.setPromptEnhancementModel" &&
+              !item.error &&
+              typeof item.output === "object" &&
+              item.output !== null &&
+              "selected" in item.output &&
+              item.output.selected !== null,
+          )
+        ) {
           announcePromptEnhancementModelChanged(organizationId);
         }
 

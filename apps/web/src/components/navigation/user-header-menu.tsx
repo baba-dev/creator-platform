@@ -36,7 +36,11 @@ const SETTINGS_MENU_ITEMS: Array<{
   { tab: "team", label: "Team & Members", icon: "admin" },
   { tab: "security", label: "Login & Security", icon: "shield" },
   { tab: "chatbot", label: "Chatbot Settings", icon: "bot" },
-  { tab: "prompt-enhancement", label: "Prompt Enhance Model", icon: "sparkles" },
+  {
+    tab: "prompt-enhancement",
+    label: "Prompt Enhance Model",
+    icon: "sparkles",
+  },
   { tab: "locale", label: "Locale Settings", icon: "globe" },
 ];
 

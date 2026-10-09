@@ -13,9 +13,13 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/request-auth", () => ({ getRequestSession: mocks.session }));
-vi.mock("@/lib/request-security", () => ({ hasTrustedMutationOrigin: mocks.trusted }));
+vi.mock("@/lib/request-security", () => ({
+  hasTrustedMutationOrigin: mocks.trusted,
+}));
 vi.mock("@aiwa/authz", () => ({ hasOrganizationPermission: mocks.permitted }));
-vi.mock("@/lib/studio-model-discovery", () => ({ getAvailableStudioModels: mocks.discover }));
+vi.mock("@/lib/studio-model-discovery", () => ({
+  getAvailableStudioModels: mocks.discover,
+}));
 vi.mock("@aiwa/db", () => ({
   db: {
     membership: { findUnique: mocks.membership },
@@ -46,7 +50,10 @@ describe("Prompt Enhance model preferences", () => {
     mocks.session.mockResolvedValue({ user: { id: "user-1" } });
     mocks.trusted.mockReturnValue(true);
     mocks.permitted.mockReturnValue(true);
-    mocks.membership.mockResolvedValue({ role: "ORGANIZATION_MEMBER", organization: { status: "ACTIVE" } });
+    mocks.membership.mockResolvedValue({
+      role: "ORGANIZATION_MEMBER",
+      organization: { status: "ACTIVE" },
+    });
     mocks.discover.mockResolvedValue({
       defaultModelId: "eligible-a",
       models: [{ id: "eligible-a" }, { id: "eligible-b" }],
@@ -72,7 +79,9 @@ describe("Prompt Enhance model preferences", () => {
     expect(res.status).toBe(200);
     expect((await res.json()).modelId).toBe("eligible-b");
     expect(mocks.preference).toHaveBeenCalledWith({
-      where: { organizationId_userId: { organizationId: org, userId: "user-1" } },
+      where: {
+        organizationId_userId: { organizationId: org, userId: "user-1" },
+      },
       select: { modelId: true },
     });
     expect(res.headers.get("Cache-Control")).toBe("private, no-store");
@@ -98,7 +107,9 @@ describe("Prompt Enhance model preferences", () => {
     const res = await PATCH(patch("eligible-b"));
     expect(res.status).toBe(200);
     expect(mocks.upsert).toHaveBeenCalledWith({
-      where: { organizationId_userId: { organizationId: org, userId: "user-1" } },
+      where: {
+        organizationId_userId: { organizationId: org, userId: "user-1" },
+      },
       create: { organizationId: org, userId: "user-1", modelId: "eligible-b" },
       update: { modelId: "eligible-b" },
     });
@@ -108,6 +119,8 @@ describe("Prompt Enhance model preferences", () => {
   it("restores the default without deleting another user's selection", async () => {
     const res = await PATCH(patch(null));
     expect((await res.json()).modelId).toBe("eligible-a");
-    expect(mocks.deleteMany).toHaveBeenCalledWith({ where: { organizationId: org, userId: "user-1" } });
+    expect(mocks.deleteMany).toHaveBeenCalledWith({
+      where: { organizationId: org, userId: "user-1" },
+    });
   });
 });

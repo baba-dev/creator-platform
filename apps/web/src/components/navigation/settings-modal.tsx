@@ -9,7 +9,13 @@ import { Button } from "@/components/ui/button";
 import { PromptEnhancementModelSettings } from "@/components/settings/prompt-enhancement-model-settings";
 
 export type SettingsTab =
-  "profile" | "organization" | "team" | "security" | "chatbot" | "prompt-enhancement" | "locale";
+  | "profile"
+  | "organization"
+  | "team"
+  | "security"
+  | "chatbot"
+  | "prompt-enhancement"
+  | "locale";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -350,7 +356,9 @@ export function SettingsModal({
 
             {/* Tab: Prompt Enhance model preference */}
             {activeTab === "prompt-enhancement" && (
-              <PromptEnhancementModelSettings organizationId={organization.id} />
+              <PromptEnhancementModelSettings
+                organizationId={organization.id}
+              />
             )}
 
             {/* Tab: Locale & Region */}

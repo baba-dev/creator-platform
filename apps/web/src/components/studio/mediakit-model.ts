@@ -1,3 +1,5 @@
+import { mediaToolSourceRoles } from "@aiwa/generation/media-tool-input";
+
 export type MediaTool = {
   key: string;
   name: string;
@@ -79,9 +81,7 @@ export const positions = [
   "bottom_right",
 ];
 export function sourceKind(key: string) {
-  return key.endsWith("image") || key === "text-to-scrolling-video"
-    ? "IMAGE"
-    : "VIDEO";
+  return mediaToolSourceRoles(key)[0] === "SOURCE_IMAGE" ? "IMAGE" : "VIDEO";
 }
 export function toolGroup(key: string) {
   return ["assess-video-quality", "semantic-segment"].includes(key)

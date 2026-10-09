@@ -365,7 +365,7 @@ export function MediaKitStudio({
           </p>
         </div>
         <Annotation className="text-primary">
-          A little polish goes a long way
+          A little polish goes far
         </Annotation>
       </div>
       {!loaded && (

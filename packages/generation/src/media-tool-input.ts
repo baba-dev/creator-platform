@@ -141,7 +141,9 @@ export function mediaToolSourceRoles(
   if (key === "add-image-watermark" && input?.watermark_type === "image")
     return ["SOURCE_IMAGE", "WATERMARK_IMAGE"];
   if (key === "text-to-scrolling-video") return ["SOURCE_IMAGE"];
-  return key.endsWith("image") ? ["SOURCE_IMAGE"] : ["SOURCE_VIDEO"];
+  return key.endsWith("image") || key === "add-image-watermark"
+    ? ["SOURCE_IMAGE"]
+    : ["SOURCE_VIDEO"];
 }
 
 export function mediaToolImageInputFits(

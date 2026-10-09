@@ -80,3 +80,33 @@ describe("MediaKit visual controls", () => {
     expect(toolGroup("semantic-segment")).toBe("Analysis");
   });
 });
+
+it("maps every operation to the correct gallery and source", () => {
+  const groups: Record<string, string[]> = {
+    Image: [
+      "compress-image",
+      "slim-image",
+      "face-blur-image",
+      "crop-image",
+      "mosaic-image",
+      "add-image-watermark",
+    ],
+    "Video finishing": [
+      "matte-portrait-video",
+      "matte-greenscreen-video",
+      "lip-sync",
+      "enhance-video-smoothness",
+      "text-to-scrolling-video",
+    ],
+    Analysis: ["assess-video-quality", "semantic-segment"],
+  };
+  for (const [group, keys] of Object.entries(groups))
+    for (const key of keys) {
+      expect(toolGroup(key)).toBe(group);
+      expect(sourceKind(key)).toBe(
+        group === "Image" || key === "text-to-scrolling-video"
+          ? "IMAGE"
+          : "VIDEO",
+      );
+    }
+});

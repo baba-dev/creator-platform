@@ -325,3 +325,25 @@ describe("visual edits admission", () => {
     expect(mocks.reserve).not.toHaveBeenCalled();
   });
 });
+
+it("admits a text watermark on its canonical image source", async () => {
+  const tool = await mocks.tx.providerTool.findFirst();
+  mocks.tx.providerTool.findFirst.mockResolvedValue({
+    ...tool,
+    providerToolId: "add-image-watermark",
+  });
+  const execution = await createProviderToolExecution("user", {
+    ...request,
+    input: { watermark_text: "Brand", watermark_position: "top_center" },
+  });
+  expect(execution.status).toBe("QUEUED");
+  expect(mocks.tx.providerToolInputAsset.create).toHaveBeenCalledWith(
+    expect.objectContaining({
+      data: expect.objectContaining({
+        assetId: "image",
+        role: "SOURCE_IMAGE",
+        position: 0,
+      }),
+    }),
+  );
+});

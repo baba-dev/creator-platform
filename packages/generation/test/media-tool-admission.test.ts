@@ -295,6 +295,17 @@ describe("visual edits admission", () => {
       }),
     );
     expect(mocks.reserve).toHaveBeenCalledTimes(1);
+    expect(mocks.storage).toHaveBeenCalledTimes(1);
+    expect(mocks.tx.asset.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          mediaKind: "IMAGE",
+          status: "PENDING",
+          mimeType: "image/png",
+          sourceAssetId: "image",
+        }),
+      }),
+    );
   });
   it("recovers the same accepted request even after its price retires", async () => {
     const input = { quality: 80, output_format: "jpeg" };
@@ -337,6 +348,17 @@ it("admits a text watermark on its canonical image source", async () => {
     input: { watermark_text: "Brand", watermark_position: "top_center" },
   });
   expect(execution.status).toBe("QUEUED");
+  expect(mocks.storage).toHaveBeenCalledTimes(1);
+  expect(mocks.tx.asset.create).toHaveBeenCalledWith(
+    expect.objectContaining({
+      data: expect.objectContaining({
+        mediaKind: "IMAGE",
+        status: "PENDING",
+        mimeType: "image/png",
+        sourceAssetId: "image",
+      }),
+    }),
+  );
   expect(mocks.tx.providerToolInputAsset.create).toHaveBeenCalledWith(
     expect.objectContaining({
       data: expect.objectContaining({

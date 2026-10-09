@@ -54,6 +54,24 @@ export function toolResultContent(result: ToolCallResult): string {
       String(output.total ?? 0) +
       " currently available models matching your request. The live cards show provider, tasks, capabilities and published base-unit credits; request a fresh quote for the actual job."
     );
+  if (result.tool === "app.getPromptEnhancementModel") {
+    const selected = output.selected as { name: string; provider: string } | null;
+    const models = output.models as Array<{ id: string; name: string; provider: string }>;
+    return selected
+      ? `Your Prompt Enhance model is ${selected.name} (${selected.provider}). Available choices: ${models.map((model) => `${model.name} (${model.provider}, ID: ${model.id})`).join("; ")}.`
+      : "No Prompt Enhance models are currently available. You can check model activation in the admin catalog.";
+  }
+  if (result.tool === "app.setPromptEnhancementModel") {
+    const selected = output.selected as { name: string; provider: string } | null;
+    if (output.ambiguous) {
+      const candidates = output.candidates as Array<{ id: string; name: string; provider: string }>;
+      return `More than one Prompt Enhance model matches. Specify one of: ${candidates.map((model) => `${model.name} (${model.provider}, ID: ${model.id})`).join("; ")}.`;
+    }
+    if (output.unavailable) return "No eligible Prompt Enhance model matches that choice. Ask me to list available Prompt Enhance models.";
+    return selected
+      ? `Prompt Enhance now uses ${selected.name} (${selected.provider}) in this workspace.`
+      : "The default Prompt Enhance model preference was restored. No eligible model is currently configured.";
+  }
   if (result.tool === "app.prepareWorkflow")
     return `Prepared “${String(output.title)}”. Review each step and its quote before approving. Nothing has been submitted yet.`;
   if (result.tool === "app.navigate")
@@ -148,6 +166,13 @@ export async function localPixelReply(
       },
     };
   }
+  const requestedEnhancementModel = /^(?:please )?(?:set|use|change|switch)(?: my| the)? (?:prompt enhance|prompt enhancement|enhance prompt)(?: model)? (?:to|using) (.+)$/.exec(text);
+  if (requestedEnhancementModel?.[1]) {
+    call = { tool: "app.setPromptEnhancementModel", input: { model: requestedEnhancementModel[1] } };
+  } else if (/^(?:what(?:'s| is)|show|list)(?: me)?(?: my| the| available)? (?:prompt enhance|prompt enhancement|enhance prompt)(?: model| models| model settings)?$/.test(text)) {
+    call = { tool: "app.getPromptEnhancementModel", input: {} };
+  }
+
   const destinations: Record<string, string> = {
     image: "IMAGE_STUDIO",
     video: "VIDEO_STUDIO",

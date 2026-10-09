@@ -13,6 +13,7 @@ import { PixelControls } from "./pixel-controls";
 import { PixelModelCatalogCard } from "./pixel-model-catalog-card";
 import { useCreativeLocale } from "@/components/studio/creative-locale-selector";
 import { safePixelRoute } from "./pixel-navigation";
+import { announcePromptEnhancementModelChanged } from "@/lib/use-prompt-enhancement-model";
 import { getGenerationErrorPresentation } from "@/lib/generation-error-copy";
 
 // ---------------------------------------------------------------------------
@@ -687,6 +688,16 @@ function PixelWidget({
           },
         ]);
         setRefreshKey((value) => value + 1);
+        if (typedResult.toolResults?.some((item) =>
+          item.tool === "app.setPromptEnhancementModel" &&
+          !item.error &&
+          typeof item.output === "object" &&
+          item.output !== null &&
+          "selected" in item.output &&
+          item.output.selected !== null
+        )) {
+          announcePromptEnhancementModelChanged(organizationId);
+        }
 
         // Navigation tools render an explicit action card. Pixel never redirects
         // the workspace without a user click.
@@ -705,7 +716,7 @@ function PixelWidget({
         approveRef.current = null;
       }
     },
-    [input, thread, sending, pathname, localeIntent],
+    [input, thread, sending, pathname, localeIntent, organizationId],
   );
 
   const handleNavigate = useCallback(

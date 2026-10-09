@@ -306,7 +306,10 @@ function outputReservationForTool(
           name: "Transparent spokesperson video",
         };
   }
-  if (providerToolId.endsWith("image")) {
+  if (
+    providerToolId.endsWith("image") ||
+    providerToolId === "add-image-watermark"
+  ) {
     const jpeg =
       providerToolId === "compress-image" || providerToolId === "slim-image";
     return {

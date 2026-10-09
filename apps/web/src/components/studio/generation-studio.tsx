@@ -21,10 +21,8 @@ import { ProcessFeedback } from "@/components/process/process-feedback";
 import { Button } from "@/components/ui/button";
 import { Eyebrow } from "@/components/ui/creative";
 import { Tape } from "@/components/ui/sketch";
-import {
-  StudioModelSelect,
-  type StudioModelOption,
-} from "@/components/studio/studio-model-select";
+import type { StudioModelOption } from "@/components/studio/studio-model-select";
+import { usePromptEnhancementModel } from "@/lib/use-prompt-enhancement-model";
 import { announceGenerationStarted } from "@/lib/generation-activity";
 import { selectQuickCreateModel } from "@/lib/quick-create-model";
 import {
@@ -240,8 +238,13 @@ export function GenerationStudio({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEnhancing, setIsEnhancing] = useState(false);
-  const [promptEnhancementModelId, setPromptEnhancementModelId] = useState(
-    promptEnhancementDefaultModelId ?? promptEnhancementModels[0]?.id ?? "",
+  const {
+    modelId: promptEnhancementModelId,
+    loading: promptEnhancementPreferenceLoading,
+    error: promptEnhancementPreferenceError,
+  } = usePromptEnhancementModel(
+    organizationId,
+    promptEnhancementDefaultModelId ?? promptEnhancementModels[0]?.id ?? null,
   );
   const [enhancementAttribution, setEnhancementAttribution] = useState<{
     name: string;
@@ -1412,6 +1415,8 @@ export function GenerationStudio({
       !sourcePrompt ||
       !model ||
       !promptEnhancementModelId ||
+      promptEnhancementPreferenceLoading ||
+      promptEnhancementPreferenceError ||
       isEnhancing ||
       busy ||
       !canGenerate
@@ -2033,26 +2038,6 @@ export function GenerationStudio({
                   ? "Optional motion direction"
                   : `Describe your ${model?.mediaKind === "VIDEO" ? "video" : "image"}`}
               </label>
-              {variant === "advanced" && (
-                <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <StudioModelSelect
-                    models={promptEnhancementModels}
-                    value={promptEnhancementModelId}
-                    onChange={(value) => {
-                      setPromptEnhancementModelId(value);
-                      setEnhancementAttribution(null);
-                      enhancementAttempt.current = null;
-                    }}
-                    disabled={busy || isEnhancing}
-                    ariaLabel="Prompt enhancement model"
-                    className="max-w-full"
-                  />
-                  <span className="text-[11px] text-muted-foreground">
-                    Prompt Enhance is assistive and does not charge workspace
-                    credits.
-                  </span>
-                </div>
-              )}
               <div className="relative">
                 <textarea
                   id="creation-prompt"
@@ -2088,9 +2073,15 @@ export function GenerationStudio({
                     !canGenerate ||
                     !model ||
                     !promptEnhancementModelId ||
+                    promptEnhancementPreferenceLoading ||
+                    Boolean(promptEnhancementPreferenceError) ||
                     !prompt.trim()
                   }
                   aria-busy={isEnhancing}
+                  title={
+                    promptEnhancementPreferenceError ??
+                    "Improve this prompt using your selected Prompt Enhance model"
+                  }
                 >
                   {isEnhancing ? (
                     <>

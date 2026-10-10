@@ -1,10 +1,7 @@
 import Image from "next/image";
 import { TemplateMark } from "@/components/templates/template-mark";
-import { getTemplateVisual, type TemplateMediaKind } from "@/lib/template-visuals";
+import { getTemplateVisual, templateActivationHref, type TemplateMediaKind } from "@/lib/template-visuals";
 export type GalleryTemplate = {slug:string;name:string;description:string;category?:string;mediaKind:TemplateMediaKind;featured?:boolean;defaultInput?:Record<string,unknown>;coverObjectKey?:string|null;coverAlt?:string|null;coverIcon?:string|null;coverVersion?:number};
-export function templateActivationHref(organizationSlug:string,slug:string){
-return `/app/${encodeURIComponent(organizationSlug)}?template=${encodeURIComponent(slug)}#create`;
-}
 export function TemplateCard({template,organizationSlug,compact=false,favoriteAction}:{template:GalleryTemplate;organizationSlug:string;compact?:boolean;favoriteAction?:React.ReactNode}){
  const visual=getTemplateVisual(template.slug,template.mediaKind);
  const cover=template.coverObjectKey?`/api/templates/covers/${encodeURIComponent(template.slug)}?v=${template.coverVersion??0}`:visual.cover;

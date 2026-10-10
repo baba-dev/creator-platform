@@ -1220,11 +1220,12 @@ export function GenerationStudio({
       cancelled = true;
     };
   }, [data, setLocaleIntent]);
+  const studioLoaded = data !== null;
   // Direct activation stays in the existing creation surface. A template never
   // submits a provider job; the ordinary quote and generate handlers remain authoritative.
   useEffect(() => {
     const slug = new URLSearchParams(window.location.search).get("template");
-    if (!slug || !data || consumedDirectTemplate.current === slug) return;
+    if (!slug || !studioLoaded || consumedDirectTemplate.current === slug) return;
     consumedDirectTemplate.current = slug;
     const controller = new AbortController();
     void (async () => {
@@ -1249,7 +1250,7 @@ export function GenerationStudio({
       }
     })();
     return ()=>controller.abort();
-  },[data,organizationId]);
+  },[studioLoaded,organizationId]);
 
   useEffect(() => {
     if(!templateBrief)return;
@@ -1257,7 +1258,6 @@ export function GenerationStudio({
     if(resolvedTemplateKey.current===key)return;
     const missing=templateBrief.variables.some(v=>v.required&&(templateBrief.values[v.key]??v.defaultValue??"")==="");
     if(missing){setTemplateResolving(false);setTemplateResolveError("Complete the required details to prepare this template.");return;}
-    resolvedTemplateKey.current=key;
     const controller=new AbortController();
     const timer=setTimeout(()=>{
       setTemplateResolving(true);
@@ -1283,6 +1283,7 @@ export function GenerationStudio({
           if(defaults.voiceKey)setVoiceKey(defaults.voiceKey);
           if(typeof defaults.speechRate==="number")setSpeechRate(defaults.speechRate);
           setReferenceAssetIds(resolved.referenceAssetIds);
+          resolvedTemplateKey.current=key;
           setTemplateResolveError(null);
         }catch(reason){
           if(!controller.signal.aborted){

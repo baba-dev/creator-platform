@@ -1,3 +1,4 @@
+import { seedTemplateCatalog } from "./template-catalog";
 // Test-only seed: deliberately refuses remote databases and production.
 import { PrismaClient } from "@prisma/client";
 import { createHash, randomUUID } from "node:crypto";
@@ -13,6 +14,7 @@ if (
     "Learn fixtures require an explicitly enabled local test database.",
   );
 const db = new PrismaClient();
+await seedTemplateCatalog(db);
 const userId = "learn-e2e-admin";
 await db.user.upsert({
   where: { id: userId },

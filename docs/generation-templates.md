@@ -9,7 +9,7 @@ submit provider work directly and they do not create a second billing path.
 1. A workspace member opens `/app/[organizationSlug]/templates`.
 2. The library supports text search, media/category filters, favourites, and
    recently used templates.
-3. The template detail page renders its validated structured variables.
+3. New gallery cards open the existing workspace with `?template=<slug>#create`; Studio fetches the published brief using `GET /api/templates/[slug]` and collects required input inline. Legacy detail/composer URLs remain supported.
 4. `POST /api/templates/[slug]/resolve` validates workspace membership,
    variables, reference-image ownership, published state, current model
    availability, active pricing, and live provider capabilities.
@@ -106,3 +106,9 @@ Included:
 Intentionally deferred: customer-authored templates, organization sharing,
 marketplace/community publishing, template ratings, revenue sharing, scripting,
 branches, and multi-step workflow orchestration.
+
+## Templates 2.0 artwork and direct handoff
+
+The built-in gallery uses 25 locally served original SVG illustrations (`apps/web/public/template-covers/`) and purpose-specific inline SVG marks. Gallery and dashboard share `TemplateCard`. Custom covers are optional and stored as optimized 960×540 WebP objects below the persistent `ASSET_STORAGE_ROOT/templates/covers/` prefix, not release directories. Administrators upload JPG, PNG or WebP after saving a template: the endpoint enforces trusted origin, platform RBAC, rate limit, 8 MB input/2 MB output, pixel bounds, Sharp decode/resize, optimistic update and audit. Published covers are served by slug; draft previews require `templates:read`. Previous media is deleted only after a committed replacement. Restoring the built-in cover deletes the custom object.
+
+Direct activation does not create a parallel provider, job or billing path. Changing a variable invalidates the previously resolved prompt and quote; generation stays disabled until the latest server resolver succeeds. The full compiled prompt remains editable in the existing Studio. If an operator creates a recipe requiring a secure reference-image variable, a link to the legacy picker is available until inline asset-picking support is extended. Templates only resolve to models accepted by the existing BytePlus media generation path. This must change in lockstep with expansion of that provider contract, not ahead of it.

@@ -130,3 +130,7 @@ export function getTemplateVisual(slug: string, kind: TemplateMediaKind) {
  const entry: {icon:string;cover:string;alt:string}|undefined = (templateVisuals as Record<string,{icon:string;cover:string;alt:string}>)[slug];
  return entry ?? {icon:kind==="VIDEO"?"promo":kind==="VOICE"?"podcast":"editorial",cover:kind==="VIDEO"?templateVisuals["product-promo-video"].cover:kind==="VOICE"?templateVisuals["podcast-intro"].cover:templateVisuals["instagram-post"].cover,alt:"Illustrated creative template example"};
 }
+
+export function templateActivationHref(organizationSlug: string, slug: string) {
+  return `/app/${encodeURIComponent(organizationSlug)}?template=${encodeURIComponent(slug)}#create`;
+}

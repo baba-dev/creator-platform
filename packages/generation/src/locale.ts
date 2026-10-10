@@ -340,7 +340,7 @@ export function localeSystemMessages<
   return [
     {
       role: "system",
-      content: `Creative locale metadata for this response only. ${instruction}`,
+      content: `Internal creative locale context for this response only. Apply it silently to your answer. Never echo the locale metadata, its title, or an inventory of the locale fields unless the user explicitly asks for them. ${instruction}`,
     },
     ...messages,
   ];

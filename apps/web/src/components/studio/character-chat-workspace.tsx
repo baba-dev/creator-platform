@@ -13,6 +13,8 @@ import { StatusBadge } from "@/components/admin/primitives";
 import { AudioWaveformPlayer } from "@/components/ui/audio-waveform-player";
 import { VoiceCastingBooth } from "@/components/ui/voice-casting-booth";
 import { runQuotedTextFeature } from "@/lib/text-feature-client";
+import { getCharacterPersonaPreset } from "@/lib/character-persona-presets";
+import { ChatMarkdown } from "./chat-markdown";
 
 interface Persona {
   id: string;
@@ -151,6 +153,25 @@ export function CharacterChatWorkspace({
   const [localeIntent, setLocaleIntent] = useCreativeLocale(organizationId);
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [selectedPersona, setSelectedPersona] = useState<Persona | null>(null);
+  const builtInPersona = getCharacterPersonaPreset(selectedPersona);
+  const quickPrompts = builtInPersona?.quickPrompts ?? [
+    {
+      label: "Get started",
+      prompt:
+        "Introduce your specialties and suggest how we could collaborate.",
+      icon: "chat" as const,
+    },
+    {
+      label: "Brainstorm",
+      prompt: "Help me brainstorm a fresh idea based on your expertise.",
+      icon: "sparkles" as const,
+    },
+    {
+      label: "Make a plan",
+      prompt: "Help me make an actionable creative plan.",
+      icon: "story" as const,
+    },
+  ];
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [prevInitialThreadId, setPrevInitialThreadId] =
     useState(initialThreadId);
@@ -846,7 +867,9 @@ export function CharacterChatWorkspace({
                     {selectedPersona.name}
                   </h3>
                   <p className="text-xs text-muted-foreground">
-                    {selectedPersona.description || "AI character intelligence"}
+                    {builtInPersona?.description ||
+                      selectedPersona.description ||
+                      "AI character intelligence"}
                   </p>
                 </div>
               </div>
@@ -909,23 +932,26 @@ export function CharacterChatWorkspace({
                     Chat with {selectedPersona?.name || "AI Companion"}
                   </h4>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {selectedPersona?.description ||
+                    {builtInPersona?.description ||
+                      selectedPersona?.description ||
                       "Send a message below to start exploring ideas, writing dialogues, or roleplaying scenarios."}
                   </p>
-                  <div className="mt-4 flex flex-wrap justify-center gap-2">
-                    {[
-                      "Tell me an intriguing story starter",
-                      "How can we craft a cinematic scene in Oman?",
-                      "Give me a witty dialogue for two rivals",
-                    ].map((suggestion) => (
+                  <div
+                    className="mt-5 grid grid-cols-2 gap-2 text-left"
+                    aria-label="Suggested prompts"
+                  >
+                    {quickPrompts.map((suggestion) => (
                       <button
-                        key={suggestion}
-                        onClick={() => {
-                          setInputText(suggestion);
-                        }}
-                        className="rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
+                        key={suggestion.label}
+                        type="button"
+                        title={suggestion.prompt}
+                        onClick={() => setInputText(suggestion.prompt)}
+                        className="flex min-h-12 items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-xs font-medium text-foreground transition hover:border-primary/50 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
-                        {suggestion} →
+                        <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                          <Icon name={suggestion.icon} className="size-3.5" />
+                        </span>
+                        <span>{suggestion.label}</span>
                       </button>
                     ))}
                   </div>
@@ -951,7 +977,13 @@ export function CharacterChatWorkspace({
                           : "border border-border bg-card text-foreground"
                       }`}
                     >
-                      <p className="whitespace-pre-wrap">{msg.content}</p>
+                      {isUser ? (
+                        <p className="whitespace-pre-wrap break-words">
+                          {msg.content}
+                        </p>
+                      ) : (
+                        <ChatMarkdown content={msg.content} />
+                      )}
                       {msg.tokensUsed ? (
                         <div
                           className={`mt-2 flex items-center gap-2 text-[10px] ${

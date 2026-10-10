@@ -19,6 +19,13 @@ describe("mapGeminiError", () => {
     expect(error.message).not.toContain("Quota exceeded");
   });
 
+  it("provides safe, actionable guidance for HTTP 404", () => {
+    const error = mapGeminiError(404, "secret provider details");
+    expect(error.retryable).toBe(false);
+    expect(error.code).toBe("HTTP_404");
+    expect(error.message).toContain("GEMINI_BASE_URL");
+    expect(error.message).not.toContain("secret provider details");
+  });
   it("classifies 403 as non-retryable", () => {
     const error = mapGeminiError(403, "forbidden");
     expect(error.retryable).toBe(false);
@@ -64,7 +71,7 @@ describe("createGeminiProvider", () => {
         ),
     });
     await expect(provider.listModels()).rejects.toThrow(
-      "Gemini request failed with status 404",
+      "Gemini returned HTTP 404",
     );
   });
 

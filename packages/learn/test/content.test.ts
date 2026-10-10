@@ -48,7 +48,20 @@ describe("Learn publishing boundaries", () => {
       '<img src="/api/learn/media/abc"><video src="/api/learn/media/def"></video>';
     expect(mediaIds(c)).toEqual(["abc", "def"]);
   });
-  it("accepts only the two reviewed Learn motion stories", () => {
+  it("only permits explicitly reviewed SVG editorial paths", () => {
+    const valid =
+      "/learn-assets/image-campaign/campaign-cover.svg";
+    const thirdParty =
+      "/learn-assets/user-provided/unsafe.svg";
+    const c = emptyContent("asset-test");
+    expect(contentSchema.safeParse({ ...c, coverSrc: valid }).success).toBe(true);
+    expect(contentSchema.safeParse({ ...c, coverSrc: thirdParty }).success).toBe(false);
+    expect(contentSchema.safeParse({ ...c, coverSrc: "https://example.invalid/f.svg" }).success).toBe(false);
+    expect(cleanHtml(`<figure class="learn-media-wide"><img src="${valid}" alt="Campaign cover"></figure>`))
+      .toContain(valid);
+    expect(cleanHtml(`<img src="${thirdParty}" alt="Unreviewed">`)).not.toContain(thirdParty);
+  });
+  it("accepts only the three reviewed Learn motion stories", () => {
     const c = emptyContent("editorial-test");
     expect(
       contentSchema.safeParse({ ...c, visualStory: "image-prompt-workflow" })
@@ -56,6 +69,10 @@ describe("Learn publishing boundaries", () => {
     ).toBe(true);
     expect(
       contentSchema.safeParse({ ...c, visualStory: "image-art-direction" })
+        .success,
+    ).toBe(true);
+    expect(
+      contentSchema.safeParse({ ...c, visualStory: "image-campaign-production" })
         .success,
     ).toBe(true);
     expect(

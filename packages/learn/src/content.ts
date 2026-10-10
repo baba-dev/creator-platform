@@ -24,8 +24,16 @@ export const learnTopics = [
   "mediakit",
   "workspaces",
 ] as const;
+// These three static vector illustrations are reviewed repository assets, not
+// an open SVG upload surface. Do not allow arbitrary SVG paths or remote media.
+const reviewedLearnVectors = new Set([
+  "/learn-assets/image-campaign/campaign-cover.svg",
+  "/learn-assets/image-campaign/format-map.svg",
+  "/learn-assets/image-campaign/finishing-check.svg",
+]);
 export const isEditorialAssetPath = (value: string) =>
-  /^\/learn-assets\/[a-zA-Z0-9/_-]+\.(?:avif|webp|png|jpe?g)$/.test(value);
+  /^\/learn-assets\/[a-zA-Z0-9/_-]+\.(?:avif|webp|png|jpe?g)$/.test(value) ||
+  reviewedLearnVectors.has(value);
 export const editorialAssetPathSchema = z
   .string()
   .max(240)

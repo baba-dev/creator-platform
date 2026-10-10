@@ -365,7 +365,7 @@ export function transcriptionLanguageHint(
 export function creativeLocaleEnhancementSystemPrompt(
   baseSystemPrompt: string,
   persistedIntent: unknown,
-  kind: "IMAGE" | "VIDEO",
+  kind: "IMAGE" | "VIDEO" | "VOICE",
 ): string {
   const intent = readCreativeLocaleIntent(persistedIntent);
   const direction = compileCreativeLocaleInstructions(intent, kind);

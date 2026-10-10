@@ -29,14 +29,23 @@ export function DeviceSettings() {
   >("unknown");
 
   useEffect(() => {
-    setOnline(navigator.onLine);
-    setStandalone(
-      window.matchMedia("(display-mode: standalone)").matches ||
-        ("standalone" in navigator &&
-          Boolean(
-            (navigator as Navigator & { standalone?: boolean }).standalone,
-          )),
-    );
+    const frame = window.requestAnimationFrame(() => {
+      setOnline(navigator.onLine);
+      setStandalone(
+        window.matchMedia("(display-mode: standalone)").matches ||
+          ("standalone" in navigator &&
+            Boolean(
+              (navigator as Navigator & { standalone?: boolean }).standalone,
+            )),
+      );
+      if (!("serviceWorker" in navigator)) {
+        setWorker("unsupported");
+        setPeriodic("unavailable");
+      }
+      if (!("PushManager" in window) || !("Notification" in window)) {
+        setPush("unsupported");
+      }
+    });
     const onPrompt = (event: Event) => {
       event.preventDefault();
       setInstall(event as InstallPromptEvent);
@@ -57,13 +66,8 @@ export function DeviceSettings() {
           setPeriodic("periodicSync" in registration ? "ready" : "unavailable");
         })
         .catch(() => setWorker("error"));
-    } else {
-      setWorker("unsupported");
-      setPeriodic("unavailable");
     }
-    if (!("PushManager" in window) || !("Notification" in window))
-      setPush("unsupported");
-    else
+    if ("PushManager" in window && "Notification" in window)
       void fetch("/api/pwa/push", { cache: "no-store" })
         .then(async (response) => {
           if (!response.ok) {
@@ -85,6 +89,7 @@ export function DeviceSettings() {
         })
         .catch(() => setPush("unavailable"));
     return () => {
+      window.cancelAnimationFrame(frame);
       window.removeEventListener("beforeinstallprompt", onPrompt);
       window.removeEventListener("appinstalled", onInstalled);
       window.removeEventListener("online", onOnline);
@@ -228,7 +233,7 @@ export function DeviceSettings() {
         </div>
         {!install && !standalone && (
           <p className="mt-4 text-xs leading-5 text-muted-foreground">
-            When supported, use your browser's Install app option. On iPhone,
+            When supported, use your browser&apos;s Install app option. On iPhone,
             use Share → Add to Home Screen.
           </p>
         )}

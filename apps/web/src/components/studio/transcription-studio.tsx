@@ -188,7 +188,7 @@ export function TranscriptionStudio({
         const data = (await response.json().catch(() => ({}))) as {
           error?: string;
           quote?: Quote;
-          wallet?: { canAfford?: boolean };
+          wallet?: { canAfford?: boolean; availableCredits?: string };
           budget?: { canSpend?: boolean };
         };
         if (requestId !== quoteRequest.current) return;

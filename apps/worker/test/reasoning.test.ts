@@ -171,7 +171,9 @@ describe("multi-provider reasoning worker", () => {
 
   it("processes speech as VOICE with a larger output budget", async () => {
     const tx = settlementTx();
-    mocks.db.$transaction.mockImplementationOnce(async (callback) => callback(tx));
+    mocks.db.$transaction.mockImplementationOnce(async (callback) =>
+      callback(tx),
+    );
     mocks.db.reasoningJob.findUniqueOrThrow.mockResolvedValue(
       dbJob({
         requestPayload: {
@@ -192,12 +194,18 @@ describe("multi-provider reasoning worker", () => {
     };
     await processReasoningJob(queueJob(), { GROQ: provider });
     expect(provider.complete).toHaveBeenCalledWith(
-      expect.objectContaining({ maxTokens: 4096, userPrompt: "Please announce the event warmly." }),
+      expect.objectContaining({
+        maxTokens: 4096,
+        userPrompt: "Please announce the event warmly.",
+      }),
     );
     expect(tx.reasoningJob.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({
-        status: "SUCCEEDED", outputPayload: { enhancedPrompt: "Welcome to our event." },
-      }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "SUCCEEDED",
+          outputPayload: { enhancedPrompt: "Welcome to our event." },
+        }),
+      }),
     );
   });
 
@@ -215,11 +223,17 @@ describe("multi-provider reasoning worker", () => {
     );
     const provider: ReasoningProvider = {
       name: "groq",
-      complete: vi.fn().mockResolvedValue({ content: { enhancedPrompt: "a".repeat(4097) } }),
+      complete: vi
+        .fn()
+        .mockResolvedValue({ content: { enhancedPrompt: "a".repeat(4097) } }),
     };
-    await expect(processReasoningJob(queueJob(), { GROQ: provider })).rejects.toThrow();
+    await expect(
+      processReasoningJob(queueJob(), { GROQ: provider }),
+    ).rejects.toThrow();
     expect(mocks.db.reasoningJob.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ status: "FAILED" }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "FAILED" }),
+      }),
     );
   });
 

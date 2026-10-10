@@ -171,6 +171,11 @@ export const serverEnvSchema = z.object({
   GOOGLE_DRIVE_CLIENT_SECRET: optionalString,
   ONEDRIVE_CLIENT_ID: optionalString,
   ONEDRIVE_CLIENT_SECRET: optionalString,
+  GOOGLE_AUTH_CLIENT_ID: optionalString,
+  GOOGLE_AUTH_CLIENT_SECRET: optionalString,
+  MICROSOFT_AUTH_CLIENT_ID: optionalString,
+  MICROSOFT_AUTH_CLIENT_SECRET: optionalString,
+  MICROSOFT_AUTH_TENANT_ID: optionalString.default("common"),
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
   OTEL_EXPORTER_OTLP_ENDPOINT: optionalUrl,
 });
@@ -207,6 +212,18 @@ export function parseServerEnv(
     throw new Error(
       "Invalid server environment variables: BYTEPLUS_VISION_ACCESS_KEY_ID, BYTEPLUS_VISION_SECRET_ACCESS_KEY must be configured together",
     );
+  }
+
+  // Partially configured OAuth providers must never be advertised to users.
+  for (const [clientId, secret] of [
+    ["GOOGLE_AUTH_CLIENT_ID", "GOOGLE_AUTH_CLIENT_SECRET"],
+    ["MICROSOFT_AUTH_CLIENT_ID", "MICROSOFT_AUTH_CLIENT_SECRET"],
+  ] as const) {
+    if (Boolean(result.data[clientId]) !== Boolean(result.data[secret])) {
+      throw new Error(
+        `Invalid server environment variables: ${clientId}, ${secret} must be configured together`,
+      );
+    }
   }
 
   if (result.data.APP_ENV === "production" && result.data.MAIL_ENABLED) {

@@ -5,13 +5,16 @@ import { AuthCard } from "@/components/auth/auth-card";
 import { SignInForm } from "@/components/auth/sign-in-form";
 import { safeInternalRoute } from "@/lib/navigation";
 import { getRequestSession } from "@/lib/request-auth";
+import { parseServerEnv } from "@aiwa/config";
 
 export default async function SignInPage({
   searchParams,
 }: {
-  searchParams: Promise<{ returnTo?: string }>;
+  searchParams: Promise<{ returnTo?: string; error?: string }>;
 }) {
-  const returnTo = safeInternalRoute((await searchParams).returnTo);
+  const params = await searchParams;
+  const returnTo = safeInternalRoute(params.returnTo);
+  const linkingNeeded = params.error === "account_not_linked";
   const session = await getRequestSession();
 
   if (session) {
@@ -31,7 +34,27 @@ export default async function SignInPage({
       }
       footerLabel="Create an account"
     >
-      <SignInForm returnTo={returnTo} />
+      {linkingNeeded ? (
+        <p
+          role="alert"
+          className="mb-4 rounded-xl border border-border bg-muted/40 p-3 text-sm text-foreground"
+        >
+          This provider is not linked to an existing Creators account. Sign in
+          with your original method, then connect it from Connections &amp;
+          Storage.
+        </p>
+      ) : null}
+      <SignInForm
+        returnTo={returnTo}
+        googleEnabled={Boolean(
+          parseServerEnv().GOOGLE_AUTH_CLIENT_ID &&
+          parseServerEnv().GOOGLE_AUTH_CLIENT_SECRET,
+        )}
+        microsoftEnabled={Boolean(
+          parseServerEnv().MICROSOFT_AUTH_CLIENT_ID &&
+          parseServerEnv().MICROSOFT_AUTH_CLIENT_SECRET,
+        )}
+      />
     </AuthCard>
   );
 }

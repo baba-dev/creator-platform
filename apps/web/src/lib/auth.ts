@@ -13,6 +13,7 @@ import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { createAuthMiddleware } from "better-auth/api";
 import { twoFactor } from "better-auth/plugins";
+import { passkey } from "@better-auth/passkey";
 
 const env = parseServerEnv();
 
@@ -21,16 +22,25 @@ async function deliverVerificationEmail(input: {
   verificationUrl: string;
   userId?: string;
 }): Promise<void> {
-  await enqueueMail(
-    verificationEmail({
-      to: input.email,
-      verificationUrl: input.verificationUrl,
-      idempotencyKey: `verify:${createHash("sha256")
-        .update(input.verificationUrl)
-        .digest("hex")}`,
+  try {
+    await enqueueMail(
+      verificationEmail({
+        to: input.email,
+        verificationUrl: input.verificationUrl,
+        idempotencyKey: `verify:${createHash("sha256")
+          .update(input.verificationUrl)
+          .digest("hex")}`,
+        userId: input.userId,
+      }),
+    );
+  } catch (error) {
+    // The account may already exist. A failed outbox write is recoverable
+    // through the rate-limited resend route; don't return a false signup 500.
+    console.error("Verification outbox write failed", {
       userId: input.userId,
-    }),
-  );
+      errorName: error instanceof Error ? error.name : "Unknown",
+    });
+  }
 }
 
 export const auth = betterAuth({
@@ -41,9 +51,41 @@ export const auth = betterAuth({
     provider: "mysql",
     transaction: true,
   }),
+  socialProviders: {
+    ...(env.GOOGLE_AUTH_CLIENT_ID && env.GOOGLE_AUTH_CLIENT_SECRET
+      ? {
+          google: {
+            clientId: env.GOOGLE_AUTH_CLIENT_ID,
+            clientSecret: env.GOOGLE_AUTH_CLIENT_SECRET,
+            prompt: "select_account" as const,
+          },
+        }
+      : {}),
+    ...(env.MICROSOFT_AUTH_CLIENT_ID && env.MICROSOFT_AUTH_CLIENT_SECRET
+      ? {
+          microsoft: {
+            clientId: env.MICROSOFT_AUTH_CLIENT_ID,
+            clientSecret: env.MICROSOFT_AUTH_CLIENT_SECRET,
+            tenantId: env.MICROSOFT_AUTH_TENANT_ID,
+            prompt: "select_account" as const,
+            mapProfileToUser: () => ({ image: "" }),
+          },
+        }
+      : {}),
+  },
   plugins: [
+    passkey({
+      rpID: new URL(env.APP_URL).hostname,
+      rpName: "Aiwa Creators",
+      origin: new URL(env.APP_URL).origin,
+      authenticatorSelection: {
+        userVerification: "required",
+        residentKey: "preferred",
+      },
+    }),
     twoFactor({
       issuer: "Aiwa Creators",
+      allowPasswordless: true,
     }),
   ],
   emailVerification: {
@@ -115,7 +157,13 @@ export const auth = betterAuth({
   },
   account: {
     accountLinking: {
-      enabled: false,
+      enabled: true,
+      // Require the existing account holder to sign in and explicitly link.
+      disableImplicitLinking: true,
+      // Only authenticated linking; implicit same-email merges remain disabled.
+      trustedProviders: ["google", "microsoft"],
+      allowUnlinkingAll: false,
+      updateUserInfoOnLink: false,
     },
   },
   user: {
@@ -160,6 +208,10 @@ export const auth = betterAuth({
       "/sign-in/email": { window: 60, max: 10 },
       "/sign-up/email": { window: 60, max: 5 },
       "/request-password-reset": { window: 300, max: 3 },
+      "/send-verification-email": { window: 300, max: 3 },
+      "/sign-in/social": { window: 60, max: 12 },
+      "/sign-in/passkey": { window: 60, max: 10 },
+      "/passkey/add-passkey": { window: 300, max: 5 },
     },
   },
   advanced: {
@@ -201,6 +253,24 @@ export const auth = betterAuth({
     }),
   },
   databaseHooks: {
+    account: {
+      create: {
+        before: async (account) => ({
+          // Authentication does not need persistent social OAuth tokens.
+          // The separately consented storage integration encrypts its own tokens.
+          data:
+            account.providerId === "google" ||
+            account.providerId === "microsoft"
+              ? {
+                  ...account,
+                  accessToken: null,
+                  refreshToken: null,
+                  idToken: null,
+                }
+              : account,
+        }),
+      },
+    },
     user: {
       create: {
         after: async (user, ctx) => {
@@ -269,13 +339,24 @@ export const auth = betterAuth({
     },
     session: {
       create: {
-        before: async (session) => {
+        before: async (session, ctx) => {
           const user = await db.user.findUnique({
             where: { id: session.userId },
-            select: { disabledAt: true },
+            select: { disabledAt: true, platformRole: true },
           });
-
-          return user?.disabledAt ? false : undefined;
+          if (!user || user.disabledAt) return false;
+          // Credential logins alone receive Better Auth's TOTP challenge.
+          // Refuse privileged sessions created by OAuth or passkey endpoints.
+          if (
+            user.platformRole !== "USER" &&
+            (!ctx?.path ||
+              ctx.path.includes("/callback/") ||
+              ctx.path.includes("/sign-in/passkey") ||
+              ctx.path.includes("/passkey/verify-authentication"))
+          ) {
+            return false;
+          }
+          return undefined;
         },
       },
     },

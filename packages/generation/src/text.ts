@@ -791,14 +791,34 @@ export async function processTextJob(
         { code: "INVALID_PROVIDER_RESPONSE" },
       );
   } catch (error) {
+    // A provider outcome may be uncertain even when automatically retrying is unsafe.
+    // Preserve the original reservation instead of generating a duplicate charge.
+    const diagnosticCode =
+      error instanceof ProviderRequestError ? error.code : undefined;
     const outcomeUnknown =
-      !(error instanceof ProviderRequestError) || error.retryable;
+      !(error instanceof ProviderRequestError) ||
+      error.retryable ||
+      (diagnosticCode !== undefined &&
+        [
+          "REQUEST_OUTCOME_UNKNOWN",
+          "NETWORK_OUTCOME_UNKNOWN",
+          "BODY_READ_OUTCOME_UNKNOWN",
+          "PROVIDER_OUTCOME_UNKNOWN",
+        ].includes(diagnosticCode));
     if (outcomeUnknown) {
       await db.generationJob.updateMany({
         where: { id, status: "SUBMITTED" },
         data: {
           status: "MANUAL_REVIEW",
           errorCode: "PROVIDER_OUTCOME_UNKNOWN",
+          outputPayload: {
+            providerDiagnosticCode:
+              diagnosticCode ?? "UNEXPECTED_PROVIDER_ERROR",
+            providerStage:
+              error instanceof ProviderRequestError
+                ? (error.stage ?? "unknown")
+                : "unknown",
+          },
           errorMessage: sponsored
             ? "The text provider outcome is unknown. This sponsored generation requires operator reconciliation before retry."
             : "The text provider outcome is unknown. Credits remain reserved to prevent duplicate billing; an operator can reconcile this job.",

@@ -1,36 +1,25 @@
 import { describe, expect, it } from "vitest";
-
 import {
   MEDIA_GENERATION_KINDS,
   mediaGenerationJobFilter,
 } from "./media-generation-query";
 
 describe("media generation query", () => {
-  it("keeps dashboard recents limited to generated media jobs", () => {
+  it("uses durable eligibility instead of a nullable JSON path predicate", () => {
     expect(mediaGenerationJobFilter()).toEqual({
-      providerModel: {
-        mediaKind: { in: [...MEDIA_GENERATION_KINDS] },
-      },
-      NOT: {
-        requestPayload: {
-          path: "$.task",
-          equals: "transcription",
-        },
-      },
+      mediaHistoryEligible: true,
+      providerModel: { mediaKind: { in: [...MEDIA_GENERATION_KINDS] } },
     });
+    expect(JSON.stringify(mediaGenerationJobFilter())).not.toContain(
+      "requestPayload",
+    );
   });
-
   it.each(["IMAGE", "VIDEO", "VOICE"] as const)(
-    "scopes dedicated %s studios to their own media kind",
+    "scopes %s studios without losing legacy payloads",
     (kind) => {
       expect(mediaGenerationJobFilter(kind)).toEqual({
+        mediaHistoryEligible: true,
         providerModel: { mediaKind: kind },
-        NOT: {
-          requestPayload: {
-            path: "$.task",
-            equals: "transcription",
-          },
-        },
       });
     },
   );

@@ -271,7 +271,7 @@ export function StorageManager({
         pool.
       </p>
       {/* Storage Options Grid */}
-      <div className="grid gap-6 xl:grid-cols-3">
+      <div className="grid gap-5">
         {/* Google Drive Card */}
         <div
           className={`relative flex flex-col justify-between rounded-2xl border p-6 transition-all ${activeProvider === "GOOGLE_DRIVE" ? "border-primary bg-primary/[0.02] shadow-sm" : "border-border bg-card"}`}

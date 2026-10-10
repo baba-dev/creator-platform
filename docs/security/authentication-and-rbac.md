@@ -2,10 +2,12 @@
 
 ## Scope
 
-The first release supports email and password authentication only. OAuth, social
-login, phone login, passkeys, and magic links are intentionally not configured.
-Better Auth owns credentials and database sessions; Aiwa owns the organization
-and authorization model.
+Email/password remains supported alongside opt-in Google and Microsoft social
+sign-in and WebAuthn passkeys. Identity is user-scoped and OAuth cloud storage
+remains independently consented at the organization scope. See
+[Authentication & Connections 2.0](./auth-connections-2.md) for detailed setup,
+security and deployment. Better Auth owns credentials and database sessions;
+Aiwa owns the organization and authorization model.
 
 Email verification is delivered through the durable transactional-mail outbox.
 Security, billing, and team-membership messages use
@@ -62,7 +64,8 @@ return not-found behavior to avoid confirming another tenant exists.
 - Disabled users cannot create new sessions and are rejected when existing
   sessions are read.
 - Suspended or closed organizations cannot be selected or accessed.
-- Account linking is disabled while email/password is the only login method.
+- Explicit account linking is enabled for authenticated users, while implicit
+  same-email linking is disabled.
 - Verification identifiers are stored hashed.
 - Organization creation and switching are audited without storing credentials.
 

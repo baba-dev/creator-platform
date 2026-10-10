@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { GenerationStudio } from "@/components/studio/generation-studio";
 import { TemplateCard } from "@/components/templates/template-card";
+import { RecentCreations } from "@/components/dashboard/recent-creations";
 import { StartConversationButton } from "@/components/conversations/start-conversation-button";
 import { Button } from "@/components/ui/button";
 import { Annotation, Eyebrow } from "@/components/ui/creative";
@@ -14,28 +15,6 @@ import { requireOrganizationPermission } from "@/lib/request-auth";
 import { getAvailableStudioModels } from "@/lib/studio-model-discovery";
 
 type MediaKind = "IMAGE" | "VIDEO" | "VOICE" | "TEXT";
-
-function promptFor(payload: unknown): string {
-  if (
-    payload &&
-    typeof payload === "object" &&
-    "prompt" in payload &&
-    typeof payload.prompt === "string" &&
-    payload.prompt.trim()
-  ) {
-    return payload.prompt.trim();
-  }
-  if (
-    payload &&
-    typeof payload === "object" &&
-    "text" in payload &&
-    typeof payload.text === "string" &&
-    payload.text.trim()
-  ) {
-    return payload.text.trim();
-  }
-  return "Prompt unavailable for this generation.";
-}
 
 export default async function OrganizationWorkspacePage({
   params,
@@ -91,9 +70,18 @@ export default async function OrganizationWorkspacePage({
         chargedCredits: true,
         reservedCredits: true,
         requestPayload: true,
+        createdAt: true,
         assets: {
           where: { status: "READY", deletedAt: null },
-          select: { id: true, mimeType: true },
+          select: {
+            id: true,
+            mimeType: true,
+            variants: {
+              where: { kind: { in: ["THUMBNAIL", "POSTER", "WAVEFORM"] } },
+              select: { kind: true },
+            },
+          },
+          orderBy: { generationOutputIndex: "asc" },
           take: 1,
         },
         project: { select: { name: true } },
@@ -101,7 +89,7 @@ export default async function OrganizationWorkspacePage({
           select: { displayName: true, mediaKind: true },
         },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: 3,
     }),
     db.generationJob.groupBy({
@@ -290,106 +278,22 @@ export default async function OrganizationWorkspacePage({
           id="projects"
           className="mt-6 grid min-w-0 gap-6 2xl:grid-cols-[minmax(0,1.5fr)_minmax(320px,.5fr)]"
         >
-          <div className="min-w-0 rounded-[24px] border border-border bg-card/88 p-5 shadow-sm sm:p-6">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="font-display text-xl font-semibold text-foreground">
-                  Recent generations
-                </h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Latest media generations in this organization
-                </p>
-              </div>
-              <Link
-                href={`/app/${organizationSlug}/history`}
-                className="inline-flex min-h-10 items-center text-sm font-semibold text-primary hover:underline"
-              >
-                View all history →
-              </Link>
-            </div>
-            {recentJobs.length ? (
-              <div className="mt-5 space-y-3">
-                {recentJobs.map((job) => {
-                  const asset = job.assets[0];
-                  const pending = job.status === "MANUAL_REVIEW";
-                  return (
-                    <article
-                      key={job.id}
-                      className="min-w-0 rounded-[24px] border border-border bg-card p-4 sm:p-5"
-                    >
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <Link
-                            href={`/app/${organizationSlug}/history/${job.id}`}
-                            className="inline-flex min-h-8 items-center text-xs font-semibold text-primary hover:underline"
-                          >
-                            Job details →
-                          </Link>
-                          <h3 className="mt-1 text-base font-semibold text-foreground">
-                            {job.providerModel.displayName}
-                          </h3>
-                        </div>
-                        <span
-                          className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-wide ${pending ? "border-warning/40 bg-warning/10 text-warning" : job.status === "SUCCEEDED" ? "border-success/40 bg-success/10 text-success" : "border-border bg-surface-sunken text-muted-foreground"}`}
-                        >
-                          {job.status.replaceAll("_", " ")}
-                          {pending ? " · credits reserved" : ""}
-                        </span>
-                      </div>
-                      <p className="mt-3 line-clamp-3 break-words text-sm leading-6 text-foreground">
-                        {promptFor(job.requestPayload)}
-                      </p>
-                      {pending ? (
-                        <p className="mt-3 rounded-xl border border-warning/30 bg-warning/10 p-3 text-xs leading-5 text-foreground">
-                          An operator needs to check the provider result.
-                          Credits remain reserved; review this job in history
-                          before another attempt.
-                        </p>
-                      ) : null}
-                      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-                        {asset ? (
-                          <a
-                            href={`/api/assets/${asset.id}?download=1`}
-                            className="inline-flex min-h-9 items-center font-semibold text-primary hover:underline"
-                          >
-                            Download asset
-                          </a>
-                        ) : null}
-                        {asset && asset.mimeType.startsWith("image/") ? (
-                          <Link
-                            href={`/app/${organizationSlug}/image?assetId=${encodeURIComponent(asset.id)}#image-editor`}
-                            className="inline-flex min-h-9 items-center font-semibold text-primary hover:underline"
-                          >
-                            Edit image →
-                          </Link>
-                        ) : null}
-                        {asset && asset.mimeType.startsWith("video/") ? (
-                          <Link
-                            href={`/app/${organizationSlug}/video?assetId=${encodeURIComponent(asset.id)}#video-editor`}
-                            className="inline-flex min-h-9 items-center font-semibold text-primary hover:underline"
-                          >
-                            Edit video →
-                          </Link>
-                        ) : null}
-                        <span className="text-muted-foreground">
-                          {job.status === "SUCCEEDED"
-                            ? `${job.chargedCredits} credits charged`
-                            : job.status === "FAILED"
-                              ? "No charge"
-                              : `${job.reservedCredits} credits reserved`}
-                        </span>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="mt-5 rounded-xl border border-border bg-surface-sunken p-5 text-sm text-muted-foreground">
-                Your first media generation will appear here. Start with Quick
-                create above.
-              </p>
-            )}
-          </div>
+          <RecentCreations
+            jobs={recentJobs.map((job) => ({
+              id: job.id,
+              status: job.status,
+              createdAt: job.createdAt,
+              chargedCredits: job.chargedCredits.toString(),
+              reservedCredits: job.reservedCredits.toString(),
+              requestPayload: job.requestPayload,
+              modelName: job.providerModel.displayName,
+              mediaKind: job.providerModel.mediaKind as
+                "IMAGE" | "VIDEO" | "VOICE",
+              asset: job.assets[0] ?? null,
+            }))}
+            organizationId={membership.organizationId}
+            organizationSlug={organizationSlug}
+          />
           <div
             id="usage"
             className="min-w-0 self-start rounded-[24px] border border-border bg-card/88 p-5 shadow-sm sm:p-6"

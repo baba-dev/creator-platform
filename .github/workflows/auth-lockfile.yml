@@ -1,0 +1,29 @@
+# One-time dependency lockfile regeneration on this feature branch.
+name: Auth lockfile regeneration
+on:
+  push:
+    branches: [feat/auth-connections-2]
+permissions:
+  contents: write
+jobs:
+  lockfile:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: true
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.19.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Resolve lockfile with declared dependency versions
+        run: pnpm install --lockfile-only --no-frozen-lockfile
+      - name: Commit lockfile to feature branch
+        run: |
+          git add pnpm-lock.yaml
+          if ! git diff --cached --quiet; then
+            git -c user.name=github-actions -c user.email=41898282+github-actions[bot]@users.noreply.github.com commit -m "chore(lockfile): resolve passkey dependency"
+            git push origin HEAD:feat/auth-connections-2
+          fi

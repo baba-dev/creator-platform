@@ -6,7 +6,7 @@ import {
   quoteParameters,
 } from "@aiwa/generation";
 import { formatBaisa } from "@/lib/format-baisa";
-import { publicCostBreakdown } from "@/lib/customer-cost-breakdown";
+import { publicCostBreakdown } from "../../../lib/customer-cost-breakdown";
 import { db } from "@aiwa/db";
 import { checkMemberSpendingBudget } from "@aiwa/organizations";
 import { quoteRequestSchema } from "@aiwa/validation";

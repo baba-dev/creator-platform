@@ -6,6 +6,7 @@ import {
   quoteParameters,
 } from "@aiwa/generation";
 import { formatBaisa } from "@/lib/format-baisa";
+import { publicCostBreakdown } from "@/lib/customer-cost-breakdown";
 import { db } from "@aiwa/db";
 import { checkMemberSpendingBudget } from "@aiwa/organizations";
 import { quoteRequestSchema } from "@aiwa/validation";
@@ -201,6 +202,15 @@ export async function POST(request: Request): Promise<NextResponse> {
         estimatedCredits: estimate.quote.customerCredits.toString(),
         estimatedPriceBaisa: estimate.quote.customerPriceBaisa.toString(),
         estimatedOmr: formatBaisa(estimate.quote.customerPriceBaisa),
+        // Retail equivalents only: never expose supplier acquisition costs.
+        pricingBreakdown: publicCostBreakdown(
+          estimate.quote.customerPriceBaisa,
+          reservation.customerPriceBaisa,
+          {
+            baisaNumerator: activePriceVersion.fxBaisaNumerator,
+            baisaDenominator: activePriceVersion.fxBaisaDenominator,
+          },
+        ),
         reservationCredits: reservation.customerCredits.toString(),
         maximumChargeCredits: reservation.customerCredits.toString(),
         maximumChargeBaisa: reservation.customerPriceBaisa.toString(),

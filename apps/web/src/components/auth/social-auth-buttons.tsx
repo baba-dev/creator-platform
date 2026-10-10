@@ -58,7 +58,7 @@ export function SocialAuthButtons({
       const result =
         mode === "link"
           ? await authClient.linkSocial({ provider, callbackURL })
-          : await authClient.signIn.social({ provider, callbackURL });
+          : await authClient.signIn.social({ provider, callbackURL: `/pending-verification?returnTo=${encodeURIComponent(callbackURL)}` });
       if (result.error) throw new Error("provider_error");
     } catch {
       setError(

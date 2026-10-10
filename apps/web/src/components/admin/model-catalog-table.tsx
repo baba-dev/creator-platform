@@ -884,8 +884,12 @@ export function ModelCatalogTable({
                         row.capabilities.audioGeneration === true
                       }
                     />
-                    {(row.provider === "GEMINI" || row.provider === "NVIDIA") && (
-                      <ModelAccessCheck provider={row.provider} modelId={row.providerModelId} />
+                    {(row.provider === "GEMINI" ||
+                      row.provider === "NVIDIA") && (
+                      <ModelAccessCheck
+                        provider={row.provider}
+                        modelId={row.providerModelId}
+                      />
                     )}
                   </td>
                 ) : null}

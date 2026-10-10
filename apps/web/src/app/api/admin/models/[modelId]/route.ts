@@ -105,9 +105,11 @@ export async function PATCH(
     }
     if (toggleResult.data.enabled && model.provider === "GEMINI") {
       // Fail closed: catalog synchronization is not proof the configured key can list this model.
-      if (!process.env.GEMINI_API_KEY) return NextResponse.json(
-        { error: "Gemini credentials are not configured." }, { status: 409 },
-      );
+      if (!process.env.GEMINI_API_KEY)
+        return NextResponse.json(
+          { error: "Gemini credentials are not configured." },
+          { status: 409 },
+        );
       try {
         const listed = await createGeminiProvider({
           apiKey: process.env.GEMINI_API_KEY,
@@ -115,11 +117,29 @@ export async function PATCH(
           requestTimeoutMs: 5000,
           idleTimeoutMs: 5000,
         }).listModels();
-        if (!listed.some((id) => (id.startsWith("models/") ? id.slice(7) : id) === model.providerModelId)) {
-          return NextResponse.json({ error: "This Gemini model is not listed for the configured API key. Verify model access before enabling it." }, { status: 409 });
+        if (
+          !listed.some(
+            (id) =>
+              (id.startsWith("models/") ? id.slice(7) : id) ===
+              model.providerModelId,
+          )
+        ) {
+          return NextResponse.json(
+            {
+              error:
+                "This Gemini model is not listed for the configured API key. Verify model access before enabling it.",
+            },
+            { status: 409 },
+          );
         }
       } catch {
-        return NextResponse.json({ error: "Gemini model access could not be verified. No availability change was made." }, { status: 503 });
+        return NextResponse.json(
+          {
+            error:
+              "Gemini model access could not be verified. No availability change was made.",
+          },
+          { status: 503 },
+        );
       }
     }
     if (toggleResult.data.enabled) {

@@ -287,7 +287,8 @@ export default async function OrganizationWorkspacePage({
               reservedCredits: job.reservedCredits.toString(),
               requestPayload: job.requestPayload,
               modelName: job.providerModel.displayName,
-              mediaKind: job.providerModel.mediaKind as "IMAGE" | "VIDEO" | "VOICE",
+              mediaKind: job.providerModel.mediaKind as
+                "IMAGE" | "VIDEO" | "VOICE",
               asset: job.assets[0] ?? null,
             }))}
             organizationId={membership.organizationId}

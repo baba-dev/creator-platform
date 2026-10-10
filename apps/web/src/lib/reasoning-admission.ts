@@ -211,9 +211,10 @@ export async function admitReasoningJob(
             input.localeIntent,
             input.targetMedia,
           ).length + input.userPrompt.length,
-        maximumOutputTokens: input.targetMedia === "VOICE"
-          ? SPEECH_ENHANCEMENT_MAX_OUTPUT_TOKENS
-          : PROMPT_ENHANCEMENT_MAX_OUTPUT_TOKENS,
+        maximumOutputTokens:
+          input.targetMedia === "VOICE"
+            ? SPEECH_ENHANCEMENT_MAX_OUTPUT_TOKENS
+            : PROMPT_ENHANCEMENT_MAX_OUTPUT_TOKENS,
       });
     } catch {
       throw new ReasoningAdmissionError(

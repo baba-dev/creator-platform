@@ -24,9 +24,9 @@ export function LearnVisualStory({ story }: { story: string }) {
               Make the image useful everywhere.
             </h2>
             <p className="mt-4 leading-7 text-muted-foreground">
-              The master stays protected while deliberate changes create a family
-              of formats. Each arrow represents a reviewable production decision,
-              not automatic image perfection.
+              The master stays protected while deliberate changes create a
+              family of formats. Each arrow represents a reviewable production
+              decision, not automatic image perfection.
             </p>
             <p className="font-hand mt-5 text-2xl text-primary">
               Finish for the destination.
@@ -40,7 +40,15 @@ export function LearnVisualStory({ story }: { story: string }) {
               className="h-auto w-full overflow-visible text-primary"
             >
               <defs>
-                <marker id="campaign-flow-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                <marker
+                  id="campaign-flow-arrow"
+                  viewBox="0 0 10 10"
+                  refX="8"
+                  refY="5"
+                  markerWidth="6"
+                  markerHeight="6"
+                  orient="auto"
+                >
                   <path d="M0 0L10 5L0 10z" fill="currentColor" />
                 </marker>
               </defs>
@@ -54,27 +62,92 @@ export function LearnVisualStory({ story }: { story: string }) {
                 markerEnd="url(#campaign-flow-arrow)"
               />
               {[83, 220, 357, 494, 631].map((cx, i) => (
-                <g key={cx} className="learn-workflow-node" style={{ animationDelay: `${i * 130}ms` }}>
-                  <circle cx={cx} cy="116" r="38" fill="var(--card)" stroke="currentColor" strokeWidth="2.5" />
-                  {i === 0 && <path d={`M${cx - 12} 101h24v30h-24z M${cx - 6} 94h12 M${cx - 5} 116l4 4 8-10`} stroke="currentColor" strokeWidth="3" strokeLinecap="round" fill="none" />}
-                  {i === 1 && <path d={`M${cx - 14} 106h28v21h-28z M${cx - 8} 115l6 6 12-12`} stroke="currentColor" strokeWidth="3" fill="none" />}
-                  {i === 2 && <path d={`M${cx} 133V100m-11 11 11-11 11 11 M${cx - 13} 134h26`} stroke="currentColor" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />}
-                  {i === 3 && <path d={`M${cx - 14} 105h19v26h-19z M${cx + 7} 100h14v31h-14z`} stroke="currentColor" strokeWidth="3" fill="none" />}
-                  {i === 4 && <path d={`M${cx - 14} 104h28v27h-28z M${cx - 8} 117l5 5 11-13`} stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none" />}
+                <g
+                  key={cx}
+                  className="learn-workflow-node"
+                  style={{ animationDelay: `${i * 130}ms` }}
+                >
+                  <circle
+                    cx={cx}
+                    cy="116"
+                    r="38"
+                    fill="var(--card)"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                  />
+                  {i === 0 && (
+                    <path
+                      d={`M${cx - 12} 101h24v30h-24z M${cx - 6} 94h12 M${cx - 5} 116l4 4 8-10`}
+                      stroke="currentColor"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      fill="none"
+                    />
+                  )}
+                  {i === 1 && (
+                    <path
+                      d={`M${cx - 14} 106h28v21h-28z M${cx - 8} 115l6 6 12-12`}
+                      stroke="currentColor"
+                      strokeWidth="3"
+                      fill="none"
+                    />
+                  )}
+                  {i === 2 && (
+                    <path
+                      d={`M${cx} 133V100m-11 11 11-11 11 11 M${cx - 13} 134h26`}
+                      stroke="currentColor"
+                      strokeWidth="3"
+                      fill="none"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  )}
+                  {i === 3 && (
+                    <path
+                      d={`M${cx - 14} 105h19v26h-19z M${cx + 7} 100h14v31h-14z`}
+                      stroke="currentColor"
+                      strokeWidth="3"
+                      fill="none"
+                    />
+                  )}
+                  {i === 4 && (
+                    <path
+                      d={`M${cx - 14} 104h28v27h-28z M${cx - 8} 117l5 5 11-13`}
+                      stroke="currentColor"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      fill="none"
+                    />
+                  )}
                 </g>
               ))}
-              <text x="75" y="188" fill="currentColor" fontSize="16">MASTER</text>
-              <text x="203" y="188" fill="currentColor" fontSize="16">EDIT</text>
-              <text x="326" y="188" fill="currentColor" fontSize="16">DETAIL</text>
-              <text x="464" y="188" fill="currentColor" fontSize="16">FORMAT</text>
-              <text x="605" y="188" fill="currentColor" fontSize="16">EXPORT</text>
+              <text x="75" y="188" fill="currentColor" fontSize="16">
+                MASTER
+              </text>
+              <text x="203" y="188" fill="currentColor" fontSize="16">
+                EDIT
+              </text>
+              <text x="326" y="188" fill="currentColor" fontSize="16">
+                DETAIL
+              </text>
+              <text x="464" y="188" fill="currentColor" fontSize="16">
+                FORMAT
+              </text>
+              <text x="605" y="188" fill="currentColor" fontSize="16">
+                EXPORT
+              </text>
             </svg>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
               {steps.map(([number, label, note]) => (
                 <div key={number} className="rounded-2xl bg-card p-3">
-                  <p className="font-mono text-[10px] font-bold tracking-widest text-primary">{number}</p>
+                  <p className="font-mono text-[10px] font-bold tracking-widest text-primary">
+                    {number}
+                  </p>
                   <p className="mt-1 text-sm font-semibold">{label}</p>
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">{note}</p>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    {note}
+                  </p>
                 </div>
               ))}
             </div>

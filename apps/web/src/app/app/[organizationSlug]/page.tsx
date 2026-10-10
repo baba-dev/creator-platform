@@ -4,6 +4,7 @@ import type { Route } from "next";
 import Link from "next/link";
 
 import { GenerationStudio } from "@/components/studio/generation-studio";
+import { TemplateCard } from "@/components/templates/template-card";
 import { StartConversationButton } from "@/components/conversations/start-conversation-button";
 import { Button } from "@/components/ui/button";
 import { Annotation, Eyebrow } from "@/components/ui/creative";
@@ -242,7 +243,7 @@ export default async function OrganizationWorkspacePage({
                 Start from a template
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Choose a brief, then make it your own in Studio.
+                Choose a look and start creating. Your Studio is prepared for you.
               </p>
             </div>
             <Link
@@ -253,35 +254,9 @@ export default async function OrganizationWorkspacePage({
             </Link>
           </div>
           {topTemplates.length ? (
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-4">
               {topTemplates.map((template) => (
-                <Link
-                  key={template.slug}
-                  href={`/app/${organizationSlug}/templates/${template.slug}`}
-                  className="group flex min-w-0 flex-col rounded-2xl border border-border bg-surface-sunken p-4 transition hover:border-primary/40 hover:bg-primary/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                >
-                  <span className="grid size-9 place-items-center rounded-xl bg-primary/10 text-primary">
-                    <Icon
-                      name={
-                        template.mediaKind === "VOICE"
-                          ? "voice"
-                          : template.mediaKind === "VIDEO"
-                            ? "video"
-                            : "image"
-                      }
-                      className="size-4"
-                    />
-                  </span>
-                  <span className="mt-4 text-sm font-semibold text-foreground">
-                    {template.name}
-                  </span>
-                  <span className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
-                    {template.description}
-                  </span>
-                  <span className="mt-auto pt-4 text-xs font-semibold text-primary">
-                    Use template →
-                  </span>
-                </Link>
+                <TemplateCard key={template.slug} template={template} organizationSlug={organizationSlug} compact />
               ))}
             </div>
           ) : (

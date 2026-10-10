@@ -1,15 +1,14 @@
 import Image from "next/image";
-import Link from "next/link";
 import { TemplateMark } from "@/components/templates/template-mark";
 import { getTemplateVisual, type TemplateMediaKind } from "@/lib/template-visuals";
-export type GalleryTemplate = {slug:string;name:string;description:string;category:string;mediaKind:TemplateMediaKind;featured?:boolean;defaultInput?:Record<string,unknown>};
+export type GalleryTemplate = {slug:string;name:string;description:string;category?:string;mediaKind:TemplateMediaKind;featured?:boolean;defaultInput?:Record<string,unknown>};
 export function templateActivationHref(organizationSlug:string,slug:string){
 return `/app/${encodeURIComponent(organizationSlug)}?template=${encodeURIComponent(slug)}#create`;
 }
 export function TemplateCard({template,organizationSlug,compact=false,favoriteAction}:{template:GalleryTemplate;organizationSlug:string;compact?:boolean;favoriteAction?:React.ReactNode}){
  const visual=getTemplateVisual(template.slug,template.mediaKind);
  return <article className="group relative min-w-0 overflow-hidden rounded-[24px] border border-border bg-card shadow-xs transition duration-200 hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-md focus-within:ring-2 focus-within:ring-primary/30">
-  <Link href={templateActivationHref(organizationSlug,template.slug)} className="block focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-ring" aria-label={`Use ${template.name} template`}>
+  <a href={templateActivationHref(organizationSlug,template.slug)} className="block focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-ring" aria-label={`Use ${template.name} template`}>
    <div className={`relative overflow-hidden bg-surface-sunken ${compact?"aspect-[16/9]":"aspect-[16/8.7]"}`}>
      <Image src={visual.cover} alt={visual.alt} width={960} height={540} className="size-full object-cover transition-transform duration-500 motion-reduce:transition-none group-hover:scale-[1.035]" sizes={compact?"(max-width:640px) 45vw, (max-width:1280px) 24vw, 20vw":"(max-width:640px) 100vw, (max-width:1536px) 50vw, 33vw"}/>
      {!compact&&<div className="absolute left-3 top-3 flex items-center gap-1.5">
@@ -28,7 +27,7 @@ export function TemplateCard({template,organizationSlug,compact=false,favoriteAc
        <span className="ml-auto font-semibold text-primary">Use template →</span>
       </div>
    </div>
-  </Link>
+  </a>
   {favoriteAction&&<div className="absolute right-3 top-3 z-10">{favoriteAction}</div>}
  </article>
 }

@@ -98,9 +98,8 @@ export default async function TemplatesPage({
               Skip the blank canvas.
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-              Start from a thoughtfully configured creative recipe, answer a
-              short brief, then keep full control in Studio before anything is
-              generated.
+              Pick a visual starting point and create immediately in your existing
+              Studio. The recipe takes care of setup; you stay in control.
             </p>
           </div>
           <div className="grid grid-cols-3 gap-2 rounded-2xl border border-border bg-card/75 p-2 shadow-xs backdrop-blur">

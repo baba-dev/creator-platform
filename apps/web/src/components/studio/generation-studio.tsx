@@ -2851,33 +2851,6 @@ export function GenerationStudio({
               <div className={variant === "quick" ? "hidden" : "space-y-4"}>
                 {activeMode !== "IMAGE" ? (
                   <>
-                    {activeMode === "IMAGE" &&
-                    Number(model?.capabilities?.maxGeneratedImages ?? 1) > 1 ? (
-                      <label className="grid gap-2 text-sm font-semibold text-foreground">
-                        Images to generate
-                        <select
-                          value={selectedOutputCount}
-                          onChange={(event) =>
-                            setOutputCount(Number(event.target.value))
-                          }
-                          className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
-                        >
-                          {Array.from(
-                            { length: Math.max(1, maxImageOutputs) },
-                            (_, index) => index + 1,
-                          ).map((count) => (
-                            <option key={count} value={count}>
-                              {count}
-                            </option>
-                          ))}
-                        </select>
-                        <span className="text-xs font-normal text-muted-foreground">
-                          Credits are reserved for the maximum and settled on
-                          successful outputs.
-                        </span>
-                      </label>
-                    ) : null}
-
                     <label
                       htmlFor="media-ratio"
                       className="block text-sm font-semibold text-foreground"

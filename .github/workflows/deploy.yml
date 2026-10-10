@@ -186,6 +186,63 @@ jobs:
             df -Pk /var/www/creator-platform/incoming
           '
 
+      # Fail before uploading when an additional immutable release cannot fit.
+      # Only the deployment-owned *incoming* files are pruned automatically;
+      # root-owned releases and backups are never deleted by the workflow.
+      - name: Reclaim stale incoming archives and verify disk headroom
+        env:
+          STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          STAGING_SSH_PORT: ${{ secrets.STAGING_SSH_PORT }}
+          STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+        run: |
+          set -Eeuo pipefail
+          archive="creator-platform-${RELEASE_SHA}.tar.gz"
+          compressed_bytes="$(stat -c '%s' "$archive")"
+          # Tar metadata gives uncompressed regular-file bytes without extracting
+          # a second copy on the staging server.
+          expanded_bytes="$(python3 - "$archive" <<'PY'
+          import sys
+          import tarfile
+          with tarfile.open(sys.argv[1], "r:gz") as archive:
+              print(sum(item.size for item in archive if item.isfile()))
+          PY
+          )"
+          # Reserve extra space for filesystem metadata, migrations and backups.
+          required_kib=$(( (compressed_bytes + expanded_bytes + 536870912 + 1023) / 1024 ))
+          echo "Release compressed bytes: $compressed_bytes"
+          echo "Release unpacked file bytes: $expanded_bytes"
+          echo "Required free disk (including 512 MiB reserve): ${required_kib} KiB"
+          ssh_opts=(
+            -4
+            -i "$RUNNER_TEMP/staging-deploy-key"
+            -p "$STAGING_SSH_PORT"
+            -o BatchMode=yes
+            -o ConnectTimeout=30
+            -o ServerAliveInterval=15
+            -o ServerAliveCountMax=4
+            -o StrictHostKeyChecking=yes
+            -o "UserKnownHostsFile=$RUNNER_TEMP/staging-known-hosts"
+          )
+          timeout 120 ssh "${ssh_opts[@]}" "$STAGING_SSH_USER@$STAGING_SSH_HOST" \
+            "bash -s -- '$required_kib'" <<'REMOTE'
+          set -Eeuo pipefail
+          required_kib="$1"
+          incoming=/var/www/creator-platform/incoming
+          # This directory is owned by the deployment account. These are
+          # rebuildable uploads, not media assets, databases, or rollback trees.
+          find "$incoming" -maxdepth 1 -type f \
+            \( -name 'creator-platform-*.tar.gz' -o -name 'creator-platform-*.tar.gz.part' \) \
+            -mmin +2880 -print -delete
+          df -h "$incoming"
+          available_kib="$(df -Pk "$incoming" | awk 'NR == 2 { print $4 }')"
+          if [[ ! "$available_kib" =~ ^[0-9]+$ ]] || (( available_kib < required_kib )); then
+            echo "::error::Insufficient staging disk space: ${available_kib:-0} KiB available; $required_kib KiB needed to extract safely." >&2
+            echo "Inspect /var/www/creator-platform/releases and run infra/deploy/prune-immutable-releases.sh --dry-run as root." >&2
+            echo "Keep the live release and a verified rollback release. Do not erase shared assets, databases or backups." >&2
+            exit 1
+          fi
+          REMOTE
+
       - name: Upload and verify release on staging
         env:
           STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}

@@ -400,8 +400,8 @@ export function MediaKitStudio({
           </Button>
         </div>
       )}
-      <div className="mt-7 grid min-w-0 gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
-        <CreativeSurface className="min-w-0 self-start p-4">
+      <div className="mt-7 flex min-w-0 flex-col gap-6 lg:gap-8">
+        <CreativeSurface className="min-w-0 w-full p-5 sm:p-6">
           <div className="flex items-center justify-between">
             <h2 className="font-display text-lg font-semibold">Your toolkit</h2>
             <span className="text-xs text-muted-foreground">
@@ -425,7 +425,7 @@ export function MediaKitStudio({
               </button>
             ))}
           </div>
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-2">
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
             {tools
               .filter((item) => toolGroup(item.key) === group)
               .map((item) => (
@@ -436,13 +436,13 @@ export function MediaKitStudio({
                   aria-pressed={toolKey === item.key}
                   onClick={() => chooseTool(item.key)}
                   title={item.description}
-                  className="flex min-w-0 flex-col items-start rounded-2xl border border-border bg-background p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-pressed:border-primary aria-pressed:bg-primary/5 disabled:opacity-60"
+                  className="flex min-h-32 min-w-0 flex-col items-start rounded-2xl border border-border bg-background p-4 text-left transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-pressed:border-primary aria-pressed:bg-primary/5 disabled:opacity-60"
                 >
                   <MediaKitArt
                     tool={item.key}
-                    className={`mb-3 size-10 ${toolKey === item.key ? "text-primary" : "text-muted-foreground"}`}
+                    className={`mb-3 size-11 ${toolKey === item.key ? "text-primary" : "text-muted-foreground"}`}
                   />
-                  <span className="text-xs font-semibold leading-5">
+                  <span className="text-sm font-semibold leading-5">
                     {item.name}
                   </span>
                   {!item.available && (
@@ -464,7 +464,7 @@ export function MediaKitStudio({
             Upload media
           </Link>
         </CreativeSurface>
-        <div className="min-w-0 space-y-5">
+        <div className="min-w-0 w-full space-y-6 lg:space-y-8">
           <CreativeSurface className="min-w-0 overflow-hidden">
             <div className="flex items-start gap-3 border-b border-border p-5">
               <MediaKitArt
@@ -482,9 +482,9 @@ export function MediaKitStudio({
             </div>
             <form
               onSubmit={review}
-              className="grid min-w-0 xl:grid-cols-[minmax(0,1fr)_300px]"
+              className="flex min-w-0 flex-col"
             >
-              <div className="min-w-0 p-4 sm:p-5">
+              <div className="min-w-0 p-5 sm:p-6 lg:p-8">
                 <div className="mb-3 flex items-center justify-between gap-2">
                   <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     {[
@@ -533,14 +533,16 @@ export function MediaKitStudio({
               </div>
               <fieldset
                 disabled={locked}
-                className="min-w-0 space-y-4 border-t border-border bg-muted/20 p-5 xl:border-l xl:border-t-0"
+                className="min-w-0 space-y-5 border-t border-border bg-muted/20 p-5 sm:p-6 lg:p-8"
               >
-                <AssetButton
-                  asset={source}
+                <div className="max-w-2xl">
+                  <AssetButton
+                    asset={source}
                   label={`Source ${sourceKind(toolKey).toLowerCase()}`}
                   disabled={locked}
                   onClick={() => setPicker("source")}
-                />
+                  />
+                </div>
                 {toolKey === "lip-sync" && (
                   <AssetButton
                     asset={audio}
@@ -549,8 +551,9 @@ export function MediaKitStudio({
                     onClick={() => setPicker("audio")}
                   />
                 )}
-                <MediaKitControls
-                  tool={toolKey}
+                <div className="max-w-3xl">
+                  <MediaKitControls
+                    tool={toolKey}
                   settings={settings}
                   onChange={changeSettings}
                   source={source}
@@ -558,11 +561,12 @@ export function MediaKitStudio({
                   onCrop={changeCrop}
                   logo={logo}
                   chooseLogo={() => setPicker("logo")}
-                />
-                <div className="border-t border-border pt-4">
+                  />
+                </div>
+                <div className="max-w-3xl border-t border-border pt-5">
                   <Button
                     type="submit"
-                    className="w-full"
+                    className="w-full sm:max-w-md"
                     disabled={!ready || locked}
                   >
                     {busy ? "Working…" : "Review credit quote"}

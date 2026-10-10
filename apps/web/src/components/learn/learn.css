@@ -53,6 +53,19 @@
   border-radius: 1rem;
   margin: 1.5rem auto;
 }
+.learn-prose figure {
+  margin-block: 2.5rem;
+}
+.learn-prose figure img {
+  margin-bottom: 0.85rem;
+}
+.learn-prose .learn-media-wide {
+  width: min(100%, 70rem);
+}
+.learn-prose .learn-media-portrait {
+  margin-inline: auto;
+  max-width: 34rem;
+}
 .learn-prose audio {
   width: 100%;
 }
@@ -96,11 +109,92 @@
 .learn-editor .tiptap:focus-visible {
   box-shadow: inset 0 0 0 2px var(--ring);
 }
+.learn-visual-story {
+  background-image:
+    radial-gradient(
+      circle at 92% 8%,
+      color-mix(in oklch, var(--primary) 16%, transparent),
+      transparent 34%
+    ),
+    linear-gradient(
+      color-mix(in oklch, var(--border) 45%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      color-mix(in oklch, var(--border) 45%, transparent) 1px,
+      transparent 1px
+    );
+  background-size:
+    auto,
+    28px 28px,
+    28px 28px;
+}
+.learn-workflow-path {
+  stroke-dasharray: 12 10;
+  animation: learn-workflow-draw 8s linear infinite;
+}
+.learn-workflow-node {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: learn-workflow-float 4.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+@keyframes learn-workflow-draw {
+  to {
+    stroke-dashoffset: -88;
+  }
+}
+@keyframes learn-workflow-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .learn-workflow-path,
+  .learn-workflow-node {
+    animation: none;
+  }
+}
 @media (max-width: 640px) {
   .learn-prose {
     font-size: 1rem;
   }
   .learn-prose h2 {
     font-size: 1.75rem;
+  }
+}
+
+/* Article 02: restrained, decorative motion; content remains legible without it. */
+.learn-art-direction-path {
+  stroke-dasharray: 9 12;
+  animation: learn-art-direction-travel 7s linear infinite;
+}
+.learn-art-direction-orbit {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: learn-art-direction-breathe 4s ease-in-out infinite;
+}
+@keyframes learn-art-direction-travel {
+  to {
+    stroke-dashoffset: -84;
+  }
+}
+@keyframes learn-art-direction-breathe {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .learn-art-direction-path,
+  .learn-art-direction-orbit {
+    animation: none;
   }
 }

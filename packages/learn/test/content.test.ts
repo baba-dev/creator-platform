@@ -25,6 +25,15 @@ describe("Learn publishing boundaries", () => {
       '<audio src="/api/learn/media/audio-id" controls preload="metadata"></audio>',
     );
   });
+  it("allows repository-owned editorial images without opening external tracking", () => {
+    expect(
+      cleanHtml(
+        '<figure class="learn-media-portrait unsafe"><img src="/learn-assets/image-generation/final-blue-hour.webp" alt="Final image"></figure><img src="/learn-assets/../secret.png">',
+      ),
+    ).toBe(
+      '<figure class="learn-media-portrait"><img src="/learn-assets/image-generation/final-blue-hour.webp" alt="Final image" loading="lazy" /></figure>',
+    );
+  });
   it("derives stable heading anchors and deduplicated media references", () => {
     const result = articleHtml(
       "<h2>Start <em>here</em></h2><h2>Start here</h2>",
@@ -39,6 +48,51 @@ describe("Learn publishing boundaries", () => {
       '<img src="/api/learn/media/abc"><video src="/api/learn/media/def"></video>';
     expect(mediaIds(c)).toEqual(["abc", "def"]);
   });
+  it("only permits explicitly reviewed SVG editorial paths", () => {
+    const valid = "/learn-assets/image-campaign/campaign-cover.svg";
+    const thirdParty = "/learn-assets/user-provided/unsafe.svg";
+    const c = emptyContent("asset-test");
+    expect(contentSchema.safeParse({ ...c, coverSrc: valid }).success).toBe(
+      true,
+    );
+    expect(
+      contentSchema.safeParse({ ...c, coverSrc: thirdParty }).success,
+    ).toBe(false);
+    expect(
+      contentSchema.safeParse({
+        ...c,
+        coverSrc: "https://example.invalid/f.svg",
+      }).success,
+    ).toBe(false);
+    expect(
+      cleanHtml(
+        `<figure class="learn-media-wide"><img src="${valid}" alt="Campaign cover"></figure>`,
+      ),
+    ).toContain(valid);
+    expect(
+      cleanHtml(`<img src="${thirdParty}" alt="Unreviewed">`),
+    ).not.toContain(thirdParty);
+  });
+  it("accepts only the three reviewed Learn motion stories", () => {
+    const c = emptyContent("editorial-test");
+    expect(
+      contentSchema.safeParse({ ...c, visualStory: "image-prompt-workflow" })
+        .success,
+    ).toBe(true);
+    expect(
+      contentSchema.safeParse({ ...c, visualStory: "image-art-direction" })
+        .success,
+    ).toBe(true);
+    expect(
+      contentSchema.safeParse({
+        ...c,
+        visualStory: "image-campaign-production",
+      }).success,
+    ).toBe(true);
+    expect(
+      contentSchema.safeParse({ ...c, visualStory: "<script>" }).success,
+    ).toBe(false);
+  });
   it("allows drafts but requires meaningful publication fields", () => {
     const c = emptyContent("test");
     expect(contentSchema.safeParse(c).success).toBe(true);
@@ -48,6 +102,16 @@ describe("Learn publishing boundaries", () => {
     );
     expect(
       contentSchema.safeParse({ ...c, tool: "//evil.invalid" }).success,
+    ).toBe(false);
+    expect(
+      contentSchema.safeParse({
+        ...c,
+        coverSrc: "/learn-assets/image-generation/cover.webp",
+      }).success,
+    ).toBe(true);
+    expect(
+      contentSchema.safeParse({ ...c, coverSrc: "https://tracker.invalid/a" })
+        .success,
     ).toBe(false);
   });
 });

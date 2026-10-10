@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element -- public editorial images are already bounded WebP derivatives */
 import Link from "next/link";
 import type { Route } from "next";
-import { learnTopics, mediaUrl } from "@aiwa/learn/content";
+import { coverUrl, learnTopics } from "@aiwa/learn/content";
 import { listPosts } from "@/lib/learn/queries";
 import { Eyebrow, CreativeSurface } from "@/components/ui/creative";
 export async function LearnArchive({
@@ -89,7 +89,7 @@ export async function LearnArchive({
             className="grid overflow-hidden rounded-[28px] lg:grid-cols-[1.2fr_1fr]"
           >
             <img
-              src={mediaUrl(featured.content.coverId)}
+              src={coverUrl(featured.content)}
               alt={featured.content.coverAlt}
               width={1200}
               height={675}
@@ -131,7 +131,7 @@ export async function LearnArchive({
             <article key={p.id}>
               <Link href={`/learn/${p.slug}` as Route} className="group block">
                 <img
-                  src={mediaUrl(p.content.coverId)}
+                  src={coverUrl(p.content)}
                   alt={p.content.coverAlt}
                   width={720}
                   height={405}

@@ -24,6 +24,29 @@ export const learnTopics = [
   "mediakit",
   "workspaces",
 ] as const;
+// These three static vector illustrations are reviewed repository assets, not
+// an open SVG upload surface. Do not allow arbitrary SVG paths or remote media.
+const reviewedLearnVectors = new Set([
+  "/learn-assets/image-campaign/campaign-cover.svg",
+  "/learn-assets/image-campaign/format-map.svg",
+  "/learn-assets/image-campaign/finishing-check.svg",
+]);
+export const isEditorialAssetPath = (value: string) =>
+  /^\/learn-assets\/[a-zA-Z0-9/_-]+\.(?:avif|webp|png|jpe?g)$/.test(value) ||
+  reviewedLearnVectors.has(value);
+export const editorialAssetPathSchema = z
+  .string()
+  .max(240)
+  .refine(
+    (value) => value === "" || isEditorialAssetPath(value),
+    "Use a trusted Learn asset path",
+  );
+export const learnVisualStories = [
+  "",
+  "image-prompt-workflow",
+  "image-art-direction",
+  "image-campaign-production",
+] as const;
 export const slugSchema = z
   .string()
   .min(2)
@@ -44,12 +67,14 @@ export const contentSchema = z.object({
   author: z.string().max(120),
   authorBio: z.string().max(500),
   coverId: z.string().max(100),
+  coverSrc: editorialAssetPathSchema.default(""),
   coverAlt: z.string().max(500),
   focalX: z.number().min(0).max(100),
   focalY: z.number().min(0).max(100),
   seoTitle: z.string().max(240),
   description: z.string().max(500),
   socialImageId: z.string().max(100),
+  socialImageSrc: editorialAssetPathSchema.default(""),
   noindex: z.boolean(),
   locale: z.string().regex(/^[a-z]{2}(?:-[A-Z]{2})?$/),
   translationKey: z
@@ -67,6 +92,7 @@ export const contentSchema = z.object({
   ctaLabel: z.string().max(80),
   prompt: z.string().max(4000),
   featured: z.boolean(),
+  visualStory: z.enum(learnVisualStories).default(""),
 });
 export type LearnContent = z.infer<typeof contentSchema>;
 export function emptyContent(key: string): LearnContent {
@@ -81,12 +107,14 @@ export function emptyContent(key: string): LearnContent {
     author: "Aiwa Creators",
     authorBio: "",
     coverId: "",
+    coverSrc: "",
     coverAlt: "",
     focalX: 50,
     focalY: 50,
     seoTitle: "",
     description: "",
     socialImageId: "",
+    socialImageSrc: "",
     noindex: false,
     locale: "en",
     translationKey: key,
@@ -94,8 +122,17 @@ export function emptyContent(key: string): LearnContent {
     ctaLabel: "Try it in Aiwa Creators",
     prompt: "",
     featured: false,
+    visualStory: "",
   };
 }
 export function mediaUrl(id: string) {
   return `/api/learn/media/${id}`;
+}
+export function coverUrl(content: LearnContent) {
+  return content.coverId ? mediaUrl(content.coverId) : content.coverSrc;
+}
+export function socialImageUrl(content: LearnContent) {
+  if (content.socialImageId) return mediaUrl(content.socialImageId);
+  if (content.socialImageSrc) return content.socialImageSrc;
+  return coverUrl(content);
 }

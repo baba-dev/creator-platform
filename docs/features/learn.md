@@ -54,6 +54,12 @@ asset by simply pasting its URL. HTML is sanitized on save and render; scripts,
 iframes, arbitrary styles, external image trackers, and unsafe URL schemes are
 removed. Media deletion is deliberately blocked by relational references.
 
+Curated first-party guides may also use reviewed images shipped under
+`/learn-assets/`. The content schema accepts only bounded repository paths with
+approved image extensions; arbitrary public paths and remote image URLs remain
+blocked. This keeps launch content deployable through migrations without
+creating synthetic customer assets.
+
 ## Discovery and conversion
 
 Six curated topic collections, archive search, language filtering, pagination,

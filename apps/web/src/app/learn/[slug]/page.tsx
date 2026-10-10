@@ -2,7 +2,7 @@ import type { Metadata, Route } from "next";
 import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
 import { db } from "@aiwa/db";
-import { mediaUrl, publishedContent } from "@aiwa/learn";
+import { coverUrl, publishedContent, socialImageUrl } from "@aiwa/learn";
 import { LearnArticle } from "@/components/learn/article";
 import { getPost, learnOrigin, listPosts } from "@/lib/learn/queries";
 export const dynamic = "force-dynamic";
@@ -15,6 +15,11 @@ export async function generateMetadata({
   const p = await getPost(slug);
   if (!p) return { robots: { index: false, follow: false } };
   const c = publishedContent(p.published);
+  // Use a raster social preview for Article 03; not all crawlers support SVG cards.
+  const socialPreview =
+    c.slug === "one-ai-image-complete-campaign"
+      ? "/learn/one-ai-image-complete-campaign/social-preview"
+      : socialImageUrl(c);
   const translated = await db.learnPost.findMany({
     where: { translationKey: c.translationKey, publishedAt: { not: null } },
     select: { locale: true, slug: true },
@@ -37,15 +42,13 @@ export async function generateMetadata({
       publishedTime: p.publishedAt?.toISOString(),
       modifiedTime: p.modifiedAt?.toISOString(),
       authors: [c.author],
-      images: [
-        { url: mediaUrl(c.socialImageId || c.coverId), alt: c.coverAlt },
-      ],
+      images: [{ url: socialPreview, alt: c.coverAlt }],
     },
     twitter: {
       card: "summary_large_image",
       title: c.seoTitle || c.title,
       description: c.description || c.excerpt,
-      images: [mediaUrl(c.socialImageId || c.coverId)],
+      images: [socialPreview],
     },
   };
 }
@@ -66,6 +69,10 @@ export default async function Page({
   }
   const c = publishedContent(p.published);
   const origin = learnOrigin();
+  const structuredImage =
+    c.slug === "one-ai-image-complete-campaign"
+      ? "/learn/one-ai-image-complete-campaign/social-preview"
+      : coverUrl(c);
   const { posts } = await listPosts({ topic: c.topic, locale: c.locale });
   const data = {
     "@context": "https://schema.org",
@@ -74,7 +81,7 @@ export default async function Page({
         "@type": "BlogPosting",
         headline: c.title,
         description: c.excerpt,
-        image: `${origin}${mediaUrl(c.coverId)}`,
+        image: `${origin}${structuredImage}`,
         datePublished: p.publishedAt?.toISOString(),
         dateModified: p.modifiedAt?.toISOString(),
         author: { "@type": "Person", name: c.author },

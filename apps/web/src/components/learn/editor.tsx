@@ -10,6 +10,7 @@ import type { Route } from "next";
 import Link from "next/link";
 import {
   emptyContent,
+  coverUrl,
   learnTopics,
   learnTypes,
   learnTools,
@@ -748,9 +749,9 @@ export function LearnEditor({
           </section>
           <section className="space-y-4 rounded-2xl border border-border bg-card p-5">
             <h2 className="font-display text-xl">Cover image</h2>
-            {content.coverId && (
+            {(content.coverId || content.coverSrc) && (
               <img
-                src={mediaUrl(content.coverId)}
+                src={coverUrl(content)}
                 alt={content.coverAlt}
                 width={480}
                 height={270}

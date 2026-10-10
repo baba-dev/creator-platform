@@ -192,7 +192,10 @@ export async function POST(request: Request) {
         pricingBreakdown: publicCostBreakdown(
           customerPriceBaisa,
           customerPriceBaisa,
-          { baisaNumerator: price.fxBaisaNumerator, baisaDenominator: price.fxBaisaDenominator },
+          {
+            baisaNumerator: price.fxBaisaNumerator,
+            baisaDenominator: price.fxBaisaDenominator,
+          },
         ),
         provider: selected.provider,
         providerModelId: selected.providerModelId,

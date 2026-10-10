@@ -73,7 +73,11 @@ describe("Creative Locale foundation", () => {
   });
 
   it("keeps speech locale metadata in system context rather than adding it to the script", () => {
-    const system = creativeLocaleEnhancementSystemPrompt("Polish narration.", oman, "VOICE");
+    const system = creativeLocaleEnhancementSystemPrompt(
+      "Polish narration.",
+      oman,
+      "VOICE",
+    );
     expect(system).toContain("Oman");
     expect(system).toContain("pronunciation");
     expect(system).not.toContain("[Creative locale guidance]");

@@ -1,11 +1,27 @@
 {
+  "id": "/",
   "name": "Creators by AIWA",
   "short_name": "Creators",
-  "description": "AI-assisted image, video, and voice creation.",
-  "start_url": "/",
+  "description": "Create, refine, and organize AI images, video, voice, scripts, storyboards, and campaign assets in one creative workspace.",
+  "start_url": "/app?source=pwa",
+  "scope": "/",
   "display": "standalone",
+  "display_override": [
+    "window-controls-overlay",
+    "standalone"
+  ],
   "background_color": "#0d0e12",
   "theme_color": "#0d0e12",
+  "lang": "en",
+  "dir": "ltr",
+  "orientation": "any",
+  "categories": [
+    "productivity",
+    "graphics",
+    "multimedia",
+    "utilities"
+  ],
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/brand/icons/pwa/creators-pwa-192x192-transparent.webp",
@@ -31,5 +47,62 @@
       "type": "image/webp",
       "purpose": "maskable"
     }
-  ]
+  ],
+  "shortcuts": [
+    {
+      "name": "Quick Create",
+      "short_name": "Create",
+      "description": "Start a creation in your active workspace",
+      "url": "/app?source=pwa-shortcut#create",
+      "icons": [
+        {
+          "src": "/brand/icons/pwa/creators-pwa-192x192-transparent.webp",
+          "sizes": "192x192",
+          "type": "image/webp"
+        }
+      ]
+    },
+    {
+      "name": "Image Studio",
+      "short_name": "Image",
+      "description": "Open Image Studio",
+      "url": "/pwa/launch?target=image",
+      "icons": [
+        {
+          "src": "/brand/icons/pwa/creators-pwa-192x192-transparent.webp",
+          "sizes": "192x192",
+          "type": "image/webp"
+        }
+      ]
+    },
+    {
+      "name": "Video Studio",
+      "short_name": "Video",
+      "description": "Open Video Studio",
+      "url": "/pwa/launch?target=video",
+      "icons": [
+        {
+          "src": "/brand/icons/pwa/creators-pwa-192x192-transparent.webp",
+          "sizes": "192x192",
+          "type": "image/webp"
+        }
+      ]
+    },
+    {
+      "name": "Asset Library",
+      "short_name": "Assets",
+      "description": "Open your assets",
+      "url": "/pwa/launch?target=assets",
+      "icons": [
+        {
+          "src": "/brand/icons/pwa/creators-pwa-192x192-transparent.webp",
+          "sizes": "192x192",
+          "type": "image/webp"
+        }
+      ]
+    }
+  ],
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  }
 }

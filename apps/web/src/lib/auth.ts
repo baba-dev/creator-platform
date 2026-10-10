@@ -11,7 +11,8 @@ import {
 } from "@aiwa/mail";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
-import { createAuthMiddleware } from "better-auth/api";
+import { APIError, createAuthMiddleware } from "better-auth/api";
+import { verifyTurnstileToken } from "./turnstile";
 import { twoFactor } from "better-auth/plugins";
 import { passkey } from "@better-auth/passkey";
 import { socialSignUpDisabled } from "./social-signup-policy";
@@ -229,6 +230,27 @@ export const auth = betterAuth({
     },
   },
   hooks: {
+    before: createAuthMiddleware(async (ctx) => {
+      if (env.TURNSTILE_MODE !== "enforce") return;
+      const action =
+        ctx.path === "/sign-up/email"
+          ? "signup"
+          : ctx.path === "/request-password-reset"
+            ? "password_reset"
+            : null;
+      if (!action) return;
+      const verified = await verifyTurnstileToken({
+        token: ctx.headers?.get("x-turnstile-token"),
+        action,
+        secret: env.TURNSTILE_SECRET_KEY!,
+        hostname: new URL(env.APP_URL).hostname,
+      });
+      if (!verified) {
+        throw new APIError("FORBIDDEN", {
+          message: "Human verification was unsuccessful. Please try again.",
+        });
+      }
+    }),
     after: createAuthMiddleware(async (ctx) => {
       if (ctx.path !== "/two-factor/generate-backup-codes") return;
 

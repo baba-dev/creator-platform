@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { AuthCard } from "@/components/auth/auth-card";
 import { ForgotPasswordForm } from "@/components/auth/forgot-password-form";
 import { getRequestSession } from "@/lib/request-auth";
+import { parseServerEnv } from "@aiwa/config";
 
 export default async function ForgotPasswordPage() {
   const session = await getRequestSession();
@@ -20,7 +21,13 @@ export default async function ForgotPasswordPage() {
       footerHref="/sign-in"
       footerLabel="Sign in"
     >
-      <ForgotPasswordForm />
+      <ForgotPasswordForm
+        turnstileSiteKey={
+          parseServerEnv().TURNSTILE_MODE === "enforce"
+            ? parseServerEnv().TURNSTILE_SITE_KEY
+            : undefined
+        }
+      />
     </AuthCard>
   );
 }

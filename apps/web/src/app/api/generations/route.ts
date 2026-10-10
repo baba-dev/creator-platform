@@ -30,6 +30,13 @@ const generationLimiter = rateLimit({
   max: 10,
   windowMs: 60_000,
   prefix: "generation",
+  failureMode: "closed",
+});
+const organizationGenerationLimiter = rateLimit({
+  max: 30,
+  windowMs: 60_000,
+  prefix: "organization-generation",
+  failureMode: "closed",
 });
 export async function POST(request: Request) {
   if (!hasTrustedMutationOrigin(request))
@@ -52,9 +59,18 @@ export async function POST(request: Request) {
         { status: 413 },
       );
     const parsed = JSON.parse(text);
-    const { modelId } = z
-      .object({ modelId: z.string().min(1).max(100) })
+    const { modelId, organizationId } = z
+      .object({
+        modelId: z.string().min(1).max(100),
+        organizationId: z.string().min(1).max(100),
+      })
       .parse(parsed);
+    // Membership is established before consuming the organization's shared budget.
+    // create*Job still performs authoritative permission, quote and wallet checks.
+    await requireMembership(db, organizationId, session.user.id);
+    const organizationLimited =
+      await organizationGenerationLimiter.check(organizationId);
+    if (organizationLimited) return organizationLimited;
     const model = await db.providerModel.findUnique({
       where: { id: modelId },
       select: { mediaKind: true, providerModelId: true },

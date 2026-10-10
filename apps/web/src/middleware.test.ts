@@ -21,6 +21,9 @@ describe("Security headers middleware", () => {
     expect(csp).toContain("object-src 'none'");
     expect(csp).toContain("base-uri 'self'");
     expect(csp).toContain("form-action 'self'");
+    expect(csp).toContain("frame-src https://challenges.cloudflare.com");
+    expect(csp).toContain("https://challenges.cloudflare.com");
+    expect(headers.get("Cross-Origin-Resource-Policy")).toBe("same-origin");
   });
 
   it("configures a matcher that excludes static Next.js assets", () => {

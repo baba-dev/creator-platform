@@ -65,6 +65,9 @@ export const serverEnvSchema = z.object({
   APP_URL: z.url().default("http://localhost:3000"),
   AUTH_SECRET: z.string().min(32),
   SIGNUPS_ENABLED: booleanFromString,
+  TURNSTILE_MODE: z.enum(["off", "enforce"]).default("off"),
+  TURNSTILE_SITE_KEY: optionalString,
+  TURNSTILE_SECRET_KEY: optionalString,
   MAIL_ENABLED: z
     .enum(["true", "false"])
     .default("true")
@@ -211,6 +214,15 @@ export function parseServerEnv(
   ) {
     throw new Error(
       "Invalid server environment variables: BYTEPLUS_VISION_ACCESS_KEY_ID, BYTEPLUS_VISION_SECRET_ACCESS_KEY must be configured together",
+    );
+  }
+
+  if (
+    result.data.TURNSTILE_MODE === "enforce" &&
+    (!result.data.TURNSTILE_SITE_KEY || !result.data.TURNSTILE_SECRET_KEY)
+  ) {
+    throw new Error(
+      "Invalid server environment variables: TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY required in enforce mode",
     );
   }
 

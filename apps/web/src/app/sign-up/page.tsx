@@ -41,6 +41,11 @@ export default async function SignUpPage({
     >
       <SignUpForm
         returnTo={returnTo}
+        turnstileSiteKey={
+          parseServerEnv().TURNSTILE_MODE === "enforce"
+            ? parseServerEnv().TURNSTILE_SITE_KEY
+            : undefined
+        }
         googleEnabled={Boolean(
           parseServerEnv().GOOGLE_AUTH_CLIENT_ID &&
           parseServerEnv().GOOGLE_AUTH_CLIENT_SECRET,

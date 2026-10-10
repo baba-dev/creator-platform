@@ -128,18 +128,23 @@ export function GenerationCostPreview({
     : null;
   const rateText =
     rate !== null && Number.isFinite(rate) ? rate.toFixed(6) : null;
-  const tokenQuantity = usage && ["TOKEN", "COMPLETION_TOKEN"].includes(usage.unit)
-    ? integer(usage.quantity)
-    : null;
+  const tokenQuantity =
+    usage && ["TOKEN", "COMPLETION_TOKEN"].includes(usage.unit)
+      ? integer(usage.quantity)
+      : null;
   const retailMicro = integer(micro?.estimatedRetailMicroUsdApprox);
-  const perThousandTokens = tokenQuantity !== null && tokenQuantity > 0n && retailMicro !== null
-    ? ((retailMicro * 1_000n + tokenQuantity / 2n) / tokenQuantity).toString()
-    : null;
+  const perThousandTokens =
+    tokenQuantity !== null && tokenQuantity > 0n && retailMicro !== null
+      ? ((retailMicro * 1_000n + tokenQuantity / 2n) / tokenQuantity).toString()
+      : null;
   const creditsPerBaisa = integer(quote?.creditsPerBaisa);
 
   const [expired, setExpired] = useState(false);
   useEffect(() => {
-    const check = () => setExpired(Boolean(quote?.expiresAt && Date.parse(quote.expiresAt) <= Date.now()));
+    const check = () =>
+      setExpired(
+        Boolean(quote?.expiresAt && Date.parse(quote.expiresAt) <= Date.now()),
+      );
     const timer = setInterval(check, 1000);
     return () => clearInterval(timer);
   }, [quote?.expiresAt]);
@@ -196,7 +201,11 @@ export function GenerationCostPreview({
               <div className="min-w-0 rounded-xl border border-border bg-surface-sunken p-3">
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <Icon name="shield" className="size-4" aria-hidden="true" />
-                  {fixed ? "Confirmed quote" : staged ? "Planned total" : "Maximum hold"}
+                  {fixed
+                    ? "Confirmed quote"
+                    : staged
+                      ? "Planned total"
+                      : "Maximum hold"}
                 </div>
                 <p className="mt-1 font-display text-2xl font-semibold tabular-nums text-foreground">
                   {digits(max)}{" "}
@@ -235,7 +244,13 @@ export function GenerationCostPreview({
                       ? `${quote.quotedQuantity} billable ${usageName(quote.pricingDimension ?? "REQUEST")}`
                       : "Model-specific billing"}
               </span>
-              <span>{fixed ? "Fixed rate" : staged ? "Separately billed steps" : "Settles on actual usage"}</span>
+              <span>
+                {fixed
+                  ? "Fixed rate"
+                  : staged
+                    ? "Separately billed steps"
+                    : "Settles on actual usage"}
+              </span>
             </div>
             {canAfford === false && (
               <p
@@ -390,8 +405,12 @@ export function GenerationCostPreview({
                     </div>
                     {perThousandTokens && (
                       <div className="flex justify-between gap-3">
-                        <dt className="text-muted-foreground">Effective retail / 1K tokens</dt>
-                        <dd className="text-right tabular-nums">≈ {digits(perThousandTokens)} μUSD</dd>
+                        <dt className="text-muted-foreground">
+                          Effective retail / 1K tokens
+                        </dt>
+                        <dd className="text-right tabular-nums">
+                          ≈ {digits(perThousandTokens)} μUSD
+                        </dd>
                       </div>
                     )}
                     {rateText && (
@@ -421,8 +440,13 @@ export function GenerationCostPreview({
                 </div>
                 {creditsPerBaisa !== null && creditsPerBaisa > 0n && (
                   <div className="flex justify-between gap-3">
-                    <dt className="text-muted-foreground">1 OMR credit equivalent</dt>
-                    <dd className="text-right tabular-nums">{(creditsPerBaisa * 1000n).toLocaleString("en-US")} credits</dd>
+                    <dt className="text-muted-foreground">
+                      1 OMR credit equivalent
+                    </dt>
+                    <dd className="text-right tabular-nums">
+                      {(creditsPerBaisa * 1000n).toLocaleString("en-US")}{" "}
+                      credits
+                    </dd>
                   </div>
                 )}
                 <div className="flex justify-between gap-3 border-t border-border pt-2 font-semibold">
@@ -434,9 +458,9 @@ export function GenerationCostPreview({
               </dl>
               <p className="text-xs leading-5 text-muted-foreground">
                 1 USD = 1,000,000 microUSD. Retail microUSD is an approximate
-                conversion of your rounded customer price using the quote&apos;s FX
-                snapshot, not the provider&apos;s wholesale cost or token rate. 1 OMR
-                = 1,000 baisa.
+                conversion of your rounded customer price using the quote&apos;s
+                FX snapshot, not the provider&apos;s wholesale cost or token
+                rate. 1 OMR = 1,000 baisa.
               </p>
             </section>
             <div className="h-px bg-border" />
@@ -460,7 +484,11 @@ export function GenerationCostPreview({
                 )}
                 <div className="flex justify-between gap-3">
                   <dt className="text-muted-foreground">
-                    {fixed ? "Fixed charge" : staged ? "Indicative total" : "Maximum reservation"}
+                    {fixed
+                      ? "Fixed charge"
+                      : staged
+                        ? "Indicative total"
+                        : "Maximum reservation"}
                   </dt>
                   <dd className="tabular-nums">
                     {digits(max)} credits

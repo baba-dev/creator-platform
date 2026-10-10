@@ -2238,6 +2238,7 @@ export async function createTranscriptionJob(userId: string, raw: unknown) {
           priceVersionId: price.id,
           idempotencyKey: key,
           requestPayload: payload,
+          mediaHistoryEligible: false,
           status: "QUOTED",
           quotedAt: now,
           billableQuantity: billableSeconds,

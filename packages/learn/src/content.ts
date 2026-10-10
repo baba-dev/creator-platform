@@ -37,6 +37,7 @@ export const learnVisualStories = [
   "",
   "image-prompt-workflow",
   "image-art-direction",
+  "image-campaign-production",
 ] as const;
 export const slugSchema = z
   .string()

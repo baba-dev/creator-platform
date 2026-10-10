@@ -274,7 +274,21 @@ jobs:
     name: browser-smoke
     runs-on: ubuntu-22.04
     timeout-minutes: 20
+    services:
+      mariadb:
+        image: public.ecr.aws/docker/library/mariadb:10.6
+        env:
+          MARIADB_ROOT_PASSWORD: ci-root-only
+          MARIADB_DATABASE: creator_platform
+          MARIADB_USER: creator
+          MARIADB_PASSWORD: ci-only
+        ports: ["127.0.0.1:3306:3306"]
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=20
     env:
+      LEARN_E2E: "true"
+      ASSET_STORAGE_ROOT: /tmp/creator-e2e-assets
       AUTH_SECRET: ci-only-auth-secret-at-least-32-characters-long
       DATABASE_URL: mysql://creator:ci-only@127.0.0.1:3306/creator_platform
       APP_ENV: staging
@@ -302,6 +316,11 @@ jobs:
 
       - name: Generate Prisma client
         run: pnpm db:generate
+
+      - name: Prepare isolated Learn fixtures
+        run: |
+          pnpm --filter @aiwa/db migrate:deploy
+          pnpm --filter @aiwa/db exec node --import tsx prisma/seed-learn-e2e.ts
 
       - name: Install Chromium
         run: pnpm exec playwright install --with-deps chromium

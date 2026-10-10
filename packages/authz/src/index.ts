@@ -25,6 +25,7 @@ export const platformPermissions = [
   "jobs:manage",
   "templates:read",
   "templates:manage",
+  "learn:manage",
   "audit:read",
 ] as const;
 
@@ -62,6 +63,7 @@ const platformRolePermissions = {
     "jobs:manage",
     "templates:read",
     "templates:manage",
+    "learn:manage",
     "audit:read",
   ],
   PLATFORM_OWNER: platformPermissions,

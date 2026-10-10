@@ -47,6 +47,8 @@ export function safeInvitationRoute(
     return route;
   }
 
+  if (/^\/learn\/start\/[a-zA-Z0-9_-]+$/.test(pathname)) return route;
+
   if (pathname.startsWith("/invite/")) {
     const token = pathname.slice("/invite/".length);
     if (token && /^[a-zA-Z0-9_-]+$/.test(token)) {

@@ -189,6 +189,7 @@ export default function HomePage() {
             ["#models", "Models"],
             ["#workflow", "Workflow"],
             ["#teams", "For teams"],
+            ["/learn", "Learn"],
           ].map(([href, label]) => (
             <a
               key={href}
@@ -200,6 +201,9 @@ export default function HomePage() {
           ))}
         </nav>
         <div className="flex items-center gap-2">
+          <Link href="/learn" className="px-2 text-sm font-semibold lg:hidden">
+            Learn
+          </Link>
           <ThemeToggle />
           <Button
             asChild
@@ -595,6 +599,9 @@ export default function HomePage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-xs text-muted-foreground">
+            <Link href="/learn" className="transition hover:text-foreground">
+              Learn
+            </Link>
             <Link
               href="/privacy-policy"
               className="transition hover:text-foreground"

@@ -23,6 +23,7 @@
     "@aiwa/credits": "workspace:*",
     "@aiwa/db": "workspace:*",
     "@aiwa/generation": "workspace:*",
+    "@aiwa/learn": "workspace:*",
     "@aiwa/mail": "workspace:*",
     "@aiwa/orchestration": "workspace:*",
     "@aiwa/providers": "workspace:*",

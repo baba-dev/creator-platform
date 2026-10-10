@@ -10,7 +10,7 @@ type OrganizationResponse = {
   workspacePath?: string;
 };
 
-export function OnboardingForm() {
+export function OnboardingForm({ returnTo }: { returnTo?: Route }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -29,7 +29,7 @@ export function OnboardingForm() {
     const result = (await response.json()) as OrganizationResponse;
 
     if (result.workspacePath) {
-      router.push(result.workspacePath as Route);
+      router.push(returnTo ?? (result.workspacePath as Route));
       router.refresh();
       return;
     }

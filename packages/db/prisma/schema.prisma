@@ -725,6 +725,7 @@ model TemplateFavorite {
 }
 
 model Asset {
+  learnMedia LearnMedia?
   id                    String                 @id @default(cuid())
   organizationId        String
   projectId             String?
@@ -1506,3 +1507,94 @@ model CreativeWorkflowEvent {
   @@index([stepId, createdAt])
 }
 
+
+// Draft and published snapshots are independent: editing never mutates live copy.
+model LearnPost {
+  id             String   @id @default(cuid())
+  slug           String   @unique @db.VarChar(191)
+  draft          Json
+  published      Json?
+  title          String   @db.VarChar(240)
+  excerpt        String   @db.Text
+  searchText     String   @db.MediumText
+  topic          String   @db.VarChar(80)
+  locale         String   @default("en") @db.VarChar(16)
+  translationKey String   @db.VarChar(100)
+  status         String   @default("DRAFT") @db.VarChar(20)
+  version        Int      @default(1)
+  publishedAt    DateTime?
+  modifiedAt     DateTime?
+  scheduledAt    DateTime?
+  reviewAt       DateTime?
+  scheduleError  String?  @db.VarChar(240)
+  authorId       String   @db.VarChar(191)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  revisions      LearnRevision[]
+  redirects      LearnRedirect[]
+  media          LearnPostMedia[]
+  events         LearnEvent[]
+  attributions   LearnAttribution[]
+  @@index([publishedAt, id])
+  @@index([status, scheduledAt])
+  @@index([topic, locale])
+  @@unique([translationKey, locale])
+}
+
+model LearnRevision {
+  id        String   @id @default(cuid())
+  postId    String
+  post      LearnPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  content   Json
+  actorId   String
+  createdAt DateTime @default(now())
+  @@index([postId, createdAt])
+}
+
+model LearnRedirect {
+  slug   String @id @db.VarChar(191)
+  postId String
+  post   LearnPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+}
+
+model LearnMedia {
+  id        String @id @default(cuid())
+  assetId   String @unique
+  asset     Asset @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  alt       String @db.VarChar(500)
+  caption   String @db.VarChar(1000)
+  credit    String @db.VarChar(500)
+  createdAt DateTime @default(now())
+  posts     LearnPostMedia[]
+}
+
+model LearnPostMedia {
+  postId  String
+  mediaId String
+  post    LearnPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  media   LearnMedia @relation(fields: [mediaId], references: [id], onDelete: Restrict)
+  @@id([postId, mediaId])
+}
+
+model LearnEvent {
+  id        String @id @default(cuid())
+  postId    String
+  post      LearnPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  kind      String @db.VarChar(24)
+  visitor   String @db.VarChar(64)
+  day       String @db.VarChar(10)
+  createdAt DateTime @default(now())
+  @@unique([postId, kind, visitor, day])
+  @@index([createdAt])
+}
+
+model LearnAttribution {
+  userId      String @id
+  postId      String
+  post        LearnPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  checkedAt   DateTime @default(now())
+  expiresAt   DateTime
+  convertedAt DateTime?
+  @@index([convertedAt, expiresAt])
+}

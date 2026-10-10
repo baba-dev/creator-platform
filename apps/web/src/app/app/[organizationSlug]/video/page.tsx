@@ -6,10 +6,10 @@ export default async function VideoPage({
   searchParams,
 }: {
   params: Promise<{ organizationSlug: string }>;
-  searchParams: Promise<{ assetId?: string; tab?: string }>;
+  searchParams: Promise<{ assetId?: string; tab?: string; learn?: string }>;
 }) {
   const { organizationSlug } = await params;
-  const { assetId, tab } = await searchParams;
+  const { assetId, tab, learn } = await searchParams;
 
   if (assetId || tab === "editor") {
     const query = new URLSearchParams();
@@ -19,5 +19,11 @@ export default async function VideoPage({
     );
   }
 
-  return <GenerationWorkspace slug={organizationSlug} kind="video" />;
+  return (
+    <GenerationWorkspace
+      slug={organizationSlug}
+      kind="video"
+      learnPostId={learn}
+    />
+  );
 }

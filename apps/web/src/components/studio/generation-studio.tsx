@@ -1640,7 +1640,7 @@ export function GenerationStudio({
   }
 
   async function enhancePrompt() {
-    const sourcePrompt = prompt.trim();
+    const sourcePrompt = (activeMode === "VOICE" ? voiceText : prompt).trim();
     if (
       !sourcePrompt ||
       !model ||
@@ -1709,7 +1709,10 @@ export function GenerationStudio({
             typeof job.model.provider !== "string"
           )
             throw new Error("Prompt enhancement provenance is unavailable.");
-          setPrompt(enhancedPrompt);
+          if (enhancedPrompt.length > (activeMode === "VOICE" ? 4096 : 2000))
+            throw new Error("Prompt enhancement exceeded the editor limit.");
+          if (activeMode === "VOICE") setVoiceText(enhancedPrompt);
+          else setPrompt(enhancedPrompt);
           setEnhancementAttribution({
             name: job.model.name,
             provider: job.model.provider,
@@ -2064,9 +2067,12 @@ export function GenerationStudio({
                   <textarea
                     id="voice-text"
                     value={voiceText}
-                    onChange={(e) => setVoiceText(e.target.value)}
+                    onChange={(e) => {
+                      setVoiceText(e.target.value);
+                      setEnhancementAttribution(null);
+                    }}
                     maxLength={4096}
-                    disabled={busy}
+                    disabled={busy || isEnhancing}
                     placeholder="Enter clear, natural text for speech synthesis…"
                     className="min-h-44 w-full rounded-2xl border border-input bg-card p-4 pb-10 text-foreground placeholder:text-muted-foreground"
                   />
@@ -2076,13 +2082,53 @@ export function GenerationStudio({
                   </div>
                 </div>
               </div>
-              <div className="flex justify-end">
+              <div className="mt-2 flex flex-wrap justify-end gap-2">
                 <CreativeLocaleButton
                   value={localeIntent}
                   onChange={setLocaleIntent}
-                  disabled={busy}
+                  disabled={busy || isEnhancing}
                 />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => void enhancePrompt()}
+                  disabled={
+                    busy ||
+                    isEnhancing ||
+                    !canGenerate ||
+                    !model ||
+                    !promptEnhancementModelId ||
+                    promptEnhancementPreferenceLoading ||
+                    Boolean(promptEnhancementPreferenceError) ||
+                    !voiceText.trim()
+                  }
+                  aria-busy={isEnhancing}
+                  title={
+                    promptEnhancementPreferenceError ??
+                    "Polish this narration with your selected Prompt Enhance model"
+                  }
+                >
+                  {isEnhancing ? "Enhancing…" : "✨ Enhance prompt"}
+                </Button>
               </div>
+              {variant === "advanced" && enhancementAttribution && (
+                <p
+                  role="status"
+                  className="text-xs font-medium text-muted-foreground"
+                >
+                  Enhanced with {enhancementAttribution.name} ·{" "}
+                  {providerDisplayName(enhancementAttribution.provider)}
+                </p>
+              )}
+              {variant === "advanced" &&
+              !enhancementAttribution &&
+              promptEnhancementModels.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Prompt Enhance is unavailable until an eligible model is
+                  enabled, priced, and configured.
+                </p>
+              ) : null}
 
               <div className={variant === "quick" ? "hidden" : "space-y-4"}>
                 <div className="flex items-center justify-between">

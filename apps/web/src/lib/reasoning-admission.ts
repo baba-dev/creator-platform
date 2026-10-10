@@ -16,6 +16,7 @@ import { getProviderRuntimeReadiness } from "./provider-readiness";
 export const MAX_ACTIVE_REASONING_JOBS_PER_USER = 3;
 export const MAX_REASONING_JOBS_PER_HOUR = 60;
 export const PROMPT_ENHANCEMENT_MAX_OUTPUT_TOKENS = 2048;
+export const SPEECH_ENHANCEMENT_MAX_OUTPUT_TOKENS = 4096;
 
 export class ReasoningAdmissionError extends Error {
   constructor(
@@ -42,7 +43,7 @@ export interface AdmitReasoningJobInput {
   priceVersionId: string;
   idempotencyKey: string;
   userPrompt: string;
-  targetMedia: "IMAGE" | "VIDEO";
+  targetMedia: "IMAGE" | "VIDEO" | "VOICE";
   localeIntent?: CreativeLocaleIntent;
   systemPrompt: string;
 }
@@ -210,7 +211,10 @@ export async function admitReasoningJob(
             input.localeIntent,
             input.targetMedia,
           ).length + input.userPrompt.length,
-        maximumOutputTokens: PROMPT_ENHANCEMENT_MAX_OUTPUT_TOKENS,
+        maximumOutputTokens:
+          input.targetMedia === "VOICE"
+            ? SPEECH_ENHANCEMENT_MAX_OUTPUT_TOKENS
+            : PROMPT_ENHANCEMENT_MAX_OUTPUT_TOKENS,
       });
     } catch {
       throw new ReasoningAdmissionError(

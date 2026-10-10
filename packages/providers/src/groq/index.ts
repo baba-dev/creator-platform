@@ -306,7 +306,7 @@ export function createGroqProvider(config: GroqAdapterConfig): GroqProvider {
               { role: "user", content: input.userPrompt },
             ],
             temperature: 0.2,
-            max_tokens: 2048,
+            max_tokens: input.maxTokens ?? 2048,
             stream: false,
             response_format: { type: "json_object" },
           }),

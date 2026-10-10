@@ -237,9 +237,10 @@ export function createNvidiaProvider(
               ? { top_k: 1, chat_template_kwargs: { enable_thinking: false } }
               : {}),
             max_tokens:
-              modelId === "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
+              input.maxTokens ??
+              (modelId === "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
                 ? 1024
-                : 2048,
+                : 2048),
             stream: false,
           }),
         },

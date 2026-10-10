@@ -4,6 +4,7 @@ import {
   DEFAULT_CREATIVE_LOCALE,
   compileCreativeLocaleInstructions,
   creativeLocaleCapabilities,
+  creativeLocaleEnhancementSystemPrompt,
   creativeLocaleIntentSchema,
   normalizeCreativeLocaleIntent,
   type CreativeLocaleIntent,
@@ -69,6 +70,17 @@ describe("Creative Locale foundation", () => {
     expect(
       creativeLocaleCapabilities("VOICE", { supportsAccent: true }).accent,
     ).toBe("native");
+  });
+
+  it("keeps speech locale metadata in system context rather than adding it to the script", () => {
+    const system = creativeLocaleEnhancementSystemPrompt(
+      "Polish narration.",
+      oman,
+      "VOICE",
+    );
+    expect(system).toContain("Oman");
+    expect(system).toContain("pronunciation");
+    expect(system).not.toContain("[Creative locale guidance]");
   });
 
   it("binds locale into all quote fingerprints without changing legacy quotes", () => {

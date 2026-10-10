@@ -169,6 +169,74 @@ describe("multi-provider reasoning worker", () => {
     );
   });
 
+  it("processes speech as VOICE with a larger output budget", async () => {
+    const tx = settlementTx();
+    mocks.db.$transaction.mockImplementationOnce(async (callback) =>
+      callback(tx),
+    );
+    mocks.db.reasoningJob.findUniqueOrThrow.mockResolvedValue(
+      dbJob({
+        requestPayload: {
+          task: "prompt-enhancement",
+          systemPrompt: "Return speakable narration.",
+          userPrompt: "Please announce the event warmly.",
+          targetMedia: "VOICE",
+          responseSchemaName: "prompt-enhancement-v1",
+        },
+      }),
+    );
+    const provider: ReasoningProvider = {
+      name: "groq",
+      complete: vi.fn().mockResolvedValue({
+        providerRequestId: "voice-enhance-1",
+        content: { enhancedPrompt: "Welcome to our event." },
+      }),
+    };
+    await processReasoningJob(queueJob(), { GROQ: provider });
+    expect(provider.complete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        maxTokens: 4096,
+        userPrompt: "Please announce the event warmly.",
+      }),
+    );
+    expect(tx.reasoningJob.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "SUCCEEDED",
+          outputPayload: { enhancedPrompt: "Welcome to our event." },
+        }),
+      }),
+    );
+  });
+
+  it("rejects speech output longer than the speech editor and fails the job", async () => {
+    mocks.db.reasoningJob.findUniqueOrThrow.mockResolvedValue(
+      dbJob({
+        requestPayload: {
+          task: "prompt-enhancement",
+          systemPrompt: "Enhance.",
+          userPrompt: "Hello",
+          targetMedia: "VOICE",
+          responseSchemaName: "prompt-enhancement-v1",
+        },
+      }),
+    );
+    const provider: ReasoningProvider = {
+      name: "groq",
+      complete: vi
+        .fn()
+        .mockResolvedValue({ content: { enhancedPrompt: "a".repeat(4097) } }),
+    };
+    await expect(
+      processReasoningJob(queueJob(), { GROQ: provider }),
+    ).rejects.toThrow();
+    expect(mocks.db.reasoningJob.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "FAILED" }),
+      }),
+    );
+  });
+
   it("fails a pinned job instead of switching providers when its model is disabled", async () => {
     mocks.db.reasoningJob.findUniqueOrThrow.mockResolvedValue(
       dbJob({

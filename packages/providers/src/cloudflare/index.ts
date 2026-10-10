@@ -278,7 +278,7 @@ export function createCloudflareAiProvider(
               { role: "user", content: input.userPrompt },
             ],
             temperature: 0.2,
-            max_tokens: 2048,
+            max_tokens: input.maxTokens ?? 2048,
           }),
         },
         timeoutMs,

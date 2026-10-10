@@ -190,6 +190,42 @@ describe("multi-provider prompt enhancement dispatch", () => {
     expect(response.status).toBe(409);
   });
 
+  it("supports speech-specific narration with the matching target and output limit", async () => {
+    const response = await POST(
+      request({
+        targetMedia: "VOICE",
+        userPrompt: "A spoken sentence. ".repeat(140),
+      }),
+    );
+    expect(response.status).toBe(202);
+    expect(mocks.admit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetMedia: "VOICE",
+        systemPrompt: expect.stringContaining("speakable narration"),
+      }),
+    );
+  });
+
+  it("retains the 2000-character limit for visual prompts", async () => {
+    const response = await POST(
+      request({ targetMedia: "IMAGE", userPrompt: "a".repeat(2001) }),
+    );
+    expect(response.status).toBe(400);
+    expect(mocks.admit).not.toHaveBeenCalled();
+  });
+
+  it("rejects overlong speech and unsupported media without queueing", async () => {
+    expect(
+      (
+        await POST(
+          request({ targetMedia: "VOICE", userPrompt: "a".repeat(4097) }),
+        )
+      ).status,
+    ).toBe(400);
+    expect((await POST(request({ targetMedia: "AUDIO" }))).status).toBe(400);
+    expect(mocks.admit).not.toHaveBeenCalled();
+  });
+
   it("returns 503 when no enabled, priced, configured task model exists", async () => {
     mocks.discover.mockResolvedValue({
       task: "prompt-enhancement",

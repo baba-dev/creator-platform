@@ -10,9 +10,11 @@ import { parseServerEnv } from "@aiwa/config";
 export default async function SignInPage({
   searchParams,
 }: {
-  searchParams: Promise<{ returnTo?: string }>;
+  searchParams: Promise<{ returnTo?: string; error?: string }>;
 }) {
-  const returnTo = safeInternalRoute((await searchParams).returnTo);
+  const params = await searchParams;
+  const returnTo = safeInternalRoute(params.returnTo);
+  const linkingNeeded = params.error === "account_not_linked";
   const session = await getRequestSession();
 
   if (session) {
@@ -32,6 +34,7 @@ export default async function SignInPage({
       }
       footerLabel="Create an account"
     >
+      {linkingNeeded ? <p role="alert" className="mb-4 rounded-xl border border-border bg-muted/40 p-3 text-sm text-foreground">This provider is not linked to an existing Creators account. Sign in with your original method, then connect it from Connections &amp; Storage.</p> : null}
       <SignInForm
         returnTo={returnTo}
         googleEnabled={Boolean(

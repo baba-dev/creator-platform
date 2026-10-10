@@ -160,6 +160,8 @@ export const auth = betterAuth({
       enabled: true,
       // Require the existing account holder to sign in and explicitly link.
       disableImplicitLinking: true,
+      // Only authenticated linking; implicit same-email merges remain disabled.
+      trustedProviders: ["google", "microsoft"],
       allowUnlinkingAll: false,
       updateUserInfoOnLink: false,
     },

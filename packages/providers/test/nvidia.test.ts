@@ -69,10 +69,21 @@ describe("createNvidiaProvider", () => {
   });
 
   it("lists models without submitting inference", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [{ id: "deepseek-ai/deepseek-v4.1-flash" }] }), { status: 200 }));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ data: [{ id: "deepseek-ai/deepseek-v4.1-flash" }] }),
+          { status: 200 },
+        ),
+      );
     const provider = createNvidiaProvider({ ...validConfig, fetch: fetchMock });
-    expect(await provider.listModels()).toEqual(["deepseek-ai/deepseek-v4.1-flash"]);
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://integrate.api.nvidia.com/v1/models");
+    expect(await provider.listModels()).toEqual([
+      "deepseek-ai/deepseek-v4.1-flash",
+    ]);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "https://integrate.api.nvidia.com/v1/models",
+    );
     expect(fetchMock.mock.calls[0]?.[1]?.method).toBeUndefined();
   });
 

@@ -215,14 +215,32 @@ export function createNvidiaProvider(
     name: "nvidia",
     /** Read-only catalog preflight: listing is not proof of model entitlement. */
     async listModels(): Promise<readonly string[]> {
-      const response = await safeFetch(fetchClient, `${baseUrl}/models`, {
-        headers: { Authorization: `Bearer ${config.apiKey}`, Accept: "application/json" },
-      }, timeoutMs, idleTimeoutMs);
+      const response = await safeFetch(
+        fetchClient,
+        `${baseUrl}/models`,
+        {
+          headers: {
+            Authorization: `Bearer ${config.apiKey}`,
+            Accept: "application/json",
+          },
+        },
+        timeoutMs,
+        idleTimeoutMs,
+      );
       await assertSuccessfulResponse(response);
       const body = await readResponseText(response, MAX_JSON_RESPONSE_BYTES);
-      const parsed = z.object({ data: z.array(z.object({ id: z.string().min(1).max(256) })).max(1000) }).safeParse(JSON.parse(body));
-      if (!parsed.success) throw new ProviderRequestError("NVIDIA model listing was invalid", false, { code: "INVALID_PROVIDER_RESPONSE", stage: "parsing" });
-      return parsed.data.data.map(model => model.id);
+      const parsed = z
+        .object({
+          data: z.array(z.object({ id: z.string().min(1).max(256) })).max(1000),
+        })
+        .safeParse(JSON.parse(body));
+      if (!parsed.success)
+        throw new ProviderRequestError(
+          "NVIDIA model listing was invalid",
+          false,
+          { code: "INVALID_PROVIDER_RESPONSE", stage: "parsing" },
+        );
+      return parsed.data.data.map((model) => model.id);
     },
     async complete(input: ReasoningRequest): Promise<ReasoningResult> {
       const modelId = input.modelId || config.defaultModel;

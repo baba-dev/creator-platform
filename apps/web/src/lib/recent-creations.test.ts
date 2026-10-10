@@ -6,7 +6,9 @@ describe("recent creation copy", () => {
     expect(creationPrompt({ sourceText: "Read this" })).toBe("Read this");
   });
   it("does not leak arbitrary payload fields", () => {
-    expect(creationPrompt({ apiKey: "secret", internal: "private" })).toBe("Untitled creation");
+    expect(creationPrompt({ apiKey: "secret", internal: "private" })).toBe(
+      "Untitled creation",
+    );
     expect(creationPrompt(null)).toBe("Untitled creation");
   });
 });

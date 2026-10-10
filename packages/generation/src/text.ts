@@ -812,8 +812,12 @@ export async function processTextJob(
           status: "MANUAL_REVIEW",
           errorCode: "PROVIDER_OUTCOME_UNKNOWN",
           outputPayload: {
-            providerDiagnosticCode: diagnosticCode ?? "UNEXPECTED_PROVIDER_ERROR",
-            providerStage: error instanceof ProviderRequestError ? error.stage ?? "unknown" : "unknown",
+            providerDiagnosticCode:
+              diagnosticCode ?? "UNEXPECTED_PROVIDER_ERROR",
+            providerStage:
+              error instanceof ProviderRequestError
+                ? (error.stage ?? "unknown")
+                : "unknown",
           },
           errorMessage: sponsored
             ? "The text provider outcome is unknown. This sponsored generation requires operator reconciliation before retry."

@@ -1236,6 +1236,7 @@ export function GenerationStudio({
       return;
     consumedDirectTemplate.current = slug;
     const controller = new AbortController();
+    let completed = false;
     void (async () => {
       try {
         const response = await fetch(
@@ -1249,6 +1250,7 @@ export function GenerationStudio({
         if (!response.ok || !payload.template)
           throw new Error(payload.error ?? "Template is unavailable.");
         if (controller.signal.aborted) return;
+        completed = true;
         const template = payload.template;
         const values = Object.fromEntries(
           template.variables
@@ -1269,15 +1271,22 @@ export function GenerationStudio({
           `${window.location.pathname}#create`,
         );
       } catch (reason) {
-        if (!controller.signal.aborted)
+        if (!controller.signal.aborted) {
+          completed = true;
           setError(
             reason instanceof Error
               ? reason.message
               : "Unable to open this template.",
           );
+        }
       }
     })();
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      if (!completed && consumedDirectTemplate.current === slug) {
+        consumedDirectTemplate.current = null;
+      }
+    };
   }, [studioLoaded, organizationId]);
 
   useEffect(() => {
@@ -1294,10 +1303,12 @@ export function GenerationStudio({
         (templateBrief.values[v.key] ?? v.defaultValue ?? "") === "",
     );
     if (missing) {
-      setTemplateResolving(false);
-      setTemplateResolveError(
-        "Complete the required details to prepare this template.",
-      );
+      queueMicrotask(() => {
+        setTemplateResolving(false);
+        setTemplateResolveError(
+          "Complete the required details to prepare this template.",
+        );
+      });
       return;
     }
     const controller = new AbortController();

@@ -1,3 +1,4 @@
+import { seedTemplateCatalog } from "./template-catalog";
 // Test-only seed: deliberately refuses remote databases and production.
 import { PrismaClient } from "@prisma/client";
 import { createHash, randomUUID } from "node:crypto";
@@ -13,6 +14,7 @@ if (
     "Learn fixtures require an explicitly enabled local test database.",
   );
 const db = new PrismaClient();
+await seedTemplateCatalog(db);
 const userId = "learn-e2e-admin";
 await db.user.upsert({
   where: { id: userId },
@@ -27,9 +29,9 @@ await db.user.upsert({
   update: {},
 });
 await db.organization.upsert({
-  where: { id: "learn-e2e-org" },
+  where: { id: "c111111111111111111111111" },
   create: {
-    id: "learn-e2e-org",
+    id: "c111111111111111111111111",
     slug: "learn-e2e",
     name: "Learn test workspace",
     ownerUserId: userId,
@@ -42,7 +44,8 @@ const coverBytes = Buffer.from(
   "/9j/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAJABADASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAABAf/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdgKaS/9k=",
   "base64",
 );
-const coverObjectKey = "org/learn-e2e-org/assets/00/learn-e2e-cover-image.jpg";
+const coverObjectKey =
+  "org/c111111111111111111111111/assets/00/learn-e2e-cover-image.jpg";
 const storageRoot = process.env.ASSET_STORAGE_ROOT;
 if (!storageRoot)
   throw new Error("ASSET_STORAGE_ROOT is required for fixtures.");
@@ -53,7 +56,7 @@ await db.asset.upsert({
   where: { id: "learn-e2e-cover-asset" },
   create: {
     id: "learn-e2e-cover-asset",
-    organizationId: "learn-e2e-org",
+    organizationId: "c111111111111111111111111",
     storageOwnerUserId: userId,
     createdById: userId,
     uploadedById: userId,

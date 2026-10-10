@@ -702,6 +702,9 @@ model GenerationTemplate {
   variables        Json
   defaultInput     Json
   preferredModelId String?
+  coverObjectKey   String?                  @db.VarChar(240)
+  coverAlt         String?                  @db.VarChar(240)
+  coverIcon        String?                  @db.VarChar(40)
   featured         Boolean                  @default(false)
   sortOrder        Int                      @default(0)
   createdAt        DateTime                 @default(now())

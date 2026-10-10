@@ -14,6 +14,7 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import { createAuthMiddleware } from "better-auth/api";
 import { twoFactor } from "better-auth/plugins";
 import { passkey } from "@better-auth/passkey";
+import { socialSignUpDisabled } from "./social-signup-policy";
 
 const env = parseServerEnv();
 
@@ -58,6 +59,9 @@ export const auth = betterAuth({
             clientId: env.GOOGLE_AUTH_CLIENT_ID,
             clientSecret: env.GOOGLE_AUTH_CLIENT_SECRET,
             prompt: "select_account" as const,
+            // Pausing registrations must also prevent new OAuth identities.
+            // Existing linked accounts can still sign in and link explicitly.
+            disableSignUp: socialSignUpDisabled(env.SIGNUPS_ENABLED),
           },
         }
       : {}),
@@ -68,6 +72,9 @@ export const auth = betterAuth({
             clientSecret: env.MICROSOFT_AUTH_CLIENT_SECRET,
             tenantId: env.MICROSOFT_AUTH_TENANT_ID,
             prompt: "select_account" as const,
+            // Pausing registrations must also prevent new OAuth identities.
+            // Existing linked accounts can still sign in and link explicitly.
+            disableSignUp: socialSignUpDisabled(env.SIGNUPS_ENABLED),
             mapProfileToUser: () => ({ image: "" }),
           },
         }

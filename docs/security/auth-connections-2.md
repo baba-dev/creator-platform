@@ -15,6 +15,8 @@ credentials; Google Drive and OneDrive remain separate, explicitly consented
 - The normal request-session guard still rejects unverified email accounts. Do
   not grant generation, storage, credits, invitation or administrator access
   merely because registration succeeded.
+- `SIGNUPS_ENABLED=false` blocks new Google/Microsoft OAuth registrations as
+  well as email signup, while permitting existing linked identities to sign in.
 - Explicit social linking is enabled; implicit same-email linking is disabled.
   Link from an existing authenticated session using the Connections & Storage
   page.

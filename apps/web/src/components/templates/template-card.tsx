@@ -37,7 +37,7 @@ export function TemplateCard({
   return (
     <article className="group relative min-w-0 overflow-hidden rounded-[24px] border border-border bg-card shadow-xs transition duration-200 hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-md focus-within:ring-2 focus-within:ring-primary/30">
       {/* Intentional native navigation: a dashboard search-param change must remount and activate Studio. */}
-          <a
+      <a
         href={templateActivationHref(organizationSlug, template.slug)}
         className="block focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-ring"
         aria-label={`Use ${template.name} template`}

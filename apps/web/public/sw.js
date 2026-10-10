@@ -1,5 +1,5 @@
 /* Creators PWA: deliberately never persist authenticated HTML, private media, or API replies. */
-const VERSION = "creators-pwa-v2-1";
+const VERSION = "creators-pwa-v2-2";
 const CORE = VERSION + "-shell";
 const PUBLIC = VERSION + "-public";
 const OFFLINE = "/offline.html";
@@ -12,7 +12,7 @@ const CORE_URLS = [
   "/brand/icons/pwa/creators-pwa-maskable-192x192-dark.webp",
   "/brand/icons/pwa/creators-pwa-maskable-512x512-dark.webp",
 ];
-const PUBLIC_PATH = /^\/learn(?:\/|$)/;
+const PUBLIC_PATH = /^\/learn(?:\/(?!preview(?:\/|$)|start(?:\/|$))|$)/;
 const MAX_PUBLIC = 18;
 const publicRequest = (request) => {
   const url = new URL(request.url);
@@ -21,7 +21,7 @@ const publicRequest = (request) => {
     url.origin === self.location.origin &&
     PUBLIC_PATH.test(url.pathname) &&
     request.mode === "navigate" &&
-    !request.headers.has("authorization")
+    request.credentials === "omit" || (request.credentials === "same-origin" && !request.headers.has("authorization"))
   );
 };
 const cacheable = (response) =>
@@ -152,21 +152,28 @@ self.addEventListener("fetch", (event) => {
     new URL(request.url).origin !== self.location.origin
   )
     return;
-  // Never intercept API calls, OAuth, workspace requests, RSC prefetches or downloads.
+  // Never cache or alter API calls, OAuth, workspace data, RSC, or downloads.
   const url = new URL(request.url);
   if (
     url.pathname.startsWith("/api/") ||
-    url.pathname.startsWith("/app") ||
-    url.pathname.startsWith("/admin") ||
-    url.pathname.startsWith("/settings") ||
-    url.pathname.startsWith("/pwa/") ||
-    url.pathname.startsWith("/sign-") ||
+
     request.headers.has("rsc") ||
     request.headers.has("next-router-prefetch") ||
     request.destination === "video" ||
     request.destination === "audio"
   )
     return;
+  // Authenticated navigations are always network-only; offline gets generic fallback.
+  if (
+    request.mode === "navigate" &&
+    (url.pathname.startsWith("/app") || url.pathname.startsWith("/admin") ||
+      url.pathname.startsWith("/settings") || url.pathname.startsWith("/pwa/") ||
+      url.pathname.startsWith("/sign-") || url.pathname.startsWith("/onboarding"))
+  ) {
+    event.respondWith(fetch(request).catch(async () => (await caches.match(OFFLINE)) ||
+      new Response("Offline", { status: 503, headers: { "Content-Type": "text/plain" } })));
+    return;
+  }
   if (url.pathname === OFFLINE || CORE_URLS.includes(url.pathname)) {
     event.respondWith(
       caches.match(request).then((cached) => cached || fetch(request)),
@@ -177,8 +184,8 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       (async () => {
         try {
-          const response = await fetch(request);
-          if (cacheable(response)) {
+          const response = await fetch(new Request(request, { credentials: "omit" }));
+          if (cacheable(response) && !response.redirected && new URL(response.url).origin === self.location.origin) {
             const cache = await caches.open(PUBLIC);
             await cache.put(request, response.clone());
             await trim(cache, MAX_PUBLIC);

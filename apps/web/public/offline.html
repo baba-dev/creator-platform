@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta name="theme-color" content="#0d0e12" />
     <title>You're offline · Creators</title>
+    <script src="/offline-drafts.js" defer></script>
     <style>
       body {
         margin: 0;
@@ -16,7 +17,7 @@
         font-family: system-ui, sans-serif;
       }
       main {
-        max-width: 550px;
+        max-width: 720px;
         padding: 32px;
         box-sizing: border-box;
       }
@@ -52,6 +53,10 @@
         background: transparent;
         color: #f5f0fc;
       }
+      section { margin-top: 28px; border: 1px solid #57486d; border-radius: 18px; padding: 20px; }
+      label { display: block; font-weight: 650; margin-top: 12px; }
+      textarea, input { display: block; box-sizing: border-box; width: 100%; margin-top: 8px; border: 1px solid #716381; border-radius: 10px; background: #1a1523; color: #f5f0fc; padding: 12px; font: inherit; }
+      textarea { min-height: 150px; resize: vertical; }
       small {
         display: block;
         margin-top: 30px;
@@ -92,6 +97,21 @@
         >We never queue paid generations or cache private customer media without
         your permission.</small
       >
+      <section aria-labelledby="draft-heading">
+        <h2 id="draft-heading">Encrypted offline scratchpad</h2>
+        <p>Opt in to save one text-only idea on this device. Your note is encrypted with a passphrase you choose. Nothing is uploaded, synchronized with an account, or sent to an AI provider.</p>
+        <label for="pad-text">Draft</label>
+        <textarea id="pad-text" maxlength="50000" placeholder="A creative idea, script outline, or prompt…"></textarea>
+        <label for="pad-passphrase">Draft passphrase (12+ characters)</label>
+        <input id="pad-passphrase" type="password" minlength="12" autocomplete="off" spellcheck="false" />
+        <div>
+          <button type="button" id="pad-save">Save encrypted draft</button>
+          <button type="button" id="pad-unlock">Unlock saved draft</button>
+          <button type="button" id="pad-erase">Delete saved draft</button>
+        </div>
+        <p role="status" aria-live="polite" id="pad-status"></p>
+        <small>No passphrase recovery is possible. Copy your idea into your workspace after reconnecting; AI generations are never submitted automatically.</small>
+      </section>
     </main>
   </body>
 </html>

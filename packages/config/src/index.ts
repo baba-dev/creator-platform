@@ -220,7 +220,9 @@ export function parseServerEnv(
     ["MICROSOFT_AUTH_CLIENT_ID", "MICROSOFT_AUTH_CLIENT_SECRET"],
   ] as const) {
     if (Boolean(result.data[clientId]) !== Boolean(result.data[secret])) {
-      throw new Error(`Invalid server environment variables: ${clientId}, ${secret} must be configured together`);
+      throw new Error(
+        `Invalid server environment variables: ${clientId}, ${secret} must be configured together`,
+      );
     }
   }
 

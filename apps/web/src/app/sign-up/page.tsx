@@ -39,7 +39,17 @@ export default async function SignUpPage({
       }
       footerLabel="Sign in"
     >
-      <SignUpForm returnTo={returnTo} googleEnabled={Boolean(parseServerEnv().GOOGLE_AUTH_CLIENT_ID && parseServerEnv().GOOGLE_AUTH_CLIENT_SECRET)} microsoftEnabled={Boolean(parseServerEnv().MICROSOFT_AUTH_CLIENT_ID && parseServerEnv().MICROSOFT_AUTH_CLIENT_SECRET)} />
+      <SignUpForm
+        returnTo={returnTo}
+        googleEnabled={Boolean(
+          parseServerEnv().GOOGLE_AUTH_CLIENT_ID &&
+          parseServerEnv().GOOGLE_AUTH_CLIENT_SECRET,
+        )}
+        microsoftEnabled={Boolean(
+          parseServerEnv().MICROSOFT_AUTH_CLIENT_ID &&
+          parseServerEnv().MICROSOFT_AUTH_CLIENT_SECRET,
+        )}
+      />
     </AuthCard>
   );
 }

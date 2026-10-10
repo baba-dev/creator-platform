@@ -32,7 +32,17 @@ export default async function SignInPage({
       }
       footerLabel="Create an account"
     >
-      <SignInForm returnTo={returnTo} googleEnabled={Boolean(parseServerEnv().GOOGLE_AUTH_CLIENT_ID && parseServerEnv().GOOGLE_AUTH_CLIENT_SECRET)} microsoftEnabled={Boolean(parseServerEnv().MICROSOFT_AUTH_CLIENT_ID && parseServerEnv().MICROSOFT_AUTH_CLIENT_SECRET)} />
+      <SignInForm
+        returnTo={returnTo}
+        googleEnabled={Boolean(
+          parseServerEnv().GOOGLE_AUTH_CLIENT_ID &&
+          parseServerEnv().GOOGLE_AUTH_CLIENT_SECRET,
+        )}
+        microsoftEnabled={Boolean(
+          parseServerEnv().MICROSOFT_AUTH_CLIENT_ID &&
+          parseServerEnv().MICROSOFT_AUTH_CLIENT_SECRET,
+        )}
+      />
     </AuthCard>
   );
 }

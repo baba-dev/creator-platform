@@ -61,7 +61,16 @@ export default async function StoragePage({
         </p>
       </div>
 
-      <AccountConnections googleEnabled={Boolean(env.GOOGLE_AUTH_CLIENT_ID && env.GOOGLE_AUTH_CLIENT_SECRET)} microsoftEnabled={Boolean(env.MICROSOFT_AUTH_CLIENT_ID && env.MICROSOFT_AUTH_CLIENT_SECRET)} allowPasswordless={session.user.platformRole === "USER"} returnTo={`/app/${organizationSlug}/storage`} />
+      <AccountConnections
+        googleEnabled={Boolean(
+          env.GOOGLE_AUTH_CLIENT_ID && env.GOOGLE_AUTH_CLIENT_SECRET,
+        )}
+        microsoftEnabled={Boolean(
+          env.MICROSOFT_AUTH_CLIENT_ID && env.MICROSOFT_AUTH_CLIENT_SECRET,
+        )}
+        allowPasswordless={session.user.platformRole === "USER"}
+        returnTo={`/app/${organizationSlug}/storage`}
+      />
       <StorageManager
         key={organizationId}
         organizationId={organizationId}

@@ -24,15 +24,15 @@ async function deliverVerificationEmail(input: {
 }): Promise<void> {
   try {
     await enqueueMail(
-    verificationEmail({
-      to: input.email,
-      verificationUrl: input.verificationUrl,
-      idempotencyKey: `verify:${createHash("sha256")
-        .update(input.verificationUrl)
-        .digest("hex")}`,
-      userId: input.userId,
-    }),
-  );
+      verificationEmail({
+        to: input.email,
+        verificationUrl: input.verificationUrl,
+        idempotencyKey: `verify:${createHash("sha256")
+          .update(input.verificationUrl)
+          .digest("hex")}`,
+        userId: input.userId,
+      }),
+    );
   } catch (error) {
     // The account may already exist. A failed outbox write is recoverable
     // through the rate-limited resend route; don't return a false signup 500.
@@ -53,14 +53,36 @@ export const auth = betterAuth({
   }),
   socialProviders: {
     ...(env.GOOGLE_AUTH_CLIENT_ID && env.GOOGLE_AUTH_CLIENT_SECRET
-      ? { google: { clientId: env.GOOGLE_AUTH_CLIENT_ID, clientSecret: env.GOOGLE_AUTH_CLIENT_SECRET, prompt: "select_account" as const } }
+      ? {
+          google: {
+            clientId: env.GOOGLE_AUTH_CLIENT_ID,
+            clientSecret: env.GOOGLE_AUTH_CLIENT_SECRET,
+            prompt: "select_account" as const,
+          },
+        }
       : {}),
     ...(env.MICROSOFT_AUTH_CLIENT_ID && env.MICROSOFT_AUTH_CLIENT_SECRET
-      ? { microsoft: { clientId: env.MICROSOFT_AUTH_CLIENT_ID, clientSecret: env.MICROSOFT_AUTH_CLIENT_SECRET, tenantId: env.MICROSOFT_AUTH_TENANT_ID, prompt: "select_account" as const, mapProfileToUser: () => ({ image: null }) } }
+      ? {
+          microsoft: {
+            clientId: env.MICROSOFT_AUTH_CLIENT_ID,
+            clientSecret: env.MICROSOFT_AUTH_CLIENT_SECRET,
+            tenantId: env.MICROSOFT_AUTH_TENANT_ID,
+            prompt: "select_account" as const,
+            mapProfileToUser: () => ({ image: null }),
+          },
+        }
       : {}),
   },
   plugins: [
-    passkey({ rpID: new URL(env.APP_URL).hostname, rpName: "Aiwa Creators", origin: new URL(env.APP_URL).origin, authenticatorSelection: { userVerification: "required", residentKey: "preferred" } }),
+    passkey({
+      rpID: new URL(env.APP_URL).hostname,
+      rpName: "Aiwa Creators",
+      origin: new URL(env.APP_URL).origin,
+      authenticatorSelection: {
+        userVerification: "required",
+        residentKey: "preferred",
+      },
+    }),
     twoFactor({
       issuer: "Aiwa Creators",
       allowPasswordless: true,
@@ -234,9 +256,16 @@ export const auth = betterAuth({
         before: async (account) => ({
           // Authentication does not need persistent social OAuth tokens.
           // The separately consented storage integration encrypts its own tokens.
-          data: account.providerId === "google" || account.providerId === "microsoft"
-            ? { ...account, accessToken: null, refreshToken: null, idToken: null }
-            : account,
+          data:
+            account.providerId === "google" ||
+            account.providerId === "microsoft"
+              ? {
+                  ...account,
+                  accessToken: null,
+                  refreshToken: null,
+                  idToken: null,
+                }
+              : account,
         }),
       },
     },
@@ -316,9 +345,13 @@ export const auth = betterAuth({
           if (!user || user.disabledAt) return false;
           // Credential logins alone receive Better Auth's TOTP challenge.
           // Refuse privileged sessions created by OAuth or passkey endpoints.
-          if (user.platformRole !== "USER" && (!ctx?.path ||
-              ctx.path.includes("/callback/") || ctx.path.includes("/sign-in/passkey") ||
-              ctx.path.includes("/passkey/verify-authentication"))) {
+          if (
+            user.platformRole !== "USER" &&
+            (!ctx?.path ||
+              ctx.path.includes("/callback/") ||
+              ctx.path.includes("/sign-in/passkey") ||
+              ctx.path.includes("/passkey/verify-authentication"))
+          ) {
             return false;
           }
           return undefined;

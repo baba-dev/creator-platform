@@ -14,7 +14,11 @@ type SignInFormProps = {
 
 const inputClassName = "form-control mt-2 text-sm";
 
-export function SignInForm({ returnTo, googleEnabled = false, microsoftEnabled = false }: SignInFormProps & { googleEnabled?: boolean; microsoftEnabled?: boolean }) {
+export function SignInForm({
+  returnTo,
+  googleEnabled = false,
+  microsoftEnabled = false,
+}: SignInFormProps & { googleEnabled?: boolean; microsoftEnabled?: boolean }) {
   const router = useRouter();
   const [passkeyBusy, setPasskeyBusy] = useState(false);
   async function signInWithPasskey() {
@@ -26,7 +30,9 @@ export function SignInForm({ returnTo, googleEnabled = false, microsoftEnabled =
       router.push(returnTo);
       router.refresh();
     } catch {
-      setError("Passkey sign-in was cancelled or unavailable. Use another sign-in method.");
+      setError(
+        "Passkey sign-in was cancelled or unavailable. Use another sign-in method.",
+      );
     } finally {
       setPasskeyBusy(false);
     }
@@ -152,64 +158,89 @@ export function SignInForm({ returnTo, googleEnabled = false, microsoftEnabled =
 
   return (
     <div className="space-y-5">
-      <SocialAuthButtons googleEnabled={googleEnabled} microsoftEnabled={microsoftEnabled} callbackURL={returnTo} />
-      <Button type="button" variant="secondary" size="lg" className="w-full gap-2" disabled={passkeyBusy} onClick={() => void signInWithPasskey()}><svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M12 11a3 3 0 0 0-3 3v3m6 0v-3a3 3 0 0 0-6 0m9 3v-3a6 6 0 0 0-12 0v2m6 1v2m-4-1v1m8-2v2M12 2c5 0 9 4 9 9M3 11c0-5 4-9 9-9" /></svg>{passkeyBusy ? "Verifying device…" : "Sign in with a passkey"}</Button>
-    <form className="space-y-5" onSubmit={handleSubmit}>
-      <label className="block text-xs font-bold text-foreground/90">
-        Work email
-        <input
-          className={inputClassName}
-          name="email"
-          type="email"
-          autoComplete="email"
-          inputMode="email"
-          required
-          autoFocus
-          placeholder="you@company.com"
-        />
-      </label>
-
-      <div>
-        <div className="flex items-center justify-between">
-          <label
-            htmlFor="sign-in-password"
-            className="block text-xs font-bold text-foreground/90"
-          >
-            Password
-          </label>
-          <Link
-            href={"/forgot-password" as Route}
-            className="text-xs font-semibold text-primary hover:underline"
-          >
-            Forgot password?
-          </Link>
-        </div>
-        <input
-          id="sign-in-password"
-          className={inputClassName}
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          minLength={12}
-          maxLength={128}
-          required
-          placeholder="Your password"
-        />
-      </div>
-
-      {error ? (
-        <p
-          className="rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-          role="alert"
+      <SocialAuthButtons
+        googleEnabled={googleEnabled}
+        microsoftEnabled={microsoftEnabled}
+        callbackURL={returnTo}
+      />
+      <Button
+        type="button"
+        variant="secondary"
+        size="lg"
+        className="w-full gap-2"
+        disabled={passkeyBusy}
+        onClick={() => void signInWithPasskey()}
+      >
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 24 24"
+          width="20"
+          height="20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
         >
-          {error}
-        </p>
-      ) : null}
-
-      <Button className="w-full" size="lg" disabled={pending} type="submit">
-        {pending ? "Signing in…" : "Sign in"}
+          <path d="M12 11a3 3 0 0 0-3 3v3m6 0v-3a3 3 0 0 0-6 0m9 3v-3a6 6 0 0 0-12 0v2m6 1v2m-4-1v1m8-2v2M12 2c5 0 9 4 9 9M3 11c0-5 4-9 9-9" />
+        </svg>
+        {passkeyBusy ? "Verifying device…" : "Sign in with a passkey"}
       </Button>
-    </form>
+      <form className="space-y-5" onSubmit={handleSubmit}>
+        <label className="block text-xs font-bold text-foreground/90">
+          Work email
+          <input
+            className={inputClassName}
+            name="email"
+            type="email"
+            autoComplete="email"
+            inputMode="email"
+            required
+            autoFocus
+            placeholder="you@company.com"
+          />
+        </label>
+
+        <div>
+          <div className="flex items-center justify-between">
+            <label
+              htmlFor="sign-in-password"
+              className="block text-xs font-bold text-foreground/90"
+            >
+              Password
+            </label>
+            <Link
+              href={"/forgot-password" as Route}
+              className="text-xs font-semibold text-primary hover:underline"
+            >
+              Forgot password?
+            </Link>
+          </div>
+          <input
+            id="sign-in-password"
+            className={inputClassName}
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            minLength={12}
+            maxLength={128}
+            required
+            placeholder="Your password"
+          />
+        </div>
+
+        {error ? (
+          <p
+            className="rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+            role="alert"
+          >
+            {error}
+          </p>
+        ) : null}
+
+        <Button className="w-full" size="lg" disabled={pending} type="submit">
+          {pending ? "Signing in…" : "Sign in"}
+        </Button>
+      </form>
     </div>
   );
 }

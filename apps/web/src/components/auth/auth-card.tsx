@@ -118,7 +118,8 @@ export function AuthCard({
           </p>
 
           <div className="mt-5 flex max-w-md items-center justify-center gap-2 text-[10px] text-subtle-foreground">
-            <span className="size-1.5 rounded-full bg-success" /> Secure account access
+            <span className="size-1.5 rounded-full bg-success" /> Secure account
+            access
           </div>
         </section>
       </div>

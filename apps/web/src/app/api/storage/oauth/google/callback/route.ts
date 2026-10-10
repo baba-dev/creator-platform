@@ -116,8 +116,11 @@ export async function GET(request: Request) {
         where: { organizationId_userId: { organizationId, userId } },
         include: { organization: true },
       });
-      if (!membership || membership.organization.status !== "ACTIVE" ||
-          !hasOrganizationPermission(membership.role, "organization:manage")) {
+      if (
+        !membership ||
+        membership.organization.status !== "ACTIVE" ||
+        !hasOrganizationPermission(membership.role, "organization:manage")
+      ) {
         throw new Error("Storage authorization revoked");
       }
       await tx.externalStorageConfig.upsert({
@@ -162,7 +165,9 @@ export async function GET(request: Request) {
     res.cookies.delete("aiwa_oauth_gdrive_state");
     return res;
   } catch (error) {
-    console.error("Google Drive connection failed", { errorName: error instanceof Error ? error.name : "Unknown" });
+    console.error("Google Drive connection failed", {
+      errorName: error instanceof Error ? error.name : "Unknown",
+    });
     return NextResponse.redirect(
       `${env.APP_URL}/app/${org.slug}/storage?error=connection_failed`,
     );

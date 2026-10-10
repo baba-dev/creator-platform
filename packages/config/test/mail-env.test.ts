@@ -14,14 +14,29 @@ const productionBase = {
 
 describe("OAuth authentication configuration", () => {
   it("rejects partial social provider credentials", () => {
-    expect(() => parseServerEnv({ ...productionBase, MAIL_ENABLED: "false", GOOGLE_AUTH_CLIENT_ID: "google-id" })).toThrow(/GOOGLE_AUTH_CLIENT_SECRET/);
-    expect(() => parseServerEnv({ ...productionBase, MAIL_ENABLED: "false", MICROSOFT_AUTH_CLIENT_SECRET: "secret" })).toThrow(/MICROSOFT_AUTH_CLIENT_ID/);
+    expect(() =>
+      parseServerEnv({
+        ...productionBase,
+        MAIL_ENABLED: "false",
+        GOOGLE_AUTH_CLIENT_ID: "google-id",
+      }),
+    ).toThrow(/GOOGLE_AUTH_CLIENT_SECRET/);
+    expect(() =>
+      parseServerEnv({
+        ...productionBase,
+        MAIL_ENABLED: "false",
+        MICROSOFT_AUTH_CLIENT_SECRET: "secret",
+      }),
+    ).toThrow(/MICROSOFT_AUTH_CLIENT_ID/);
   });
   it("accepts a complete provider pair and defaults the Microsoft audience to common", () => {
     const env = parseServerEnv({
-      ...productionBase, MAIL_ENABLED: "false",
-      GOOGLE_AUTH_CLIENT_ID: "google-id", GOOGLE_AUTH_CLIENT_SECRET: "google-secret",
-      MICROSOFT_AUTH_CLIENT_ID: "microsoft-id", MICROSOFT_AUTH_CLIENT_SECRET: "microsoft-secret",
+      ...productionBase,
+      MAIL_ENABLED: "false",
+      GOOGLE_AUTH_CLIENT_ID: "google-id",
+      GOOGLE_AUTH_CLIENT_SECRET: "google-secret",
+      MICROSOFT_AUTH_CLIENT_ID: "microsoft-id",
+      MICROSOFT_AUTH_CLIENT_SECRET: "microsoft-secret",
     });
     expect(env.GOOGLE_AUTH_CLIENT_ID).toBe("google-id");
     expect(env.MICROSOFT_AUTH_TENANT_ID).toBe("common");

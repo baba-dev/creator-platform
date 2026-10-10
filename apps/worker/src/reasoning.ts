@@ -267,7 +267,7 @@ export async function processReasoningJob(
       ),
       userPrompt: payload.userPrompt,
       responseSchemaName: payload.responseSchemaName,
-      maxTokens: payload.targetMedia === "VOICE" ? 4096 : 2048,
+      maxTokens: payload.targetMedia === "VOICE" ? 4096 : undefined,
     });
     const output = readPromptEnhancementOutput(
       result.content,

@@ -14,6 +14,7 @@ type PromptEnhancementPayload = {
   task: "prompt-enhancement";
   systemPrompt: string;
   userPrompt: string;
+  targetMedia?: "IMAGE" | "VIDEO" | "VOICE";
   responseSchemaName: "prompt-enhancement-v1";
 };
 
@@ -29,7 +30,11 @@ function readPromptEnhancementPayload(
     typeof payload.systemPrompt !== "string" ||
     typeof payload.userPrompt !== "string" ||
     !payload.userPrompt.trim() ||
-    payload.userPrompt.length > 2000 ||
+    payload.userPrompt.length > (payload.targetMedia === "VOICE" ? 4096 : 2000) ||
+    (payload.targetMedia !== undefined &&
+      payload.targetMedia !== "IMAGE" &&
+      payload.targetMedia !== "VIDEO" &&
+      payload.targetMedia !== "VOICE") ||
     payload.responseSchemaName !== "prompt-enhancement-v1"
   )
     throw new Error("Invalid reasoning request payload");
@@ -37,7 +42,7 @@ function readPromptEnhancementPayload(
   return payload as PromptEnhancementPayload;
 }
 
-function readPromptEnhancementOutput(value: unknown): {
+function readPromptEnhancementOutput(value: unknown, targetMedia: "IMAGE" | "VIDEO" | "VOICE"): {
   enhancedPrompt: string;
 } {
   if (!value || typeof value !== "object")
@@ -51,7 +56,7 @@ function readPromptEnhancementOutput(value: unknown): {
   if (
     typeof enhancedPrompt !== "string" ||
     !enhancedPrompt.trim() ||
-    enhancedPrompt.trim().length > 2000
+    enhancedPrompt.trim().length > (targetMedia === "VOICE" ? 4096 : 2000)
   )
     throw new ProviderRequestError(
       "Provider returned an invalid prompt enhancement result",
@@ -254,15 +259,13 @@ export async function processReasoningJob(
       systemPrompt: creativeLocaleEnhancementSystemPrompt(
         payload.systemPrompt,
         (dbJob.requestPayload as Record<string, unknown>).localeIntent,
-        (dbJob.requestPayload as Record<string, unknown>).targetMedia ===
-          "VIDEO"
-          ? "VIDEO"
-          : "IMAGE",
+        payload.targetMedia ?? "IMAGE",
       ),
       userPrompt: payload.userPrompt,
       responseSchemaName: payload.responseSchemaName,
+      maxTokens: payload.targetMedia === "VOICE" ? 4096 : 2048,
     });
-    const output = readPromptEnhancementOutput(result.content);
+    const output = readPromptEnhancementOutput(result.content, payload.targetMedia ?? "IMAGE");
     const providerCost = (() => {
       try {
         return settleReasoningProviderCost({

@@ -579,8 +579,8 @@ const generationWorker = createWorker(
             await processTextJob(job.data.jobId, bytePlusProvider);
             break;
           case "NVIDIA":
-            if (!nvidiaProvider || !env.NVIDIA_COMMERCIAL_USE_ENABLED)
-              throw new Error("NVIDIA commercial text inference is not configured");
+            if (!nvidiaProvider)
+              throw new Error("NVIDIA text provider is not configured");
             await processTextJob(job.data.jobId, nvidiaProvider);
             break;
           case "GROQ":

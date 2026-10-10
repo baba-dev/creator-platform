@@ -19,6 +19,10 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { ProcessFeedback } from "@/components/process/process-feedback";
 import { Button } from "@/components/ui/button";
+import {
+  GenerationCostPreview,
+  type CostPreviewQuote,
+} from "@/components/studio/generation-cost-preview";
 import { Eyebrow } from "@/components/ui/creative";
 import { Tape } from "@/components/ui/sketch";
 import type { StudioModelOption } from "@/components/studio/studio-model-select";
@@ -135,7 +139,7 @@ function providerDisplayName(provider: string): string {
   return labels[provider] ?? provider;
 }
 
-interface StudioQuote {
+interface StudioQuote extends CostPreviewQuote {
   quoteToken: string;
   priceVersionId: string;
   expiresAt: string;
@@ -3225,74 +3229,17 @@ export function GenerationStudio({
             </Link>
           ) : null}
 
-          <section
-            aria-label="Generation cost estimate"
-            aria-live="polite"
-            className="space-y-3 rounded-xl border border-border bg-surface-sunken p-4"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-sm font-semibold">
-                {activeQuote?.quote.settlement === "ACTUAL_USAGE"
-                  ? "Estimated generation cost"
-                  : "Generation quote"}
-              </span>
-              <span className="text-xs tabular-nums text-muted-foreground">
-                Balance: {data?.balance ?? "…"} credits
-              </span>
-            </div>
-            {quotePending ? (
-              <p className="text-sm text-muted-foreground">Calculating cost…</p>
-            ) : activeQuote ? (
-              <>
-                <p className="text-lg font-semibold tabular-nums">
-                  {activeQuote.quote.estimatedCredits} credits{" "}
-                  <span className="text-sm font-normal text-muted-foreground">
-                    · {activeQuote.quote.estimatedOmr}
-                  </span>
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {activeQuote.quote.estimatedUsage.isEstimate
-                    ? "Estimated "
-                    : "Billable "}
-                  {activeQuote.quote.estimatedUsage.unit === "COMPLETION_TOKEN"
-                    ? "video tokens"
-                    : activeQuote.quote.estimatedUsage.unit === "CHARACTER"
-                      ? "characters"
-                      : activeQuote.quote.estimatedUsage.unit === "SECOND"
-                        ? "seconds"
-                        : "images"}
-                  : {activeQuote.quote.estimatedUsage.quantity}
-                </p>
-                {activeQuote.quote.settlement === "ACTUAL_USAGE" && (
-                  <p className="text-xs text-muted-foreground">
-                    Wallet hold / maximum charge:{" "}
-                    {activeQuote.quote.reservationCredits} credits ·{" "}
-                    {activeQuote.quote.maximumChargeOmr}. Final charge uses
-                    provider usage; unused held credits return to your balance.
-                  </p>
-                )}
-                {!activeQuote.canSpend && (
-                  <p className="text-sm text-destructive">
-                    This generation exceeds your monthly spending cap.
-                  </p>
-                )}
-                {!activeQuote.canAfford && (
-                  <p className="text-sm text-destructive">
-                    Your wallet cannot cover the required wallet hold.
-                  </p>
-                )}
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Choose settings to receive a quote.
-              </p>
-            )}
-            {quoteError && (
-              <p role="status" className="text-sm text-destructive">
-                {quoteError}
-              </p>
-            )}
-          </section>
+          <GenerationCostPreview
+            quote={activeQuote?.quote}
+            modelName={model?.name}
+            mediaKind={activeMode}
+            details={[selectedResolution, selectedRatio]}
+            walletCredits={data?.balance}
+            canAfford={activeQuote?.canAfford}
+            canSpend={activeQuote?.canSpend}
+            pending={quotePending}
+            error={quoteError}
+          />
 
           <Button
             type="button"

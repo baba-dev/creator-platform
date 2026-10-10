@@ -51,6 +51,12 @@ const prepared = {
   priceVersionId: "price",
   quotedQuantity: 1000,
   reservedCredits: "2",
+  customerPriceBaisa: "2",
+  creditsPerBaisa: "1",
+  fxBaisaNumerator: "769",
+  fxBaisaDenominator: "2",
+  pricingMetric: "INPUT_BYTE",
+  unitQuantity: "1000",
   input: body.input,
   sourceAssets: [{ assetId: "image", role: "SOURCE_IMAGE", position: 0 }],
 };
@@ -85,7 +91,11 @@ describe("MediaKit quote acceptance", () => {
   it("quotes without creating a billable execution", async () => {
     const response = await POST(request(body));
     expect(response.status).toBe(200);
-    expect((await response.json()).quote.reservedCredits).toBe("2");
+    const quoted = (await response.json()).quote;
+    expect(quoted.reservedCredits).toBe("2");
+    expect(quoted.estimatedOmr).toBe("0.002 OMR");
+    expect(quoted.maximumChargeOmr).toBe("0.002 OMR");
+    expect(quoted.pricingBreakdown.estimatedRetailMicroUsdApprox).toBe("5202");
     expect(mocks.create).not.toHaveBeenCalled();
   });
   it("rejects a changed price or edited reservation before committing work", async () => {

@@ -14,6 +14,8 @@ import { checkMemberSpendingBudget } from "@aiwa/organizations";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { deterministicUuid } from "@/lib/idempotency";
+import { formatBaisa } from "../../../../../lib/format-baisa";
+import { publicCostBreakdown } from "../../../../../lib/customer-cost-breakdown";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
 
@@ -208,11 +210,31 @@ export async function POST(
 
     if (input.mode === "quote") {
       const quote = issueGenerationQuote(quoteContext, maximumCredits, now);
+      const customerBaisa = maximumCredits / price.creditsPerBaisa;
+      const totalCharacters = resolvedBlocks.reduce(
+        (sum, row) => sum + countBillableCharacters(row.block.text.trim()),
+        0,
+      );
       return NextResponse.json({
         quote: {
           ...quote,
           estimatedCredits: maximumCredits.toString(),
           maximumChargeCredits: maximumCredits.toString(),
+          reservationCredits: maximumCredits.toString(),
+          estimatedOmr: formatBaisa(customerBaisa),
+          maximumChargeOmr: formatBaisa(customerBaisa),
+          creditsPerBaisa: price.creditsPerBaisa.toString(),
+          pricingDimension: price.pricingDimension,
+          settlement: "MULTI_STEP_ESTIMATE",
+          estimatedUsage: {
+            unit: "CHARACTER",
+            quantity: String(totalCharacters),
+            isEstimate: false,
+          },
+          pricingBreakdown: publicCostBreakdown(customerBaisa, customerBaisa, {
+            baisaNumerator: price.fxBaisaNumerator,
+            baisaDenominator: price.fxBaisaDenominator,
+          }),
           blockCount: resolvedBlocks.length,
           displayName: voiceModel.displayName,
         },

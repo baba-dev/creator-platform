@@ -1816,6 +1816,7 @@ export async function prepareMediaToolRequest(
       "Source needs trusted duration metadata, or scrolling text is too long.",
       409,
     );
+  const costQuote = priceQuote(price, quantity);
   return {
     organizationId: params.organizationId,
     toolId: tool.id,
@@ -1827,6 +1828,12 @@ export async function prepareMediaToolRequest(
       role: roles[position]!,
       position,
     })),
-    reservedCredits: priceQuote(price, quantity).customerCredits.toString(),
+    reservedCredits: costQuote.customerCredits.toString(),
+    customerPriceBaisa: costQuote.customerPriceBaisa.toString(),
+    creditsPerBaisa: price.creditsPerBaisa.toString(),
+    fxBaisaNumerator: price.fxBaisaNumerator.toString(),
+    fxBaisaDenominator: price.fxBaisaDenominator.toString(),
+    pricingMetric: tool.pricingMetric,
+    unitQuantity: price.unitQuantity.toString(),
   };
 }

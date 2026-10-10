@@ -12,6 +12,8 @@ import { z } from "zod";
 import { creativeLocaleIntentSchema } from "@aiwa/generation/locale";
 
 import { getRequestSession } from "@/lib/request-auth";
+import { formatBaisa } from "../../../../lib/format-baisa";
+import { publicCostBreakdown } from "../../../../lib/customer-cost-breakdown";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
 import {
   getAvailableStudioModels,
@@ -168,6 +170,7 @@ export async function POST(request: Request) {
     }),
   ]);
   const available = wallet?.balanceCache ?? 0n;
+  const customerPriceBaisa = customerCredits / price.creditsPerBaisa;
 
   return NextResponse.json(
     {
@@ -181,6 +184,19 @@ export async function POST(request: Request) {
         billingUnits: units.toString(),
         estimatedCredits: customerCredits.toString(),
         reservationCredits: customerCredits.toString(),
+        estimatedOmr: formatBaisa(customerPriceBaisa),
+        maximumChargeOmr: formatBaisa(customerPriceBaisa),
+        creditsPerBaisa: price.creditsPerBaisa.toString(),
+        settlement: "FIXED",
+        expiresAt: signed.expiresAt,
+        pricingBreakdown: publicCostBreakdown(
+          customerPriceBaisa,
+          customerPriceBaisa,
+          {
+            baisaNumerator: price.fxBaisaNumerator,
+            baisaDenominator: price.fxBaisaDenominator,
+          },
+        ),
         provider: selected.provider,
         providerModelId: selected.providerModelId,
         displayName: selected.name,

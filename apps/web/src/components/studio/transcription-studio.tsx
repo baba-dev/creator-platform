@@ -12,6 +12,10 @@ import {
   type StudioModelOption,
 } from "@/components/studio/studio-model-select";
 import { Button } from "@/components/ui/button";
+import {
+  GenerationCostPreview,
+  type CostPreviewQuote,
+} from "@/components/studio/generation-cost-preview";
 import { Eyebrow } from "@/components/ui/creative";
 import { Icon } from "@/components/ui/icon";
 
@@ -63,7 +67,7 @@ type TranscriptionJob = {
   assets: OutputAsset[];
 };
 
-type Quote = {
+type Quote = CostPreviewQuote & {
   quoteToken: string;
   priceVersionId: string;
   expiresAt: string;
@@ -129,6 +133,9 @@ export function TranscriptionStudio({
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteCanAfford, setQuoteCanAfford] = useState(false);
   const [quoteCanSpend, setQuoteCanSpend] = useState(false);
+  const [quoteWalletCredits, setQuoteWalletCredits] = useState<string | null>(
+    null,
+  );
   const [quotePending, setQuotePending] = useState(false);
   const [busy, setBusy] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
@@ -186,7 +193,7 @@ export function TranscriptionStudio({
         const data = (await response.json().catch(() => ({}))) as {
           error?: string;
           quote?: Quote;
-          wallet?: { canAfford?: boolean };
+          wallet?: { canAfford?: boolean; availableCredits?: string };
           budget?: { canSpend?: boolean };
         };
         if (requestId !== quoteRequest.current) return;
@@ -198,6 +205,7 @@ export function TranscriptionStudio({
           return;
         }
         setQuote(data.quote);
+        setQuoteWalletCredits(data.wallet?.availableCredits ?? null);
         setQuoteCanAfford(data.wallet?.canAfford === true);
         setQuoteCanSpend(data.budget?.canSpend === true);
       } catch {
@@ -481,34 +489,27 @@ export function TranscriptionStudio({
           <h3 className="text-sm font-semibold text-foreground">
             Estimate & result
           </h3>
-          {quote ? (
-            <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
-              <div>
-                <div className="text-muted-foreground">Duration</div>
-                <strong>{quote.billableSeconds}s</strong>
-              </div>
-              <div>
-                <div className="text-muted-foreground">Billing</div>
-                <strong>
-                  {quote.pricingDimension === "SECOND"
-                    ? `${quote.billingUnits} × ${quote.unitQuantity}s`
-                    : "Per request"}
-                </strong>
-              </div>
-              <div>
-                <div className="text-muted-foreground">Estimate</div>
-                <strong>{quote.estimatedCredits} credits</strong>
-              </div>
-              <div>
-                <div className="text-muted-foreground">Provider</div>
-                <strong>{providerLabel(quote.provider)}</strong>
-              </div>
-            </div>
-          ) : (
-            <p className="mt-3 text-xs text-muted-foreground">
-              Choose a source and model to calculate the quote.
-            </p>
-          )}
+          <GenerationCostPreview
+            className="mt-3"
+            quote={quote}
+            modelName={quote?.displayName ?? "Transcription"}
+            providerName={quote ? providerLabel(quote.provider) : undefined}
+            mediaKind="VOICE"
+            details={
+              quote
+                ? [
+                    `${quote.billableSeconds}s audio`,
+                    quote.pricingDimension === "SECOND"
+                      ? `${quote.billingUnits} × ${quote.unitQuantity}s`
+                      : "Per request",
+                  ]
+                : []
+            }
+            walletCredits={quoteWalletCredits}
+            canAfford={quote ? quoteCanAfford : undefined}
+            canSpend={quote ? quoteCanSpend : undefined}
+            pending={quotePending}
+          />
 
           {activeJob ? (
             <div className="mt-5 border-t border-border pt-4">

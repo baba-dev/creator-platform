@@ -11,7 +11,10 @@ import Image from "next/image";
 import Link from "next/link";
 import type { Route } from "next";
 import { Button } from "@/components/ui/button";
-import { GenerationCostPreview, type CostPreviewQuote } from "@/components/studio/generation-cost-preview";
+import {
+  GenerationCostPreview,
+  type CostPreviewQuote,
+} from "@/components/studio/generation-cost-preview";
 import { Icon, type IconName } from "@/components/ui/icon";
 
 type Model = {
@@ -1544,7 +1547,10 @@ export function SeedAudioStudio({
           modelName={model?.name ?? "Seed Audio 1.0"}
           providerName="BytePlus"
           mediaKind="VOICE"
-          details={[mode === "LONG" ? "Long-form" : "Audio generation", `${duration}s target duration`]}
+          details={[
+            mode === "LONG" ? "Long-form" : "Audio generation",
+            `${duration}s target duration`,
+          ]}
           error={quoteError}
         />
 

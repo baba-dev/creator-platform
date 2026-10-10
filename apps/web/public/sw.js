@@ -1,7 +1,6 @@
 /* Creators PWA: deliberately never persist authenticated HTML, private media, or API replies. */
-const VERSION = "creators-pwa-v2-5";
+const VERSION = "creators-pwa-v2-6";
 const CORE = VERSION + "-shell";
-const PUBLIC = VERSION + "-public";
 const STATIC = VERSION + "-static";
 const OFFLINE = "/offline.html";
 const CORE_URLS = [
@@ -14,20 +13,7 @@ const CORE_URLS = [
   "/brand/icons/pwa/creators-pwa-maskable-192x192-dark.webp",
   "/brand/icons/pwa/creators-pwa-maskable-512x512-dark.webp",
 ];
-const PUBLIC_PATH = /^\/learn(?:\/(?!preview(?:\/|$)|start(?:\/|$))|$)/;
-const MAX_PUBLIC = 18;
 const MAX_STATIC = 64;
-const publicRequest = (request) => {
-  const url = new URL(request.url);
-  return (
-    request.method === "GET" &&
-    url.origin === self.location.origin &&
-    PUBLIC_PATH.test(url.pathname) &&
-    request.mode === "navigate" &&
-    !url.search &&
-    !request.headers.has("authorization")
-  );
-};
 const cacheable = (response) =>
   response.ok &&
   response.type === "basic" &&
@@ -222,37 +208,6 @@ self.addEventListener("fetch", (event) => {
     );
     return;
   }
-  if (publicRequest(request)) {
-    event.respondWith(
-      (async () => {
-        try {
-          const response = await fetch(
-            new Request(request, { credentials: "omit" }),
-          );
-          if (
-            cacheable(response) &&
-            !response.redirected &&
-            new URL(response.url).origin === self.location.origin
-          ) {
-            const cache = await caches.open(PUBLIC);
-            await cache.put(request, response.clone());
-            await trim(cache, MAX_PUBLIC);
-          }
-          return response;
-        } catch {
-          return (
-            (await caches.match(request)) ||
-            (await caches.match(OFFLINE)) ||
-            new Response("Offline", {
-              status: 503,
-              headers: { "Content-Type": "text/plain" },
-            })
-          );
-        }
-      })(),
-    );
-    return;
-  }
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request).catch(
@@ -271,8 +226,6 @@ self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
   if (event.data?.type === "GET_VERSION")
     event.source?.postMessage({ type: "PWA_VERSION", version: VERSION });
-  if (event.data?.type === "CLEAR_PUBLIC_CACHE")
-    event.waitUntil(caches.delete(PUBLIC));
 });
 self.addEventListener("push", (event) => {
   event.waitUntil(
@@ -352,13 +305,13 @@ self.addEventListener("sync", (event) => {
 });
 self.addEventListener("periodicsync", (event) => {
   if (event.tag !== "creators-public-refresh") return;
+  // Refresh only the credential-free, bundled public guide.
   event.waitUntil(
-    fetch("/learn", { credentials: "omit" })
+    fetch("/offline-guide.html", { credentials: "omit", cache: "no-store" })
       .then(async (response) => {
         if (!cacheable(response)) return;
-        const cache = await caches.open(PUBLIC);
-        await cache.put("/learn", response);
-        await trim(cache, MAX_PUBLIC);
+        const cache = await caches.open(CORE);
+        await cache.put("/offline-guide.html", response);
       })
       .catch(() => undefined),
   );

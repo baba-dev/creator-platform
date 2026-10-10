@@ -49,6 +49,7 @@ export interface ReasoningRequest {
   readonly systemPrompt: string;
   readonly userPrompt: string;
   readonly responseSchemaName: string;
+  readonly maxTokens?: number;
 }
 
 export interface ReasoningResult {

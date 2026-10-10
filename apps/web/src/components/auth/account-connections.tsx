@@ -122,35 +122,48 @@ export function AccountConnections({
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
-    const [linked, keys] = await Promise.all([
-      authClient.listAccounts(),
-      authClient.passkey.listUserPasskeys(),
-    ]);
-    if (linked.error || keys.error) {
-      setMessage(
-        "Some account connections could not be loaded. Please refresh.",
-      );
-    } else {
-      setAccounts(
-        (linked.data ?? []).map((a) => ({
-          id: a.id,
-          providerId: a.providerId,
-        })),
-      );
-      setDevices(
-        (keys.data ?? []).map((p) => ({
-          id: p.id,
-          name: p.name,
-          createdAt: p.createdAt,
-          deviceType: p.deviceType,
-          backedUp: p.backedUp,
-        })),
-      );
+    try {
+      const [linked, keys] = await Promise.all([
+        authClient.listAccounts(),
+        authClient.passkey.listUserPasskeys(),
+      ]);
+      if (linked.error || keys.error) {
+        setMessage(
+          "Some account connections could not be loaded. Please refresh.",
+        );
+      } else {
+        setAccounts(
+          (linked.data ?? []).map((a) => ({
+            id: a.id,
+            providerId: a.providerId,
+          })),
+        );
+        setDevices(
+          (keys.data ?? []).map((p) => ({
+            id: p.id,
+            name: p.name,
+            createdAt: p.createdAt,
+            deviceType: p.deviceType,
+            backedUp: p.backedUp,
+          })),
+        );
+      }
+    } catch {
+      setMessage("Connections could not be loaded. Please refresh.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
   useEffect(() => {
-    void refresh();
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (!cancelled) {
+        void refresh();
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [refresh]);
 
   async function link(provider: SocialProvider) {
@@ -265,7 +278,7 @@ export function AccountConnections({
             </h2>
             <p className="mt-2 max-w-lg text-sm leading-6 text-muted-foreground">
               Link sign-in providers and trusted devices. These connections
-              belong to you, not to your organization's shared storage.
+              belong to you, not to your organization&apos;s shared storage.
             </p>
           </div>
           <ConnectionArt />

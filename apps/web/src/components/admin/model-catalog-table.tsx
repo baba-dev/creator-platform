@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { ModelActions } from "@/components/admin/model-actions";
+import { ModelAccessCheck } from "@/components/admin/model-access-check";
 import {
   DataTable,
   EmptyState,
@@ -883,6 +884,9 @@ export function ModelCatalogTable({
                         row.capabilities.audioGeneration === true
                       }
                     />
+                    {(row.provider === "GEMINI" || row.provider === "NVIDIA") && (
+                      <ModelAccessCheck provider={row.provider} modelId={row.providerModelId} />
+                    )}
                   </td>
                 ) : null}
               </tr>

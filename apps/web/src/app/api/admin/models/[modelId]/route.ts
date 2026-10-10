@@ -21,6 +21,7 @@ import { NextResponse } from "next/server";
 
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
+import { createGeminiProvider } from "@aiwa/providers/gemini";
 
 function priceVersionResponse(price: ModelPriceVersion) {
   return {
@@ -101,6 +102,25 @@ export async function PATCH(
         },
         { status: 409 },
       );
+    }
+    if (toggleResult.data.enabled && model.provider === "GEMINI") {
+      // Fail closed: catalog synchronization is not proof the configured key can list this model.
+      if (!process.env.GEMINI_API_KEY) return NextResponse.json(
+        { error: "Gemini credentials are not configured." }, { status: 409 },
+      );
+      try {
+        const listed = await createGeminiProvider({
+          apiKey: process.env.GEMINI_API_KEY,
+          baseUrl: process.env.GEMINI_BASE_URL,
+          requestTimeoutMs: 5000,
+          idleTimeoutMs: 5000,
+        }).listModels();
+        if (!listed.some(id => id.replace(/^models\\//, "") === model.providerModelId)) {
+          return NextResponse.json({ error: "This Gemini model is not listed for the configured API key. Verify model access before enabling it." }, { status: 409 });
+        }
+      } catch {
+        return NextResponse.json({ error: "Gemini model access could not be verified. No availability change was made." }, { status: 503 });
+      }
     }
     if (toggleResult.data.enabled) {
       const activePrice = await db.modelPriceVersion.findFirst({

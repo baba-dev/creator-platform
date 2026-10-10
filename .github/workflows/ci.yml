@@ -59,6 +59,7 @@ jobs:
           bash -n infra/deploy/install-control-plane.sh
           bash -n infra/deploy/creator-deploy
           bash -n infra/deploy/creator-ops
+          bash -n infra/deploy/prune-immutable-releases.sh
           bash -n infra/deploy/package-release.sh
 
       - name: Check formatting

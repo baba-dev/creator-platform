@@ -131,6 +131,11 @@ export const serverEnvSchema = z.object({
   NVIDIA_API_KEY: optionalString,
   NVIDIA_BASE_URL: z.url().default("https://integrate.api.nvidia.com/v1"),
   NVIDIA_REASONING_MODEL: optionalString,
+  // Explicit production-licensing acknowledgement; free NVIDIA API trials are not resale licenses.
+  NVIDIA_COMMERCIAL_USE_ENABLED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
   NVIDIA_REQUEST_TIMEOUT_MS: optionalPositiveInteger,
   NVIDIA_IDLE_TIMEOUT_MS: optionalPositiveInteger,
   GROQ_API_KEY: optionalString,

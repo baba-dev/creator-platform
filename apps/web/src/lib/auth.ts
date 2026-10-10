@@ -68,7 +68,7 @@ export const auth = betterAuth({
             clientSecret: env.MICROSOFT_AUTH_CLIENT_SECRET,
             tenantId: env.MICROSOFT_AUTH_TENANT_ID,
             prompt: "select_account" as const,
-            mapProfileToUser: () => ({ image: null }),
+            mapProfileToUser: () => ({ image: "" }),
           },
         }
       : {}),

@@ -383,7 +383,7 @@ export function createNvidiaProvider(
       // Some reasoning NIMs include analysis in a leading <think> element;
       // that must not leak into customer-visible assistant dialogue.
       const content = (parsed.data.choices[0]?.message.content ?? "")
-        .replace(/^\\s*<think>[\\s\\S]*?<\\/think>\\s*/i, "")
+        .replace(/^\s*<think>[\s\S]*?<\/think>\s*/i, "")
         .trim();
       if (!content) {
         throw new ProviderRequestError("NVIDIA returned no chat content", false, {

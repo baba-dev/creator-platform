@@ -9,7 +9,11 @@ export function retailMicroUsdApprox(
   baisaNumerator: bigint,
   baisaDenominator: bigint,
 ): string {
-  if (customerPriceBaisa < 0n || baisaNumerator <= 0n || baisaDenominator <= 0n) {
+  if (
+    customerPriceBaisa < 0n ||
+    baisaNumerator <= 0n ||
+    baisaDenominator <= 0n
+  ) {
     throw new RangeError("Invalid retail FX quote.");
   }
   const numerator = customerPriceBaisa * 1_000_000n * baisaDenominator;

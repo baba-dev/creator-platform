@@ -109,12 +109,19 @@ describe("provider runtime readiness", () => {
       mediaKind: "REASONING",
       providerModelId: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
     };
-    expect(getProviderRuntimeReadiness(textModel, { NVIDIA_API_KEY: "key" }).configured).toBe(false);
-    expect(getProviderRuntimeReadiness(textModel, {
-      NVIDIA_API_KEY: "key",
-      NVIDIA_COMMERCIAL_USE_ENABLED: "true",
-    }).configured).toBe(true);
-    expect(getProviderRuntimeReadiness(reasoningModel, { NVIDIA_API_KEY: "key" }).configured).toBe(true);
+    expect(
+      getProviderRuntimeReadiness(textModel, { NVIDIA_API_KEY: "key" })
+        .configured,
+    ).toBe(false);
+    expect(
+      getProviderRuntimeReadiness(textModel, {
+        NVIDIA_API_KEY: "key",
+        NVIDIA_COMMERCIAL_USE_ENABLED: "true",
+      }).configured,
+    ).toBe(true);
+    expect(
+      getProviderRuntimeReadiness(reasoningModel, { NVIDIA_API_KEY: "key" })
+        .configured,
+    ).toBe(true);
   });
-
 });

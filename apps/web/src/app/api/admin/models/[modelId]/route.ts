@@ -95,7 +95,10 @@ export async function PATCH(
       process.env.NVIDIA_COMMERCIAL_USE_ENABLED !== "true"
     ) {
       return NextResponse.json(
-        { error: "NVIDIA commercial inference must be licensed and enabled before activating text models." },
+        {
+          error:
+            "NVIDIA commercial inference must be licensed and enabled before activating text models.",
+        },
         { status: 409 },
       );
     }

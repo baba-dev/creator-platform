@@ -23,11 +23,18 @@ function completion(content: string | null, usage?: Record<string, number>) {
 
 describe("NVIDIA NIM chat integration", () => {
   it("catalogs curated models as TEXT but preserves Nano Omni as REASONING", () => {
-    expect(VERIFIED_NVIDIA_MODELS.filter((entry) => entry.mediaKind === "text")).toHaveLength(9);
-    const lightning = VERIFIED_NVIDIA_MODELS.find((entry) => entry.id === model);
+    expect(
+      VERIFIED_NVIDIA_MODELS.filter((entry) => entry.mediaKind === "text"),
+    ).toHaveLength(9);
+    const lightning = VERIFIED_NVIDIA_MODELS.find(
+      (entry) => entry.id === model,
+    );
     expect(lightning?.capabilities["task:character-chat"]).toBe(true);
     expect(lightning?.capabilities["task:prompt-enhancement"]).toBe(true);
-    expect(VERIFIED_NVIDIA_MODELS.find((entry) => entry.id === config.defaultModel)?.mediaKind).toBe("reasoning");
+    expect(
+      VERIFIED_NVIDIA_MODELS.find((entry) => entry.id === config.defaultModel)
+        ?.mediaKind,
+    ).toBe("reasoning");
   });
 
   it("passes multi-turn history with safe common NIM parameters and captures token usage", async () => {
@@ -97,18 +104,25 @@ describe("NVIDIA NIM chat integration", () => {
       ...config,
       fetch: vi.fn().mockResolvedValue(completion("This is not JSON")),
     });
-    await expect(provider.chat({
-      idempotencyKey: "test-3",
-      modelId: model,
-      messages: [{ role: "user", content: "Give JSON" }],
-      responseFormat: "json_object",
-    })).rejects.toMatchObject({ code: "INVALID_PROVIDER_RESPONSE", retryable: false });
+    await expect(
+      provider.chat({
+        idempotencyKey: "test-3",
+        modelId: model,
+        messages: [{ role: "user", content: "Give JSON" }],
+        responseFormat: "json_object",
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_PROVIDER_RESPONSE",
+      retryable: false,
+    });
   });
 
   it("does not expose private reasoning blocks as assistant replies", async () => {
     const provider = createNvidiaProvider({
       ...config,
-      fetch: vi.fn().mockResolvedValue(completion("<think>internal</think> Public answer")),
+      fetch: vi
+        .fn()
+        .mockResolvedValue(completion("<think>internal</think> Public answer")),
     });
     const result = await provider.chat({
       idempotencyKey: "test-4",
@@ -121,17 +135,21 @@ describe("NVIDIA NIM chat integration", () => {
   it("fails closed for unregistered models and invalid inputs before network dispatch", async () => {
     const fetchMock = vi.fn();
     const provider = createNvidiaProvider({ ...config, fetch: fetchMock });
-    await expect(provider.chat({
-      idempotencyKey: "test-5",
-      modelId: "nvidia/unknown-model",
-      messages: [{ role: "user", content: "Hello" }],
-    })).rejects.toBeInstanceOf(ProviderConfigurationError);
-    await expect(provider.chat({
-      idempotencyKey: "test-6",
-      modelId: model,
-      messages: [{ role: "user", content: "Hello" }],
-      maxTokens: 9000,
-    })).rejects.toBeInstanceOf(ProviderRequestError);
+    await expect(
+      provider.chat({
+        idempotencyKey: "test-5",
+        modelId: "nvidia/unknown-model",
+        messages: [{ role: "user", content: "Hello" }],
+      }),
+    ).rejects.toBeInstanceOf(ProviderConfigurationError);
+    await expect(
+      provider.chat({
+        idempotencyKey: "test-6",
+        modelId: model,
+        messages: [{ role: "user", content: "Hello" }],
+        maxTokens: 9000,
+      }),
+    ).rejects.toBeInstanceOf(ProviderRequestError);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -140,10 +158,12 @@ describe("NVIDIA NIM chat integration", () => {
       ...config,
       fetch: vi.fn().mockResolvedValue(completion(null)),
     });
-    await expect(provider.chat({
-      idempotencyKey: "test-7",
-      modelId: model,
-      messages: [{ role: "user", content: "Hello" }],
-    })).rejects.toMatchObject({ code: "INVALID_PROVIDER_RESPONSE" });
+    await expect(
+      provider.chat({
+        idempotencyKey: "test-7",
+        modelId: model,
+        messages: [{ role: "user", content: "Hello" }],
+      }),
+    ).rejects.toMatchObject({ code: "INVALID_PROVIDER_RESPONSE" });
   });
 });

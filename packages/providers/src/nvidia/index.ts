@@ -386,10 +386,14 @@ export function createNvidiaProvider(
         .replace(/^\s*<think>[\s\S]*?<\/think>\s*/i, "")
         .trim();
       if (!content) {
-        throw new ProviderRequestError("NVIDIA returned no chat content", false, {
-          code: "INVALID_PROVIDER_RESPONSE",
-          stage: "parsing",
-        });
+        throw new ProviderRequestError(
+          "NVIDIA returned no chat content",
+          false,
+          {
+            code: "INVALID_PROVIDER_RESPONSE",
+            stage: "parsing",
+          },
+        );
       }
       if (input.responseFormat === "json_object") {
         try {

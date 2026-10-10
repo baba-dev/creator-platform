@@ -3,17 +3,17 @@
 ## Scope
 
 The NVIDIA provider now supports the existing structured reasoning pathway
-(Nemotron 3 Nano Omni) and standard **text-only** chat completions for the
-nine curated TEXT entries in `packages/providers/src/nvidia/models.ts`.
-The same durable TEXT-job admission, idempotency, workspace authorization,
-credit reservation, and price snapshot settlement used by Groq/Gemini applies.
+(Nemotron 3 Nano Omni) and standard **text-only** chat completions for the nine
+curated TEXT entries in `packages/providers/src/nvidia/models.ts`. The same
+durable TEXT-job admission, idempotency, workspace authorization, credit
+reservation, and price snapshot settlement used by Groq/Gemini applies.
 
 The shared NVIDIA adapter deliberately sends only the broadly compatible
-`model`, `messages`, `temperature`, `max_tokens`, and `stream`
-fields for chat. JSON replies are requested through system instruction and
-validated locally. This avoids hardcoded Nano Omni `top_k` and thinking
-arguments breaking other endpoints. Output must contain a nonempty assistant
-message; missing provider usage is treated as **unknown**, not zero usage.
+`model`, `messages`, `temperature`, `max_tokens`, and `stream` fields for chat.
+JSON replies are requested through system instruction and validated locally.
+This avoids hardcoded Nano Omni `top_k` and thinking arguments breaking other
+endpoints. Output must contain a nonempty assistant message; missing provider
+usage is treated as **unknown**, not zero usage.
 
 ### Free trials are NOT production licenses
 
@@ -24,10 +24,10 @@ not mean the organization's API key is entitled to invoke every model.
 
 NVIDIA text execution has three independent admission gates:
 
-1. `NVIDIA_API_KEY` and `NVIDIA_COMMERCIAL_USE_ENABLED=true` must be
-   configured in **web and generation worker** environments. The commercial flag
-   defaults to false; set it only after a suitable NVIDIA/commercial endpoint
-   agreement or otherwise properly licensed hosting has been verified.
+1. `NVIDIA_API_KEY` and `NVIDIA_COMMERCIAL_USE_ENABLED=true` must be configured
+   in **web and generation worker** environments. The commercial flag defaults
+   to false; set it only after a suitable NVIDIA/commercial endpoint agreement
+   or otherwise properly licensed hosting has been verified.
 2. The newly synced ProviderModel rows start **disabled**. An admin must
    explicitly activate each model. The admin API refuses activation of NVIDIA
    TEXT models without the commercial flag.
@@ -58,15 +58,15 @@ for TEXT models does not prevent existing REASONING prompt enhancement.
 ### Not silently supported
 
 Vision inputs, embeddings, reranking, moderation, translation, function/tool
-calling and streaming require distinct validated contracts and accounting.
-Even if a listed upstream model has multimodal ability, its integration is
-limited to text messages until those contracts are implemented. Tool execution
-must continue through the app's independently authorized specialist tools.
+calling and streaming require distinct validated contracts and accounting. Even
+if a listed upstream model has multimodal ability, its integration is limited to
+text messages until those contracts are implemented. Tool execution must
+continue through the app's independently authorized specialist tools.
 
 ### CI validation
 
 `packages/providers/test/nvidia-chat.test.ts` verifies the catalog, chat
 payload, usage capture, JSON validation, output sanitization and fail-closed
-model validation. `apps/web/src/lib/provider-readiness.test.ts` verifies
-the licensing gate and Nano Omni backwards compatibility. CI's four required
-lanes remain static, test, build-release, browser-smoke, followed by quality.
+model validation. `apps/web/src/lib/provider-readiness.test.ts` verifies the
+licensing gate and Nano Omni backwards compatibility. CI's four required lanes
+remain static, test, build-release, browser-smoke, followed by quality.

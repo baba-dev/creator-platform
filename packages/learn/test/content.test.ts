@@ -49,17 +49,29 @@ describe("Learn publishing boundaries", () => {
     expect(mediaIds(c)).toEqual(["abc", "def"]);
   });
   it("only permits explicitly reviewed SVG editorial paths", () => {
-    const valid =
-      "/learn-assets/image-campaign/campaign-cover.svg";
-    const thirdParty =
-      "/learn-assets/user-provided/unsafe.svg";
+    const valid = "/learn-assets/image-campaign/campaign-cover.svg";
+    const thirdParty = "/learn-assets/user-provided/unsafe.svg";
     const c = emptyContent("asset-test");
-    expect(contentSchema.safeParse({ ...c, coverSrc: valid }).success).toBe(true);
-    expect(contentSchema.safeParse({ ...c, coverSrc: thirdParty }).success).toBe(false);
-    expect(contentSchema.safeParse({ ...c, coverSrc: "https://example.invalid/f.svg" }).success).toBe(false);
-    expect(cleanHtml(`<figure class="learn-media-wide"><img src="${valid}" alt="Campaign cover"></figure>`))
-      .toContain(valid);
-    expect(cleanHtml(`<img src="${thirdParty}" alt="Unreviewed">`)).not.toContain(thirdParty);
+    expect(contentSchema.safeParse({ ...c, coverSrc: valid }).success).toBe(
+      true,
+    );
+    expect(
+      contentSchema.safeParse({ ...c, coverSrc: thirdParty }).success,
+    ).toBe(false);
+    expect(
+      contentSchema.safeParse({
+        ...c,
+        coverSrc: "https://example.invalid/f.svg",
+      }).success,
+    ).toBe(false);
+    expect(
+      cleanHtml(
+        `<figure class="learn-media-wide"><img src="${valid}" alt="Campaign cover"></figure>`,
+      ),
+    ).toContain(valid);
+    expect(
+      cleanHtml(`<img src="${thirdParty}" alt="Unreviewed">`),
+    ).not.toContain(thirdParty);
   });
   it("accepts only the three reviewed Learn motion stories", () => {
     const c = emptyContent("editorial-test");
@@ -72,8 +84,10 @@ describe("Learn publishing boundaries", () => {
         .success,
     ).toBe(true);
     expect(
-      contentSchema.safeParse({ ...c, visualStory: "image-campaign-production" })
-        .success,
+      contentSchema.safeParse({
+        ...c,
+        visualStory: "image-campaign-production",
+      }).success,
     ).toBe(true);
     expect(
       contentSchema.safeParse({ ...c, visualStory: "<script>" }).success,

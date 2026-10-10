@@ -4,6 +4,7 @@ import { VERIFIED_BYTEPLUS_MODELS as RAW_BYTEPLUS_MODELS } from "./byteplus";
 import { VERIFIED_CLOUDFLARE_MODELS as RAW_CLOUDFLARE_MODELS } from "./cloudflare";
 import { VERIFIED_GEMINI_MODELS as RAW_GEMINI_MODELS } from "./gemini";
 import { VERIFIED_GROQ_MODELS as RAW_GROQ_MODELS } from "./groq";
+import { NVIDIA_CHAT_MODELS } from "./nvidia/models";
 
 function normalizeCatalog(
   models: readonly ProviderModelDescriptor[],
@@ -36,6 +37,7 @@ export const VERIFIED_NVIDIA_MODELS: readonly ProviderModelDescriptor[] =
         instructMode: true,
       },
     },
+    ...NVIDIA_CHAT_MODELS,
   ]);
 
 export const VERIFIED_EXTERNAL_MODELS: readonly ProviderModelDescriptor[] = [

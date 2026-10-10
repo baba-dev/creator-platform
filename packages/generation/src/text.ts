@@ -687,6 +687,19 @@ export async function processTextJob(
     return;
   }
 
+  if (
+    job.providerModel.provider === "NVIDIA" &&
+    process.env.NVIDIA_COMMERCIAL_USE_ENABLED !== "true"
+  ) {
+    await failTextJob(
+      id,
+      "SUBMITTED",
+      "NVIDIA commercial inference is not enabled for this deployment.",
+      "PROVIDER_NOT_CONFIGURED",
+    );
+    return;
+  }
+
   const payload = payloadObject(job.requestPayload);
   const sponsored = payload.sponsored === true;
   const savedMessages = Array.isArray(payload.messages)

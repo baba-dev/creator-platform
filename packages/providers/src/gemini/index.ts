@@ -107,7 +107,9 @@ export function mapGeminiError(
       /RESOURCE_EXHAUSTED|rate.?limit|throttl|unavailable/i.test(safeCode));
 
   return new ProviderRequestError(
-    `Gemini request failed with status ${status}`,
+    status === 404
+      ? "Gemini returned HTTP 404. Verify the selected model is accessible to the configured API key and GEMINI_BASE_URL points to /v1beta/openai."
+      : `Gemini request failed with status ${status}`,
     retryable,
     { code: safeCode ?? `HTTP_${status}`, stage: "response_headers" },
   );

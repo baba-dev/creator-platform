@@ -81,6 +81,7 @@ describe("Provider-aware creative locale", () => {
     const compiled = localeSystemMessages(original, persisted);
     expect(compiled).toHaveLength(2);
     expect(compiled[0]?.role).toBe("system");
+    expect(compiled[0]?.content).toContain("Never echo the locale metadata");
     expect(compiled[1]).toEqual(original[0]);
     expect(original).toHaveLength(1);
     expect(original[0]?.content).toBe("Write a short poem.");

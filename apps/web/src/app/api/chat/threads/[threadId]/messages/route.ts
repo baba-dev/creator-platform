@@ -11,6 +11,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { creativeLocaleIntentSchema } from "@aiwa/generation/locale";
 import { resolvePersistedChatModel } from "@/lib/chat-model-selection";
+import { getCharacterPersonaPreset } from "@/lib/character-persona-presets";
 import { deterministicUuid } from "@/lib/idempotency";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
@@ -115,6 +116,7 @@ export async function POST(
         role: "system",
         content:
           thread.systemPrompt ??
+          getCharacterPersonaPreset(thread.persona)?.systemPrompt ??
           thread.persona?.systemPrompt ??
           "You are a helpful, creative and knowledgeable assistant.",
       },

@@ -174,7 +174,13 @@ export function UserHeaderMenu({
 
             {/* Installable application preferences */}
             <div className="border-t border-border/80 py-1">
-              <a href="/settings/device" role="menuitem" className="flex min-h-10 items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-foreground hover:bg-surface-sunken hover:text-primary"><Icon name="settings" className="size-4" /> App &amp; Device</a>
+              <a
+                href="/settings/device"
+                role="menuitem"
+                className="flex min-h-10 items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-foreground hover:bg-surface-sunken hover:text-primary"
+              >
+                <Icon name="settings" className="size-4" /> App &amp; Device
+              </a>
             </div>
             {/* Divider & Sign Out */}
             <div className="border-t border-border/80 pt-1">

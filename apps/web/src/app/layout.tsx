@@ -68,7 +68,10 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: themeBootScript }}
         />
       </head>
-      <body>{children}<PwaRuntime /></body>
+      <body>
+        {children}
+        <PwaRuntime />
+      </body>
     </html>
   );
 }

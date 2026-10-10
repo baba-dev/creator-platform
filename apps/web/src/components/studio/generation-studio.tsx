@@ -2053,12 +2053,7 @@ export function GenerationStudio({
 
           {activeMode === "VOICE" ? (
             <>
-              <details open={!templateBrief} className="group">
-                {templateBrief ? (
-                  <summary className="cursor-pointer text-xs font-semibold text-primary">
-                    Review / edit full speech script
-                  </summary>
-                ) : null}
+              <div className="group">
                 <label
                   htmlFor="voice-text"
                   className="block text-sm font-semibold text-foreground"
@@ -2080,7 +2075,7 @@ export function GenerationStudio({
                     {estimatedUnits === 1 ? "" : "s"}
                   </div>
                 </div>
-              </details>
+              </div>
               <div className="flex justify-end">
                 <CreativeLocaleButton
                   value={localeIntent}
@@ -2276,15 +2271,7 @@ export function GenerationStudio({
             </>
           ) : (
             <>
-              <details
-                open={!templateBrief || variant === "advanced"}
-                className="group"
-              >
-                {templateBrief ? (
-                  <summary className="cursor-pointer text-xs font-semibold text-primary">
-                    Review / edit full creative prompt
-                  </summary>
-                ) : null}
+              <div className="group">
                 <label
                   htmlFor="creation-prompt"
                   className="block text-sm font-semibold text-foreground"
@@ -2311,7 +2298,7 @@ export function GenerationStudio({
                     className="min-h-44 w-full rounded-2xl border border-input bg-card p-4 text-foreground placeholder:text-muted-foreground"
                   />
                 </div>
-              </details>
+              </div>
               <div className="mt-2 flex flex-wrap justify-end gap-2">
                 <CreativeLocaleButton
                   value={localeIntent}

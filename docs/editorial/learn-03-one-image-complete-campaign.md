@@ -10,7 +10,7 @@
 
 **Permalink:** `/learn/one-ai-image-complete-campaign`
 
-**Cover:** ![Editorial illustration showing a cobalt-blue ceramic cup as one master image alongside wide, portrait and vertical campaign compositions](/learn-assets/image-campaign/campaign-cover.png)
+**Cover:** ![Editorial illustration showing a cobalt-blue ceramic cup as one master image alongside wide, portrait and vertical campaign compositions](/learn-assets/image-campaign/campaign-cover.svg)
 
 ---
 
@@ -65,7 +65,7 @@ A common mistake is rerunning the whole prompt because one reflection, edge, or 
 - Check hands, repeated details, transparent or reflective edges, unusual lettering and geometric continuity at actual export size.
 - Compare the revised result to the master side by side, so a visually impressive edit does not silently change the product.
 
-![Schematic quality-assurance comparison of a cobalt-blue cup, with attention to edge artifacts, glaze details and actual-size inspection.](/learn-assets/image-campaign/finishing-check.png)
+![Schematic quality-assurance comparison of a cobalt-blue cup, with attention to edge artifacts, glaze details and actual-size inspection.](/learn-assets/image-campaign/finishing-check.svg)
 
 _Inspect at the size that matters. An apparent improvement at thumbnail size may introduce false detail when enlarged._
 
@@ -87,7 +87,7 @@ Upscale only the version whose composition is approved, inspect at 100%, and com
 
 A single visual idea may support several sizes, but different shapes tell different stories. Start from the master and make an art-directed version for each destination. A horizontal hero can give the cup space on one side for a headline; a square feed post needs a stronger focal point; a vertical story may need additional scene above and below the cup. Where the chosen model supports outpainting or extension, use it to create new surrounding space, then inspect seams, perspective, shadows and consistency. Otherwise, regenerate a compatible composition using the master as a reference where supported.
 
-![Four illustrated format studies of the same cobalt-blue ceramic cup: wide hero, feed portrait, square and vertical story with safe zones.](/learn-assets/image-campaign/format-map.png)
+![Four illustrated format studies of the same cobalt-blue ceramic cup: wide hero, feed portrait, square and vertical story with safe zones.](/learn-assets/image-campaign/format-map.svg)
 
 _One campaign, different compositions. Keep the product identity constant, but rebuild framing for the job._
 
@@ -169,4 +169,4 @@ A strong AI image is an achievement. A dependable campaign is a system: a preser
 
 ---
 
-_This human-readable editorial copy mirrors the database seed. Both the reviewed PNG media and the published snapshot must ship in the same release. Live edits remain available through the Learn administration UI after deployment._
+_This human-readable editorial copy mirrors the database seed. Both the reviewed, restricted SVG media and the published snapshot must ship in the same release. Live edits remain available through the Learn administration UI after deployment._

@@ -22,7 +22,8 @@ async function deliverVerificationEmail(input: {
   verificationUrl: string;
   userId?: string;
 }): Promise<void> {
-  await enqueueMail(
+  try {
+    await enqueueMail(
     verificationEmail({
       to: input.email,
       verificationUrl: input.verificationUrl,
@@ -32,6 +33,14 @@ async function deliverVerificationEmail(input: {
       userId: input.userId,
     }),
   );
+  } catch (error) {
+    // The account may already exist. A failed outbox write is recoverable
+    // through the rate-limited resend route; don't return a false signup 500.
+    console.error("Verification outbox write failed", {
+      userId: input.userId,
+      errorName: error instanceof Error ? error.name : "Unknown",
+    });
+  }
 }
 
 export const auth = betterAuth({
@@ -218,6 +227,17 @@ export const auth = betterAuth({
     }),
   },
   databaseHooks: {
+    account: {
+      create: {
+        before: async (account) => ({
+          // Authentication does not need persistent social OAuth tokens.
+          // The separately consented storage integration encrypts its own tokens.
+          data: account.providerId === "google" || account.providerId === "microsoft"
+            ? { ...account, accessToken: null, refreshToken: null, idToken: null }
+            : account,
+        }),
+      },
+    },
     user: {
       create: {
         after: async (user, ctx) => {

@@ -70,8 +70,8 @@ export function SignUpForm({ returnTo, googleEnabled = false, microsoftEnabled =
         </p>
         <p className="text-xs leading-5 text-muted-foreground">
           {isInvite
-            ? "Your verification request is queued. Check your inbox when it arrives; your invitation remains available."
-            : "Verification delivery happens separately from account creation. Check your inbox when it arrives, then continue to onboarding."}
+            ? "Your account is ready. Check your inbox for the verification link; request a new one if delivery is delayed. Your invitation remains available."
+            : "Verification delivery happens separately from account creation. Check your inbox or request another link, then continue to onboarding."}
         </p>
         <Button type="button" variant="secondary" className="w-full" disabled={resending} onClick={async () => {
           setResending(true);

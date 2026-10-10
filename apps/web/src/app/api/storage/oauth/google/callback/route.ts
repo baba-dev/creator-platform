@@ -6,6 +6,7 @@ import {
   exchangeGoogleDriveCode,
 } from "@aiwa/assets/storage";
 import { db } from "@aiwa/db";
+import { hasOrganizationPermission } from "@aiwa/authz";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getRequestSession } from "@/lib/request-auth";
@@ -110,6 +111,15 @@ export async function GET(request: Request) {
     const accessTokenExpiresAt = new Date(Date.now() + tokens.expiresIn * 1000);
 
     await db.$transaction(async (tx) => {
+      // A workspace role can be revoked while OAuth consent is underway.
+      const membership = await tx.membership.findUnique({
+        where: { organizationId_userId: { organizationId, userId } },
+        include: { organization: true },
+      });
+      if (!membership || membership.organization.status !== "ACTIVE" ||
+          !hasOrganizationPermission(membership.role, "organization:manage")) {
+        throw new Error("Storage authorization revoked");
+      }
       await tx.externalStorageConfig.upsert({
         where: {
           organizationId_provider: {
@@ -152,7 +162,7 @@ export async function GET(request: Request) {
     res.cookies.delete("aiwa_oauth_gdrive_state");
     return res;
   } catch (error) {
-    console.error("Google Drive connection error:", error);
+    console.error("Google Drive connection failed", { errorName: error instanceof Error ? error.name : "Unknown" });
     return NextResponse.redirect(
       `${env.APP_URL}/app/${org.slug}/storage?error=connection_failed`,
     );

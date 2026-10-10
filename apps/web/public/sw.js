@@ -1,5 +1,5 @@
 /* Creators PWA: deliberately never persist authenticated HTML, private media, or API replies. */
-const VERSION = "creators-pwa-v2-2";
+const VERSION = "creators-pwa-v2-3";
 const CORE = VERSION + "-shell";
 const PUBLIC = VERSION + "-public";
 const OFFLINE = "/offline.html";
@@ -21,7 +21,8 @@ const publicRequest = (request) => {
     url.origin === self.location.origin &&
     PUBLIC_PATH.test(url.pathname) &&
     request.mode === "navigate" &&
-    request.credentials === "omit" || (request.credentials === "same-origin" && !request.headers.has("authorization"))
+    !url.search &&
+    !request.headers.has("authorization")
   );
 };
 const cacheable = (response) =>

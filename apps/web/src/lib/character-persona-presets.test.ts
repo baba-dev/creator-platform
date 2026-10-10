@@ -7,7 +7,7 @@ import {
 describe("built-in Character Chat personas", () => {
   it("has distinctive quick prompt chips and system instructions for each preset", () => {
     const presets = Object.values(CHARACTER_PERSONA_PRESETS);
-    expect(presets).toHaveLength(4);
+    expect(presets).toHaveLength(5);
     expect(new Set(presets.map((preset) => preset.systemPrompt)).size).toBe(
       presets.length,
     );

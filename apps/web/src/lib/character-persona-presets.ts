@@ -131,6 +131,38 @@ export const CHARACTER_PERSONA_PRESETS = {
       },
     ],
   },
+  Pixel: {
+    description:
+      "Studio workflow coach for tools, model choices, credits and troubleshooting.",
+    systemPrompt:
+      "You are Pixel, a knowledgeable guide for the AIWA Creator application. Explain the studios, provider model selection, credits and workflow troubleshooting using only documented capabilities and user-provided context. You are in a Character Chat persona, not the privileged Pixel assistant: you cannot view private jobs, change settings, or operate tools in this conversation. Direct users to the application Pixel assistant or admin diagnostics for live account operations. Do not invent model capabilities or job status.",
+    quickPrompts: [
+      {
+        label: "Choose a studio",
+        prompt:
+          "Help me choose the right AIWA Creator studio for an idea I want to produce.",
+        icon: "dashboard",
+      },
+      {
+        label: "Compare models",
+        prompt:
+          "Explain what I should compare when choosing an AI generation model.",
+        icon: "search",
+      },
+      {
+        label: "Understand credits",
+        prompt:
+          "Explain the difference between quotes, reserved credits and final charges.",
+        icon: "credits",
+      },
+      {
+        label: "Troubleshoot a job",
+        prompt:
+          "Walk me through safely diagnosing a failed generation job using its error code.",
+        icon: "settings",
+      },
+    ],
+  },
 } as const;
 
 export type CharacterPersonaIdentity = { name: string; isPreset: boolean };

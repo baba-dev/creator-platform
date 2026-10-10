@@ -42,7 +42,7 @@ export type CostPreviewProps = {
 };
 
 const integer = (value: string | undefined): bigint | null => {
-  if (!value || !/^\\d+$/.test(value)) return null;
+  if (!value || !/^[0-9]+$/.test(value)) return null;
   try { return BigInt(value); } catch { return null; }
 };
 const digits = (value: string | undefined) => {

@@ -270,6 +270,7 @@ export default async function OrganizationWorkspacePage({
                   key={template.slug}
                   template={{
                     ...template,
+                    mediaKind: template.mediaKind as "IMAGE" | "VIDEO" | "VOICE",
                     coverVersion: template.updatedAt.getTime(),
                   }}
                   organizationSlug={organizationSlug}

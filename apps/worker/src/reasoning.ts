@@ -30,7 +30,8 @@ function readPromptEnhancementPayload(
     typeof payload.systemPrompt !== "string" ||
     typeof payload.userPrompt !== "string" ||
     !payload.userPrompt.trim() ||
-    payload.userPrompt.length > (payload.targetMedia === "VOICE" ? 4096 : 2000) ||
+    payload.userPrompt.length >
+      (payload.targetMedia === "VOICE" ? 4096 : 2000) ||
     (payload.targetMedia !== undefined &&
       payload.targetMedia !== "IMAGE" &&
       payload.targetMedia !== "VIDEO" &&
@@ -42,7 +43,10 @@ function readPromptEnhancementPayload(
   return payload as PromptEnhancementPayload;
 }
 
-function readPromptEnhancementOutput(value: unknown, targetMedia: "IMAGE" | "VIDEO" | "VOICE"): {
+function readPromptEnhancementOutput(
+  value: unknown,
+  targetMedia: "IMAGE" | "VIDEO" | "VOICE",
+): {
   enhancedPrompt: string;
 } {
   if (!value || typeof value !== "object")
@@ -265,7 +269,10 @@ export async function processReasoningJob(
       responseSchemaName: payload.responseSchemaName,
       maxTokens: payload.targetMedia === "VOICE" ? 4096 : 2048,
     });
-    const output = readPromptEnhancementOutput(result.content, payload.targetMedia ?? "IMAGE");
+    const output = readPromptEnhancementOutput(
+      result.content,
+      payload.targetMedia ?? "IMAGE",
+    );
     const providerCost = (() => {
       try {
         return settleReasoningProviderCost({

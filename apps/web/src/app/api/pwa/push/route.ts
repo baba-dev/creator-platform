@@ -11,7 +11,11 @@ import { z } from "zod";
 
 export const runtime = "nodejs";
 
-const mutationLimiter = rateLimit({ max: 12, windowMs: 60_000, prefix: "pwa-push" });
+const mutationLimiter = rateLimit({
+  max: 12,
+  windowMs: 60_000,
+  prefix: "pwa-push",
+});
 
 const endpoint = z
   .string()

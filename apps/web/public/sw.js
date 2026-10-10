@@ -51,7 +51,10 @@ self.addEventListener("activate", (event) => {
         keys
           .filter(
             (key) =>
-              key.startsWith("creators-pwa-") && key !== CORE && key !== PUBLIC && key !== STATIC,
+              key.startsWith("creators-pwa-") &&
+              key !== CORE &&
+              key !== PUBLIC &&
+              key !== STATIC,
           )
           .map((key) => caches.delete(key)),
       );
@@ -157,28 +160,34 @@ self.addEventListener("fetch", (event) => {
   )
     return;
   // Only immutable Next.js build assets may enter the bounded static cache.
-  if (url.pathname.startsWith("/_next/static/") &&
-      ["script", "style", "font", "image"].includes(request.destination)) {
-    event.respondWith((async () => {
-      const cache = await caches.open(STATIC);
-      const prior = await cache.match(request);
-      if (prior) return prior;
-      const response = await fetch(request);
-      if (response.ok && response.type === "basic" &&
+  if (
+    url.pathname.startsWith("/_next/static/") &&
+    ["script", "style", "font", "image"].includes(request.destination)
+  ) {
+    event.respondWith(
+      (async () => {
+        const cache = await caches.open(STATIC);
+        const prior = await cache.match(request);
+        if (prior) return prior;
+        const response = await fetch(request);
+        if (
+          response.ok &&
+          response.type === "basic" &&
           !(response.headers.get("cache-control") || "").includes("no-store") &&
-          !(response.headers.get("cache-control") || "").includes("private")) {
-        await cache.put(request, response.clone());
-        await trim(cache, MAX_STATIC);
-      }
-      return response;
-    })());
+          !(response.headers.get("cache-control") || "").includes("private")
+        ) {
+          await cache.put(request, response.clone());
+          await trim(cache, MAX_STATIC);
+        }
+        return response;
+      })(),
+    );
     return;
   }
   // Never cache or alter API calls, OAuth, workspace data, RSC, or downloads.
   const url = new URL(request.url);
   if (
     url.pathname.startsWith("/api/") ||
-
     request.headers.has("rsc") ||
     request.headers.has("next-router-prefetch") ||
     request.destination === "video" ||
@@ -188,12 +197,23 @@ self.addEventListener("fetch", (event) => {
   // Authenticated navigations are always network-only; offline gets generic fallback.
   if (
     request.mode === "navigate" &&
-    (url.pathname.startsWith("/app") || url.pathname.startsWith("/admin") ||
-      url.pathname.startsWith("/settings") || url.pathname.startsWith("/pwa/") ||
-      url.pathname.startsWith("/sign-") || url.pathname.startsWith("/onboarding"))
+    (url.pathname.startsWith("/app") ||
+      url.pathname.startsWith("/admin") ||
+      url.pathname.startsWith("/settings") ||
+      url.pathname.startsWith("/pwa/") ||
+      url.pathname.startsWith("/sign-") ||
+      url.pathname.startsWith("/onboarding"))
   ) {
-    event.respondWith(fetch(request).catch(async () => (await caches.match(OFFLINE)) ||
-      new Response("Offline", { status: 503, headers: { "Content-Type": "text/plain" } })));
+    event.respondWith(
+      fetch(request).catch(
+        async () =>
+          (await caches.match(OFFLINE)) ||
+          new Response("Offline", {
+            status: 503,
+            headers: { "Content-Type": "text/plain" },
+          }),
+      ),
+    );
     return;
   }
   if (url.pathname === OFFLINE || CORE_URLS.includes(url.pathname)) {
@@ -206,8 +226,14 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       (async () => {
         try {
-          const response = await fetch(new Request(request, { credentials: "omit" }));
-          if (cacheable(response) && !response.redirected && new URL(response.url).origin === self.location.origin) {
+          const response = await fetch(
+            new Request(request, { credentials: "omit" }),
+          );
+          if (
+            cacheable(response) &&
+            !response.redirected &&
+            new URL(response.url).origin === self.location.origin
+          ) {
             const cache = await caches.open(PUBLIC);
             await cache.put(request, response.clone());
             await trim(cache, MAX_PUBLIC);

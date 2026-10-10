@@ -24,7 +24,9 @@ export function DeviceSettings() {
     | "error"
   >("checking");
   const [message, setMessage] = useState("");
-  const [periodic, setPeriodic] = useState<"unknown" | "ready" | "unavailable" | "enabled">("unknown");
+  const [periodic, setPeriodic] = useState<
+    "unknown" | "ready" | "unavailable" | "enabled"
+  >("unknown");
 
   useEffect(() => {
     setOnline(navigator.onLine);
@@ -92,11 +94,22 @@ export function DeviceSettings() {
 
   async function enablePeriodicRefresh() {
     try {
-      const registration = (await navigator.serviceWorker.ready) as ServiceWorkerRegistration & {
-        periodicSync?: { register(tag: string, options: { minInterval: number }): Promise<void> };
+      const registration = (await navigator.serviceWorker
+        .ready) as ServiceWorkerRegistration & {
+        periodicSync?: {
+          register(
+            tag: string,
+            options: { minInterval: number },
+          ): Promise<void>;
+        };
       };
-      if (!registration.periodicSync) { setPeriodic("unavailable"); return; }
-      await registration.periodicSync.register("creators-public-refresh", { minInterval: 24 * 60 * 60 * 1000 });
+      if (!registration.periodicSync) {
+        setPeriodic("unavailable");
+        return;
+      }
+      await registration.periodicSync.register("creators-public-refresh", {
+        minInterval: 24 * 60 * 60 * 1000,
+      });
       setPeriodic("enabled");
     } catch {
       setPeriodic("unavailable");
@@ -271,13 +284,33 @@ export function DeviceSettings() {
         )}
       </section>
       <section className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-6">
-        <h2 className="font-display text-xl font-semibold">Offline learning refresh</h2>
+        <h2 className="font-display text-xl font-semibold">
+          Offline learning refresh
+        </h2>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
-          Optionally refresh eligible public Learn pages when your browser grants background access. Browsers control timing and may not support this feature; no personal data is fetched.
+          Optionally refresh eligible public Learn pages when your browser
+          grants background access. Browsers control timing and may not support
+          this feature; no personal data is fetched.
         </p>
         <div className="mt-4 flex items-center gap-3">
-          {periodic === "ready" && <button type="button" className="rounded-xl border border-border px-4 py-2.5 text-sm font-semibold" onClick={() => void enablePeriodicRefresh()}>Enable public refresh</button>}
-          <span className="text-xs text-muted-foreground">{periodic === "enabled" ? "Registered" : periodic === "unavailable" ? "Not available in this browser" : periodic === "ready" ? "Available" : "Checking support…"}</span>
+          {periodic === "ready" && (
+            <button
+              type="button"
+              className="rounded-xl border border-border px-4 py-2.5 text-sm font-semibold"
+              onClick={() => void enablePeriodicRefresh()}
+            >
+              Enable public refresh
+            </button>
+          )}
+          <span className="text-xs text-muted-foreground">
+            {periodic === "enabled"
+              ? "Registered"
+              : periodic === "unavailable"
+                ? "Not available in this browser"
+                : periodic === "ready"
+                  ? "Available"
+                  : "Checking support…"}
+          </span>
         </div>
       </section>
       <section className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-6">

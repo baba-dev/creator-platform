@@ -8,10 +8,13 @@ export default async function InboxPage({
   searchParams: Promise<{ import?: string }>;
 }) {
   const params = await searchParams;
-  const pendingId = typeof params.import === "string" && /^[a-f0-9-]{36}$/.test(params.import)
-    ? params.import
-    : null;
-  const session = await requireRequestSession(pendingId ? "/pwa/inbox?import=" + pendingId : "/pwa/inbox");
+  const pendingId =
+    typeof params.import === "string" && /^[a-f0-9-]{36}$/.test(params.import)
+      ? params.import
+      : null;
+  const session = await requireRequestSession(
+    pendingId ? "/pwa/inbox?import=" + pendingId : "/pwa/inbox",
+  );
   const memberships = await db.membership.findMany({
     where: { userId: session.user.id, organization: { status: "ACTIVE" } },
     select: { organization: { select: { id: true, name: true, slug: true } } },

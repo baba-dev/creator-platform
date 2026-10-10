@@ -201,7 +201,10 @@ export default function HomePage() {
           ))}
         </nav>
         <div className="flex items-center gap-2">
-          <Link href="/learn" className="hidden px-2 text-sm font-semibold sm:inline-flex lg:hidden">
+          <Link
+            href="/learn"
+            className="hidden px-2 text-sm font-semibold sm:inline-flex lg:hidden"
+          >
             Learn
           </Link>
           <ThemeToggle />
@@ -215,7 +218,9 @@ export default function HomePage() {
           </Button>
           <Button asChild size="sm">
             <Link href="/sign-up">
-              <span className="sm:hidden">Start</span><span className="hidden sm:inline">Start creating</span> <Icon name="arrow" className="hidden size-4 sm:inline" />
+              <span className="sm:hidden">Start</span>
+              <span className="hidden sm:inline">Start creating</span>{" "}
+              <Icon name="arrow" className="hidden size-4 sm:inline" />
             </Link>
           </Button>
         </div>

@@ -78,7 +78,9 @@ export function PwaInbox({ workspaces }: { workspaces: Workspace[] }) {
       window.history.replaceState(null, "", "/pwa/inbox");
     } else if (params.get("error") === "share") {
       window.requestAnimationFrame(() => {
-        setResult("The share could not be accepted. Use a supported file under 25 MB or share text.");
+        setResult(
+          "The share could not be accepted. Use a supported file under 25 MB or share text.",
+        );
       });
     }
     (window as LaunchWindow).launchQueue?.setConsumer(async (params) => {
@@ -157,8 +159,8 @@ export function PwaInbox({ workspaces }: { workspaces: Workspace[] }) {
       </div>
       {!incoming ? (
         <p className="mt-4 text-sm text-muted-foreground">
-          Nothing is waiting. Use your operating system&apos;s Share or Open with
-          menu to send compatible content here.
+          Nothing is waiting. Use your operating system&apos;s Share or Open
+          with menu to send compatible content here.
         </p>
       ) : (
         <>

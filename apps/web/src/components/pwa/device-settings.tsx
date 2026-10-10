@@ -233,8 +233,8 @@ export function DeviceSettings() {
         </div>
         {!install && !standalone && (
           <p className="mt-4 text-xs leading-5 text-muted-foreground">
-            When supported, use your browser&apos;s Install app option. On iPhone,
-            use Share → Add to Home Screen.
+            When supported, use your browser&apos;s Install app option. On
+            iPhone, use Share → Add to Home Screen.
           </p>
         )}
       </section>

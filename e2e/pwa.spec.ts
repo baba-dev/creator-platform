@@ -118,7 +118,9 @@ test("capture actual responsive public Creators app artwork for manifest review"
     page.getByRole("heading", { name: /from first thought.*final media/i }),
   ).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
-  await page.addStyleTag({ content: "nextjs-portal { display: none !important; }" });
+  await page.addStyleTag({
+    content: "nextjs-portal { display: none !important; }",
+  });
   await page.screenshot({
     path:
       testInfo.project.name === "desktop-chromium"

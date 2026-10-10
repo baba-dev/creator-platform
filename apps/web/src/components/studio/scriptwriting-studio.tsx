@@ -7,7 +7,10 @@ import {
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { GenerationCostPreview, type CostPreviewQuote } from "@/components/studio/generation-cost-preview";
+import {
+  GenerationCostPreview,
+  type CostPreviewQuote,
+} from "@/components/studio/generation-cost-preview";
 import { CreativeSurface, Eyebrow } from "@/components/ui/creative";
 import { Icon } from "@/components/ui/icon";
 import { StatusBadge } from "@/components/admin/primitives";
@@ -149,14 +152,17 @@ export function ScriptwritingStudio({
   );
   const [selectedVoice, setSelectedVoice] = useState<string>("jasper");
   const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
-  const [pendingBatchQuote, setPendingBatchQuote] = useState<CostPreviewQuote & {
-    quoteToken: string;
-    idempotencyKey: string;
-    estimatedCredits: string;
-    maximumChargeCredits: string;
-    blockCount: number;
-    displayName?: string;
-  } | null>(null);
+  const [pendingBatchQuote, setPendingBatchQuote] = useState<
+    | (CostPreviewQuote & {
+        quoteToken: string;
+        idempotencyKey: string;
+        estimatedCredits: string;
+        maximumChargeCredits: string;
+        blockCount: number;
+        displayName?: string;
+      })
+    | null
+  >(null);
 
   // Sequential story player state
   const [isPlayingSequence, setIsPlayingSequence] = useState(false);
@@ -1165,10 +1171,15 @@ export function ScriptwritingStudio({
                     <GenerationCostPreview
                       className="mt-4"
                       quote={pendingBatchQuote}
-                      modelName={pendingBatchQuote.displayName ?? "Seed Speech TTS 2.0"}
+                      modelName={
+                        pendingBatchQuote.displayName ?? "Seed Speech TTS 2.0"
+                      }
                       providerName="BytePlus"
                       mediaKind="VOICE"
-                      details={[`${pendingBatchQuote.blockCount} dialogue lines`, "Billed as separate speech jobs"]}
+                      details={[
+                        `${pendingBatchQuote.blockCount} dialogue lines`,
+                        "Billed as separate speech jobs",
+                      ]}
                     />
                   )}
 

@@ -1,12 +1,12 @@
-# One-time dependency lockfile regeneration on this feature branch.
-name: Auth lockfile regeneration
+# Temporary feature-branch formatter. Removed before merge.
+name: Auth feature preparation
 on:
   push:
     branches: [feat/auth-connections-2]
 permissions:
   contents: write
 jobs:
-  lockfile:
+  prepare:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v7
@@ -18,12 +18,13 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-      - name: Resolve lockfile with declared dependency versions
-        run: pnpm install --lockfile-only --no-frozen-lockfile
-      - name: Commit lockfile to feature branch
+      - run: pnpm install --frozen-lockfile
+      - name: Format feature changes
+        run: pnpm exec prettier --write .
+      - name: Commit formatted changes
         run: |
-          git add pnpm-lock.yaml
+          git add -u
           if ! git diff --cached --quiet; then
-            git -c user.name=github-actions -c user.email=41898282+github-actions[bot]@users.noreply.github.com commit -m "chore(lockfile): resolve passkey dependency"
+            git -c user.name=github-actions -c user.email=41898282+github-actions[bot]@users.noreply.github.com commit -m "style(auth): format connections feature"
             git push origin HEAD:feat/auth-connections-2
           fi

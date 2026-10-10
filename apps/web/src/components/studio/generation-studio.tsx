@@ -2113,7 +2113,10 @@ export function GenerationStudio({
                 </Button>
               </div>
               {variant === "advanced" && enhancementAttribution && (
-                <p role="status" className="text-xs font-medium text-muted-foreground">
+                <p
+                  role="status"
+                  className="text-xs font-medium text-muted-foreground"
+                >
                   Enhanced with {enhancementAttribution.name} ·{" "}
                   {providerDisplayName(enhancementAttribution.provider)}
                 </p>
@@ -2122,8 +2125,8 @@ export function GenerationStudio({
               !enhancementAttribution &&
               promptEnhancementModels.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
-                  Prompt Enhance is unavailable until an eligible model is enabled,
-                  priced, and configured.
+                  Prompt Enhance is unavailable until an eligible model is
+                  enabled, priced, and configured.
                 </p>
               ) : null}
 

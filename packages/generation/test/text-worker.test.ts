@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ProviderRequestError } from "@aiwa/providers";
 
 const mocks = vi.hoisted(() => ({
   db: {
@@ -651,6 +652,40 @@ describe("durable text generation billing", () => {
         data: expect.objectContaining({
           status: "MANUAL_REVIEW",
           errorCode: "PROVIDER_OUTCOME_UNKNOWN",
+        }),
+      }),
+    );
+  });
+
+  it.each([
+    "REQUEST_OUTCOME_UNKNOWN",
+    "NETWORK_OUTCOME_UNKNOWN",
+    "BODY_READ_OUTCOME_UNKNOWN",
+  ])("holds a non-retryable %s instead of releasing credits", async (code) => {
+    mocks.db.generationJob.findUniqueOrThrow.mockResolvedValue(queuedJob());
+    const provider = {
+      ...providerResponse(),
+      submit: vi
+        .fn()
+        .mockRejectedValue(
+          new ProviderRequestError(
+            "Provider response could not be confirmed",
+            false,
+            { code, stage: "dispatch" },
+          ),
+        ),
+    };
+    await processTextJob("job_text_1", provider);
+    expect(mocks.credits.releaseOrRefundCredits).not.toHaveBeenCalled();
+    expect(mocks.db.generationJob.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "job_text_1", status: "SUBMITTED" },
+        data: expect.objectContaining({
+          status: "MANUAL_REVIEW",
+          errorCode: "PROVIDER_OUTCOME_UNKNOWN",
+          outputPayload: expect.objectContaining({
+            providerDiagnosticCode: code,
+          }),
         }),
       }),
     );

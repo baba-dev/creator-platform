@@ -6,6 +6,7 @@ import "@fontsource-variable/caveat";
 import "@fontsource-variable/manrope";
 
 import "./globals.css";
+import { PwaRuntime } from "@/components/pwa/pwa-runtime";
 
 const themeBootScript = `
   (() => {
@@ -67,7 +68,10 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: themeBootScript }}
         />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <PwaRuntime />
+      </body>
     </html>
   );
 }

@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./web-push": "./src/web-push.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",

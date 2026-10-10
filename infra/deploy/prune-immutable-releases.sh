@@ -11,7 +11,7 @@ mode="${1:---dry-run}"
 recent_override="${2:-}"
 if [[ $# -gt 2 || ( "$mode" != "--dry-run" && "$mode" != "--apply" ) ||
       ( -n "$recent_override" && "$recent_override" != "--include-recent" ) ]]; then
-  printf 'Usage: sudo bash %s [--dry-run|--apply] [--include-recent]\\n' "$0" >&2
+  printf 'Usage: sudo bash %s [--dry-run|--apply] [--include-recent]\n' "$0" >&2
   exit 64
 fi
 [[ "$EUID" -eq 0 ]] || { echo "Must be run as root." >&2; exit 1; }

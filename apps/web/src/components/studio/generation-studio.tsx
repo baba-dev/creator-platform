@@ -156,6 +156,7 @@ export function GenerationStudio({
   organizationId,
   organizationSlug,
   variant = "advanced",
+  initialPrompt = "",
   initialMode = "IMAGE",
   promptEnhancementModels = [],
   promptEnhancementDefaultModelId = null,
@@ -166,6 +167,7 @@ export function GenerationStudio({
   organizationId: string;
   organizationSlug: string;
   variant?: "quick" | "advanced";
+  initialPrompt?: string;
   initialMode?: MediaKind;
   promptEnhancementModels?: StudioModelOption[];
   promptEnhancementDefaultModelId?: string | null;
@@ -178,8 +180,8 @@ export function GenerationStudio({
   const [activeMode, setActiveMode] = useState<MediaKind>(initialMode);
   const [modelId, setModelId] = useState("");
   const [projectId, setProjectId] = useState("");
-  const [prompt, setPrompt] = useState("");
-  const [voiceText, setVoiceText] = useState("");
+  const [prompt, setPrompt] = useState(initialPrompt);
+  const [voiceText, setVoiceText] = useState(initialPrompt);
   const [voiceKey, setVoiceKey] = useState(initialVoiceKey);
   const [speechRate, setSpeechRate] = useState(initialSpeechRate);
   const [voiceLoudnessRate, setVoiceLoudnessRate] = useState(1.0);

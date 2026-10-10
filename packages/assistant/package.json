@@ -14,17 +14,18 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@aiwa/assets": "workspace:*",
+    "@aiwa/authz": "workspace:*",
     "@aiwa/config": "workspace:*",
+    "@aiwa/credits": "workspace:*",
     "@aiwa/db": "workspace:*",
     "@aiwa/generation": "workspace:*",
+    "@aiwa/learn": "workspace:*",
     "@aiwa/mail": "workspace:*",
     "@aiwa/providers": "workspace:*",
     "bullmq": "6.3.5",
     "ioredis": "^5.8.1",
-    "zod": "^4.6.4",
-    "@aiwa/authz": "workspace:*",
-    "@aiwa/credits": "workspace:*",
-    "@aiwa/assets": "workspace:*"
+    "zod": "^4.6.4"
   },
   "devDependencies": {
     "vitest": "^4.1.11"

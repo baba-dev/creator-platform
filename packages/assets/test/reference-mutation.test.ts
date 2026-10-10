@@ -24,6 +24,7 @@ describe("Private Reference Mutation Authorization", () => {
     expect(updateManyMock).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
+          learnMedia: { is: null },
           id: { in: ["asset-ref-1"] },
           organizationId: "org-1",
           status: "READY",
@@ -86,6 +87,7 @@ describe("Private Reference Mutation Authorization", () => {
     expect(updateManyMock).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
+          learnMedia: { is: null },
           id: { in: ["asset-ref-1"] },
           organizationId: "org-1",
           status: { in: ["READY", "DELETED"] },

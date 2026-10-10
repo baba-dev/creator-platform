@@ -5,10 +5,14 @@ export default async function SpeechPage({
   searchParams,
 }: {
   params: Promise<{ organizationSlug: string }>;
-  searchParams: Promise<{ voiceKey?: string; speechRate?: string }>;
+  searchParams: Promise<{
+    voiceKey?: string;
+    speechRate?: string;
+    learn?: string;
+  }>;
 }) {
   const { organizationSlug } = await params;
-  const { voiceKey, speechRate } = await searchParams;
+  const { voiceKey, speechRate, learn } = await searchParams;
   const parsedRate = Number.parseFloat(speechRate ?? "");
   const initialSpeechRate =
     Number.isFinite(parsedRate) && parsedRate >= 0.5 && parsedRate <= 2
@@ -21,6 +25,7 @@ export default async function SpeechPage({
     <GenerationWorkspace
       slug={organizationSlug}
       kind="speech"
+      learnPostId={learn}
       initialVoiceKey={initialVoiceKey}
       initialSpeechRate={initialSpeechRate}
     />

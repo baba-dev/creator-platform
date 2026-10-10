@@ -1,3 +1,4 @@
+import { publishScheduled, reconcileLearnConversions } from "@aiwa/learn";
 import { createHash, randomUUID } from "node:crypto";
 import { hostPressure } from "./host-pressure";
 import { mediaAlerts } from "@aiwa/assets/worker-health";
@@ -1425,6 +1426,23 @@ function schedule(
   run();
 }
 schedule("mail", dispatchMail, 5_000);
+let publishingLearn = false;
+schedule(
+  "mail",
+  async () => {
+    if (publishingLearn || isShuttingDown) return;
+    publishingLearn = true;
+    try {
+      await publishScheduled();
+      await reconcileLearnConversions();
+    } catch {
+      log("error", "Learn scheduled publishing unavailable");
+    } finally {
+      publishingLearn = false;
+    }
+  },
+  30_000,
+);
 schedule("generation", dispatchGeneration, 10_000);
 schedule("provider-tools", dispatchProviderTools, 5_000);
 schedule("reasoning", dispatchReasoning, 2_000);

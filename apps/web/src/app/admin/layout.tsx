@@ -20,6 +20,12 @@ const navigation: readonly (AdminNavigationItem & {
 })[] = [
   { href: "/admin", label: "Overview", icon: "dashboard" },
   {
+    href: "/admin/learn",
+    label: "Learn publishing",
+    icon: "assets",
+    permission: "learn:manage",
+  },
+  {
     href: "/admin/organizations",
     label: "Organizations",
     icon: "projects",

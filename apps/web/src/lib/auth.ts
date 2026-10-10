@@ -1,3 +1,4 @@
+import { attributeLearn } from "@aiwa/learn";
 import { createHash } from "node:crypto";
 import { platformRoles } from "@aiwa/authz";
 import { parseServerEnv } from "@aiwa/config";
@@ -201,6 +202,17 @@ export const auth = betterAuth({
   },
   databaseHooks: {
     user: {
+      create: {
+        after: async (user, ctx) => {
+          const target = ctx?.body?.callbackURL;
+          if (typeof target !== "string") return;
+          const match = /^\/learn\/start\/([a-zA-Z0-9_-]+)$/.exec(target);
+          if (match?.[1])
+            await attributeLearn(user.id, match[1], true).catch(
+              () => undefined,
+            );
+        },
+      },
       update: {
         after: async (updatedUser, ctx) => {
           if (

@@ -1,3 +1,4 @@
+import { safeInvitationRoute } from "@/lib/navigation";
 import { db } from "@aiwa/db";
 import { redirect } from "next/navigation";
 
@@ -10,7 +11,15 @@ import { Icon, type IconName } from "@/components/ui/icon";
 import { PencilArrow, Tape } from "@/components/ui/sketch";
 import { requireRequestSession } from "@/lib/request-auth";
 
-export default async function OnboardingPage() {
+export default async function OnboardingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ returnTo?: string }>;
+}) {
+  const requested = safeInvitationRoute((await searchParams).returnTo);
+  const learnReturn = requested.startsWith("/learn/start/")
+    ? requested
+    : undefined;
   const session = await requireRequestSession("/onboarding");
   const membership = await db.membership.findFirst({
     where: {
@@ -22,7 +31,7 @@ export default async function OnboardingPage() {
   });
 
   if (membership) {
-    redirect(`/app/${membership.organization.slug}`);
+    redirect(learnReturn ?? `/app/${membership.organization.slug}`);
   }
 
   return (
@@ -83,7 +92,7 @@ export default async function OnboardingPage() {
                 </span>
               </div>
 
-              <OnboardingForm />
+              <OnboardingForm returnTo={learnReturn} />
 
               <div className="mt-8 grid gap-3 border-t border-border pt-6 sm:grid-cols-3">
                 {(

@@ -277,6 +277,7 @@ export async function trashAssets(
   const now = new Date();
   const where: Prisma.AssetWhereInput = {
     id: { in: input.assetIds },
+    learnMedia: { is: null },
     organizationId: input.organizationId,
     status: "READY",
   };
@@ -470,6 +471,7 @@ export async function assignAssets(
   };
   const where: Prisma.AssetWhereInput = {
     id: { in: input.assetIds },
+    learnMedia: { is: null },
     organizationId: input.organizationId,
     status: { in: ["READY", "DELETED"] },
   };

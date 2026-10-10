@@ -1,5 +1,6 @@
 "use client";
 
+import { LearnHelp } from "@/components/learn/help";
 import { useState, type ReactNode } from "react";
 import { ChatGPTAppSidebar } from "@/components/navigation/chatgpt-sidebar";
 
@@ -89,6 +90,7 @@ export function WorkspaceShell({
         {header}
         {mobileHeader}
         <div className="min-w-0">{children}</div>
+        <LearnHelp />
         {activityCenter}
         {assistantWidget}
       </div>

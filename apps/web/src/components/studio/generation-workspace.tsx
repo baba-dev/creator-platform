@@ -1,3 +1,5 @@
+import { db } from "@aiwa/db";
+import { publishedContent } from "@aiwa/learn";
 import Link from "next/link";
 import { hasOrganizationPermission } from "@aiwa/authz";
 import { GenerationStudio } from "@/components/studio/generation-studio";
@@ -36,11 +38,13 @@ const pages = {
 export async function GenerationWorkspace({
   slug,
   kind,
+  learnPostId,
   initialVoiceKey,
   initialSpeechRate,
 }: {
   slug: string;
   kind: keyof typeof pages;
+  learnPostId?: string;
   initialVoiceKey?: string;
   initialSpeechRate?: number;
 }) {
@@ -48,6 +52,14 @@ export async function GenerationWorkspace({
     slug,
     "workspace:view",
   );
+  const guide = learnPostId
+    ? await db.learnPost.findFirst({
+        where: { id: learnPostId, publishedAt: { not: null } },
+        select: { published: true },
+      })
+    : null;
+  const guideContent = guide ? publishedContent(guide.published) : null;
+  const initialPrompt = guideContent?.tool === kind ? guideContent.prompt : "";
   const page = pages[kind];
   const promptEnhancement =
     kind === "speech"
@@ -89,6 +101,7 @@ export async function GenerationWorkspace({
             membership.role,
             "generation:create",
           )}
+          initialPrompt={initialPrompt}
           initialMode={page.mode}
           variant="advanced"
           promptEnhancementModels={promptEnhancement?.models ?? []}

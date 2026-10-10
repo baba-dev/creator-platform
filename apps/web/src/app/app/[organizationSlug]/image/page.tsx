@@ -6,10 +6,10 @@ export default async function ImagePage({
   searchParams,
 }: {
   params: Promise<{ organizationSlug: string }>;
-  searchParams: Promise<{ assetId?: string; tab?: string }>;
+  searchParams: Promise<{ assetId?: string; tab?: string; learn?: string }>;
 }) {
   const { organizationSlug } = await params;
-  const { assetId, tab } = await searchParams;
+  const { assetId, tab, learn } = await searchParams;
   const editorTab =
     tab === "ai" || tab === "layers" || tab === "pixel" ? tab : null;
 
@@ -22,5 +22,11 @@ export default async function ImagePage({
     );
   }
 
-  return <GenerationWorkspace slug={organizationSlug} kind="image" />;
+  return (
+    <GenerationWorkspace
+      slug={organizationSlug}
+      kind="image"
+      learnPostId={learn}
+    />
+  );
 }

@@ -5,7 +5,6 @@ test.describe("Templates 2.0", () => {
   test("renders 25 distinctive covers and opens the existing Studio directly", async ({
     page,
     context,
-    request,
   }) => {
     const token = `learn-e2e-${test.info().project.name}`;
     const signature = createHmac("sha256", process.env.AUTH_SECRET!)
@@ -40,13 +39,13 @@ test.describe("Templates 2.0", () => {
     await expect(
       page.getByText("Complete the required details to prepare this template."),
     ).toBeVisible();
-    expect(
-      (
-        await request.get(
-          "/api/templates/youtube-thumbnail?organizationId=wrong",
-        )
-      ).status(),
-    ).toBe(400);
+    const invalidWorkspaceStatus = await page.evaluate(async () => {
+      const response = await fetch(
+        "/api/templates/youtube-thumbnail?organizationId=wrong",
+      );
+      return response.status;
+    });
+    expect(invalidWorkspaceStatus).toBe(400);
     await page.screenshot({
       path: `test-results/templates-direct-${test.info().project.name}.png`,
       fullPage: true,

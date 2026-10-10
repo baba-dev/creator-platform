@@ -69,6 +69,10 @@ export default async function Page({
   }
   const c = publishedContent(p.published);
   const origin = learnOrigin();
+  const structuredImage =
+    c.slug === "one-ai-image-complete-campaign"
+      ? "/learn/one-ai-image-complete-campaign/social-preview"
+      : coverUrl(c);
   const { posts } = await listPosts({ topic: c.topic, locale: c.locale });
   const data = {
     "@context": "https://schema.org",
@@ -77,7 +81,7 @@ export default async function Page({
         "@type": "BlogPosting",
         headline: c.title,
         description: c.excerpt,
-        image: `${origin}${coverUrl(c)}`,
+        image: `${origin}${structuredImage}`,
         datePublished: p.publishedAt?.toISOString(),
         dateModified: p.modifiedAt?.toISOString(),
         author: { "@type": "Person", name: c.author },

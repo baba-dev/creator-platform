@@ -2,40 +2,65 @@
 
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
+import { TurnstileWidget } from "./turnstile-widget";
 import type { Route } from "next";
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 
 const inputClassName = "form-control mt-2 text-sm";
 
-export function ForgotPasswordForm() {
+export function ForgotPasswordForm({
+  turnstileSiteKey,
+}: {
+  turnstileSiteKey?: string;
+}) {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [email, setEmail] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPending(true);
     setError(null);
+    if (turnstileSiteKey && !turnstileToken) {
+      setError("Complete the verification to continue.");
+      setPending(false);
+      return;
+    }
 
     const form = new FormData(event.currentTarget);
     const emailValue = String(form.get("email") ?? "").trim();
     setEmail(emailValue);
 
     try {
-      const result = await authClient.requestPasswordReset({
-        email: emailValue,
-        redirectTo: "/reset-password",
-      });
+      const result = await authClient.requestPasswordReset(
+        {
+          email: emailValue,
+          redirectTo: "/reset-password",
+        },
+        turnstileSiteKey
+          ? { headers: { "x-turnstile-token": turnstileToken! } }
+          : undefined,
+      );
 
       if (result.error) {
+        if (turnstileSiteKey) {
+          setTurnstileToken(null);
+          setTurnstileResetKey((value) => value + 1);
+        }
         setError("Could not start password recovery. Try again shortly.");
         return;
       }
 
       setSubmitted(true);
     } catch {
+      if (turnstileSiteKey) {
+        setTurnstileToken(null);
+        setTurnstileResetKey((value) => value + 1);
+      }
       setError("Could not start password recovery. Try again shortly.");
     } finally {
       setPending(false);
@@ -105,7 +130,21 @@ export function ForgotPasswordForm() {
         </p>
       ) : null}
 
-      <Button className="w-full" size="lg" disabled={pending} type="submit">
+      {turnstileSiteKey ? (
+        <TurnstileWidget
+          siteKey={turnstileSiteKey}
+          action="password_reset"
+          onTokenChange={setTurnstileToken}
+          resetKey={turnstileResetKey}
+        />
+      ) : null}
+
+      <Button
+        className="w-full"
+        size="lg"
+        disabled={pending || Boolean(turnstileSiteKey && !turnstileToken)}
+        type="submit"
+      >
         {pending ? "Sending link…" : "Send reset link"}
       </Button>
 

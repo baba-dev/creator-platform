@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
 import { SocialAuthButtons } from "./social-auth-buttons";
+import { TurnstileWidget } from "./turnstile-widget";
 import type { Route } from "next";
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
@@ -13,16 +14,20 @@ export function SignUpForm({
   returnTo,
   googleEnabled = false,
   microsoftEnabled = false,
+  turnstileSiteKey,
 }: {
   returnTo?: Route;
   googleEnabled?: boolean;
   microsoftEnabled?: boolean;
+  turnstileSiteKey?: string;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [verificationEmail, setVerificationEmail] = useState<string | null>(
     null,
   );
   const [pending, setPending] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
   const [resendStatus, setResendStatus] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
 
@@ -32,6 +37,11 @@ export function SignUpForm({
     event.preventDefault();
     setPending(true);
     setError(null);
+    if (turnstileSiteKey && !turnstileToken) {
+      setError("Complete the verification to continue.");
+      setPending(false);
+      return;
+    }
 
     const form = new FormData(event.currentTarget);
     const password = String(form.get("password") ?? "");
@@ -44,14 +54,23 @@ export function SignUpForm({
     }
 
     const email = String(form.get("email") ?? "").trim();
-    const result = await authClient.signUp.email({
-      name: String(form.get("name") ?? "").trim(),
-      email,
-      password,
-      callbackURL: returnTo ?? "/onboarding",
-    });
+    const result = await authClient.signUp.email(
+      {
+        name: String(form.get("name") ?? "").trim(),
+        email,
+        password,
+        callbackURL: returnTo ?? "/onboarding",
+      },
+      turnstileSiteKey
+        ? { headers: { "x-turnstile-token": turnstileToken! } }
+        : undefined,
+    );
 
     if (result.error) {
+      if (turnstileSiteKey) {
+        setTurnstileToken(null);
+        setTurnstileResetKey((value) => value + 1);
+      }
       setError(
         result.error.status === 429
           ? "Too many signup attempts. Please try again shortly."
@@ -193,7 +212,21 @@ export function SignUpForm({
           </p>
         ) : null}
 
-        <Button className="w-full" size="lg" disabled={pending} type="submit">
+        {turnstileSiteKey ? (
+          <TurnstileWidget
+            siteKey={turnstileSiteKey}
+            action="signup"
+            onTokenChange={setTurnstileToken}
+            resetKey={turnstileResetKey}
+          />
+        ) : null}
+
+        <Button
+          className="w-full"
+          size="lg"
+          disabled={pending || Boolean(turnstileSiteKey && !turnstileToken)}
+          type="submit"
+        >
           {pending ? "Creating account…" : "Create account"}
         </Button>
 

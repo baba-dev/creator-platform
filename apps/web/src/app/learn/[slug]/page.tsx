@@ -15,6 +15,11 @@ export async function generateMetadata({
   const p = await getPost(slug);
   if (!p) return { robots: { index: false, follow: false } };
   const c = publishedContent(p.published);
+  // Use a raster social preview for Article 03; not all crawlers support SVG cards.
+  const socialPreview =
+    c.slug === "one-ai-image-complete-campaign"
+      ? "/learn/one-ai-image-complete-campaign/social-preview"
+      : socialImageUrl(c);
   const translated = await db.learnPost.findMany({
     where: { translationKey: c.translationKey, publishedAt: { not: null } },
     select: { locale: true, slug: true },
@@ -37,13 +42,13 @@ export async function generateMetadata({
       publishedTime: p.publishedAt?.toISOString(),
       modifiedTime: p.modifiedAt?.toISOString(),
       authors: [c.author],
-      images: [{ url: socialImageUrl(c), alt: c.coverAlt }],
+      images: [{ url: socialPreview, alt: c.coverAlt }],
     },
     twitter: {
       card: "summary_large_image",
       title: c.seoTitle || c.title,
       description: c.description || c.excerpt,
-      images: [socialImageUrl(c)],
+      images: [socialPreview],
     },
   };
 }

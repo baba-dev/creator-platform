@@ -1,5 +1,5 @@
 /* Creators PWA: deliberately never persist authenticated HTML, private media, or API replies. */
-const VERSION = "creators-pwa-v2-4";
+const VERSION = "creators-pwa-v2-5";
 const CORE = VERSION + "-shell";
 const PUBLIC = VERSION + "-public";
 const STATIC = VERSION + "-static";
@@ -154,6 +154,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   const request = event.request;
+  const url = new URL(request.url);
   if (
     request.method !== "GET" ||
     new URL(request.url).origin !== self.location.origin
@@ -185,7 +186,6 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   // Never cache or alter API calls, OAuth, workspace data, RSC, or downloads.
-  const url = new URL(request.url);
   if (
     url.pathname.startsWith("/api/") ||
     request.headers.has("rsc") ||

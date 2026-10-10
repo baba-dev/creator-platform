@@ -167,3 +167,26 @@
     font-size: 1.75rem;
   }
 }
+
+
+/* Article 02: restrained, decorative motion; content remains legible without it. */
+.learn-art-direction-path {
+  stroke-dasharray: 9 12;
+  animation: learn-art-direction-travel 7s linear infinite;
+}
+.learn-art-direction-orbit {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: learn-art-direction-breathe 4s ease-in-out infinite;
+}
+@keyframes learn-art-direction-travel {
+  to { stroke-dashoffset: -84; }
+}
+@keyframes learn-art-direction-breathe {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .learn-art-direction-path,
+  .learn-art-direction-orbit { animation: none; }
+}

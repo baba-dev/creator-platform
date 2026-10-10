@@ -88,6 +88,17 @@ export async function PATCH(
   // 1. Availability toggle
   const toggleResult = toggleModelEnabledSchema.safeParse(body);
   if (toggleResult.success) {
+    if (
+      toggleResult.data.enabled &&
+      model.provider === "NVIDIA" &&
+      model.mediaKind === "TEXT" &&
+      process.env.NVIDIA_COMMERCIAL_USE_ENABLED !== "true"
+    ) {
+      return NextResponse.json(
+        { error: "NVIDIA commercial inference must be licensed and enabled before activating text models." },
+        { status: 409 },
+      );
+    }
     if (toggleResult.data.enabled) {
       const activePrice = await db.modelPriceVersion.findFirst({
         where: {

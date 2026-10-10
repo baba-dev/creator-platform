@@ -3,12 +3,13 @@ import Link from "next/link";
 import type { Route } from "next";
 import {
   articleHtml,
-  mediaUrl,
+  coverUrl,
   plainText,
   type LearnContent,
 } from "@aiwa/learn";
 import { Eyebrow } from "@/components/ui/creative";
 import { ArticleActions } from "./article-actions";
+import { LearnVisualStory } from "./visual-story";
 export function LearnArticle({
   content: c,
   id,
@@ -80,7 +81,7 @@ export function LearnArticle({
       </header>
       {c.coverId && (
         <img
-          src={mediaUrl(c.coverId)}
+          src={coverUrl(c)}
           alt={c.coverAlt}
           width={1600}
           height={900}
@@ -89,6 +90,18 @@ export function LearnArticle({
           style={{ objectPosition: `${c.focalX}% ${c.focalY}%` }}
         />
       )}
+      {!c.coverId && c.coverSrc && (
+        <img
+          src={coverUrl(c)}
+          alt={c.coverAlt}
+          width={1600}
+          height={900}
+          fetchPriority="high"
+          className="my-12 aspect-video w-full rounded-[28px] object-cover"
+          style={{ objectPosition: `${c.focalX}% ${c.focalY}%` }}
+        />
+      )}
+      <LearnVisualStory story={c.visualStory} />
       <div className="mt-12 grid gap-12 lg:grid-cols-[200px_minmax(0,740px)] lg:justify-center">
         <aside>
           <details

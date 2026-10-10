@@ -1,5 +1,5 @@
 import sanitizeHtml from "sanitize-html";
-import type { LearnContent } from "./content";
+import { isEditorialAssetPath, type LearnContent } from "./content";
 export function cleanHtml(html: string): string {
   return sanitizeHtml(html, {
     allowedTags: [
@@ -36,8 +36,12 @@ export function cleanHtml(html: string): string {
       img: ["src", "alt", "width", "height", "loading"],
       video: ["src", "controls", "preload"],
       audio: ["src", "controls", "preload"],
+      figure: ["class"],
       th: ["colspan", "rowspan"],
       td: ["colspan", "rowspan"],
+    },
+    allowedClasses: {
+      figure: ["learn-media-wide", "learn-media-portrait"],
     },
     allowedSchemes: ["https", "http", "mailto"],
     allowProtocolRelative: false,
@@ -67,7 +71,8 @@ export function cleanHtml(html: string): string {
       ["img", "video", "audio"].includes(frame.tag) &&
       !/^\/api\/learn\/media\/[a-zA-Z0-9_-]{1,100}$/.test(
         frame.attribs.src ?? "",
-      ),
+      ) &&
+      !(frame.tag === "img" && isEditorialAssetPath(frame.attribs.src ?? "")),
   });
 }
 export function plainText(html: string) {
@@ -95,7 +100,7 @@ export function publishIssues(c: LearnContent) {
     !c.title.trim() && "Add a title.",
     !c.excerpt.trim() && "Add an excerpt.",
     !c.author.trim() && "Add an author.",
-    !c.coverId && "Choose a cover image.",
+    !c.coverId && !c.coverSrc && "Choose a cover image.",
     !c.coverAlt.trim() && "Describe the cover image.",
     plainText(c.html).length < 80 &&
       "Add a useful article body (at least 80 characters).",

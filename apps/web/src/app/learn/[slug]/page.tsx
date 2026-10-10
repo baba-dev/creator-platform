@@ -2,7 +2,7 @@ import type { Metadata, Route } from "next";
 import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
 import { db } from "@aiwa/db";
-import { mediaUrl, publishedContent } from "@aiwa/learn";
+import { coverUrl, publishedContent, socialImageUrl } from "@aiwa/learn";
 import { LearnArticle } from "@/components/learn/article";
 import { getPost, learnOrigin, listPosts } from "@/lib/learn/queries";
 export const dynamic = "force-dynamic";
@@ -37,15 +37,13 @@ export async function generateMetadata({
       publishedTime: p.publishedAt?.toISOString(),
       modifiedTime: p.modifiedAt?.toISOString(),
       authors: [c.author],
-      images: [
-        { url: mediaUrl(c.socialImageId || c.coverId), alt: c.coverAlt },
-      ],
+      images: [{ url: socialImageUrl(c), alt: c.coverAlt }],
     },
     twitter: {
       card: "summary_large_image",
       title: c.seoTitle || c.title,
       description: c.description || c.excerpt,
-      images: [mediaUrl(c.socialImageId || c.coverId)],
+      images: [socialImageUrl(c)],
     },
   };
 }
@@ -74,7 +72,7 @@ export default async function Page({
         "@type": "BlogPosting",
         headline: c.title,
         description: c.excerpt,
-        image: `${origin}${mediaUrl(c.coverId)}`,
+        image: `${origin}${coverUrl(c)}`,
         datePublished: p.publishedAt?.toISOString(),
         dateModified: p.modifiedAt?.toISOString(),
         author: { "@type": "Person", name: c.author },

@@ -25,6 +25,15 @@ describe("Learn publishing boundaries", () => {
       '<audio src="/api/learn/media/audio-id" controls preload="metadata"></audio>',
     );
   });
+  it("allows repository-owned editorial images without opening external tracking", () => {
+    expect(
+      cleanHtml(
+        '<figure class="learn-media-portrait unsafe"><img src="/learn-assets/image-generation/final-blue-hour.webp" alt="Final image"></figure><img src="/learn-assets/../secret.png">',
+      ),
+    ).toBe(
+      '<figure class="learn-media-portrait"><img src="/learn-assets/image-generation/final-blue-hour.webp" alt="Final image" loading="lazy" /></figure>',
+    );
+  });
   it("derives stable heading anchors and deduplicated media references", () => {
     const result = articleHtml(
       "<h2>Start <em>here</em></h2><h2>Start here</h2>",
@@ -48,6 +57,16 @@ describe("Learn publishing boundaries", () => {
     );
     expect(
       contentSchema.safeParse({ ...c, tool: "//evil.invalid" }).success,
+    ).toBe(false);
+    expect(
+      contentSchema.safeParse({
+        ...c,
+        coverSrc: "/learn-assets/image-generation/cover.webp",
+      }).success,
+    ).toBe(true);
+    expect(
+      contentSchema.safeParse({ ...c, coverSrc: "https://tracker.invalid/a" })
+        .success,
     ).toBe(false);
   });
 });

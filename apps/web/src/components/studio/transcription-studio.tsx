@@ -12,7 +12,10 @@ import {
   type StudioModelOption,
 } from "@/components/studio/studio-model-select";
 import { Button } from "@/components/ui/button";
-import { GenerationCostPreview, type CostPreviewQuote } from "@/components/studio/generation-cost-preview";
+import {
+  GenerationCostPreview,
+  type CostPreviewQuote,
+} from "@/components/studio/generation-cost-preview";
 import { Eyebrow } from "@/components/ui/creative";
 import { Icon } from "@/components/ui/icon";
 
@@ -130,7 +133,9 @@ export function TranscriptionStudio({
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteCanAfford, setQuoteCanAfford] = useState(false);
   const [quoteCanSpend, setQuoteCanSpend] = useState(false);
-  const [quoteWalletCredits, setQuoteWalletCredits] = useState<string | null>(null);
+  const [quoteWalletCredits, setQuoteWalletCredits] = useState<string | null>(
+    null,
+  );
   const [quotePending, setQuotePending] = useState(false);
   const [busy, setBusy] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
@@ -490,7 +495,16 @@ export function TranscriptionStudio({
             modelName={quote?.displayName ?? "Transcription"}
             providerName={quote ? providerLabel(quote.provider) : undefined}
             mediaKind="VOICE"
-            details={quote ? [`${quote.billableSeconds}s audio`, quote.pricingDimension === "SECOND" ? `${quote.billingUnits} × ${quote.unitQuantity}s` : "Per request"] : []}
+            details={
+              quote
+                ? [
+                    `${quote.billableSeconds}s audio`,
+                    quote.pricingDimension === "SECOND"
+                      ? `${quote.billingUnits} × ${quote.unitQuantity}s`
+                      : "Per request",
+                  ]
+                : []
+            }
             walletCredits={quoteWalletCredits}
             canAfford={quote ? quoteCanAfford : undefined}
             canSpend={quote ? quoteCanSpend : undefined}

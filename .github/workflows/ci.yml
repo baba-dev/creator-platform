@@ -329,6 +329,17 @@ jobs:
       - name: Run browser smoke journeys
         run: pnpm test:e2e
 
+      - name: Upload genuine PWA screenshot captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pwa-install-screenshots-${{ github.run_id }}
+          path: |
+            test-results/pwa-wide.png
+            test-results/pwa-narrow.png
+          retention-days: 3
+          if-no-files-found: ignore
+
       - name: Upload browser traces
         if: failure()
         uses: actions/upload-artifact@v4

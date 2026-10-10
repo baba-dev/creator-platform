@@ -64,3 +64,14 @@ test("offline scratchpad stores ciphertext and can be unlocked without network",
   await page.getByRole("button", { name: "Unlock saved draft" }).click();
   await expect(page.locator("#pad-text")).toHaveValue("A private offline campaign idea");
 });
+
+test("capture actual responsive public Creators app artwork for manifest review", async ({ page }, testInfo) => {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: /from first thought.*final media/i })).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  await page.screenshot({
+    path: testInfo.project.name === "desktop-chromium" ? "test-results/pwa-wide.png" : "test-results/pwa-narrow.png",
+    animations: "disabled",
+    fullPage: false,
+  });
+});

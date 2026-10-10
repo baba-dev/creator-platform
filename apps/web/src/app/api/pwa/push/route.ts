@@ -6,9 +6,12 @@ import {
 } from "@aiwa/core/web-push";
 import { getRequestSession } from "@/lib/request-auth";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
+import { rateLimit } from "@/lib/rate-limit";
 import { z } from "zod";
 
 export const runtime = "nodejs";
+
+const mutationLimiter = rateLimit({ max: 12, windowMs: 60_000, prefix: "pwa-push" });
 
 const endpoint = z
   .string()
@@ -63,6 +66,8 @@ export async function POST(request: Request) {
     return Response.json({ error: "Origin not allowed." }, { status: 403 });
   const session = await getRequestSession(request.headers);
   if (!session) return gone();
+  const limit = await mutationLimiter.check(session.user.id);
+  if (limit) return limit;
   if (!privateKey())
     return Response.json({ error: "Push is not configured." }, { status: 503 });
   const data = payload.safeParse(await request.json().catch(() => null));

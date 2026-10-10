@@ -33,7 +33,11 @@ export const editorialAssetPathSchema = z
     (value) => value === "" || isEditorialAssetPath(value),
     "Use a trusted Learn asset path",
   );
-export const learnVisualStories = ["", "image-prompt-workflow"] as const;
+export const learnVisualStories = [
+  "",
+  "image-prompt-workflow",
+  "image-art-direction",
+] as const;
 export const slugSchema = z
   .string()
   .min(2)

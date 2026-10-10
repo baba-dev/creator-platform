@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import { mediaToolSourceIssue } from "@aiwa/generation/media-tool-input";
 import { Button } from "@/components/ui/button";
+import { GenerationCostPreview, type CostPreviewQuote } from "@/components/studio/generation-cost-preview";
 import { CreativeSurface, Eyebrow, Annotation } from "@/components/ui/creative";
 import { Icon } from "@/components/ui/icon";
 import { ProcessFeedback } from "@/components/process/process-feedback";
@@ -32,7 +33,7 @@ import {
   type Settings,
 } from "./mediakit-model";
 
-type Quote = {
+type Quote = CostPreviewQuote & {
   priceVersionId: string;
   reservedCredits: string;
   quotedQuantity: number;
@@ -695,20 +696,14 @@ export function MediaKitStudio({
             <p className="mt-2 break-words text-sm text-muted-foreground">
               {source?.name} · {source ? assetDetail(source) : ""}
             </p>
-            <div className="my-5 rounded-2xl border border-primary/30 bg-primary/5 p-5">
-              <p className="text-sm text-muted-foreground">Reserve up to</p>
-              <p className="mt-2 font-display text-3xl font-semibold tabular-nums">
-                {quote.reservedCredits} credits
-              </p>
-              <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                Final charges follow successful processing and storage. Unused
-                reserved credits are released.
-                {toolKey.startsWith("matte-") ||
-                toolKey === "text-to-scrolling-video"
-                  ? " This ceiling includes the highest resolution tariff; final duration and resolution determine the charge."
-                  : ""}
-              </p>
-            </div>
+            <GenerationCostPreview
+              className="my-5"
+              quote={quote}
+              modelName={tool?.name}
+              providerName="BytePlus MediaKit"
+              mediaKind={source?.mediaKind}
+              details={[source ? assetDetail(source) : "", tool?.description ?? ""]}
+            />
             <div className="flex flex-wrap gap-3">
               <Button
                 type="button"

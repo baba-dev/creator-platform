@@ -1,12 +1,14 @@
 /* Creators PWA: deliberately never persist authenticated HTML, private media, or API replies. */
-const VERSION = "creators-pwa-v2-3";
+const VERSION = "creators-pwa-v2-4";
 const CORE = VERSION + "-shell";
 const PUBLIC = VERSION + "-public";
+const STATIC = VERSION + "-static";
 const OFFLINE = "/offline.html";
 const CORE_URLS = [
   OFFLINE,
   "/manifest.webmanifest",
   "/offline-drafts.js",
+  "/offline-guide.html",
   "/brand/icons/pwa/creators-pwa-192x192-transparent.webp",
   "/brand/icons/pwa/creators-pwa-512x512-transparent.webp",
   "/brand/icons/pwa/creators-pwa-maskable-192x192-dark.webp",
@@ -14,6 +16,7 @@ const CORE_URLS = [
 ];
 const PUBLIC_PATH = /^\/learn(?:\/(?!preview(?:\/|$)|start(?:\/|$))|$)/;
 const MAX_PUBLIC = 18;
+const MAX_STATIC = 64;
 const publicRequest = (request) => {
   const url = new URL(request.url);
   return (
@@ -48,7 +51,7 @@ self.addEventListener("activate", (event) => {
         keys
           .filter(
             (key) =>
-              key.startsWith("creators-pwa-") && key !== CORE && key !== PUBLIC,
+              key.startsWith("creators-pwa-") && key !== CORE && key !== PUBLIC && key !== STATIC,
           )
           .map((key) => caches.delete(key)),
       );
@@ -153,6 +156,24 @@ self.addEventListener("fetch", (event) => {
     new URL(request.url).origin !== self.location.origin
   )
     return;
+  // Only immutable Next.js build assets may enter the bounded static cache.
+  if (url.pathname.startsWith("/_next/static/") &&
+      ["script", "style", "font", "image"].includes(request.destination)) {
+    event.respondWith((async () => {
+      const cache = await caches.open(STATIC);
+      const prior = await cache.match(request);
+      if (prior) return prior;
+      const response = await fetch(request);
+      if (response.ok && response.type === "basic" &&
+          !(response.headers.get("cache-control") || "").includes("no-store") &&
+          !(response.headers.get("cache-control") || "").includes("private")) {
+        await cache.put(request, response.clone());
+        await trim(cache, MAX_STATIC);
+      }
+      return response;
+    })());
+    return;
+  }
   // Never cache or alter API calls, OAuth, workspace data, RSC, or downloads.
   const url = new URL(request.url);
   if (

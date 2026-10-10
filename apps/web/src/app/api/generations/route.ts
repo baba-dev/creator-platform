@@ -246,9 +246,12 @@ export async function GET(request: Request) {
                       ? "0"
                       : priceCredits(m.priceVersions[0]).toString(),
                   // Safe retail conversion metadata; never expose supplier cost.
-                  creditsPerBaisa: m.priceVersions[0].creditsPerBaisa.toString(),
-                  fxBaisaNumerator: m.priceVersions[0].fxBaisaNumerator.toString(),
-                  fxBaisaDenominator: m.priceVersions[0].fxBaisaDenominator.toString(),
+                  creditsPerBaisa:
+                    m.priceVersions[0].creditsPerBaisa.toString(),
+                  fxBaisaNumerator:
+                    m.priceVersions[0].fxBaisaNumerator.toString(),
+                  fxBaisaDenominator:
+                    m.priceVersions[0].fxBaisaDenominator.toString(),
                   capabilities:
                     m.mediaKind === "VIDEO" &&
                     m.capabilities &&

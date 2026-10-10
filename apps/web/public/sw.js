@@ -57,8 +57,13 @@ self.addEventListener("activate", (event) => {
 });
 const SHARE_DB = "creators-pwa-incoming";
 const ALLOWED_MEDIA = new Set([
-  "image/png", "image/jpeg", "image/webp", "video/mp4",
-  "audio/mpeg", "audio/wav", "audio/x-wav"
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "video/mp4",
+  "audio/mpeg",
+  "audio/wav",
+  "audio/x-wav",
 ]);
 function openInbox() {
   return new Promise((resolve, reject) => {
@@ -75,12 +80,18 @@ async function receiveShare(request) {
   try {
     const form = await request.formData();
     const file = form.get("files");
-    if (file && (!(file instanceof File) || file.size > 25 * 1024 * 1024 ||
-      !ALLOWED_MEDIA.has(file.type))) throw new Error("Unsupported media.");
+    if (
+      file &&
+      (!(file instanceof File) ||
+        file.size > 25 * 1024 * 1024 ||
+        !ALLOWED_MEDIA.has(file.type))
+    )
+      throw new Error("Unsupported media.");
     const title = String(form.get("title") || "").slice(0, 300);
     const body = String(form.get("text") || "").slice(0, 10_000);
     const sharedUrl = String(form.get("url") || "").slice(0, 2048);
-    if (!file && !title && !body && !sharedUrl) throw new Error("Share is empty.");
+    if (!file && !title && !body && !sharedUrl)
+      throw new Error("Share is empty.");
     const db = await openInbox();
     const id = crypto.randomUUID();
     await new Promise((resolve, reject) => {
@@ -90,20 +101,36 @@ async function receiveShare(request) {
       all.onsuccess = () => {
         const records = all.result || [];
         for (const record of records) {
-          if (record.createdAt < Date.now() - 15 * 60_000) store.delete(record.id);
+          if (record.createdAt < Date.now() - 15 * 60_000)
+            store.delete(record.id);
         }
-        if (records.filter((record) => record.createdAt >= Date.now() - 15 * 60_000).length >= 3) {
+        if (
+          records.filter(
+            (record) => record.createdAt >= Date.now() - 15 * 60_000,
+          ).length >= 3
+        ) {
           transaction.abort();
           return;
         }
-        store.put({ id, file: file || null, title, body, sharedUrl, createdAt: Date.now() });
+        store.put({
+          id,
+          file: file || null,
+          title,
+          body,
+          sharedUrl,
+          createdAt: Date.now(),
+        });
       };
       transaction.oncomplete = resolve;
       transaction.onerror = () => reject(transaction.error);
-      transaction.onabort = () => reject(new Error("Inbox storage limit reached."));
+      transaction.onabort = () =>
+        reject(new Error("Inbox storage limit reached."));
     });
     db.close();
-    return Response.redirect("/pwa/inbox?import=" + encodeURIComponent(id), 303);
+    return Response.redirect(
+      "/pwa/inbox?import=" + encodeURIComponent(id),
+      303,
+    );
   } catch {
     return Response.redirect("/pwa/inbox?error=share", 303);
   }
@@ -111,8 +138,11 @@ async function receiveShare(request) {
 
 self.addEventListener("fetch", (event) => {
   const incoming = new URL(event.request.url);
-  if (incoming.origin === self.location.origin &&
-      incoming.pathname === "/pwa/inbox" && event.request.method === "POST") {
+  if (
+    incoming.origin === self.location.origin &&
+    incoming.pathname === "/pwa/inbox" &&
+    event.request.method === "POST"
+  ) {
     event.respondWith(receiveShare(event.request));
     return;
   }

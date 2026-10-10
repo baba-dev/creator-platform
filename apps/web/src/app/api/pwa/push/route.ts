@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { db } from "@aiwa/db";
 import { endpointFingerprint, validatePushEndpoint, vapidPublicKey } from "@aiwa/core/web-push";
 import { getRequestSession } from "@/lib/request-auth";

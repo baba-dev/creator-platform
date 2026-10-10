@@ -1,4 +1,5 @@
 import { publishScheduled, reconcileLearnConversions } from "@aiwa/learn";
+import { enqueueTerminalPush, reconcileTerminalPush } from "./web-push";
 import { createHash, randomUUID } from "node:crypto";
 import { hostPressure } from "./host-pressure";
 import { mediaAlerts } from "@aiwa/assets/worker-health";
@@ -620,6 +621,27 @@ const generationWorker = createWorker(
     concurrency: env.GENERATION_WORKER_CONCURRENCY,
   },
 );
+
+generationWorker?.on("completed", (job) => {
+  if (typeof job?.data?.jobId !== "string") return;
+  void enqueueTerminalPush(job.data.jobId)
+    .then(() => reconcileTerminalPush())
+    .catch(() => log("error", "Web push notification enqueue failed"));
+});
+
+// Durable sweep recovers completion events lost to process crashes. It never
+// retries a billable provider request or mutates settlement.
+if (generationWorker) {
+  const pushSweep = setInterval(() => {
+    void reconcileTerminalPush().catch(() =>
+      log("error", "Web push reconciliation failed"),
+    );
+  }, 60_000);
+  pushSweep.unref();
+  void reconcileTerminalPush().catch(() =>
+    log("error", "Initial web push reconciliation failed"),
+  );
+}
 
 generationWorker?.on("error", () =>
   log("error", "Generation queue connection failed"),

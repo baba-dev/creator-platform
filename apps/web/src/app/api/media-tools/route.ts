@@ -1,6 +1,8 @@
 import { AssetQuotaExceededError } from "@aiwa/assets";
 import { LedgerDomainError } from "@aiwa/credits";
 import { db } from "@aiwa/db";
+import { formatBaisa } from "@/lib/format-baisa";
+import { publicCostBreakdown } from "@/lib/customer-cost-breakdown";
 import { requireMembership } from "@aiwa/generation";
 import {
   createProviderToolExecution,
@@ -158,6 +160,22 @@ export async function POST(request: Request) {
           priceVersionId: prepared.priceVersionId,
           reservedCredits: prepared.reservedCredits,
           quotedQuantity: prepared.quotedQuantity,
+          estimatedCredits: prepared.reservedCredits,
+          reservationCredits: prepared.reservedCredits,
+          estimatedOmr: formatBaisa(BigInt(prepared.customerPriceBaisa)),
+          maximumChargeOmr: formatBaisa(BigInt(prepared.customerPriceBaisa)),
+          creditsPerBaisa: prepared.creditsPerBaisa,
+          pricingDimension: prepared.pricingMetric,
+          unitQuantity: prepared.unitQuantity,
+          settlement: "ACTUAL_USAGE",
+          pricingBreakdown: publicCostBreakdown(
+            BigInt(prepared.customerPriceBaisa),
+            BigInt(prepared.customerPriceBaisa),
+            {
+              baisaNumerator: BigInt(prepared.fxBaisaNumerator),
+              baisaDenominator: BigInt(prepared.fxBaisaDenominator),
+            },
+          ),
         },
       });
     if (

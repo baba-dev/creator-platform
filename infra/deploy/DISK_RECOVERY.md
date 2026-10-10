@@ -2,7 +2,7 @@
 
 The deployment control plane makes immutable, root-owned release trees under
 `/var/www/creator-platform/releases`. A CI artifact must be uploaded and then
-expanded into a *separate* temporary tree. Therefore an archive fitting into
+expanded into a _separate_ temporary tree. Therefore an archive fitting into
 `incoming/` **does not** prove there is enough free space to activate it.
 
 ## Diagnosis (read-only)
@@ -22,7 +22,7 @@ Also check `/var/lib/mysql`, `/var/log`, and other directories with
 `sudo du -xhd1 /` **if releases are not the main consumers**. Never delete
 `shared/`, `/var/lib/mysql`, root-owned backups, or the active runtime.
 
-## Remove old, verified *immutable releases* only
+## Remove old, verified _immutable releases_ only
 
 Use the operator-reviewed script added in this change (retrieve it from a
 trusted copy of this repo). The script runs in **dry-run** mode by default.
@@ -43,20 +43,20 @@ The script protects the current release, the newest validated non-current
 rollback candidate, every release younger than 24 hours, unrecognized
 directories, backups, quarantine trees, and shared runtime data. If it cannot
 reclaim enough space, investigate usage before proceeding rather than deleting
-more aggressively. Running it requires privileged VPS access; the CI
-deployment account cannot remove root-owned release trees by design.
+more aggressively. Running it requires privileged VPS access; the CI deployment
+account cannot remove root-owned release trees by design.
 
 ## Retry and verify
 
 The CI deploy workflow automatically removes only **stale incoming archives**
 older than 48 hours, then compares staging free space with the compressed
 artifact size, its uncompressed regular-file size, and 512 MiB of spare
-headroom. Insufficient free space fails **before** transferring or extracting
-a new release.
+headroom. Insufficient free space fails **before** transferring or extracting a
+new release.
 
 Once enough space exists, rerun the failed deploy job for a specific already
-validated `main` CI artifact, or allow the next successful main CI deployment
-to proceed. Confirm the new run completes `Activate release on staging`, and
+validated `main` CI artifact, or allow the next successful main CI deployment to
+proceed. Confirm the new run completes `Activate release on staging`, and
 compare the active SHA and health response:
 
 ```bash

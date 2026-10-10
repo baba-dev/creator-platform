@@ -4,7 +4,10 @@ import Link from "next/link";
 import type { Route } from "next";
 import { mediaToolSourceIssue } from "@aiwa/generation/media-tool-input";
 import { Button } from "@/components/ui/button";
-import { GenerationCostPreview, type CostPreviewQuote } from "@/components/studio/generation-cost-preview";
+import {
+  GenerationCostPreview,
+  type CostPreviewQuote,
+} from "@/components/studio/generation-cost-preview";
 import { CreativeSurface, Eyebrow, Annotation } from "@/components/ui/creative";
 import { Icon } from "@/components/ui/icon";
 import { ProcessFeedback } from "@/components/process/process-feedback";
@@ -702,7 +705,10 @@ export function MediaKitStudio({
               modelName={tool?.name}
               providerName="BytePlus MediaKit"
               mediaKind={source?.mediaKind}
-              details={[source ? assetDetail(source) : "", tool?.description ?? ""]}
+              details={[
+                source ? assetDetail(source) : "",
+                tool?.description ?? "",
+              ]}
             />
             <div className="flex flex-wrap gap-3">
               <Button

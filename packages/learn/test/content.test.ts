@@ -48,6 +48,12 @@ describe("Learn publishing boundaries", () => {
       '<img src="/api/learn/media/abc"><video src="/api/learn/media/def"></video>';
     expect(mediaIds(c)).toEqual(["abc", "def"]);
   });
+  it("accepts only the two reviewed Learn motion stories", () => {
+    const c = emptyContent("editorial-test");
+    expect(contentSchema.safeParse({ ...c, visualStory: "image-prompt-workflow" }).success).toBe(true);
+    expect(contentSchema.safeParse({ ...c, visualStory: "image-art-direction" }).success).toBe(true);
+    expect(contentSchema.safeParse({ ...c, visualStory: "<script>" }).success).toBe(false);
+  });
   it("allows drafts but requires meaningful publication fields", () => {
     const c = emptyContent("test");
     expect(contentSchema.safeParse(c).success).toBe(true);

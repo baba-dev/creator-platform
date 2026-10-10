@@ -2,13 +2,14 @@
 
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
+import { SocialAuthButtons } from "./social-auth-buttons";
 import type { Route } from "next";
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 
 const inputClassName = "form-control mt-2 text-sm";
 
-export function SignUpForm({ returnTo }: { returnTo?: Route }) {
+export function SignUpForm({ returnTo, googleEnabled = false, microsoftEnabled = false }: { returnTo?: Route; googleEnabled?: boolean; microsoftEnabled?: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [verificationEmail, setVerificationEmail] = useState<string | null>(
     null,
@@ -63,12 +64,12 @@ export function SignUpForm({ returnTo }: { returnTo?: Route }) {
     return (
       <div className="space-y-4">
         <p className="rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-sm text-success">
-          We sent a verification link to <strong>{verificationEmail}</strong>.
+          Your account has been created for <strong>{verificationEmail}</strong>.
         </p>
         <p className="text-xs leading-5 text-muted-foreground">
           {isInvite
-            ? "Verify that email address first. The verification link will return you to this invitation; the sign-in button below is available as a fallback."
-            : "Verify that email address first. The verification link will continue to onboarding; you can also sign in manually below."}
+            ? "Your verification request is queued. Check your inbox when it arrives; your invitation remains available."
+            : "Verification delivery happens separately from account creation. Check your inbox when it arrives, then continue to onboarding."}
         </p>
         <Button asChild className="w-full">
           <Link href={signInHref}>Continue to sign in</Link>
@@ -78,6 +79,8 @@ export function SignUpForm({ returnTo }: { returnTo?: Route }) {
   }
 
   return (
+    <div className="space-y-5">
+      <SocialAuthButtons googleEnabled={googleEnabled} microsoftEnabled={microsoftEnabled} callbackURL={returnTo ?? "/onboarding"} />
     <form className="space-y-5" onSubmit={handleSubmit}>
       <label className="block text-xs font-bold text-foreground/90">
         Your name
@@ -154,5 +157,6 @@ export function SignUpForm({ returnTo }: { returnTo?: Route }) {
           : "Workspace creation begins only after you verify ownership of this email address. An administrator can assign credits after signup."}
       </p>
     </form>
+    </div>
   );
 }

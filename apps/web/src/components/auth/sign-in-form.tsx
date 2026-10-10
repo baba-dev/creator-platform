@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
+import { SocialAuthButtons } from "./social-auth-buttons";
 import type { Route } from "next";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -13,8 +14,23 @@ type SignInFormProps = {
 
 const inputClassName = "form-control mt-2 text-sm";
 
-export function SignInForm({ returnTo }: SignInFormProps) {
+export function SignInForm({ returnTo, googleEnabled = false, microsoftEnabled = false }: SignInFormProps & { googleEnabled?: boolean; microsoftEnabled?: boolean }) {
   const router = useRouter();
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
+  async function signInWithPasskey() {
+    setPasskeyBusy(true);
+    setError(null);
+    try {
+      const result = await authClient.signIn.passkey();
+      if (result.error) throw new Error("passkey_failed");
+      router.push(returnTo);
+      router.refresh();
+    } catch {
+      setError("Passkey sign-in was cancelled or unavailable. Use another sign-in method.");
+    } finally {
+      setPasskeyBusy(false);
+    }
+  }
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [requires2FA, setRequires2FA] = useState(false);
@@ -135,6 +151,9 @@ export function SignInForm({ returnTo }: SignInFormProps) {
   }
 
   return (
+    <div className="space-y-5">
+      <SocialAuthButtons googleEnabled={googleEnabled} microsoftEnabled={microsoftEnabled} callbackURL={returnTo} />
+      <Button type="button" variant="secondary" size="lg" className="w-full gap-2" disabled={passkeyBusy} onClick={() => void signInWithPasskey()}><span aria-hidden="true">◈</span>{passkeyBusy ? "Verifying device…" : "Sign in with a passkey"}</Button>
     <form className="space-y-5" onSubmit={handleSubmit}>
       <label className="block text-xs font-bold text-foreground/90">
         Work email
@@ -191,5 +210,6 @@ export function SignInForm({ returnTo }: SignInFormProps) {
         {pending ? "Signing in…" : "Sign in"}
       </Button>
     </form>
+    </div>
   );
 }

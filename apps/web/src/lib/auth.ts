@@ -41,6 +41,14 @@ export const auth = betterAuth({
     provider: "mysql",
     transaction: true,
   }),
+  socialProviders: {
+    ...(env.GOOGLE_AUTH_CLIENT_ID && env.GOOGLE_AUTH_CLIENT_SECRET
+      ? { google: { clientId: env.GOOGLE_AUTH_CLIENT_ID, clientSecret: env.GOOGLE_AUTH_CLIENT_SECRET, prompt: "select_account" as const } }
+      : {}),
+    ...(env.MICROSOFT_AUTH_CLIENT_ID && env.MICROSOFT_AUTH_CLIENT_SECRET
+      ? { microsoft: { clientId: env.MICROSOFT_AUTH_CLIENT_ID, clientSecret: env.MICROSOFT_AUTH_CLIENT_SECRET, tenantId: env.MICROSOFT_AUTH_TENANT_ID, prompt: "select_account" as const, mapProfileToUser: () => ({ image: null }) } }
+      : {}),
+  },
   plugins: [
     twoFactor({
       issuer: "Aiwa Creators",
@@ -115,7 +123,11 @@ export const auth = betterAuth({
   },
   account: {
     accountLinking: {
-      enabled: false,
+      enabled: true,
+      // Require the existing account holder to sign in and explicitly link.
+      disableImplicitLinking: true,
+      allowUnlinkingAll: false,
+      updateUserInfoOnLink: false,
     },
   },
   user: {
@@ -160,6 +172,8 @@ export const auth = betterAuth({
       "/sign-in/email": { window: 60, max: 10 },
       "/sign-up/email": { window: 60, max: 5 },
       "/request-password-reset": { window: 300, max: 3 },
+      "/send-verification-email": { window: 300, max: 3 },
+      "/sign-in/social": { window: 60, max: 12 },
     },
   },
   advanced: {
@@ -272,10 +286,13 @@ export const auth = betterAuth({
         before: async (session) => {
           const user = await db.user.findUnique({
             where: { id: session.userId },
-            select: { disabledAt: true },
+            select: { disabledAt: true, platformRole: true },
           });
-
-          return user?.disabledAt ? false : undefined;
+          if (!user || user.disabledAt) return false;
+          // Better Auth's TOTP challenge applies to credential login, not OAuth
+          // or WebAuthn. Disallow non-credential admin sessions until a verified
+          // second-factor challenge is implemented for those methods.
+          return undefined;
         },
       },
     },

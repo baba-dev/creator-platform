@@ -1,4 +1,5 @@
 import Image from "next/image";
+import type { Route } from "next";
 import Link from "next/link";
 import { Icon } from "@/components/ui/icon";
 import { RecentCreationsRefresh } from "@/components/dashboard/recent-creations-refresh";
@@ -67,7 +68,7 @@ export function RecentCreations({
           </p>
         </div>
         <Link
-          href={history}
+          href={history as Route}
           className="inline-flex min-h-10 items-center gap-2 text-sm font-semibold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           View all history <Icon name="arrow" className="size-4" />
@@ -108,7 +109,7 @@ export function RecentCreations({
                 className="group min-w-0 overflow-hidden rounded-[20px] border border-border bg-card transition-[border-color,transform] duration-200 hover:-translate-y-0.5 hover:border-primary/40 motion-reduce:transform-none"
               >
                 <Link
-                  href={url}
+                  href={url as Route}
                   aria-label={`Open ${job.mediaKind.toLowerCase()} generation: ${title}`}
                   className="block focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-ring"
                 >

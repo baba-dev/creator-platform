@@ -191,7 +191,12 @@ describe("multi-provider prompt enhancement dispatch", () => {
   });
 
   it("supports speech-specific narration with the matching target and output limit", async () => {
-    const response = await POST(request({ targetMedia: "VOICE", userPrompt: "A spoken sentence. ".repeat(140) }));
+    const response = await POST(
+      request({
+        targetMedia: "VOICE",
+        userPrompt: "A spoken sentence. ".repeat(140),
+      }),
+    );
     expect(response.status).toBe(202);
     expect(mocks.admit).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -202,13 +207,21 @@ describe("multi-provider prompt enhancement dispatch", () => {
   });
 
   it("retains the 2000-character limit for visual prompts", async () => {
-    const response = await POST(request({ targetMedia: "IMAGE", userPrompt: "a".repeat(2001) }));
+    const response = await POST(
+      request({ targetMedia: "IMAGE", userPrompt: "a".repeat(2001) }),
+    );
     expect(response.status).toBe(400);
     expect(mocks.admit).not.toHaveBeenCalled();
   });
 
   it("rejects overlong speech and unsupported media without queueing", async () => {
-    expect((await POST(request({ targetMedia: "VOICE", userPrompt: "a".repeat(4097) }))).status).toBe(400);
+    expect(
+      (
+        await POST(
+          request({ targetMedia: "VOICE", userPrompt: "a".repeat(4097) }),
+        )
+      ).status,
+    ).toBe(400);
     expect((await POST(request({ targetMedia: "AUDIO" }))).status).toBe(400);
     expect(mocks.admit).not.toHaveBeenCalled();
   });

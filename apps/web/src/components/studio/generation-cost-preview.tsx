@@ -128,6 +128,15 @@ export function GenerationCostPreview({
     : null;
   const rateText =
     rate !== null && Number.isFinite(rate) ? rate.toFixed(6) : null;
+  const tokenQuantity = usage && ["TOKEN", "COMPLETION_TOKEN"].includes(usage.unit)
+    ? integer(usage.quantity)
+    : null;
+  const retailMicro = integer(micro?.estimatedRetailMicroUsdApprox);
+  const perThousandTokens = tokenQuantity !== null && tokenQuantity > 0n && retailMicro !== null
+    ? ((retailMicro * 1_000n + tokenQuantity / 2n) / tokenQuantity).toString()
+    : null;
+  const creditsPerBaisa = integer(quote?.creditsPerBaisa);
+
   const [expired, setExpired] = useState(false);
   useEffect(() => {
     const check = () => setExpired(Boolean(quote?.expiresAt && Date.parse(quote.expiresAt) <= Date.now()));
@@ -379,6 +388,12 @@ export function GenerationCostPreview({
                         ≈ {digits(micro.estimatedRetailMicroUsdApprox)} μUSD
                       </dd>
                     </div>
+                    {perThousandTokens && (
+                      <div className="flex justify-between gap-3">
+                        <dt className="text-muted-foreground">Effective retail / 1K tokens</dt>
+                        <dd className="text-right tabular-nums">≈ {digits(perThousandTokens)} μUSD</dd>
+                      </div>
+                    )}
                     {rateText && (
                       <div className="flex justify-between gap-3">
                         <dt className="text-muted-foreground">
@@ -404,6 +419,12 @@ export function GenerationCostPreview({
                       : "Not provided"}
                   </dd>
                 </div>
+                {creditsPerBaisa !== null && creditsPerBaisa > 0n && (
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-muted-foreground">1 OMR credit equivalent</dt>
+                    <dd className="text-right tabular-nums">{(creditsPerBaisa * 1000n).toLocaleString("en-US")} credits</dd>
+                  </div>
+                )}
                 <div className="flex justify-between gap-3 border-t border-border pt-2 font-semibold">
                   <dt>Total estimated charge</dt>
                   <dd className="tabular-nums">

@@ -129,6 +129,21 @@ export function TemplateManager({
     }
   }
 
+  async function removeCover() {
+    if (!canManage || !draft.id || coverBusy) return;
+    setCoverBusy(true);
+    setMessage(null);
+    try {
+      const response = await fetch(`/api/admin/templates/${encodeURIComponent(draft.id)}/cover`, { method: "DELETE" });
+      const result = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Cover could not be removed.");
+      window.location.reload();
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Cover could not be removed.");
+      setCoverBusy(false);
+    }
+  }
+
   async function save() {
     if (!canManage || busy) return;
     setBusy(true);
@@ -393,6 +408,7 @@ export function TemplateManager({
             {draft.id?<div className="flex flex-wrap items-center gap-3">
               <input type="file" accept="image/jpeg,image/png,image/webp" aria-label="Select template cover image" onChange={e=>setCoverFile(e.target.files?.[0]??null)} className="block min-w-0 max-w-full text-xs" disabled={!canManage||coverBusy}/>
               <Button type="button" variant="secondary" size="sm" disabled={!canManage||coverBusy||!coverFile||!draft.coverAlt.trim()} onClick={()=>void uploadCover()}>{coverBusy?"Uploading…":"Upload cover"}</Button>
+              {selected?.coverObjectKey ? <Button type="button" variant="secondary" size="sm" disabled={!canManage||coverBusy} onClick={()=>void removeCover()}>Restore built-in cover</Button> : null}
             </div>:<p className="text-xs text-muted-foreground">Save the new template before uploading its cover.</p>}
           </section>
           <div className="grid gap-4 sm:grid-cols-2">

@@ -19,7 +19,10 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { ProcessFeedback } from "@/components/process/process-feedback";
 import { Button } from "@/components/ui/button";
-import { GenerationCostPreview, type CostPreviewQuote } from "@/components/studio/generation-cost-preview";
+import {
+  GenerationCostPreview,
+  type CostPreviewQuote,
+} from "@/components/studio/generation-cost-preview";
 import { Eyebrow } from "@/components/ui/creative";
 import { Tape } from "@/components/ui/sketch";
 import type { StudioModelOption } from "@/components/studio/studio-model-select";

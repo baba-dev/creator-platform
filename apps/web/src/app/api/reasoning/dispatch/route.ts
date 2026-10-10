@@ -26,7 +26,15 @@ const reasoningLimiter = rateLimit({
   prefix: "reasoning",
 });
 
-function promptEnhancementSystemPrompt(targetMedia: "IMAGE" | "VIDEO") {
+function promptEnhancementSystemPrompt(targetMedia: "IMAGE" | "VIDEO" | "VOICE") {
+  if (targetMedia === "VOICE")
+    return [
+      "You are an expert editor for text that will be spoken aloud by text-to-speech.",
+      "Polish clarity, natural spoken cadence, grammar and punctuation while preserving all user facts, names, quantities, intent and language.",
+      "Return only speakable narration: never add headings, stage directions, markdown, explanations, bracketed sound cues or text that should not be spoken.",
+      'Return only one JSON object with exactly one string property named "enhancedPrompt". Do not use markdown fences or commentary.',
+      "Keep enhancedPrompt at or below 4096 characters.",
+    ].join(" ");
   return [
     `You are an expert creative director for AI ${targetMedia === "VIDEO" ? "video" : "image"} generation.`,
     targetMedia === "VIDEO"
@@ -41,13 +49,17 @@ function promptEnhancementSystemPrompt(targetMedia: "IMAGE" | "VIDEO") {
 const requestSchema = z
   .object({
     organizationId: z.string().min(1).max(191),
-    userPrompt: z.string().trim().min(1).max(2000),
-    targetMedia: z.enum(["IMAGE", "VIDEO"]),
+    userPrompt: z.string().trim().min(1).max(4096),
+    targetMedia: z.enum(["IMAGE", "VIDEO", "VOICE"]),
     idempotencyKey: z.uuid(),
     modelId: z.string().min(1).max(191).optional(),
     localeIntent: creativeLocaleIntentSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.targetMedia !== "VOICE" && value.userPrompt.length > 2000)
+      ctx.addIssue({ code: "custom", path: ["userPrompt"], message: "Prompt exceeds 2000 characters." });
+  });
 
 function publicModel(model: {
   id: string;
@@ -82,7 +94,7 @@ async function existingResponse(
   idempotencyKey: string,
   organizationId: string,
   userPrompt: string,
-  targetMedia: "IMAGE" | "VIDEO",
+  targetMedia: "IMAGE" | "VIDEO" | "VOICE",
   requestedModelId?: string,
   localeIntent?: unknown,
 ) {
@@ -151,7 +163,7 @@ export async function POST(request: Request) {
 
   try {
     const text = await request.text();
-    if (new TextEncoder().encode(text).byteLength > 6000)
+    if (new TextEncoder().encode(text).byteLength > 20_000)
       return NextResponse.json(
         { error: "Request too large." },
         { status: 413 },

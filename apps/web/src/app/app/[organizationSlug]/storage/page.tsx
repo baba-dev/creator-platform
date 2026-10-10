@@ -1,4 +1,5 @@
 import { hasOrganizationPermission } from "@aiwa/authz";
+import { AccountConnections } from "@/components/auth/account-connections";
 import { parseServerEnv } from "@aiwa/config";
 import { db } from "@aiwa/db";
 import { requireOrganizationPermission } from "@/lib/request-auth";
@@ -60,6 +61,7 @@ export default async function StoragePage({
         </p>
       </div>
 
+      <AccountConnections googleEnabled={Boolean(env.GOOGLE_AUTH_CLIENT_ID && env.GOOGLE_AUTH_CLIENT_SECRET)} microsoftEnabled={Boolean(env.MICROSOFT_AUTH_CLIENT_ID && env.MICROSOFT_AUTH_CLIENT_SECRET)} returnTo={`/app/${organizationSlug}/storage`} />
       <StorageManager
         key={organizationId}
         organizationId={organizationId}

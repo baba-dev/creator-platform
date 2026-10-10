@@ -15,6 +15,8 @@ export function SignUpForm({ returnTo, googleEnabled = false, microsoftEnabled =
     null,
   );
   const [pending, setPending] = useState(false);
+  const [resendStatus, setResendStatus] = useState<string | null>(null);
+  const [resending, setResending] = useState(false);
 
   const isInvite = Boolean(returnTo && returnTo.startsWith("/invite/"));
 
@@ -71,6 +73,15 @@ export function SignUpForm({ returnTo, googleEnabled = false, microsoftEnabled =
             ? "Your verification request is queued. Check your inbox when it arrives; your invitation remains available."
             : "Verification delivery happens separately from account creation. Check your inbox when it arrives, then continue to onboarding."}
         </p>
+        <Button type="button" variant="secondary" className="w-full" disabled={resending} onClick={async () => {
+          setResending(true);
+          try {
+            const result = await authClient.sendVerificationEmail({ email: verificationEmail, callbackURL: returnTo ?? "/onboarding" });
+            setResendStatus(result.error ? "Unable to request another link yet. Please try later." : "A fresh verification email has been requested.");
+          } catch { setResendStatus("Unable to request a link right now."); }
+          finally { setResending(false); }
+        }}>{resending ? "Requesting…" : "Resend verification link"}</Button>
+        {resendStatus ? <p role="status" className="text-xs text-muted-foreground">{resendStatus}</p> : null}
         <Button asChild className="w-full">
           <Link href={signInHref}>Continue to sign in</Link>
         </Button>

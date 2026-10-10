@@ -5,6 +5,7 @@ import { AuthCard } from "@/components/auth/auth-card";
 import { SignUpForm } from "@/components/auth/sign-up-form";
 import { safeInvitationRoute } from "@/lib/navigation";
 import { getRequestSession } from "@/lib/request-auth";
+import { parseServerEnv } from "@aiwa/config";
 
 export default async function SignUpPage({
   searchParams,
@@ -38,7 +39,7 @@ export default async function SignUpPage({
       }
       footerLabel="Sign in"
     >
-      <SignUpForm returnTo={returnTo} />
+      <SignUpForm returnTo={returnTo} googleEnabled={Boolean(parseServerEnv().GOOGLE_AUTH_CLIENT_ID && parseServerEnv().GOOGLE_AUTH_CLIENT_SECRET)} microsoftEnabled={Boolean(parseServerEnv().MICROSOFT_AUTH_CLIENT_ID && parseServerEnv().MICROSOFT_AUTH_CLIENT_SECRET)} />
     </AuthCard>
   );
 }

@@ -1,6 +1,6 @@
 # Multi-provider prompt enhancement
 
-Image and Video Studio can improve a user prompt through the task-aware
+Image, Video and Speech Studio can improve a user prompt through the task-aware
 reasoning pipeline before the user submits media generation. Prompt Enhance is
 an assistive editing step: it does not queue media generation and does not
 reserve or capture workspace credits.
@@ -89,7 +89,7 @@ used, token usage, and output, but not commercial cost internals.
 7. Definite retryable provider responses may retry according to queue policy;
    unknown outcomes are not silently switched to another provider.
 8. Successful output is validated to a non-empty `enhancedPrompt` of at most
-   2000 characters and saved with provider request ID, token usage and cost
+   2000 characters for images/video or 4096 characters for spoken narration, and saved with provider request ID, token usage and cost
    basis.
 9. Studio replaces the prompt and displays the provider/model that produced it.
 
@@ -117,9 +117,9 @@ After applying the reasoning-cost migration and restarting web/worker services:
    `text-token-v1`.
 3. Open the top-right user menu → Prompt Enhance Model and confirm the selector
    lists only eligible configured models.
-4. Set a model in this menu, then open Image and Video Studio. Both use the
+4. Set a model in this menu, then open Image, Video and Speech Studio. All use the
    chosen model without showing a model selector next to the prompt.
-5. Ask Pixel to show or change the Prompt Enhance model; verify the setting
+5. In Speech Studio, Enhance Prompt polishes only the speakable narration and preserves the voice editor limit. Ask Pixel to show or change the Prompt Enhance model; verify the setting
    persists for this user and workspace across reloads.
 6. Enhance the same prompt with two different providers and confirm each job
    reports the exact selected provider/model.

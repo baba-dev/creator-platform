@@ -55,7 +55,8 @@ for directory in "${directories[@]}"; do
   fi
 
   # Never remove recent releases, even after selecting an older rollback.
-  if [[ -z "$(find "$directory" -maxdepth 0 -mmin +1440 -print)" ]]; then
+  if [[ "$recent_override" != "--include-recent" &&
+        -z "$(find "$directory" -maxdepth 0 -mmin +1440 -print)" ]]; then
     echo "KEEP recent (less than 24h old): $name"
     continue
   fi

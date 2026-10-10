@@ -2116,135 +2116,346 @@ export function GenerationStudio({
                 </p>
               ) : null}
 
-              {variant === "advanced" &&
-              activeMode === "IMAGE" &&
-              model?.capabilities?.referenceImages === true ? (
-                <div className="space-y-3 rounded-2xl border border-border bg-card/75 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className="text-sm font-semibold text-foreground">
-                        Reference images
-                      </h3>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Use private images to guide the next creation. Order
-                        matters.
-                      </p>
-                    </div>
-                    <label className="cursor-pointer rounded-xl border border-border px-3 py-2 text-xs font-semibold text-primary hover:border-primary/40">
-                      {referenceBusy ? "Uploading…" : "Upload image"}
-                      <input
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp"
-                        className="sr-only"
-                        disabled={
-                          referenceBusy ||
-                          busy ||
-                          !canGenerate ||
-                          referenceAssetIds.length >= 14
-                        }
-                        onChange={(event) => {
-                          const file = event.target.files?.[0];
-                          if (file) void uploadReference(file);
-                          event.target.value = "";
-                        }}
-                      />
-                    </label>
-                  </div>
-                  {referenceAssetIds.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {referenceAssetIds.map((id, index) => {
-                        const asset = references.find((item) => item.id === id);
-                        return (
-                          <div
-                            key={id}
-                            className="flex items-center gap-2 rounded-xl border border-border bg-background p-1.5 pr-2"
+              {variant === "advanced" && activeMode === "IMAGE" ? (
+                <section
+                  aria-label="Image creation settings"
+                  className="space-y-2"
+                >
+                  <h3 className="text-sm font-semibold">Creation settings</h3>
+                  <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+                    <details className="group relative min-w-0 rounded-2xl border border-border bg-card open:border-primary/60">
+                      <summary className="flex min-h-28 cursor-pointer list-none flex-col justify-between gap-2 rounded-2xl p-3 outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+                        <span className="flex items-center justify-between text-muted-foreground">
+                          <svg
+                            aria-hidden="true"
+                            viewBox="0 0 24 24"
+                            className="size-5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.7"
                           >
-                            <Image
-                              src={`/api/assets/${id}`}
-                              alt=""
-                              width={48}
-                              height={48}
-                              unoptimized
-                              className="size-12 rounded-lg object-cover"
-                            />
-                            <span className="max-w-24 truncate text-xs text-foreground">
-                              {index + 1}. {asset?.name ?? "Reference"}
-                            </span>
-                            <button
-                              type="button"
-                              aria-label={`Remove ${asset?.name ?? "reference"}`}
-                              className="rounded px-1 text-muted-foreground hover:text-destructive"
-                              onClick={() =>
+                            <rect x="3" y="3" width="18" height="18" rx="3" />
+                            <circle cx="9" cy="9" r="2" />
+                            <path d="m4 19 7-7 4 4 3-3 3 4" />
+                          </svg>
+                          <span aria-hidden="true">⌄</span>
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          References
+                        </span>
+                        <span className="truncate text-sm font-semibold">
+                          {referenceAssetIds.length} selected
+                        </span>
+                      </summary>
+                      <div className="absolute left-0 top-full z-40 mt-2 max-h-[65vh] w-[min(20rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-border bg-card p-3 shadow-xl max-sm:fixed max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto max-sm:w-auto">
+                        {model?.capabilities?.referenceImages === true ? (
+                          <div className="space-y-3 rounded-2xl border border-border bg-card/75 p-4">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <h3 className="text-sm font-semibold text-foreground">
+                                  Reference images
+                                </h3>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  Use private images to guide the next creation.
+                                  Order matters.
+                                </p>
+                              </div>
+                              <label className="cursor-pointer rounded-xl border border-border px-3 py-2 text-xs font-semibold text-primary hover:border-primary/40">
+                                {referenceBusy ? "Uploading…" : "Upload image"}
+                                <input
+                                  type="file"
+                                  accept="image/png,image/jpeg,image/webp"
+                                  className="sr-only"
+                                  disabled={
+                                    referenceBusy ||
+                                    busy ||
+                                    !canGenerate ||
+                                    referenceAssetIds.length >= 14
+                                  }
+                                  onChange={(event) => {
+                                    const file = event.target.files?.[0];
+                                    if (file) void uploadReference(file);
+                                    event.target.value = "";
+                                  }}
+                                />
+                              </label>
+                            </div>
+                            {referenceAssetIds.length > 0 ? (
+                              <div className="flex flex-wrap gap-2">
+                                {referenceAssetIds.map((id, index) => {
+                                  const asset = references.find(
+                                    (item) => item.id === id,
+                                  );
+                                  return (
+                                    <div
+                                      key={id}
+                                      className="flex items-center gap-2 rounded-xl border border-border bg-background p-1.5 pr-2"
+                                    >
+                                      <Image
+                                        src={`/api/assets/${id}`}
+                                        alt=""
+                                        width={48}
+                                        height={48}
+                                        unoptimized
+                                        className="size-12 rounded-lg object-cover"
+                                      />
+                                      <span className="max-w-24 truncate text-xs text-foreground">
+                                        {index + 1}.{" "}
+                                        {asset?.name ?? "Reference"}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        aria-label={`Remove ${asset?.name ?? "reference"}`}
+                                        className="rounded px-1 text-muted-foreground hover:text-destructive"
+                                        onClick={() =>
+                                          setReferenceAssetIds((previous) =>
+                                            previous.filter(
+                                              (value) => value !== id,
+                                            ),
+                                          )
+                                        }
+                                      >
+                                        ×
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : null}
+                            <select
+                              aria-label="Choose an existing reference"
+                              value=""
+                              disabled={busy || referenceAssetIds.length >= 14}
+                              onChange={(event) =>
                                 setReferenceAssetIds((previous) =>
-                                  previous.filter((value) => value !== id),
+                                  previous.includes(event.target.value)
+                                    ? previous
+                                    : [...previous, event.target.value],
                                 )
                               }
+                              className="min-h-10 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground"
                             >
-                              ×
-                            </button>
+                              <option value="">
+                                Choose from your reference library…
+                              </option>
+                              {references
+                                .filter(
+                                  (asset) =>
+                                    !referenceAssetIds.includes(asset.id),
+                                )
+                                .map((asset) => (
+                                  <option key={asset.id} value={asset.id}>
+                                    {asset.name}
+                                  </option>
+                                ))}
+                            </select>
+                            <div className="flex flex-col gap-2 sm:flex-row">
+                              <label
+                                htmlFor="reference-url"
+                                className="sr-only"
+                              >
+                                Approved image link
+                              </label>
+                              <input
+                                id="reference-url"
+                                type="url"
+                                value={referenceUrl}
+                                onChange={(event) =>
+                                  setReferenceUrl(event.target.value)
+                                }
+                                placeholder="https://approved-host.example/image.jpg"
+                                maxLength={2048}
+                                className="min-h-11 min-w-0 flex-1 rounded-xl border border-input bg-background px-3 text-sm text-foreground"
+                              />
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                disabled={
+                                  !referenceUrl.trim() ||
+                                  referenceBusy ||
+                                  !canGenerate ||
+                                  referenceAssetIds.length >= 14
+                                }
+                                onClick={() => void importReference()}
+                              >
+                                Import link
+                              </Button>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              Links are imported into your private reference
+                              library. Your administrator controls approved
+                              source hosts.
+                            </p>
                           </div>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-                  <select
-                    aria-label="Choose an existing reference"
-                    value=""
-                    disabled={busy || referenceAssetIds.length >= 14}
-                    onChange={(event) =>
-                      setReferenceAssetIds((previous) =>
-                        previous.includes(event.target.value)
-                          ? previous
-                          : [...previous, event.target.value],
-                      )
-                    }
-                    className="min-h-10 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground"
-                  >
-                    <option value="">
-                      Choose from your reference library…
-                    </option>
-                    {references
-                      .filter((asset) => !referenceAssetIds.includes(asset.id))
-                      .map((asset) => (
-                        <option key={asset.id} value={asset.id}>
-                          {asset.name}
-                        </option>
-                      ))}
-                  </select>
-                  <div className="flex flex-col gap-2 sm:flex-row">
-                    <label htmlFor="reference-url" className="sr-only">
-                      Approved image link
-                    </label>
-                    <input
-                      id="reference-url"
-                      type="url"
-                      value={referenceUrl}
-                      onChange={(event) => setReferenceUrl(event.target.value)}
-                      placeholder="https://approved-host.example/image.jpg"
-                      maxLength={2048}
-                      className="min-h-11 min-w-0 flex-1 rounded-xl border border-input bg-background px-3 text-sm text-foreground"
-                    />
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      disabled={
-                        !referenceUrl.trim() ||
-                        referenceBusy ||
-                        !canGenerate ||
-                        referenceAssetIds.length >= 14
-                      }
-                      onClick={() => void importReference()}
-                    >
-                      Import link
-                    </Button>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">
+                            Reference images are not supported by this model.
+                          </p>
+                        )}
+                      </div>
+                    </details>
+                    <details className="group relative min-w-0 rounded-2xl border border-border bg-card open:border-primary/60">
+                      <summary className="flex min-h-28 cursor-pointer list-none flex-col justify-between gap-2 rounded-2xl p-3 outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+                        <span className="flex items-center justify-between text-muted-foreground">
+                          <svg
+                            aria-hidden="true"
+                            viewBox="0 0 24 24"
+                            className="size-5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.7"
+                          >
+                            <rect x="4" y="7" width="14" height="14" rx="2" />
+                            <path d="M8 3h10a3 3 0 0 1 3 3v10" />
+                          </svg>
+                          <span aria-hidden="true">⌄</span>
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          Outputs
+                        </span>
+                        <span className="truncate text-sm font-semibold">
+                          {selectedOutputCount} image
+                          {selectedOutputCount === 1 ? "" : "s"}
+                        </span>
+                      </summary>
+                      <div className="absolute left-0 top-full z-40 mt-2 max-h-[65vh] w-[min(20rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-border bg-card p-3 shadow-xl max-sm:fixed max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto max-sm:w-auto">
+                        <div className="space-y-3">
+                          <p className="text-sm font-semibold">
+                            Images to generate
+                          </p>
+                          <div className="grid grid-cols-4 gap-2">
+                            {Array.from(
+                              { length: Math.max(1, maxImageOutputs) },
+                              (_, i) => i + 1,
+                            ).map((count) => (
+                              <button
+                                key={count}
+                                type="button"
+                                disabled={busy}
+                                aria-pressed={count === selectedOutputCount}
+                                onClick={() => setOutputCount(count)}
+                                className={`min-h-11 rounded-lg border px-2 text-sm focus-visible:outline-2 focus-visible:outline-ring ${count === selectedOutputCount ? "border-primary bg-primary/10" : "border-border"}`}
+                              >
+                                {count}
+                              </button>
+                            ))}
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Credits are reserved for the maximum and settled on
+                            successful outputs.
+                          </p>
+                        </div>
+                      </div>
+                    </details>
+                    <details className="group relative min-w-0 rounded-2xl border border-border bg-card open:border-primary/60">
+                      <summary className="flex min-h-28 cursor-pointer list-none flex-col justify-between gap-2 rounded-2xl p-3 outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+                        <span className="flex items-center justify-between text-muted-foreground">
+                          <svg
+                            aria-hidden="true"
+                            viewBox="0 0 24 24"
+                            className="size-5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.7"
+                          >
+                            <rect x="3" y="5" width="18" height="14" rx="2" />
+                            <path d="M9 5v14" />
+                          </svg>
+                          <span aria-hidden="true">⌄</span>
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          Aspect ratio
+                        </span>
+                        <span className="truncate text-sm font-semibold">
+                          {selectedRatio}
+                        </span>
+                      </summary>
+                      <div className="absolute left-0 top-full z-40 mt-2 max-h-[65vh] w-[min(20rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-border bg-card p-3 shadow-xl max-sm:fixed max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto max-sm:w-auto">
+                        <div className="space-y-2">
+                          <p className="text-sm font-semibold">Aspect ratio</p>
+                          <div className="grid grid-cols-3 gap-2">
+                            {availableRatios.map((value) => {
+                              const [w, h] = value.split(":").map(Number);
+                              const max = Math.max(w || 1, h || 1);
+                              return (
+                                <button
+                                  key={value}
+                                  type="button"
+                                  disabled={busy}
+                                  aria-pressed={value === selectedRatio}
+                                  onClick={() => setRatio(value)}
+                                  className={`flex min-h-20 flex-col items-center justify-center gap-2 rounded-lg border p-2 text-xs focus-visible:outline-2 focus-visible:outline-ring ${value === selectedRatio ? "border-primary bg-primary/10" : "border-border"}`}
+                                >
+                                  <svg
+                                    aria-hidden="true"
+                                    viewBox="0 0 52 40"
+                                    className="h-9 w-12"
+                                  >
+                                    <rect
+                                      x={26 - (18 * (w || 1)) / max}
+                                      y={20 - (17 * (h || 1)) / max}
+                                      width={(36 * (w || 1)) / max}
+                                      height={(34 * (h || 1)) / max}
+                                      rx="2"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2"
+                                    />
+                                  </svg>
+                                  {value}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    </details>
+                    <details className="group relative min-w-0 rounded-2xl border border-border bg-card open:border-primary/60">
+                      <summary className="flex min-h-28 cursor-pointer list-none flex-col justify-between gap-2 rounded-2xl p-3 outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+                        <span className="flex items-center justify-between text-muted-foreground">
+                          <svg
+                            aria-hidden="true"
+                            viewBox="0 0 24 24"
+                            className="size-5"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.7"
+                          >
+                            <path d="M8 3H5a2 2 0 0 0-2 2v3m13-5h3a2 2 0 0 1 2 2v3M3 16v3a2 2 0 0 0 2 2h3m13-5v3a2 2 0 0 1-2 2h-3" />
+                            <rect x="8" y="8" width="8" height="8" rx="1" />
+                          </svg>
+                          <span aria-hidden="true">⌄</span>
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          Resolution
+                        </span>
+                        <span className="truncate text-sm font-semibold">
+                          {resolutionLabel(selectedResolution)}
+                        </span>
+                      </summary>
+                      <div className="absolute left-0 top-full z-40 mt-2 max-h-[65vh] w-[min(20rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-border bg-card p-3 shadow-xl max-sm:fixed max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto max-sm:w-auto">
+                        <div className="space-y-2">
+                          <p className="text-sm font-semibold">Resolution</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            {availableResolutions.map((value) => (
+                              <button
+                                key={value}
+                                type="button"
+                                disabled={busy}
+                                aria-pressed={value === selectedResolution}
+                                onClick={() => setResolution(value)}
+                                className={`min-h-11 rounded-lg border p-2 text-sm focus-visible:outline-2 focus-visible:outline-ring ${value === selectedResolution ? "border-primary bg-primary/10" : "border-border"}`}
+                              >
+                                {resolutionLabel(value)}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </details>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Links are imported into your private reference library. Your
-                    administrator controls approved source hosts.
-                  </p>
-                </div>
+                </section>
               ) : null}
-
               {variant === "advanced" && activeMode === "VIDEO" ? (
                 <div className="space-y-4 rounded-2xl border border-border bg-card/75 p-4">
                   <div>
@@ -2638,103 +2849,82 @@ export function GenerationStudio({
               ) : null}
 
               <div className={variant === "quick" ? "hidden" : "space-y-4"}>
-                {activeMode === "IMAGE" &&
-                Number(model?.capabilities?.maxGeneratedImages ?? 1) > 1 ? (
-                  <label className="grid gap-2 text-sm font-semibold text-foreground">
-                    Images to generate
+                {activeMode !== "IMAGE" ? (
+                  <>
+                    <label
+                      htmlFor="media-ratio"
+                      className="block text-sm font-semibold text-foreground"
+                    >
+                      Aspect ratio
+                    </label>
                     <select
-                      value={selectedOutputCount}
-                      onChange={(event) =>
-                        setOutputCount(Number(event.target.value))
+                      id="media-ratio"
+                      value={selectedRatio}
+                      onChange={(e) => setRatio(e.target.value)}
+                      disabled={
+                        busy ||
+                        availableRatios.length === 0 ||
+                        videoForcesAdaptive
                       }
                       className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
                     >
-                      {Array.from(
-                        { length: Math.max(1, maxImageOutputs) },
-                        (_, index) => index + 1,
-                      ).map((count) => (
-                        <option key={count} value={count}>
-                          {count}
-                        </option>
-                      ))}
+                      {availableRatios.length ? (
+                        (videoForcesAdaptive
+                          ? ["adaptive"]
+                          : availableRatios
+                        ).map((r) => {
+                          const ratioLabels: Record<string, string> = {
+                            "1:1": "1:1 · Square",
+                            "16:9": "16:9 · Landscape (Standard)",
+                            "9:16": "9:16 · Portrait (Reels/Stories)",
+                            "4:3": "4:3 · Classic Display",
+                            "3:4": "3:4 · Vertical Display",
+                            "3:2": "3:2 · 35mm Photography",
+                            "2:3": "2:3 · Vertical Photo",
+                            "21:9": "21:9 · Cinematic Ultrawide",
+                            adaptive: "Adaptive · From source frame",
+                          };
+                          return (
+                            <option key={r} value={r}>
+                              {ratioLabels[r] ?? r}
+                            </option>
+                          );
+                        })
+                      ) : (
+                        <option>No supported aspect ratios advertised</option>
+                      )}
                     </select>
-                    <span className="text-xs font-normal text-muted-foreground">
-                      Credits are reserved for the maximum and settled on
-                      successful outputs.
-                    </span>
-                  </label>
-                ) : null}
 
-                <label
-                  htmlFor="media-ratio"
-                  className="block text-sm font-semibold text-foreground"
-                >
-                  Aspect ratio
-                </label>
-                <select
-                  id="media-ratio"
-                  value={selectedRatio}
-                  onChange={(e) => setRatio(e.target.value)}
-                  disabled={
-                    busy || availableRatios.length === 0 || videoForcesAdaptive
-                  }
-                  className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
-                >
-                  {availableRatios.length ? (
-                    (videoForcesAdaptive ? ["adaptive"] : availableRatios).map(
-                      (r) => {
-                        const ratioLabels: Record<string, string> = {
-                          "1:1": "1:1 · Square",
-                          "16:9": "16:9 · Landscape (Standard)",
-                          "9:16": "9:16 · Portrait (Reels/Stories)",
-                          "4:3": "4:3 · Classic Display",
-                          "3:4": "3:4 · Vertical Display",
-                          "3:2": "3:2 · 35mm Photography",
-                          "2:3": "2:3 · Vertical Photo",
-                          "21:9": "21:9 · Cinematic Ultrawide",
-                          adaptive: "Adaptive · From source frame",
-                        };
-                        return (
-                          <option key={r} value={r}>
-                            {ratioLabels[r] ?? r}
+                    <label
+                      htmlFor="media-resolution"
+                      className="block text-sm font-semibold text-foreground"
+                    >
+                      Resolution
+                    </label>
+                    <select
+                      id="media-resolution"
+                      value={selectedResolution}
+                      onChange={(e) => setResolution(e.target.value)}
+                      disabled={
+                        busy ||
+                        availableResolutions.length === 0 ||
+                        (activeMode === "VIDEO" &&
+                          ["DRAFT", "DRAFT_FINAL"].includes(videoWorkflow))
+                      }
+                      className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
+                    >
+                      {availableResolutions.length ? (
+                        availableResolutions.map((value) => (
+                          <option key={value} value={value}>
+                            {resolutionLabel(value)}
                           </option>
-                        );
-                      },
-                    )
-                  ) : (
-                    <option>No supported aspect ratios advertised</option>
-                  )}
-                </select>
-
-                <label
-                  htmlFor="media-resolution"
-                  className="block text-sm font-semibold text-foreground"
-                >
-                  Resolution
-                </label>
-                <select
-                  id="media-resolution"
-                  value={selectedResolution}
-                  onChange={(e) => setResolution(e.target.value)}
-                  disabled={
-                    busy ||
-                    availableResolutions.length === 0 ||
-                    (activeMode === "VIDEO" &&
-                      ["DRAFT", "DRAFT_FINAL"].includes(videoWorkflow))
-                  }
-                  className="min-h-11 rounded-xl border border-input bg-card px-3 text-foreground"
-                >
-                  {availableResolutions.length ? (
-                    availableResolutions.map((value) => (
-                      <option key={value} value={value}>
-                        {resolutionLabel(value)}
-                      </option>
-                    ))
-                  ) : (
-                    <option>No supported resolutions advertised</option>
-                  )}
-                </select>
-
+                        ))
+                      ) : (
+                        <option>No supported resolutions advertised</option>
+                      )}
+                    </select>
+                  </>
+                ) : null}
                 {model?.mediaKind === "VIDEO" && (
                   <>
                     {videoWorkflow === "TALKING_AVATAR" ? (

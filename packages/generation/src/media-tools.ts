@@ -1828,5 +1828,11 @@ export async function prepareMediaToolRequest(
       position,
     })),
     reservedCredits: priceQuote(price, quantity).customerCredits.toString(),
+    customerPriceBaisa: priceQuote(price, quantity).customerPriceBaisa.toString(),
+    creditsPerBaisa: price.creditsPerBaisa.toString(),
+    fxBaisaNumerator: price.fxBaisaNumerator.toString(),
+    fxBaisaDenominator: price.fxBaisaDenominator.toString(),
+    pricingMetric: tool.pricingMetric,
+    unitQuantity: price.unitQuantity.toString(),
   };
 }

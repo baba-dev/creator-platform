@@ -11,6 +11,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { Route } from "next";
 import { Button } from "@/components/ui/button";
+import { GenerationCostPreview, type CostPreviewQuote } from "@/components/studio/generation-cost-preview";
 import { Icon, type IconName } from "@/components/ui/icon";
 
 type Model = {
@@ -43,10 +44,8 @@ type PresetVoice = {
   previewUrl?: string;
 };
 
-type Quote = {
+type Quote = CostPreviewQuote & {
   quoteToken: string;
-  reservationCredits: string;
-  estimatedCredits: string;
   priceVersionId: string;
 };
 
@@ -1539,18 +1538,15 @@ export function SeedAudioStudio({
           </div>
         ) : null}
 
-        <div className="mt-5 rounded-2xl border border-border bg-muted/30 p-4">
-          <p className="text-xs text-muted-foreground">Estimated credits</p>
-          <p className="mt-1 text-2xl font-semibold tabular-nums">
-            {activeQuote ? activeQuote.estimatedCredits : "—"}
-          </p>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            {activeQuote
-              ? `Up to ${activeQuote.reservationCredits} credits may be held. Settlement uses provider-reported original duration.`
-              : quoteError ||
-                "Complete the required inputs to calculate a fresh quote."}
-          </p>
-        </div>
+        <GenerationCostPreview
+          className="mt-5"
+          quote={activeQuote}
+          modelName={model?.name ?? "Seed Audio 1.0"}
+          providerName="BytePlus"
+          mediaKind="VOICE"
+          details={[mode === "LONG" ? "Long-form" : "Audio generation", `${duration}s target duration`]}
+          error={quoteError}
+        />
 
         <dl className="mt-5 space-y-3 text-sm">
           <div className="flex items-center justify-between gap-3">

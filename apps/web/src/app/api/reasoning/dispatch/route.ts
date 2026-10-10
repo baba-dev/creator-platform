@@ -26,7 +26,9 @@ const reasoningLimiter = rateLimit({
   prefix: "reasoning",
 });
 
-function promptEnhancementSystemPrompt(targetMedia: "IMAGE" | "VIDEO" | "VOICE") {
+function promptEnhancementSystemPrompt(
+  targetMedia: "IMAGE" | "VIDEO" | "VOICE",
+) {
   if (targetMedia === "VOICE")
     return [
       "You are an expert editor for text that will be spoken aloud by text-to-speech.",
@@ -58,7 +60,11 @@ const requestSchema = z
   .strict()
   .superRefine((value, ctx) => {
     if (value.targetMedia !== "VOICE" && value.userPrompt.length > 2000)
-      ctx.addIssue({ code: "custom", path: ["userPrompt"], message: "Prompt exceeds 2000 characters." });
+      ctx.addIssue({
+        code: "custom",
+        path: ["userPrompt"],
+        message: "Prompt exceeds 2000 characters.",
+      });
   });
 
 function publicModel(model: {

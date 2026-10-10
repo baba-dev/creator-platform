@@ -60,9 +60,11 @@ export function SignInForm({
 
     if (result.error) {
       setUnverifiedEmail(result.error.status === 403 ? email : null);
-      setError(result.error.status === 403
-        ? "Please verify your email address before signing in. You can request another link below."
-        : "We could not sign you in with those details.");
+      setError(
+        result.error.status === 403
+          ? "Please verify your email address before signing in. You can request another link below."
+          : "We could not sign you in with those details.",
+      );
       setPending(false);
       return;
     }
@@ -240,17 +242,44 @@ export function SignInForm({
           </p>
         ) : null}
 
-        {unverifiedEmail ? <div className="space-y-2 rounded-xl border border-border p-3">
-          <Button type="button" variant="secondary" size="sm" className="w-full" disabled={resendBusy} onClick={async () => {
-            setResendBusy(true);
-            try {
-              const result = await authClient.sendVerificationEmail({ email: unverifiedEmail, callbackURL: returnTo });
-              setResendStatus(result.error ? "Unable to request a new link yet. Please try later." : "A new verification message was requested.");
-            } catch { setResendStatus("Verification delivery is currently unavailable."); }
-            finally { setResendBusy(false); }
-          }}>{resendBusy ? "Requesting…" : "Resend verification link"}</Button>
-          {resendStatus ? <p role="status" className="text-xs text-muted-foreground">{resendStatus}</p> : null}
-        </div> : null}
+        {unverifiedEmail ? (
+          <div className="space-y-2 rounded-xl border border-border p-3">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="w-full"
+              disabled={resendBusy}
+              onClick={async () => {
+                setResendBusy(true);
+                try {
+                  const result = await authClient.sendVerificationEmail({
+                    email: unverifiedEmail,
+                    callbackURL: returnTo,
+                  });
+                  setResendStatus(
+                    result.error
+                      ? "Unable to request a new link yet. Please try later."
+                      : "A new verification message was requested.",
+                  );
+                } catch {
+                  setResendStatus(
+                    "Verification delivery is currently unavailable.",
+                  );
+                } finally {
+                  setResendBusy(false);
+                }
+              }}
+            >
+              {resendBusy ? "Requesting…" : "Resend verification link"}
+            </Button>
+            {resendStatus ? (
+              <p role="status" className="text-xs text-muted-foreground">
+                {resendStatus}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
         <Button className="w-full" size="lg" disabled={pending} type="submit">
           {pending ? "Signing in…" : "Sign in"}
         </Button>

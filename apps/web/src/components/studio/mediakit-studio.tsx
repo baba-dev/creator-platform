@@ -480,10 +480,7 @@ export function MediaKitStudio({
                 </p>
               </div>
             </div>
-            <form
-              onSubmit={review}
-              className="flex min-w-0 flex-col"
-            >
+            <form onSubmit={review} className="flex min-w-0 flex-col">
               <div className="min-w-0 p-5 sm:p-6 lg:p-8">
                 <div className="mb-3 flex items-center justify-between gap-2">
                   <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -538,9 +535,9 @@ export function MediaKitStudio({
                 <div className="max-w-2xl">
                   <AssetButton
                     asset={source}
-                  label={`Source ${sourceKind(toolKey).toLowerCase()}`}
-                  disabled={locked}
-                  onClick={() => setPicker("source")}
+                    label={`Source ${sourceKind(toolKey).toLowerCase()}`}
+                    disabled={locked}
+                    onClick={() => setPicker("source")}
                   />
                 </div>
                 {toolKey === "lip-sync" && (
@@ -554,13 +551,13 @@ export function MediaKitStudio({
                 <div className="max-w-3xl">
                   <MediaKitControls
                     tool={toolKey}
-                  settings={settings}
-                  onChange={changeSettings}
-                  source={source}
-                  crop={crop}
-                  onCrop={changeCrop}
-                  logo={logo}
-                  chooseLogo={() => setPicker("logo")}
+                    settings={settings}
+                    onChange={changeSettings}
+                    source={source}
+                    crop={crop}
+                    onCrop={changeCrop}
+                    logo={logo}
+                    chooseLogo={() => setPicker("logo")}
                   />
                 </div>
                 <div className="max-w-3xl border-t border-border pt-5">

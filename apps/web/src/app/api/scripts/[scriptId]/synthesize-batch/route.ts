@@ -212,7 +212,8 @@ export async function POST(
       const quote = issueGenerationQuote(quoteContext, maximumCredits, now);
       const customerBaisa = maximumCredits / price.creditsPerBaisa;
       const totalCharacters = resolvedBlocks.reduce(
-        (sum, row) => sum + countBillableCharacters(row.block.text.trim()), 0,
+        (sum, row) => sum + countBillableCharacters(row.block.text.trim()),
+        0,
       );
       return NextResponse.json({
         quote: {
@@ -225,11 +226,15 @@ export async function POST(
           creditsPerBaisa: price.creditsPerBaisa.toString(),
           pricingDimension: price.pricingDimension,
           settlement: "MULTI_STEP_ESTIMATE",
-          estimatedUsage: { unit: "CHARACTER", quantity: String(totalCharacters), isEstimate: false },
-          pricingBreakdown: publicCostBreakdown(
-            customerBaisa, customerBaisa,
-            { baisaNumerator: price.fxBaisaNumerator, baisaDenominator: price.fxBaisaDenominator },
-          ),
+          estimatedUsage: {
+            unit: "CHARACTER",
+            quantity: String(totalCharacters),
+            isEstimate: false,
+          },
+          pricingBreakdown: publicCostBreakdown(customerBaisa, customerBaisa, {
+            baisaNumerator: price.fxBaisaNumerator,
+            baisaDenominator: price.fxBaisaDenominator,
+          }),
           blockCount: resolvedBlocks.length,
           displayName: voiceModel.displayName,
         },

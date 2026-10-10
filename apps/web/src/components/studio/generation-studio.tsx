@@ -211,6 +211,10 @@ export function GenerationStudio({
   >([]);
   const [referenceAssetIds, setReferenceAssetIds] = useState<string[]>([]);
   const [videoWorkflow, setVideoWorkflow] = useState<VideoWorkflow>("GENERATE");
+  const [videoControlPanel, setVideoControlPanel] = useState<
+    "workflow" | "ratio" | "resolution" | "duration" | null
+  >("workflow");
+
   const [videoFirstFrameId, setVideoFirstFrameId] = useState("");
   const [videoLastFrameId, setVideoLastFrameId] = useState("");
   const [videoReferenceImageIds, setVideoReferenceImageIds] = useState<
@@ -2457,7 +2461,116 @@ export function GenerationStudio({
                 </section>
               ) : null}
               {variant === "advanced" && activeMode === "VIDEO" ? (
-                <div className="space-y-4 rounded-2xl border border-border bg-card/75 p-4">
+                <>
+                  <div
+                    className="grid grid-cols-4 gap-2"
+                    role="group"
+                    aria-label="Video configuration"
+                  >
+                    {(
+                      [
+                        {
+                          key: "workflow",
+                          label: "Workflow",
+                          value:
+                            availableVideoWorkflows.find(
+                              (item) =>
+                                item.value === videoWorkflow ||
+                                (item.value === "FRAME_TO_VIDEO" &&
+                                  videoWorkflow === "FIRST_LAST_FRAME"),
+                            )?.label ?? "Generate",
+                        },
+                        {
+                          key: "ratio",
+                          label: "Aspect ratio",
+                          value:
+                            selectedRatio === "adaptive"
+                              ? "Adaptive"
+                              : selectedRatio,
+                        },
+                        {
+                          key: "resolution",
+                          label: "Resolution",
+                          value: selectedResolution,
+                        },
+                        {
+                          key: "duration",
+                          label: "Duration",
+                          value:
+                            videoWorkflow === "TALKING_AVATAR"
+                              ? validDrivingAudio.find(
+                                  (item) => item.id === drivingAudioId,
+                                )?.durationMs
+                                ? `${(validDrivingAudio.find((item) => item.id === drivingAudioId)!.durationMs! / 1000).toFixed(1)}s`
+                                : "From audio"
+                              : videoWorkflow === "EDIT"
+                                ? "From source"
+                                : videoWorkflow === "DRAFT_FINAL"
+                                  ? "From draft"
+                                  : `${selectedDuration}s`,
+                        },
+                      ] as const
+                    ).map((tile) => (
+                      <button
+                        key={tile.key}
+                        type="button"
+                        disabled={busy}
+                        aria-expanded={videoControlPanel === tile.key}
+                        aria-controls="video-compact-control-panel"
+                        onClick={() =>
+                          setVideoControlPanel((current) =>
+                            current === tile.key ? null : tile.key,
+                          )
+                        }
+                        className={`flex min-h-20 min-w-0 flex-col items-center justify-center gap-1 rounded-xl border px-1.5 py-2 text-center transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${videoControlPanel === tile.key ? "border-primary bg-primary/[0.08]" : "border-border bg-card hover:border-primary/40"}`}
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          width="22"
+                          height="22"
+                          aria-hidden="true"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.7"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          {tile.key === "workflow" ? (
+                            <>
+                              <rect x="3" y="7" width="18" height="14" rx="2" />
+                              <path d="M3 7 6 3h15l-3 4M8 3l-3 4m10-4-3 4M10 11l5 3-5 3z" />
+                            </>
+                          ) : tile.key === "ratio" ? (
+                            <>
+                              <rect x="3" y="5" width="18" height="14" rx="2" />
+                              <path d="M8 9h8v6H8z" />
+                            </>
+                          ) : tile.key === "resolution" ? (
+                            <>
+                              <rect x="3" y="4" width="18" height="14" rx="2" />
+                              <path d="M8 22h8m-4-4v4m-3-12 3-2 3 2-3 2z" />
+                            </>
+                          ) : (
+                            <>
+                              <circle cx="12" cy="13" r="8" />
+                              <path d="M12 13V9m0 4 3 2M9 2h6" />
+                            </>
+                          )}
+                        </svg>
+                        <span className="text-[10px] text-muted-foreground">
+                          {tile.label}
+                        </span>
+                        <span className="max-w-full truncate text-[11px] font-semibold text-foreground sm:text-xs">
+                          {tile.value}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  <div
+                    id="video-compact-control-panel"
+                    className={videoControlPanel === "workflow" ? "" : "hidden"}
+                  >
+                    <div className="space-y-4 rounded-2xl border border-border bg-card/75 p-4">
                   <div>
                     <h3 className="text-sm font-semibold">Creation workflow</h3>
                     <p className="mt-1 text-xs text-muted-foreground">
@@ -2846,11 +2959,14 @@ export function GenerationStudio({
                     </div>
                   ) : null}
                 </div>
+                  </div>
+                </>
               ) : null}
 
               <div className={variant === "quick" ? "hidden" : "space-y-4"}>
                 {activeMode !== "IMAGE" ? (
                   <>
+                    <div className={activeMode === "VIDEO" && videoControlPanel !== "ratio" ? "hidden" : "space-y-2"}>
                     <label
                       htmlFor="media-ratio"
                       className="block text-sm font-semibold text-foreground"
@@ -2895,6 +3011,8 @@ export function GenerationStudio({
                       )}
                     </select>
 
+                    </div>
+                    <div className={activeMode === "VIDEO" && videoControlPanel !== "resolution" ? "hidden" : "space-y-2"}>
                     <label
                       htmlFor="media-resolution"
                       className="block text-sm font-semibold text-foreground"
@@ -2923,8 +3041,10 @@ export function GenerationStudio({
                         <option>No supported resolutions advertised</option>
                       )}
                     </select>
+                    </div>
                   </>
                 ) : null}
+                <div className={activeMode === "VIDEO" && videoControlPanel !== "duration" ? "hidden" : "space-y-2"}>
                 {model?.mediaKind === "VIDEO" && (
                   <>
                     {videoWorkflow === "TALKING_AVATAR" ? (
@@ -2991,6 +3111,10 @@ export function GenerationStudio({
                       </>
                     )}
 
+                  </>) }
+                </div>
+                {model?.mediaKind === "VIDEO" && (
+                  <>
                     {model.capabilities?.generateAudio === true &&
                     videoWorkflow !== "DRAFT_FINAL" ? (
                       <label className="flex items-center gap-3 rounded-xl border border-border bg-card px-3 py-3 text-sm font-medium text-foreground">

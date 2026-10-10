@@ -6,9 +6,16 @@ import Link from "next/link";
 import type { Route } from "next";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
+import { PromptEnhancementModelSettings } from "@/components/settings/prompt-enhancement-model-settings";
 
 export type SettingsTab =
-  "profile" | "organization" | "team" | "security" | "chatbot" | "locale";
+  | "profile"
+  | "organization"
+  | "team"
+  | "security"
+  | "chatbot"
+  | "prompt-enhancement"
+  | "locale";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -77,6 +84,7 @@ export function SettingsModal({
     { id: "team", label: "Team & Access", icon: "admin" },
     { id: "security", label: "Login & Security", icon: "shield" },
     { id: "chatbot", label: "Chatbot & AI", icon: "bot" },
+    { id: "prompt-enhancement", label: "Prompt Enhance", icon: "sparkles" },
     { id: "locale", label: "Locale & Region", icon: "globe" },
   ];
 
@@ -344,6 +352,13 @@ export function SettingsModal({
                   </p>
                 </div>
               </div>
+            )}
+
+            {/* Tab: Prompt Enhance model preference */}
+            {activeTab === "prompt-enhancement" && (
+              <PromptEnhancementModelSettings
+                organizationId={organization.id}
+              />
             )}
 
             {/* Tab: Locale & Region */}

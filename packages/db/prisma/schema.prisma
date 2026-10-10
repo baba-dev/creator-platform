@@ -228,6 +228,7 @@ model User {
   storyPlans             StoryPlan[]
   externalStorageConfigs ExternalStorageConfig[]
   pixelPreferences       PixelPreference[]
+  promptEnhancementPreferences PromptEnhancementPreference[]
   assistantReminders     AssistantReminder[]
   supportRequests        SupportRequest[]
   assistantSettings      AssistantSetting[]
@@ -343,6 +344,7 @@ model Organization {
   defaultStorageProvider AssetStorageProvider     @default(LOCAL)
   externalStorageConfigs ExternalStorageConfig[]
   pixelPreferences       PixelPreference[]
+  promptEnhancementPreferences PromptEnhancementPreference[]
   assistantReminders     AssistantReminder[]
   supportRequests        SupportRequest[]
 
@@ -1404,6 +1406,18 @@ model PixelAction {
   @@unique([workflowId, position])
   @@index([workflowId, status])
 }
+model PromptEnhancementPreference {
+  organizationId String
+  userId String
+  modelId String @db.VarChar(191)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([organizationId, userId])
+}
+
 model PixelPreference {
   organizationId String
   userId         String

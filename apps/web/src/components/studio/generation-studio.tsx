@@ -17,6 +17,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { TemplateInlineBrief, type TemplateBriefState } from "@/components/templates/template-inline-brief";
 import { ProcessFeedback } from "@/components/process/process-feedback";
 import { Button } from "@/components/ui/button";
 import {
@@ -200,6 +201,11 @@ export function GenerationStudio({
   const [quoteRefresh, setQuoteRefresh] = useState(0);
   const [ratio, setRatio] = useState("1:1");
   const [resolution, setResolution] = useState("2K");
+  const [templateBrief, setTemplateBrief] = useState<TemplateBriefState | null>(null);
+  const [templateResolving, setTemplateResolving] = useState(false);
+  const [templateResolveError, setTemplateResolveError] = useState<string | null>(null);
+  const consumedDirectTemplate = useRef<string | null>(null);
+  const resolvedTemplateKey = useRef<string | null>(null);
   const [templateContext, setTemplateContext] = useState<{
     id: string;
     slug: string;
@@ -544,6 +550,7 @@ export function GenerationStudio({
     (mode: MediaKind) => {
       if (mode !== activeMode) {
         setTemplateContext(null);
+        setTemplateBrief(null);
         setReferenceAssetIds([]);
         setOutputCount(1);
       }
@@ -1213,8 +1220,89 @@ export function GenerationStudio({
       cancelled = true;
     };
   }, [data, setLocaleIntent]);
+  // Direct activation stays in the existing creation surface. A template never
+  // submits a provider job; the ordinary quote and generate handlers remain authoritative.
+  useEffect(() => {
+    const slug = new URLSearchParams(window.location.search).get("template");
+    if (!slug || !data || consumedDirectTemplate.current === slug) return;
+    consumedDirectTemplate.current = slug;
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const response = await fetch(`/api/templates/${encodeURIComponent(slug)}?organizationId=${encodeURIComponent(organizationId)}`, {signal:controller.signal,cache:"no-store"});
+        const payload = (await response.json()) as {error?:string;template?:TemplateBriefState};
+        if(!response.ok||!payload.template)throw new Error(payload.error??"Template is unavailable.");
+        if(controller.signal.aborted)return;
+        const template=payload.template;
+        const values=Object.fromEntries(template.variables.filter(v=>v.defaultValue!==undefined).map(v=>[v.key,v.defaultValue])) as Record<string,string|number|boolean>;
+        resolvedTemplateKey.current=null;
+        setTemplateContext(null);
+        setQuoteState(null);
+        setPrompt("");
+        setVoiceText("");
+        setActiveMode(template.mediaKind);
+        setTemplateBrief({...template,values});
+        setTemplateResolveError(null);
+        window.history.replaceState(null,"",`${window.location.pathname}#create`);
+      } catch(reason) {
+        if(!controller.signal.aborted)setError(reason instanceof Error?reason.message:"Unable to open this template.");
+      }
+    })();
+    return ()=>controller.abort();
+  },[data,organizationId]);
+
+  useEffect(() => {
+    if(!templateBrief)return;
+    const key=JSON.stringify({slug:templateBrief.slug,values:templateBrief.values,localeIntent});
+    if(resolvedTemplateKey.current===key)return;
+    const missing=templateBrief.variables.some(v=>v.required&&(templateBrief.values[v.key]??v.defaultValue??"")==="");
+    if(missing){setTemplateResolving(false);setTemplateResolveError("Complete the required details to prepare this template.");return;}
+    resolvedTemplateKey.current=key;
+    const controller=new AbortController();
+    const timer=setTimeout(()=>{
+      setTemplateResolving(true);
+      setTemplateResolveError(null);
+      void (async()=>{
+        try{
+          const response=await fetch(`/api/templates/${encodeURIComponent(templateBrief.slug)}/resolve`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({organizationId,values:templateBrief.values,localeIntent}),signal:controller.signal});
+          const payload=(await response.json()) as {error?:string;resolved?:{templateId:string;templateSlug:string;templateName:string;mediaKind:MediaKind;prompt:string;modelId:string;referenceAssetIds:string[];defaults:{aspectRatio?:string;resolution?:string;outputCount?:number;durationSeconds?:number;generateAudio?:boolean;voiceKey?:string;speechRate?:number}}};
+          if(!response.ok||!payload.resolved)throw new Error(payload.error??"Could not prepare this template.");
+          if(controller.signal.aborted)return;
+          const resolved=payload.resolved;
+          const selected=data?.models.find(candidate=>candidate.id===resolved.modelId&&candidate.mediaKind===resolved.mediaKind);
+          if(!selected)throw new Error("The selected model is not available in this Studio. Try again or ask an administrator to update the template.");
+          setModelId(selected.id);
+          setTemplateContext({id:resolved.templateId,slug:resolved.templateSlug,name:resolved.templateName});
+          if(resolved.mediaKind==="VOICE")setVoiceText(resolved.prompt);else setPrompt(resolved.prompt);
+          const defaults=resolved.defaults;
+          if(defaults.aspectRatio)setRatio(defaults.aspectRatio);
+          if(defaults.resolution)setResolution(defaults.resolution);
+          if(typeof defaults.outputCount==="number")setOutputCount(Math.max(1,Math.min(15,defaults.outputCount)));
+          if(typeof defaults.durationSeconds==="number")setDuration(String(defaults.durationSeconds));
+          if(typeof defaults.generateAudio==="boolean")setGenerateAudio(defaults.generateAudio);
+          if(defaults.voiceKey)setVoiceKey(defaults.voiceKey);
+          if(typeof defaults.speechRate==="number")setSpeechRate(defaults.speechRate);
+          setReferenceAssetIds(resolved.referenceAssetIds);
+          setTemplateResolveError(null);
+        }catch(reason){
+          if(!controller.signal.aborted){
+            resolvedTemplateKey.current=null;
+            setTemplateContext(null);setPrompt("");setVoiceText("");
+            setTemplateResolveError(reason instanceof Error?reason.message:"Could not prepare template.");
+          }
+        }finally{if(!controller.signal.aborted)setTemplateResolving(false);}
+      })();
+    },300);
+    return ()=>{clearTimeout(timer);controller.abort();};
+  },[templateBrief,localeIntent,organizationId,data?.models]);
+
+  function updateTemplateValue(key:string,value:string|number|boolean){
+    setTemplateBrief(current=>current?{...current,values:{...current.values,[key]:value}}:null);
+    resolvedTemplateKey.current=null;
+    setTemplateContext(null);setQuoteState(null);setPrompt("");setVoiceText("");setEnhancementAttribution(null);setTemplateResolveError(null);
+  }
   async function generate() {
-    if (!model || busy || isEnhancing || !activeQuote) return;
+    if (!model || busy || isEnhancing || !activeQuote || (templateBrief && (!templateContext || templateResolving))) return;
     setBusy(true);
     setError(null);
     let input: Record<string, unknown>;
@@ -1643,6 +1731,9 @@ export function GenerationStudio({
           )}
         </div>
       </div>
+      {templateBrief ? (
+        <TemplateInlineBrief brief={templateBrief} busy={busy} error={templateResolveError} onChange={updateTemplateValue} organizationSlug={organizationSlug} />
+      ) : null}
       <div
         id="media-creation-panel"
         role="tabpanel"
@@ -1824,6 +1915,8 @@ export function GenerationStudio({
 
           {activeMode === "VOICE" ? (
             <>
+              <details open={!templateBrief} className="group">
+              {templateBrief ? <summary className="cursor-pointer text-xs font-semibold text-primary">Review / edit full speech script</summary> : null}
               <label
                 htmlFor="voice-text"
                 className="block text-sm font-semibold text-foreground"
@@ -1845,6 +1938,7 @@ export function GenerationStudio({
                   {estimatedUnits === 1 ? "" : "s"}
                 </div>
               </div>
+              </details>
               <div className="flex justify-end">
                 <CreativeLocaleButton
                   value={localeIntent}
@@ -2040,6 +2134,8 @@ export function GenerationStudio({
             </>
           ) : (
             <>
+              <details open={!templateBrief || variant === "advanced"} className="group">
+              {templateBrief ? <summary className="cursor-pointer text-xs font-semibold text-primary">Review / edit full creative prompt</summary> : null}
               <label
                 htmlFor="creation-prompt"
                 className="block text-sm font-semibold text-foreground"
@@ -2066,6 +2162,7 @@ export function GenerationStudio({
                   className="min-h-44 w-full rounded-2xl border border-input bg-card p-4 text-foreground placeholder:text-muted-foreground"
                 />
               </div>
+              </details>
               <div className="mt-2 flex flex-wrap justify-end gap-2">
                 <CreativeLocaleButton
                   value={localeIntent}
@@ -3248,6 +3345,7 @@ export function GenerationStudio({
             aria-busy={busy}
             disabled={
               busy ||
+              (templateBrief !== null && (templateResolving || !templateContext)) ||
               !canGenerate ||
               !isConfiguredForMode ||
               !model ||

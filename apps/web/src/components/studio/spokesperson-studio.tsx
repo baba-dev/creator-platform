@@ -5,7 +5,10 @@ import Link from "next/link";
 import type { Route } from "next";
 import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
-import { GenerationCostPreview, type CostPreviewQuote } from "@/components/studio/generation-cost-preview";
+import {
+  GenerationCostPreview,
+  type CostPreviewQuote,
+} from "@/components/studio/generation-cost-preview";
 import { retailMicroUsdApprox } from "@/lib/customer-cost-breakdown";
 import { formatBaisa } from "@/lib/format-baisa";
 import { Eyebrow } from "@/components/ui/creative";
@@ -97,8 +100,13 @@ function retailPart(credits: number, model: Model | null) {
     const perBaisa = BigInt(model.creditsPerBaisa ?? "0");
     const numerator = BigInt(model.fxBaisaNumerator ?? "0");
     const denominator = BigInt(model.fxBaisaDenominator ?? "0");
-    if (perBaisa <= 0n || numerator <= 0n || denominator <= 0n ||
-        BigInt(credits) % perBaisa !== 0n) return null;
+    if (
+      perBaisa <= 0n ||
+      numerator <= 0n ||
+      denominator <= 0n ||
+      BigInt(credits) % perBaisa !== 0n
+    )
+      return null;
     const baisa = BigInt(credits) / perBaisa;
     return {
       baisa,
@@ -378,23 +386,32 @@ export function SpokespersonStudio({
   const stagedQuote = useMemo<CostPreviewQuote | null>(() => {
     if (!creditBreakdown.pricingAvailable) return null;
     const video = retailPart(creditBreakdown.videoCredits, omniHumanModel);
-    const voice = audioMode === "SCRIPT"
-      ? retailPart(creditBreakdown.voiceCredits, voiceModel)
-      : null;
+    const voice =
+      audioMode === "SCRIPT"
+        ? retailPart(creditBreakdown.voiceCredits, voiceModel)
+        : null;
     if (!video || (audioMode === "SCRIPT" && !voice)) return null;
     const totalBaisa = video.baisa + (voice?.baisa ?? 0n);
     const totalRetailMicroUsd = video.microUsd + (voice?.microUsd ?? 0n);
-    const sameFx = !voice ||
-      (voice.numerator === video.numerator && voice.denominator === video.denominator);
+    const sameFx =
+      !voice ||
+      (voice.numerator === video.numerator &&
+        voice.denominator === video.denominator);
     const sameCreditsPerBaisa = !voice || voice.perBaisa === video.perBaisa;
     return {
       estimatedCredits: String(creditBreakdown.totalCredits),
       reservationCredits: String(creditBreakdown.totalCredits),
       estimatedOmr: formatBaisa(totalBaisa),
       maximumChargeOmr: formatBaisa(totalBaisa),
-      creditsPerBaisa: sameCreditsPerBaisa ? video.perBaisa.toString() : undefined,
+      creditsPerBaisa: sameCreditsPerBaisa
+        ? video.perBaisa.toString()
+        : undefined,
       settlement: "MULTI_STEP_ESTIMATE",
-      estimatedUsage: { unit: "SECOND", quantity: String(estimatedSeconds), isEstimate: true },
+      estimatedUsage: {
+        unit: "SECOND",
+        quantity: String(estimatedSeconds),
+        isEstimate: true,
+      },
       pricingBreakdown: {
         estimatedRetailMicroUsdApprox: totalRetailMicroUsd.toString(),
         maximumRetailMicroUsdApprox: totalRetailMicroUsd.toString(),
@@ -1307,17 +1324,25 @@ export function SpokespersonStudio({
                 providerName="BytePlus"
                 mediaKind="VIDEO"
                 walletCredits={data?.balance}
-                canAfford={creditBreakdown.pricingAvailable ? creditBreakdown.hasEnoughBalance : undefined}
+                canAfford={
+                  creditBreakdown.pricingAvailable
+                    ? creditBreakdown.hasEnoughBalance
+                    : undefined
+                }
                 details={[
                   `${estimatedSeconds}s estimated video`,
                   resolution,
                   ...(audioMode === "SCRIPT"
-                    ? [`Seed-TTS speech · ${creditBreakdown.voiceCredits} credits`]
+                    ? [
+                        `Seed-TTS speech · ${creditBreakdown.voiceCredits} credits`,
+                      ]
                     : ["Uploaded driving audio"]),
                 ]}
-                error={!creditBreakdown.pricingAvailable
-                  ? "Active pricing is unavailable for the selected spokesperson pipeline."
-                  : undefined}
+                error={
+                  !creditBreakdown.pricingAvailable
+                    ? "Active pricing is unavailable for the selected spokesperson pipeline."
+                    : undefined
+                }
               />
 
               {!creditBreakdown.pricingAvailable ? (

@@ -12,7 +12,7 @@ export type CostPreviewQuote = {
   maximumChargeOmr?: string;
   creditsPerBaisa?: string;
   expiresAt?: string;
-  settlement?: "FIXED" | "ACTUAL_USAGE";
+  settlement?: "FIXED" | "ACTUAL_USAGE" | "MULTI_STEP_ESTIMATE";
   pricingDimension?: string;
   unitQuantity?: string;
   billableSeconds?: number;
@@ -115,6 +115,7 @@ export function GenerationCostPreview({
     quote?.maximumChargeOmr ??
     omr(quote?.reservationCredits, quote?.creditsPerBaisa);
   const fixed = quote?.settlement === "FIXED";
+  const staged = quote?.settlement === "MULTI_STEP_ESTIMATE";
   const max = quote?.reservationCredits ?? "0";
   const wallet = integer(walletCredits ?? undefined);
   const reserved = integer(max);
@@ -186,7 +187,7 @@ export function GenerationCostPreview({
               <div className="min-w-0 rounded-xl border border-border bg-surface-sunken p-3">
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <Icon name="shield" className="size-4" aria-hidden="true" />
-                  {fixed ? "Confirmed quote" : "Maximum hold"}
+                  {fixed ? "Confirmed quote" : staged ? "Planned total" : "Maximum hold"}
                 </div>
                 <p className="mt-1 font-display text-2xl font-semibold tabular-nums text-foreground">
                   {digits(max)}{" "}
@@ -225,7 +226,7 @@ export function GenerationCostPreview({
                       ? `${quote.quotedQuantity} billable ${usageName(quote.pricingDimension ?? "REQUEST")}`
                       : "Model-specific billing"}
               </span>
-              <span>{fixed ? "Fixed rate" : "Settles on actual usage"}</span>
+              <span>{fixed ? "Fixed rate" : staged ? "Separately billed steps" : "Settles on actual usage"}</span>
             </div>
             {canAfford === false && (
               <p
@@ -438,7 +439,7 @@ export function GenerationCostPreview({
                 )}
                 <div className="flex justify-between gap-3">
                   <dt className="text-muted-foreground">
-                    {fixed ? "Fixed charge" : "Maximum reservation"}
+                    {fixed ? "Fixed charge" : staged ? "Indicative total" : "Maximum reservation"}
                   </dt>
                   <dd className="tabular-nums">
                     {digits(max)} credits
@@ -448,7 +449,7 @@ export function GenerationCostPreview({
                 {remaining !== null && (
                   <div className="flex justify-between gap-3">
                     <dt className="text-muted-foreground">
-                      Available after hold
+                      Available after planned total
                     </dt>
                     <dd className="tabular-nums">
                       {remaining.toLocaleString("en-US")} credits

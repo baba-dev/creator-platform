@@ -2116,11 +2116,19 @@ export function GenerationStudio({
                 </p>
               ) : null}
 
-              {variant === "advanced" &&
-              activeMode === "IMAGE" &&
-              model?.capabilities?.referenceImages === true ? (
-                <div className="space-y-3 rounded-2xl border border-border bg-card/75 p-4">
-                  <div className="flex items-start justify-between gap-3">
+              {variant === "advanced" && activeMode === "IMAGE" ? (
+                <section aria-label="Image creation settings" className="space-y-2">
+                  <h3 className="text-sm font-semibold text-foreground">Creation settings</h3>
+                  <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+                    <details className="group relative min-w-0 rounded-2xl border border-border bg-card transition-colors hover:border-primary/40 open:border-primary/60 open:bg-card">
+                  <summary className="flex min-h-28 cursor-pointer list-none flex-col justify-between gap-1 rounded-2xl p-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+                    <span className="flex items-center justify-between text-muted-foreground"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="size-5"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="9" r="1.5"/><path d="m4 18 6-6 4 4 3-3 4 5"/></svg><span aria-hidden="true" className="text-xs group-open:rotate-180">⌄</span></span>
+                    <span className="text-xs text-muted-foreground">References</span>
+                    <span className="truncate text-sm font-semibold text-foreground">${referenceAssetIds.length} selected</span>
+                  </summary>
+                  <div className="absolute left-0 top-full z-40 mt-2 w-[min(21rem,calc(100vw-2rem))] max-h-[65vh] overflow-y-auto overscroll-contain rounded-2xl border border-border bg-card p-3 shadow-xl max-sm:fixed max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto max-sm:w-auto">
+                    {model?.capabilities?.referenceImages === true ? (<div className="space-y-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <h3 className="text-sm font-semibold text-foreground">
                         Reference images
@@ -2634,10 +2642,44 @@ export function GenerationStudio({
                       </p>
                     </div>
                   ) : null}
-                </div>
+                </div>) : <p className="text-sm text-muted-foreground">This model does not support reference images.</p>}
+                  </div>
+                </details>
+                    <details className="group relative min-w-0 rounded-2xl border border-border bg-card transition-colors hover:border-primary/40 open:border-primary/60 open:bg-card">
+                  <summary className="flex min-h-28 cursor-pointer list-none flex-col justify-between gap-1 rounded-2xl p-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+                    <span className="flex items-center justify-between text-muted-foreground"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="size-5"><rect x="5" y="5" width="13" height="13" rx="2"/><path d="M9 2h10a3 3 0 0 1 3 3v10"/></svg><span aria-hidden="true" className="text-xs group-open:rotate-180">⌄</span></span>
+                    <span className="text-xs text-muted-foreground">Outputs</span>
+                    <span className="truncate text-sm font-semibold text-foreground">${selectedOutputCount} image${selectedOutputCount === 1 ? "" : "s"}</span>
+                  </summary>
+                  <div className="absolute left-0 top-full z-40 mt-2 w-[min(21rem,calc(100vw-2rem))] max-h-[65vh] overflow-y-auto overscroll-contain rounded-2xl border border-border bg-card p-3 shadow-xl max-sm:fixed max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto max-sm:w-auto">
+                    <div className="space-y-3"><p className="text-xs font-semibold">Images to generate</p><div className="grid grid-cols-4 gap-2">{Array.from({length:Math.max(1,maxImageOutputs)},(_,i)=>i+1).map(count=><button key={count} type="button" disabled={busy} aria-pressed={selectedOutputCount===count} onClick={()=>setOutputCount(count)} className={`min-h-11 rounded-xl border text-sm font-semibold focus-visible:outline-2 focus-visible:outline-ring ${selectedOutputCount===count?"border-primary bg-primary/10":"border-border hover:border-primary/40"}`}>{count}</button>)}</div><p className="text-xs text-muted-foreground">Credits are reserved for the maximum and settled on successful outputs.</p></div>
+                  </div>
+                </details>
+                    <details className="group relative min-w-0 rounded-2xl border border-border bg-card transition-colors hover:border-primary/40 open:border-primary/60 open:bg-card">
+                  <summary className="flex min-h-28 cursor-pointer list-none flex-col justify-between gap-1 rounded-2xl p-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+                    <span className="flex items-center justify-between text-muted-foreground"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="size-5"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M9 5v14"/></svg><span aria-hidden="true" className="text-xs group-open:rotate-180">⌄</span></span>
+                    <span className="text-xs text-muted-foreground">Aspect ratio</span>
+                    <span className="truncate text-sm font-semibold text-foreground">${selectedRatio}</span>
+                  </summary>
+                  <div className="absolute left-0 top-full z-40 mt-2 w-[min(21rem,calc(100vw-2rem))] max-h-[65vh] overflow-y-auto overscroll-contain rounded-2xl border border-border bg-card p-3 shadow-xl max-sm:fixed max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto max-sm:w-auto">
+                    <div className="space-y-3"><p className="text-xs font-semibold">Aspect ratio</p><div className="grid grid-cols-3 gap-2">{availableRatios.map((value) => { const [w,h] = value.split(":").map(Number); const widest = Math.max(w || 1,h || 1); return <button key={value} type="button" aria-pressed={selectedRatio === value} disabled={busy} onClick={() => setRatio(value)} className={`flex min-h-20 flex-col items-center justify-center gap-2 rounded-xl border p-2 text-xs hover:border-primary/50 focus-visible:outline-2 focus-visible:outline-ring ${selectedRatio === value ? "border-primary bg-primary/10" : "border-border"}`}><svg viewBox="0 0 52 40" aria-hidden="true" className="h-10 w-12"><rect x={26-18*(w||1)/widest} y={20-17*(h||1)/widest} width={36*(w||1)/widest} height={34*(h||1)/widest} rx="2" fill="none" stroke="currentColor" strokeWidth="2"/></svg>{value}</button>; })}</div></div>
+                  </div>
+                </details>
+                    <details className="group relative min-w-0 rounded-2xl border border-border bg-card transition-colors hover:border-primary/40 open:border-primary/60 open:bg-card">
+                  <summary className="flex min-h-28 cursor-pointer list-none flex-col justify-between gap-1 rounded-2xl p-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+                    <span className="flex items-center justify-between text-muted-foreground"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="size-5"><path d="M8 3H5a2 2 0 0 0-2 2v3m13-5h3a2 2 0 0 1 2 2v3M3 16v3a2 2 0 0 0 2 2h3m13-5v3a2 2 0 0 1-2 2h-3"/><rect x="8" y="8" width="8" height="8" rx="1"/></svg><span aria-hidden="true" className="text-xs group-open:rotate-180">⌄</span></span>
+                    <span className="text-xs text-muted-foreground">Resolution</span>
+                    <span className="truncate text-sm font-semibold text-foreground">${resolutionLabel(selectedResolution)}</span>
+                  </summary>
+                  <div className="absolute left-0 top-full z-40 mt-2 w-[min(21rem,calc(100vw-2rem))] max-h-[65vh] overflow-y-auto overscroll-contain rounded-2xl border border-border bg-card p-3 shadow-xl max-sm:fixed max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto max-sm:w-auto">
+                    <div className="space-y-3"><p className="text-xs font-semibold">Resolution</p><div className="grid grid-cols-2 gap-2">{availableResolutions.map(value=><button key={value} type="button" disabled={busy} aria-pressed={selectedResolution===value} onClick={()=>setResolution(value)} className={`min-h-11 rounded-xl border px-3 text-sm focus-visible:outline-2 focus-visible:outline-ring ${selectedResolution===value?"border-primary bg-primary/10":"border-border hover:border-primary/40"}`}>{resolutionLabel(value)}</button>)}</div></div>
+                  </div>
+                </details>
+                  </div>
+                </section>
               ) : null}
-
               <div className={variant === "quick" ? "hidden" : "space-y-4"}>
+              {activeMode !== "IMAGE" ? (
                 {activeMode === "IMAGE" &&
                 Number(model?.capabilities?.maxGeneratedImages ?? 1) > 1 ? (
                   <label className="grid gap-2 text-sm font-semibold text-foreground">
@@ -2735,6 +2777,7 @@ export function GenerationStudio({
                   )}
                 </select>
 
+              ) : null}
                 {model?.mediaKind === "VIDEO" && (
                   <>
                     {videoWorkflow === "TALKING_AVATAR" ? (

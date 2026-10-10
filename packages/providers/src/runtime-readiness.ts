@@ -39,7 +39,10 @@ export function getProviderRuntimeReadiness(
       }
       break;
     case "NVIDIA":
-      ready = configured(environment.NVIDIA_API_KEY);
+      ready =
+        configured(environment.NVIDIA_API_KEY) &&
+        (mediaKind !== "TEXT" ||
+          environment.NVIDIA_COMMERCIAL_USE_ENABLED === "true");
       break;
     case "GROQ":
       ready = configured(environment.GROQ_API_KEY);

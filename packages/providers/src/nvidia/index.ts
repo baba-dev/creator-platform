@@ -6,8 +6,11 @@ import {
   type ReasoningProvider,
   type ReasoningRequest,
   type ReasoningResult,
+  type TextChatRequest,
+  type TextChatResult,
 } from "../index";
 import { executeSafeFetch, sharedReadResponseText } from "../http";
+import { isNvidiaChatModel } from "./models";
 
 export interface NvidiaAdapterConfig {
   readonly apiKey: string;
@@ -182,9 +185,13 @@ function parseStructuredContent(content: string): unknown {
   );
 }
 
+export interface NvidiaProvider extends ReasoningProvider {
+  chat(input: TextChatRequest): Promise<TextChatResult>;
+}
+
 export function createNvidiaProvider(
   config: NvidiaAdapterConfig,
-): ReasoningProvider {
+): NvidiaProvider {
   if (!config.apiKey || !config.baseUrl || !config.defaultModel) {
     throw new ProviderConfigurationError(
       "NVIDIA API key, base URL, and model are required",
@@ -226,10 +233,14 @@ export function createNvidiaProvider(
               { role: "user", content: input.userPrompt },
             ],
             temperature: 0.2,
-            top_k: 1,
-            max_tokens: 1024,
+            ...(modelId === "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
+              ? { top_k: 1, chat_template_kwargs: { enable_thinking: false } }
+              : {}),
+            max_tokens:
+              modelId === "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
+                ? 1024
+                : 2048,
             stream: false,
-            chat_template_kwargs: { enable_thinking: false },
           }),
         },
         timeoutMs,
@@ -281,6 +292,141 @@ export function createNvidiaProvider(
         content: contentJson,
         inputTokens: parsed.data.usage?.prompt_tokens,
         outputTokens: parsed.data.usage?.completion_tokens,
+      };
+    },
+
+    async chat(input: TextChatRequest): Promise<TextChatResult> {
+      const modelId = input.modelId || config.defaultModel;
+      if (!isNvidiaChatModel(modelId)) {
+        throw new ProviderConfigurationError(
+          "NVIDIA text chat model is not in the verified integration catalog",
+        );
+      }
+      if (
+        !Number.isSafeInteger(input.maxTokens ?? 2048) ||
+        (input.maxTokens ?? 2048) < 1 ||
+        (input.maxTokens ?? 2048) > 8192 ||
+        !Number.isFinite(input.temperature ?? 0.7) ||
+        (input.temperature ?? 0.7) < 0 ||
+        (input.temperature ?? 0.7) > 2 ||
+        input.messages.length === 0 ||
+        input.messages.length > 50 ||
+        input.messages.some(
+          (message) =>
+            !["system", "user", "assistant"].includes(message.role) ||
+            !message.content.trim() ||
+            message.content.length > 8000,
+        )
+      ) {
+        throw new ProviderRequestError("Invalid NVIDIA chat request", false, {
+          code: "INVALID_REQUEST_PAYLOAD",
+        });
+      }
+
+      // NIM endpoints do not share a universal JSON mode, top_k or thinking
+      // parameter. Keep the compatible core request and validate JSON locally.
+      const messages =
+        input.responseFormat === "json_object"
+          ? [
+              {
+                role: "system" as const,
+                content: "Return only one valid JSON object, without markdown.",
+              },
+              ...input.messages,
+            ]
+          : input.messages;
+
+      logger.info("Submitting NVIDIA text chat request", { modelId });
+      const response = await safeFetch(
+        fetchClient,
+        `${baseUrl}/chat/completions`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${config.apiKey}`,
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: modelId,
+            messages,
+            temperature: Math.min(input.temperature ?? 0.7, 1),
+            max_tokens: input.maxTokens ?? 2048,
+            stream: false,
+          }),
+        },
+        timeoutMs,
+        idleTimeoutMs,
+      );
+      await assertSuccessfulResponse(response);
+      const responseText = await readResponseText(
+        response,
+        MAX_JSON_RESPONSE_BYTES,
+      );
+      let data: unknown;
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        throw new ProviderRequestError("NVIDIA returned invalid JSON", false, {
+          code: "INVALID_PROVIDER_RESPONSE",
+          stage: "parsing",
+        });
+      }
+      const parsed = chatCompletionResponseSchema.safeParse(data);
+      if (!parsed.success) {
+        throw new ProviderRequestError(
+          "NVIDIA returned an invalid chat response shape",
+          false,
+          { code: "INVALID_PROVIDER_RESPONSE", stage: "parsing" },
+        );
+      }
+      // Some reasoning NIMs include analysis in a leading <think> element;
+      // that must not leak into customer-visible assistant dialogue.
+      const content = (parsed.data.choices[0]?.message.content ?? "")
+        .replace(/^\s*<think>[\s\S]*?<\/think>\s*/i, "")
+        .trim();
+      if (!content) {
+        throw new ProviderRequestError(
+          "NVIDIA returned no chat content",
+          false,
+          {
+            code: "INVALID_PROVIDER_RESPONSE",
+            stage: "parsing",
+          },
+        );
+      }
+      if (input.responseFormat === "json_object") {
+        try {
+          const value: unknown = JSON.parse(content);
+          if (!value || Array.isArray(value) || typeof value !== "object")
+            throw new Error("Expected JSON object");
+        } catch {
+          throw new ProviderRequestError(
+            "NVIDIA did not return the requested JSON object",
+            false,
+            { code: "INVALID_PROVIDER_RESPONSE", stage: "parsing" },
+          );
+        }
+      }
+      const usage = parsed.data.usage;
+      const completeUsage =
+        usage?.prompt_tokens !== undefined &&
+        usage.completion_tokens !== undefined &&
+        usage.total_tokens !== undefined;
+      logger.info("NVIDIA text chat request succeeded", {
+        modelId,
+        providerRequestId: parsed.data.id,
+      });
+      return {
+        providerRequestId: parsed.data.id,
+        content,
+        usage: completeUsage
+          ? {
+              promptTokens: usage.prompt_tokens!,
+              completionTokens: usage.completion_tokens!,
+              totalTokens: usage.total_tokens!,
+            }
+          : undefined,
       };
     },
   };

@@ -98,4 +98,30 @@ describe("provider runtime readiness", () => {
       }).configured,
     ).toBe(true);
   });
+  it("hides NVIDIA text models unless licensed, but retains the existing reasoning model", () => {
+    const textModel = {
+      provider: "NVIDIA",
+      mediaKind: "TEXT",
+      providerModelId: "nvidia/nemotron-3.5-lightning-30b-a3b",
+    };
+    const reasoningModel = {
+      provider: "NVIDIA",
+      mediaKind: "REASONING",
+      providerModelId: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+    };
+    expect(
+      getProviderRuntimeReadiness(textModel, { NVIDIA_API_KEY: "key" })
+        .configured,
+    ).toBe(false);
+    expect(
+      getProviderRuntimeReadiness(textModel, {
+        NVIDIA_API_KEY: "key",
+        NVIDIA_COMMERCIAL_USE_ENABLED: "true",
+      }).configured,
+    ).toBe(true);
+    expect(
+      getProviderRuntimeReadiness(reasoningModel, { NVIDIA_API_KEY: "key" })
+        .configured,
+    ).toBe(true);
+  });
 });

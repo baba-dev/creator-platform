@@ -446,6 +446,18 @@ const geminiProvider =
         idleTimeoutMs: env.GEMINI_IDLE_TIMEOUT_MS,
       })
     : null;
+const nvidiaProvider =
+  externalProviderRole && env.NVIDIA_API_KEY
+    ? createNvidiaProvider({
+        apiKey: env.NVIDIA_API_KEY,
+        baseUrl: env.NVIDIA_BASE_URL,
+        defaultModel:
+          env.NVIDIA_REASONING_MODEL ||
+          "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+        requestTimeoutMs: env.NVIDIA_REQUEST_TIMEOUT_MS,
+        idleTimeoutMs: env.NVIDIA_IDLE_TIMEOUT_MS,
+      })
+    : null;
 const cloudflareProvider =
   externalProviderRole && env.CLOUDFLARE_API_TOKEN && env.CLOUDFLARE_ACCOUNT_ID
     ? createCloudflareAiProvider({
@@ -565,6 +577,11 @@ const generationWorker = createWorker(
             if (!bytePlusProvider)
               throw new Error("BytePlus text provider is not configured");
             await processTextJob(job.data.jobId, bytePlusProvider);
+            break;
+          case "NVIDIA":
+            if (!nvidiaProvider)
+              throw new Error("NVIDIA text provider is not configured");
+            await processTextJob(job.data.jobId, nvidiaProvider);
             break;
           case "GROQ":
             if (!groqProvider)
@@ -961,18 +978,6 @@ async function dispatchAssets() {
 }
 
 const reasoningQueue = createQueue("reasoning");
-const nvidiaProvider =
-  owns("reasoning") && env.NVIDIA_API_KEY
-    ? createNvidiaProvider({
-        apiKey: env.NVIDIA_API_KEY,
-        baseUrl: env.NVIDIA_BASE_URL,
-        defaultModel:
-          env.NVIDIA_REASONING_MODEL ||
-          "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
-        requestTimeoutMs: env.NVIDIA_REQUEST_TIMEOUT_MS,
-        idleTimeoutMs: env.NVIDIA_IDLE_TIMEOUT_MS,
-      })
-    : null;
 
 const reasoningProviders = {
   NVIDIA: nvidiaProvider ?? undefined,

@@ -200,6 +200,7 @@ model User {
   updatedAt              DateTime                 @updatedAt
   sessions               Session[]
   accounts               Account[]
+  passkeys                Passkey[]
   memberships            Membership[]
   onboardedOrganization  Organization?            @relation("SelfServeOrganization")
   createdPayments        ManualPayment[]          @relation("PaymentCreatedBy")
@@ -271,6 +272,23 @@ model Account {
   user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([providerId, accountId])
+  @@index([userId])
+}
+
+model Passkey {
+  id           String   @id
+  name         String?
+  publicKey    String   @db.Text
+  userId       String
+  credentialID String   @unique @db.VarChar(512)
+  counter      Int
+  deviceType   String
+  backedUp     Boolean
+  transports   String?  @db.Text
+  createdAt    DateTime @default(now())
+  aaguid       String?
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId])
 }
 

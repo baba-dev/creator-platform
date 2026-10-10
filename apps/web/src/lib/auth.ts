@@ -13,6 +13,7 @@ import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { createAuthMiddleware } from "better-auth/api";
 import { twoFactor } from "better-auth/plugins";
+import { passkey } from "@better-auth/passkey";
 
 const env = parseServerEnv();
 
@@ -50,8 +51,10 @@ export const auth = betterAuth({
       : {}),
   },
   plugins: [
+    passkey({ rpID: new URL(env.APP_URL).hostname, rpName: "Aiwa Creators", origin: new URL(env.APP_URL).origin, authenticatorSelection: { userVerification: "required", residentKey: "preferred" } }),
     twoFactor({
       issuer: "Aiwa Creators",
+      allowPasswordless: true,
     }),
   ],
   emailVerification: {
@@ -283,15 +286,18 @@ export const auth = betterAuth({
     },
     session: {
       create: {
-        before: async (session) => {
+        before: async (session, ctx) => {
           const user = await db.user.findUnique({
             where: { id: session.userId },
             select: { disabledAt: true, platformRole: true },
           });
           if (!user || user.disabledAt) return false;
-          // Better Auth's TOTP challenge applies to credential login, not OAuth
-          // or WebAuthn. Disallow non-credential admin sessions until a verified
-          // second-factor challenge is implemented for those methods.
+          // Credential logins alone receive Better Auth's TOTP challenge.
+          // Refuse privileged sessions created by OAuth or passkey endpoints.
+          if (user.platformRole !== "USER" && (!ctx?.path ||
+              ctx.path.includes("/callback/") || ctx.path.includes("/sign-in/passkey"))) {
+            return false;
+          }
           return undefined;
         },
       },

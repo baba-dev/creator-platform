@@ -623,6 +623,7 @@ model GenerationJob {
   status                     GenerationJobStatus    @default(DRAFT)
   idempotencyKey             String                 @unique
   requestPayload             Json
+  mediaHistoryEligible       Boolean                @default(true)
   outputPayload              Json?
   providerRequestId          String?
   reservedCredits            BigInt                 @default(0)
@@ -658,6 +659,7 @@ model GenerationJob {
   @@unique([providerModelId, providerRequestId])
   @@index([organizationId, status, createdAt])
   @@index([organizationId, createdAt, id])
+  @@index([organizationId, mediaHistoryEligible, createdAt, id])
   @@index([organizationId, createdById, createdAt, id])
   @@index([projectId, createdAt])
   @@index([templateId, createdAt])

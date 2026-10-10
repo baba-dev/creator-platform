@@ -115,7 +115,7 @@ export async function PATCH(
           requestTimeoutMs: 5000,
           idleTimeoutMs: 5000,
         }).listModels();
-        if (!listed.some(id => id.replace(/^models\\//, "") === model.providerModelId)) {
+        if (!listed.some((id) => (id.startsWith("models/") ? id.slice(7) : id) === model.providerModelId)) {
           return NextResponse.json({ error: "This Gemini model is not listed for the configured API key. Verify model access before enabling it." }, { status: 409 });
         }
       } catch {

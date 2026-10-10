@@ -186,6 +186,8 @@ export const auth = betterAuth({
       "/request-password-reset": { window: 300, max: 3 },
       "/send-verification-email": { window: 300, max: 3 },
       "/sign-in/social": { window: 60, max: 12 },
+      "/sign-in/passkey": { window: 60, max: 10 },
+      "/passkey/add-passkey": { window: 300, max: 5 },
     },
   },
   advanced: {
@@ -315,7 +317,8 @@ export const auth = betterAuth({
           // Credential logins alone receive Better Auth's TOTP challenge.
           // Refuse privileged sessions created by OAuth or passkey endpoints.
           if (user.platformRole !== "USER" && (!ctx?.path ||
-              ctx.path.includes("/callback/") || ctx.path.includes("/sign-in/passkey"))) {
+              ctx.path.includes("/callback/") || ctx.path.includes("/sign-in/passkey") ||
+              ctx.path.includes("/passkey/verify-authentication"))) {
             return false;
           }
           return undefined;

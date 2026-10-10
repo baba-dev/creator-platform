@@ -21,7 +21,7 @@ export function SignInForm({ returnTo, googleEnabled = false, microsoftEnabled =
     setPasskeyBusy(true);
     setError(null);
     try {
-      const result = await authClient.signIn.passkey();
+      const result = await authClient.signIn.passkey({});
       if (result.error) throw new Error("passkey_failed");
       router.push(returnTo);
       router.refresh();

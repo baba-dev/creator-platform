@@ -24,8 +24,8 @@ function ConnectionArt() {
   );
 }
 
-export function AccountConnections({ googleEnabled, microsoftEnabled, returnTo }: {
-  googleEnabled: boolean; microsoftEnabled: boolean; returnTo: string;
+export function AccountConnections({ googleEnabled, microsoftEnabled, allowPasswordless, returnTo }: {
+  googleEnabled: boolean; microsoftEnabled: boolean; allowPasswordless: boolean; returnTo: string;
 }) {
   const [accounts, setAccounts] = useState<LinkedAccount[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
@@ -135,7 +135,7 @@ export function AccountConnections({ googleEnabled, microsoftEnabled, returnTo }
                 {connected ? <span className="rounded-full bg-success/10 px-2 py-1 text-[10px] font-semibold text-success">Linked</span> : null}
               </div>
               <p className="mt-4 text-xs leading-5 text-muted-foreground">Sign-in only. Cloud storage requires separate consent.</p>
-              <Button type="button" variant="secondary" className="mt-4 w-full" disabled={loading || !!busy || !enabled}
+              <Button type="button" variant="secondary" className="mt-4 w-full" disabled={loading || !!busy || !enabled || !allowPasswordless}
                 onClick={() => connected ? void unlink(connected) : void link(provider)}>
                 {busy === provider ? "Working…" : connected ? "Disconnect sign-in" : enabled ? "Connect account" : "Not configured"}
               </Button>
@@ -152,8 +152,9 @@ export function AccountConnections({ googleEnabled, microsoftEnabled, returnTo }
             </span>
             <div><h3 className="text-base font-semibold">Passkeys & trusted devices</h3><p className="text-xs text-muted-foreground">Windows Hello, Android, and compatible authenticators</p></div>
           </div>
-          <Button type="button" disabled={!!busy || loading} onClick={() => void addDevice()}>{busy === "passkey" ? "Registering…" : "Add a passkey"}</Button>
+          <Button type="button" disabled={!!busy || loading || !allowPasswordless} onClick={() => void addDevice()}>{busy === "passkey" ? "Registering…" : "Add a passkey"}</Button>
         </div>
+        {!allowPasswordless ? <p className="mt-4 text-xs text-muted-foreground">Privileged accounts must continue using email/password plus authenticator MFA until additional step-up verification is available.</p> : null}
         <p className="mt-4 text-xs leading-5 text-muted-foreground">Your device verifies its own PIN or biometrics. Creators stores only a public-key credential, never your device PIN. Keep a backup sign-in method for recovery.</p>
         <div className="mt-5 space-y-2">
           {loading ? <p className="text-sm text-muted-foreground">Loading devices…</p> : devices.length === 0 ? <p className="rounded-xl bg-muted/30 p-4 text-sm text-muted-foreground">No passkeys yet. Add your first trusted device for fast, passwordless sign-in.</p> : devices.map(device => (

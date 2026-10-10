@@ -12,8 +12,8 @@ import { z } from "zod";
 import { creativeLocaleIntentSchema } from "@aiwa/generation/locale";
 
 import { getRequestSession } from "@/lib/request-auth";
-import { formatBaisa } from "@/lib/format-baisa";
-import { publicCostBreakdown } from "@/lib/customer-cost-breakdown";
+import { formatBaisa } from "../../../../lib/format-baisa";
+import { publicCostBreakdown } from "../../../../lib/customer-cost-breakdown";
 import { hasTrustedMutationOrigin } from "@/lib/request-security";
 import {
   getAvailableStudioModels,

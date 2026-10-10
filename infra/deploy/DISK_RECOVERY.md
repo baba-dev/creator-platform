@@ -41,13 +41,13 @@ df -h /var/www/creator-platform/releases
 
 The script protects the current release, the newest validated non-current
 rollback candidate, unrecognized directories, backups, quarantine trees, and
-shared runtime data. By default, it also preserves releases younger than
-24 hours. If the disk is full of recent deployments, explicitly review those
+shared runtime data. By default, it also preserves releases younger than 24
+hours. If the disk is full of recent deployments, explicitly review those
 candidates with `--dry-run --include-recent` and permit them only with
-`--apply --include-recent`; the active and rollback releases remain protected. If it cannot
-reclaim enough space, investigate usage before proceeding rather than deleting
-more aggressively. Running it requires privileged VPS access; the CI deployment
-account cannot remove root-owned release trees by design.
+`--apply --include-recent`; the active and rollback releases remain protected.
+If it cannot reclaim enough space, investigate usage before proceeding rather
+than deleting more aggressively. Running it requires privileged VPS access; the
+CI deployment account cannot remove root-owned release trees by design.
 
 ## Retry and verify
 

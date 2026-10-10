@@ -5,6 +5,9 @@ import Link from "next/link";
 import type { Route } from "next";
 import { Icon } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
+import { GenerationCostPreview, type CostPreviewQuote } from "@/components/studio/generation-cost-preview";
+import { retailMicroUsdApprox } from "@/lib/customer-cost-breakdown";
+import { formatBaisa } from "@/lib/format-baisa";
 import { Eyebrow } from "@/components/ui/creative";
 import { StatusDot, Tape } from "@/components/ui/sketch";
 import { AudioWaveformPlayer } from "@/components/ui/audio-waveform-player";
@@ -42,6 +45,9 @@ interface Model {
   pricingDimension?: "REQUEST" | "CHARACTER" | "SECOND" | "TOKEN" | null;
   unitQuantity?: string | null;
   credits: string;
+  creditsPerBaisa?: string;
+  fxBaisaNumerator?: string;
+  fxBaisaDenominator?: string;
   capabilities?: Record<string, unknown> | null;
 }
 
@@ -82,6 +88,28 @@ interface StudioData {
   voices?: PresetVoice[];
   projects: ProjectOption[];
   jobs: Job[];
+}
+
+/** Indicative retail conversion only. Real reservations happen per generation job. */
+function retailPart(credits: number, model: Model | null) {
+  if (!model || !Number.isSafeInteger(credits) || credits < 0) return null;
+  try {
+    const perBaisa = BigInt(model.creditsPerBaisa ?? "0");
+    const numerator = BigInt(model.fxBaisaNumerator ?? "0");
+    const denominator = BigInt(model.fxBaisaDenominator ?? "0");
+    if (perBaisa <= 0n || numerator <= 0n || denominator <= 0n ||
+        BigInt(credits) % perBaisa !== 0n) return null;
+    const baisa = BigInt(credits) / perBaisa;
+    return {
+      baisa,
+      microUsd: BigInt(retailMicroUsdApprox(baisa, numerator, denominator)),
+      numerator,
+      denominator,
+      perBaisa,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function SpokespersonStudio({
@@ -345,6 +373,44 @@ export function SpokespersonStudio({
     data?.balance,
     omniHumanModel,
     voiceModel,
+  ]);
+
+  const stagedQuote = useMemo<CostPreviewQuote | null>(() => {
+    if (!creditBreakdown.pricingAvailable) return null;
+    const video = retailPart(creditBreakdown.videoCredits, omniHumanModel);
+    const voice = audioMode === "SCRIPT"
+      ? retailPart(creditBreakdown.voiceCredits, voiceModel)
+      : null;
+    if (!video || (audioMode === "SCRIPT" && !voice)) return null;
+    const totalBaisa = video.baisa + (voice?.baisa ?? 0n);
+    const totalRetailMicroUsd = video.microUsd + (voice?.microUsd ?? 0n);
+    const sameFx = !voice ||
+      (voice.numerator === video.numerator && voice.denominator === video.denominator);
+    const sameCreditsPerBaisa = !voice || voice.perBaisa === video.perBaisa;
+    return {
+      estimatedCredits: String(creditBreakdown.totalCredits),
+      reservationCredits: String(creditBreakdown.totalCredits),
+      estimatedOmr: formatBaisa(totalBaisa),
+      maximumChargeOmr: formatBaisa(totalBaisa),
+      creditsPerBaisa: sameCreditsPerBaisa ? video.perBaisa.toString() : undefined,
+      settlement: "MULTI_STEP_ESTIMATE",
+      estimatedUsage: { unit: "SECOND", quantity: String(estimatedSeconds), isEstimate: true },
+      pricingBreakdown: {
+        estimatedRetailMicroUsdApprox: totalRetailMicroUsd.toString(),
+        maximumRetailMicroUsdApprox: totalRetailMicroUsd.toString(),
+        fxBaisaNumerator: sameFx ? video.numerator.toString() : "",
+        fxBaisaDenominator: sameFx ? video.denominator.toString() : "",
+      },
+    };
+  }, [
+    creditBreakdown.pricingAvailable,
+    creditBreakdown.videoCredits,
+    creditBreakdown.voiceCredits,
+    creditBreakdown.totalCredits,
+    omniHumanModel,
+    voiceModel,
+    audioMode,
+    estimatedSeconds,
   ]);
 
   // Upload Avatar Image
@@ -1235,35 +1301,24 @@ export function SpokespersonStudio({
 
             {/* Credit Quotation & Primary Submission */}
             <div className="space-y-3 rounded-2xl border border-border bg-surface-sunken p-4">
-              <div className="space-y-1 text-xs">
-                <div className="flex items-center justify-between text-muted-foreground">
-                  <span>
-                    OmniHuman 1.5 Video ({estimatedSeconds}s @{" "}
-                    {creditBreakdown.videoCreditsPerUnit} cr/
-                    {creditBreakdown.videoUnitQuantity === 1
-                      ? "s"
-                      : `${creditBreakdown.videoUnitQuantity}s`}
-                    )
-                  </span>
-                  <span className="font-mono tabular-nums">
-                    {creditBreakdown.videoCredits} cr
-                  </span>
-                </div>
-                {audioMode === "SCRIPT" && (
-                  <div className="flex items-center justify-between text-muted-foreground">
-                    <span>Seed-TTS 2.0 Speech</span>
-                    <span className="font-mono tabular-nums">
-                      {creditBreakdown.voiceCredits} cr
-                    </span>
-                  </div>
-                )}
-                <div className="flex items-center justify-between border-t border-border pt-1 font-semibold text-foreground">
-                  <span>Total Estimated Credits</span>
-                  <span className="font-mono text-sm tabular-nums text-primary">
-                    {creditBreakdown.totalCredits} credits
-                  </span>
-                </div>
-              </div>
+              <GenerationCostPreview
+                quote={stagedQuote}
+                modelName={omniHumanModel?.name ?? "OmniHuman 1.5"}
+                providerName="BytePlus"
+                mediaKind="VIDEO"
+                walletCredits={data?.balance}
+                canAfford={creditBreakdown.pricingAvailable ? creditBreakdown.hasEnoughBalance : undefined}
+                details={[
+                  `${estimatedSeconds}s estimated video`,
+                  resolution,
+                  ...(audioMode === "SCRIPT"
+                    ? [`Seed-TTS speech · ${creditBreakdown.voiceCredits} credits`]
+                    : ["Uploaded driving audio"]),
+                ]}
+                error={!creditBreakdown.pricingAvailable
+                  ? "Active pricing is unavailable for the selected spokesperson pipeline."
+                  : undefined}
+              />
 
               {!creditBreakdown.pricingAvailable ? (
                 <p className="text-xs font-medium text-destructive">

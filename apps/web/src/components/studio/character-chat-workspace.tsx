@@ -155,9 +155,22 @@ export function CharacterChatWorkspace({
   const [selectedPersona, setSelectedPersona] = useState<Persona | null>(null);
   const builtInPersona = getCharacterPersonaPreset(selectedPersona);
   const quickPrompts = builtInPersona?.quickPrompts ?? [
-    { label: "Get started", prompt: "Introduce your specialties and suggest how we could collaborate.", icon: "chat" as const },
-    { label: "Brainstorm", prompt: "Help me brainstorm a fresh idea based on your expertise.", icon: "sparkles" as const },
-    { label: "Make a plan", prompt: "Help me make an actionable creative plan.", icon: "story" as const },
+    {
+      label: "Get started",
+      prompt:
+        "Introduce your specialties and suggest how we could collaborate.",
+      icon: "chat" as const,
+    },
+    {
+      label: "Brainstorm",
+      prompt: "Help me brainstorm a fresh idea based on your expertise.",
+      icon: "sparkles" as const,
+    },
+    {
+      label: "Make a plan",
+      prompt: "Help me make an actionable creative plan.",
+      icon: "story" as const,
+    },
   ];
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [prevInitialThreadId, setPrevInitialThreadId] =
@@ -854,7 +867,9 @@ export function CharacterChatWorkspace({
                     {selectedPersona.name}
                   </h3>
                   <p className="text-xs text-muted-foreground">
-                    {builtInPersona?.description || selectedPersona.description || "AI character intelligence"}
+                    {builtInPersona?.description ||
+                      selectedPersona.description ||
+                      "AI character intelligence"}
                   </p>
                 </div>
               </div>
@@ -921,7 +936,10 @@ export function CharacterChatWorkspace({
                       selectedPersona?.description ||
                       "Send a message below to start exploring ideas, writing dialogues, or roleplaying scenarios."}
                   </p>
-                  <div className="mt-5 grid grid-cols-2 gap-2 text-left" aria-label="Suggested prompts">
+                  <div
+                    className="mt-5 grid grid-cols-2 gap-2 text-left"
+                    aria-label="Suggested prompts"
+                  >
                     {quickPrompts.map((suggestion) => (
                       <button
                         key={suggestion.label}
@@ -960,7 +978,9 @@ export function CharacterChatWorkspace({
                       }`}
                     >
                       {isUser ? (
-                        <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                        <p className="whitespace-pre-wrap break-words">
+                          {msg.content}
+                        </p>
                       ) : (
                         <ChatMarkdown content={msg.content} />
                       )}

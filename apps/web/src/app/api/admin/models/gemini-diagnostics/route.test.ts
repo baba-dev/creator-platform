@@ -35,9 +35,15 @@ describe("Gemini model diagnostic", () => {
     });
   });
   it("checks model access without generating or exposing credentials", async () => {
-    mocks.session.mockResolvedValue({ user: { platformRole: "PLATFORM_ADMIN" } });
+    mocks.session.mockResolvedValue({
+      user: { platformRole: "PLATFORM_ADMIN" },
+    });
     mocks.list.mockResolvedValue(["models/gemini-3.8-flash"]);
-    const response = await GET(new Request("https://example.com/api/admin/models/gemini-diagnostics?modelId=gemini-3.5-flash-lite"));
+    const response = await GET(
+      new Request(
+        "https://example.com/api/admin/models/gemini-diagnostics?modelId=gemini-3.5-flash-lite",
+      ),
+    );
     expect(await response.json()).toEqual({
       status: "verified",
       models: ["models/gemini-3.8-flash"],
@@ -46,8 +52,14 @@ describe("Gemini model diagnostic", () => {
     expect(mocks.list).toHaveBeenCalledOnce();
   });
   it("rejects invalid model identifiers without calling provider", async () => {
-    mocks.session.mockResolvedValue({ user: { platformRole: "PLATFORM_ADMIN" } });
-    const response = await GET(new Request("https://example.com/api/admin/models/gemini-diagnostics?modelId=oops%3Fkey%3Dx"));
+    mocks.session.mockResolvedValue({
+      user: { platformRole: "PLATFORM_ADMIN" },
+    });
+    const response = await GET(
+      new Request(
+        "https://example.com/api/admin/models/gemini-diagnostics?modelId=oops%3Fkey%3Dx",
+      ),
+    );
     expect(response.status).toBe(400);
     expect(mocks.list).not.toHaveBeenCalled();
   });

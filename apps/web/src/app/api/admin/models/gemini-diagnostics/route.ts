@@ -17,13 +17,24 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Access denied." }, { status: 403 });
   const headers = { "Cache-Control": "private, no-store" };
   const rawModelId = new URL(request.url).searchParams.get("modelId");
-  const parsedModelId = rawModelId === null
-    ? null
-    : z.string().min(1).max(128).regex(/^[a-zA-Z0-9._/-]+$/).safeParse(rawModelId);
+  const parsedModelId =
+    rawModelId === null
+      ? null
+      : z
+          .string()
+          .min(1)
+          .max(128)
+          .regex(/^[a-zA-Z0-9._/-]+$/)
+          .safeParse(rawModelId);
   if (parsedModelId !== null && !parsedModelId.success) {
-    return NextResponse.json({ error: "Invalid model identifier." }, { status: 400, headers });
+    return NextResponse.json(
+      { error: "Invalid model identifier." },
+      { status: 400, headers },
+    );
   }
-  const modelId = parsedModelId?.success ? parsedModelId.data.replace(/^models\//, "") : null;
+  const modelId = parsedModelId?.success
+    ? parsedModelId.data.replace(/^models\//, "")
+    : null;
   if (!process.env.GEMINI_API_KEY)
     return NextResponse.json({ status: "missing_credentials" }, { headers });
   try {
@@ -34,16 +45,23 @@ export async function GET(request: Request) {
       idleTimeoutMs: 5000,
     });
     const models = await provider.listModels();
-    return NextResponse.json({
-      status: "verified",
-      models,
-      ...(modelId !== null ? {
-        requestedModel: {
-          id: modelId,
-          available: models.some((candidate) => candidate.replace(/^models\//, "") === modelId),
-        },
-      } : {}),
-    }, { headers });
+    return NextResponse.json(
+      {
+        status: "verified",
+        models,
+        ...(modelId !== null
+          ? {
+              requestedModel: {
+                id: modelId,
+                available: models.some(
+                  (candidate) => candidate.replace(/^models\//, "") === modelId,
+                ),
+              },
+            }
+          : {}),
+      },
+      { headers },
+    );
   } catch (error) {
     return NextResponse.json(
       {

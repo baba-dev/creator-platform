@@ -127,9 +127,12 @@ export function GenerationCostPreview({
     : null;
   const rateText =
     rate !== null && Number.isFinite(rate) ? rate.toFixed(6) : null;
-  const expired = quote?.expiresAt
-    ? Date.parse(quote.expiresAt) <= Date.now()
-    : false;
+  const [expired, setExpired] = useState(false);
+  useEffect(() => {
+    const check = () => setExpired(Boolean(quote?.expiresAt && Date.parse(quote.expiresAt) <= Date.now()));
+    const timer = setInterval(check, 1000);
+    return () => clearInterval(timer);
+  }, [quote?.expiresAt]);
   return (
     <>
       <section
@@ -409,8 +412,8 @@ export function GenerationCostPreview({
               </dl>
               <p className="text-xs leading-5 text-muted-foreground">
                 1 USD = 1,000,000 microUSD. Retail microUSD is an approximate
-                conversion of your rounded customer price using the quote's FX
-                snapshot, not the provider's wholesale cost or token rate. 1 OMR
+                conversion of your rounded customer price using the quote&apos;s FX
+                snapshot, not the provider&apos;s wholesale cost or token rate. 1 OMR
                 = 1,000 baisa.
               </p>
             </section>

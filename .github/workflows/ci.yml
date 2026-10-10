@@ -273,8 +273,6 @@ jobs:
 
   browser_smoke:
     name: browser-smoke
-    permissions:
-      contents: write # Limited same-repository one-off screenshot capture; restored immediately afterwards.
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     services:
@@ -330,37 +328,6 @@ jobs:
 
       - name: Run browser smoke journeys
         run: pnpm test:e2e
-
-      - name: Commit verified PWA screenshots (temporary, same-repo PR only)
-        if: success() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/creators-pwa-2'
-        env:
-          PWA_HEAD_REF: ${{ github.head_ref }}
-          PWA_EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -s test-results/pwa-wide.png
-          test -s test-results/pwa-narrow.png
-          mkdir -p "$RUNNER_TEMP/pwa-captures"
-          cp test-results/pwa-wide.png test-results/pwa-narrow.png "$RUNNER_TEMP/pwa-captures/"
-          git fetch --no-tags origin "refs/heads/${PWA_HEAD_REF}"
-          if test "$(git rev-parse FETCH_HEAD)" != "$PWA_EXPECTED_HEAD"; then
-            echo "PR head advanced; do not write screenshots to a newer commit."
-            exit 0
-          fi
-          git switch --detach FETCH_HEAD
-          if test -e apps/web/public/pwa-screenshots/wide.png; then
-            echo "PWA screenshots already committed."
-            exit 0
-          fi
-          mkdir -p apps/web/public/pwa-screenshots
-          cp "$RUNNER_TEMP/pwa-captures/pwa-wide.png" apps/web/public/pwa-screenshots/wide.png
-          cp "$RUNNER_TEMP/pwa-captures/pwa-narrow.png" apps/web/public/pwa-screenshots/narrow.png
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add apps/web/public/pwa-screenshots/wide.png apps/web/public/pwa-screenshots/narrow.png
-          git commit -m "assets(pwa): add authentic desktop and mobile install screenshots"
-          git push origin "HEAD:refs/heads/${PWA_HEAD_REF}"
 
       - name: Upload genuine PWA screenshot captures
         if: always()

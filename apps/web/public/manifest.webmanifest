@@ -133,5 +133,21 @@
         "audio/wav": [".wav"]
       }
     }
+  ],
+  "screenshots": [
+    {
+      "src": "/pwa-screenshots/wide.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Creators interactive desktop creation workspace"
+    },
+    {
+      "src": "/pwa-screenshots/narrow.png",
+      "sizes": "1082x2202",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Creators responsive mobile creative workspace"
+    }
   ]
 }

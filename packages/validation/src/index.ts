@@ -783,6 +783,8 @@ export const createTemplateSchema = z
     defaultInput: templateDefaultInputSchema,
     preferredModelId: z.string().trim().max(128).nullable().optional(),
     featured: z.boolean().default(false),
+    coverAlt: z.string().trim().max(240).nullable().optional(),
+    coverIcon: z.string().trim().max(40).regex(/^[a-z]+$/).nullable().optional(),
     sortOrder: z.number().int().min(-10000).max(10000).default(0),
     status: z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]).default("DRAFT"),
   })

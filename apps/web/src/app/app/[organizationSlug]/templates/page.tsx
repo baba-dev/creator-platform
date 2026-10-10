@@ -36,6 +36,10 @@ export default async function TemplatesPage({
         mediaKind: true,
         featured: true,
         defaultInput: true,
+        coverObjectKey: true,
+        coverAlt: true,
+        coverIcon: true,
+        updatedAt: true,
         favorites: {
           where: { userId: session.user.id },
           select: { userId: true },
@@ -65,7 +69,8 @@ export default async function TemplatesPage({
   ).slice(0, 6);
 
   const cards: TemplateCardData[] = templates.map(
-    ({ favorites, _count, defaultInput, ...template }) => ({
+    ({ favorites, _count, defaultInput, updatedAt, ...template }) => ({
+      coverVersion: updatedAt.getTime(),
       ...template,
       mediaKind: template.mediaKind as "IMAGE" | "VIDEO" | "VOICE",
       defaultInput:

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
+import { templateVisuals, getTemplateVisual } from "@/lib/template-visuals";
 
 export type AdminTemplateRow = {
   id: string;
@@ -17,6 +18,9 @@ export type AdminTemplateRow = {
   variables: unknown;
   defaultInput: unknown;
   preferredModelId: string | null;
+  coverObjectKey: string | null;
+  coverAlt: string | null;
+  coverIcon: string | null;
   featured: boolean;
   sortOrder: number;
   usageCount: number;
@@ -35,6 +39,8 @@ type Draft = {
   variables: string;
   defaultInput: string;
   preferredModelId: string;
+  coverAlt: string;
+  coverIcon: string;
   featured: boolean;
   sortOrder: number;
 };
@@ -50,6 +56,8 @@ const blank: Draft = {
   variables: "[]",
   defaultInput: "{}",
   preferredModelId: "",
+  coverAlt: "",
+  coverIcon: "",
   featured: false,
   sortOrder: 0,
 };
@@ -67,6 +75,8 @@ function toDraft(template: AdminTemplateRow): Draft {
     variables: JSON.stringify(template.variables, null, 2),
     defaultInput: JSON.stringify(template.defaultInput, null, 2),
     preferredModelId: template.preferredModelId ?? "",
+    coverAlt: template.coverAlt ?? "",
+    coverIcon: template.coverIcon ?? "",
     featured: template.featured,
     sortOrder: template.sortOrder,
   };
@@ -90,12 +100,33 @@ export function TemplateManager({
     selected ? toDraft(selected) : blank,
   );
   const [busy, setBusy] = useState(false);
+  const [coverBusy, setCoverBusy] = useState(false);
+  const [coverFile, setCoverFile] = useState<File | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   function choose(template: AdminTemplateRow | null) {
     setSelectedId(template?.id ?? null);
     setDraft(template ? toDraft(template) : { ...blank });
     setMessage(null);
+    setCoverFile(null);
+  }
+
+  async function uploadCover() {
+    if (!canManage || !draft.id || !coverFile || coverBusy) return;
+    setCoverBusy(true);
+    setMessage(null);
+    try {
+      const form = new FormData();
+      form.set("file", coverFile);
+      form.set("alt", draft.coverAlt.trim());
+      const response = await fetch(`/api/admin/templates/${encodeURIComponent(draft.id)}/cover`, { method: "POST", body: form });
+      const result = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Cover could not be uploaded.");
+      window.location.reload();
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Cover could not be uploaded.");
+      setCoverBusy(false);
+    }
   }
 
   async function save() {
@@ -122,6 +153,8 @@ export function TemplateManager({
         variables,
         defaultInput,
         preferredModelId: draft.preferredModelId.trim() || null,
+        coverAlt: draft.coverAlt.trim() || null,
+        coverIcon: draft.coverIcon.trim() || null,
         featured: draft.featured,
         sortOrder: Number(draft.sortOrder),
       };
@@ -338,6 +371,30 @@ export function TemplateManager({
             </Field>
           </div>
 
+          <section className="space-y-3 rounded-2xl border border-border bg-surface-sunken p-4" aria-label="Template artwork">
+            <div>
+              <h3 className="text-sm font-semibold">Template artwork</h3>
+              <p className="mt-1 text-xs text-muted-foreground">Built-in recipes use their own lightweight cover illustration. Upload a custom cover after saving the recipe. SVG icons remain separate from uploaded images.</p>
+            </div>
+            <div className="relative aspect-video max-w-xl overflow-hidden rounded-xl border border-border bg-muted">
+              {/* Custom uploads are converted to bounded WebP by the server. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={selected?.coverObjectKey?`/api/templates/covers/${encodeURIComponent(selected.slug)}?v=${encodeURIComponent(selected.updatedAt)}`:getTemplateVisual(draft.slug,draft.mediaKind).cover} alt={draft.coverAlt||getTemplateVisual(draft.slug,draft.mediaKind).alt} className="size-full object-cover"/>
+            </div>
+            <Field label="Cover image alt text" hint="Required before uploading an image. Describe the artwork, not its filename.">
+              <input value={draft.coverAlt} maxLength={240} onChange={e=>setDraft({...draft,coverAlt:e.target.value})} className="field"/>
+            </Field>
+            <Field label="Icon" hint="Choose an individually identifiable SVG mark.">
+              <select value={draft.coverIcon} onChange={e=>setDraft({...draft,coverIcon:e.target.value})} className="field">
+                <option value="">Use catalog default</option>
+                {Array.from(new Set(Object.values(templateVisuals).map(item=>item.icon))).map(key=><option key={key} value={key}>{key.replaceAll("-", " ")}</option>)}
+              </select>
+            </Field>
+            {draft.id?<div className="flex flex-wrap items-center gap-3">
+              <input type="file" accept="image/jpeg,image/png,image/webp" aria-label="Select template cover image" onChange={e=>setCoverFile(e.target.files?.[0]??null)} className="block min-w-0 max-w-full text-xs" disabled={!canManage||coverBusy}/>
+              <Button type="button" variant="secondary" size="sm" disabled={!canManage||coverBusy||!coverFile||!draft.coverAlt.trim()} onClick={()=>void uploadCover()}>{coverBusy?"Uploading…":"Upload cover"}</Button>
+            </div>:<p className="text-xs text-muted-foreground">Save the new template before uploading its cover.</p>}
+          </section>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
               label="Preferred provider model ID"

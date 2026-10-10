@@ -44,7 +44,8 @@ const coverBytes = Buffer.from(
   "/9j/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAJABADASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAABAf/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdgKaS/9k=",
   "base64",
 );
-const coverObjectKey = "org/c111111111111111111111111/assets/00/learn-e2e-cover-image.jpg";
+const coverObjectKey =
+  "org/c111111111111111111111111/assets/00/learn-e2e-cover-image.jpg";
 const storageRoot = process.env.ASSET_STORAGE_ROOT;
 if (!storageRoot)
   throw new Error("ASSET_STORAGE_ROOT is required for fixtures.");

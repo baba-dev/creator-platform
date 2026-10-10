@@ -121,7 +121,16 @@ export default async function OrganizationWorkspacePage({
       },
       orderBy: [{ featured: "desc" }, { sortOrder: "asc" }, { name: "asc" }],
       take: 4,
-      select: { slug: true, name: true, description: true, mediaKind: true, coverObjectKey: true, coverAlt: true, coverIcon: true, updatedAt: true },
+      select: {
+        slug: true,
+        name: true,
+        description: true,
+        mediaKind: true,
+        coverObjectKey: true,
+        coverAlt: true,
+        coverIcon: true,
+        updatedAt: true,
+      },
     }),
     getAvailableStudioModels("prompt-enhancement"),
   ]);
@@ -243,7 +252,8 @@ export default async function OrganizationWorkspacePage({
                 Start from a template
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Choose a look and start creating. Your Studio is prepared for you.
+                Choose a look and start creating. Your Studio is prepared for
+                you.
               </p>
             </div>
             <Link
@@ -256,7 +266,15 @@ export default async function OrganizationWorkspacePage({
           {topTemplates.length ? (
             <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-4">
               {topTemplates.map((template) => (
-                <TemplateCard key={template.slug} template={{ ...template, coverVersion: template.updatedAt.getTime() }} organizationSlug={organizationSlug} compact />
+                <TemplateCard
+                  key={template.slug}
+                  template={{
+                    ...template,
+                    coverVersion: template.updatedAt.getTime(),
+                  }}
+                  organizationSlug={organizationSlug}
+                  compact
+                />
               ))}
             </div>
           ) : (

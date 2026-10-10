@@ -119,12 +119,20 @@ export function TemplateManager({
       const form = new FormData();
       form.set("file", coverFile);
       form.set("alt", draft.coverAlt.trim());
-      const response = await fetch(`/api/admin/templates/${encodeURIComponent(draft.id)}/cover`, { method: "POST", body: form });
+      const response = await fetch(
+        `/api/admin/templates/${encodeURIComponent(draft.id)}/cover`,
+        { method: "POST", body: form },
+      );
       const result = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(result.error ?? "Cover could not be uploaded.");
+      if (!response.ok)
+        throw new Error(result.error ?? "Cover could not be uploaded.");
       window.location.reload();
     } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : "Cover could not be uploaded.");
+      setMessage(
+        reason instanceof Error
+          ? reason.message
+          : "Cover could not be uploaded.",
+      );
       setCoverBusy(false);
     }
   }
@@ -134,12 +142,20 @@ export function TemplateManager({
     setCoverBusy(true);
     setMessage(null);
     try {
-      const response = await fetch(`/api/admin/templates/${encodeURIComponent(draft.id)}/cover`, { method: "DELETE" });
+      const response = await fetch(
+        `/api/admin/templates/${encodeURIComponent(draft.id)}/cover`,
+        { method: "DELETE" },
+      );
       const result = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(result.error ?? "Cover could not be removed.");
+      if (!response.ok)
+        throw new Error(result.error ?? "Cover could not be removed.");
       window.location.reload();
     } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : "Cover could not be removed.");
+      setMessage(
+        reason instanceof Error
+          ? reason.message
+          : "Cover could not be removed.",
+      );
       setCoverBusy(false);
     }
   }
@@ -386,30 +402,111 @@ export function TemplateManager({
             </Field>
           </div>
 
-          <section className="space-y-3 rounded-2xl border border-border bg-surface-sunken p-4" aria-label="Template artwork">
+          <section
+            className="space-y-3 rounded-2xl border border-border bg-surface-sunken p-4"
+            aria-label="Template artwork"
+          >
             <div>
               <h3 className="text-sm font-semibold">Template artwork</h3>
-              <p className="mt-1 text-xs text-muted-foreground">Built-in recipes use their own lightweight cover illustration. Upload a custom cover after saving the recipe. SVG icons remain separate from uploaded images.</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Built-in recipes use their own lightweight cover illustration.
+                Upload a custom cover after saving the recipe. SVG icons remain
+                separate from uploaded images.
+              </p>
             </div>
             <div className="relative aspect-video max-w-xl overflow-hidden rounded-xl border border-border bg-muted">
               {/* Custom uploads are converted to bounded WebP by the server. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={selected?.coverObjectKey?`/api/templates/covers/${encodeURIComponent(selected.slug)}?v=${encodeURIComponent(selected.updatedAt)}`:getTemplateVisual(draft.slug,draft.mediaKind).cover} alt={draft.coverAlt||getTemplateVisual(draft.slug,draft.mediaKind).alt} className="size-full object-cover"/>
+              <img
+                src={
+                  selected?.coverObjectKey
+                    ? `/api/templates/covers/${encodeURIComponent(selected.slug)}?v=${encodeURIComponent(selected.updatedAt)}`
+                    : getTemplateVisual(draft.slug, draft.mediaKind).cover
+                }
+                alt={
+                  draft.coverAlt ||
+                  getTemplateVisual(draft.slug, draft.mediaKind).alt
+                }
+                className="size-full object-cover"
+              />
             </div>
-            <Field label="Cover image alt text" hint="Required before uploading an image. Describe the artwork, not its filename.">
-              <input value={draft.coverAlt} maxLength={240} onChange={e=>setDraft({...draft,coverAlt:e.target.value})} className="field"/>
+            <Field
+              label="Cover image alt text"
+              hint="Required before uploading an image. Describe the artwork, not its filename."
+            >
+              <input
+                value={draft.coverAlt}
+                maxLength={240}
+                onChange={(e) =>
+                  setDraft({ ...draft, coverAlt: e.target.value })
+                }
+                className="field"
+              />
             </Field>
-            <Field label="Icon" hint="Choose an individually identifiable SVG mark.">
-              <select value={draft.coverIcon} onChange={e=>setDraft({...draft,coverIcon:e.target.value})} className="field">
+            <Field
+              label="Icon"
+              hint="Choose an individually identifiable SVG mark."
+            >
+              <select
+                value={draft.coverIcon}
+                onChange={(e) =>
+                  setDraft({ ...draft, coverIcon: e.target.value })
+                }
+                className="field"
+              >
                 <option value="">Use catalog default</option>
-                {Array.from(new Set(Object.values(templateVisuals).map(item=>item.icon))).map(key=><option key={key} value={key}>{key.replaceAll("-", " ")}</option>)}
+                {Array.from(
+                  new Set(
+                    Object.values(templateVisuals).map((item) => item.icon),
+                  ),
+                ).map((key) => (
+                  <option key={key} value={key}>
+                    {key.replaceAll("-", " ")}
+                  </option>
+                ))}
               </select>
             </Field>
-            {draft.id?<div className="flex flex-wrap items-center gap-3">
-              <input type="file" accept="image/jpeg,image/png,image/webp" aria-label="Select template cover image" onChange={e=>setCoverFile(e.target.files?.[0]??null)} className="block min-w-0 max-w-full text-xs" disabled={!canManage||coverBusy}/>
-              <Button type="button" variant="secondary" size="sm" disabled={!canManage||coverBusy||!coverFile||!draft.coverAlt.trim()} onClick={()=>void uploadCover()}>{coverBusy?"Uploading…":"Upload cover"}</Button>
-              {selected?.coverObjectKey ? <Button type="button" variant="secondary" size="sm" disabled={!canManage||coverBusy} onClick={()=>void removeCover()}>Restore built-in cover</Button> : null}
-            </div>:<p className="text-xs text-muted-foreground">Save the new template before uploading its cover.</p>}
+            {draft.id ? (
+              <div className="flex flex-wrap items-center gap-3">
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  aria-label="Select template cover image"
+                  onChange={(e) => setCoverFile(e.target.files?.[0] ?? null)}
+                  className="block min-w-0 max-w-full text-xs"
+                  disabled={!canManage || coverBusy}
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={
+                    !canManage ||
+                    coverBusy ||
+                    !coverFile ||
+                    !draft.coverAlt.trim()
+                  }
+                  onClick={() => void uploadCover()}
+                >
+                  {coverBusy ? "Uploading…" : "Upload cover"}
+                </Button>
+                {selected?.coverObjectKey ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    disabled={!canManage || coverBusy}
+                    onClick={() => void removeCover()}
+                  >
+                    Restore built-in cover
+                  </Button>
+                ) : null}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Save the new template before uploading its cover.
+              </p>
+            )}
           </section>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field

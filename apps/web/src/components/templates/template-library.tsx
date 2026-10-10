@@ -1,24 +1,221 @@
 "use client";
 import { useMemo, useState } from "react";
 import { Icon } from "@/components/ui/icon";
-import { TemplateCard, type GalleryTemplate } from "@/components/templates/template-card";
-export type TemplateCardData = GalleryTemplate & {id:string;category:string;featured:boolean;favorite:boolean;usageCount:number;defaultInput:Record<string,unknown>};
-export function TemplateLibrary({templates,organizationId,organizationSlug,recentTemplateIds}:{templates:TemplateCardData[];organizationId:string;organizationSlug:string;recentTemplateIds:string[]}){
- const [query,setQuery]=useState(""); const [kind,setKind]=useState<"ALL"|"IMAGE"|"VIDEO"|"VOICE">("ALL"); const [category,setCategory]=useState("All"); const [favoritesOnly,setFavoritesOnly]=useState(false);
- const [favorites,setFavorites]=useState<Record<string,boolean>>(()=>Object.fromEntries(templates.map(t=>[t.id,t.favorite])));
- const categories=useMemo(()=>["All",...Array.from(new Set(templates.map(t=>t.category))).sort()],[templates]);
- const recent=useMemo(()=>recentTemplateIds.map(id=>templates.find(t=>t.id===id)).filter((t):t is TemplateCardData=>Boolean(t)),[recentTemplateIds,templates]);
- const visible=useMemo(()=>templates.filter(t=>(kind==="ALL"||t.mediaKind===kind)&&(category==="All"||category===t.category)&&(!favoritesOnly||favorites[t.id])&&[t.name,t.description,t.category,t.mediaKind].join(" ").toLowerCase().includes(query.trim().toLowerCase())),[kind,category,favoritesOnly,favorites,templates,query]);
- async function toggleFavorite(t:TemplateCardData){const next=!favorites[t.id];setFavorites(s=>({...s,[t.id]:next}));try{const response=await fetch(`/api/templates/${encodeURIComponent(t.slug)}/favorite`,{method:next?"POST":"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({organizationId})});if(!response.ok)throw Error("Could not update favourite");}catch{setFavorites(s=>({...s,[t.id]:!next}));}}
- const action=(t:TemplateCardData)=><button type="button" onClick={()=>void toggleFavorite(t)} aria-label={favorites[t.id]?"Remove from favourites":"Add to favourites"} aria-pressed={Boolean(favorites[t.id])} className="grid size-9 place-items-center rounded-full border border-white/30 bg-background/90 text-primary shadow-xs backdrop-blur focus-visible:outline-2 focus-visible:outline-ring"><span aria-hidden="true">{favorites[t.id]?"♥":"♡"}</span></button>;
- return <div className="space-y-8">
-  {recent.length>0&&<section aria-labelledby="recent-templates"><div><p className="text-[10px] font-bold uppercase tracking-[.18em] text-primary">Pick up where you left off</p><h2 id="recent-templates" className="font-display mt-2 text-2xl font-semibold">Recently used</h2></div><div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">{recent.slice(0,4).map(t=><TemplateCard key={t.id} template={t} organizationSlug={organizationSlug} compact />)}</div></section>}
-  <section aria-labelledby="template-library">
-   <div className="flex flex-wrap gap-3"><div className="relative min-w-48 flex-1"><Icon name="search" className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search thumbnails, products, narration…" aria-label="Search templates" className="min-h-12 w-full rounded-2xl border border-input bg-card pl-11 pr-4 text-sm outline-none focus:border-primary/45 focus:ring-4 focus:ring-primary/10"/></div><label className="inline-flex min-h-12 items-center gap-2 rounded-2xl border border-border bg-card px-4 text-xs font-semibold"><input type="checkbox" checked={favoritesOnly} onChange={e=>setFavoritesOnly(e.target.checked)} className="size-4 accent-primary"/>Favourites only</label></div>
-   <div className="mt-4 flex flex-wrap gap-2">{(["ALL","IMAGE","VIDEO","VOICE"] as const).map(v=><button type="button" key={v} onClick={()=>setKind(v)} aria-pressed={kind===v} className={`min-h-10 rounded-xl border px-4 text-xs font-semibold transition ${kind===v?"border-primary/25 bg-primary/10 text-primary":"border-border bg-card text-muted-foreground hover:text-foreground"}`}>{v==="ALL"?"All formats":v==="VOICE"?"Voice":v==="VIDEO"?"Video":"Image"}</button>)}</div>
-   <div className="mt-2 flex gap-2 overflow-x-auto pb-2">{categories.map(v=><button key={v} type="button" onClick={()=>setCategory(v)} aria-pressed={category===v} className={`shrink-0 rounded-lg px-3 py-2 text-xs font-semibold transition ${category===v?"bg-foreground text-background":"text-muted-foreground hover:bg-muted hover:text-foreground"}`}>{v}</button>)}</div>
-   <div className="mt-5"><p id="template-library" className="text-sm font-semibold">{visible.length.toLocaleString("en-US")} creative recipes</p><p className="mt-1 text-xs text-muted-foreground">Choose a look. Your Studio is prepared automatically, and nothing is charged until you generate.</p></div>
-   {visible.length>0?<div className="mt-5 grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">{visible.map(t=><TemplateCard key={t.id} template={t} organizationSlug={organizationSlug} favoriteAction={action(t)}/>)}</div>:<div className="mt-5 rounded-3xl border border-dashed border-border bg-card/60 px-6 py-14 text-center"><h3 className="font-display text-xl font-semibold">No matching templates</h3><p className="mt-2 text-sm text-muted-foreground">Try another format, category or shorter search.</p><button type="button" onClick={()=>{setQuery("");setKind("ALL");setCategory("All");setFavoritesOnly(false)}} className="mt-4 text-xs font-semibold text-primary">Clear filters</button></div>}
-  </section>
- </div>;
+import {
+  TemplateCard,
+  type GalleryTemplate,
+} from "@/components/templates/template-card";
+export type TemplateCardData = GalleryTemplate & {
+  id: string;
+  category: string;
+  featured: boolean;
+  favorite: boolean;
+  usageCount: number;
+  defaultInput: Record<string, unknown>;
+};
+export function TemplateLibrary({
+  templates,
+  organizationId,
+  organizationSlug,
+  recentTemplateIds,
+}: {
+  templates: TemplateCardData[];
+  organizationId: string;
+  organizationSlug: string;
+  recentTemplateIds: string[];
+}) {
+  const [query, setQuery] = useState("");
+  const [kind, setKind] = useState<"ALL" | "IMAGE" | "VIDEO" | "VOICE">("ALL");
+  const [category, setCategory] = useState("All");
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [favorites, setFavorites] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(templates.map((t) => [t.id, t.favorite])),
+  );
+  const categories = useMemo(
+    () => [
+      "All",
+      ...Array.from(new Set(templates.map((t) => t.category))).sort(),
+    ],
+    [templates],
+  );
+  const recent = useMemo(
+    () =>
+      recentTemplateIds
+        .map((id) => templates.find((t) => t.id === id))
+        .filter((t): t is TemplateCardData => Boolean(t)),
+    [recentTemplateIds, templates],
+  );
+  const visible = useMemo(
+    () =>
+      templates.filter(
+        (t) =>
+          (kind === "ALL" || t.mediaKind === kind) &&
+          (category === "All" || category === t.category) &&
+          (!favoritesOnly || favorites[t.id]) &&
+          [t.name, t.description, t.category, t.mediaKind]
+            .join(" ")
+            .toLowerCase()
+            .includes(query.trim().toLowerCase()),
+      ),
+    [kind, category, favoritesOnly, favorites, templates, query],
+  );
+  async function toggleFavorite(t: TemplateCardData) {
+    const next = !favorites[t.id];
+    setFavorites((s) => ({ ...s, [t.id]: next }));
+    try {
+      const response = await fetch(
+        `/api/templates/${encodeURIComponent(t.slug)}/favorite`,
+        {
+          method: next ? "POST" : "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ organizationId }),
+        },
+      );
+      if (!response.ok) throw Error("Could not update favourite");
+    } catch {
+      setFavorites((s) => ({ ...s, [t.id]: !next }));
+    }
+  }
+  const action = (t: TemplateCardData) => (
+    <button
+      type="button"
+      onClick={() => void toggleFavorite(t)}
+      aria-label={
+        favorites[t.id] ? "Remove from favourites" : "Add to favourites"
+      }
+      aria-pressed={Boolean(favorites[t.id])}
+      className="grid size-9 place-items-center rounded-full border border-white/30 bg-background/90 text-primary shadow-xs backdrop-blur focus-visible:outline-2 focus-visible:outline-ring"
+    >
+      <span aria-hidden="true">{favorites[t.id] ? "♥" : "♡"}</span>
+    </button>
+  );
+  return (
+    <div className="space-y-8">
+      {recent.length > 0 && (
+        <section aria-labelledby="recent-templates">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[.18em] text-primary">
+              Pick up where you left off
+            </p>
+            <h2
+              id="recent-templates"
+              className="font-display mt-2 text-2xl font-semibold"
+            >
+              Recently used
+            </h2>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+            {recent.slice(0, 4).map((t) => (
+              <TemplateCard
+                key={t.id}
+                template={t}
+                organizationSlug={organizationSlug}
+                compact
+              />
+            ))}
+          </div>
+        </section>
+      )}
+      <section aria-labelledby="template-library">
+        <div className="flex flex-wrap gap-3">
+          <div className="relative min-w-48 flex-1">
+            <Icon
+              name="search"
+              className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search thumbnails, products, narration…"
+              aria-label="Search templates"
+              className="min-h-12 w-full rounded-2xl border border-input bg-card pl-11 pr-4 text-sm outline-none focus:border-primary/45 focus:ring-4 focus:ring-primary/10"
+            />
+          </div>
+          <label className="inline-flex min-h-12 items-center gap-2 rounded-2xl border border-border bg-card px-4 text-xs font-semibold">
+            <input
+              type="checkbox"
+              checked={favoritesOnly}
+              onChange={(e) => setFavoritesOnly(e.target.checked)}
+              className="size-4 accent-primary"
+            />
+            Favourites only
+          </label>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {(["ALL", "IMAGE", "VIDEO", "VOICE"] as const).map((v) => (
+            <button
+              type="button"
+              key={v}
+              onClick={() => setKind(v)}
+              aria-pressed={kind === v}
+              className={`min-h-10 rounded-xl border px-4 text-xs font-semibold transition ${kind === v ? "border-primary/25 bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:text-foreground"}`}
+            >
+              {v === "ALL"
+                ? "All formats"
+                : v === "VOICE"
+                  ? "Voice"
+                  : v === "VIDEO"
+                    ? "Video"
+                    : "Image"}
+            </button>
+          ))}
+        </div>
+        <div className="mt-2 flex gap-2 overflow-x-auto pb-2">
+          {categories.map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setCategory(v)}
+              aria-pressed={category === v}
+              className={`shrink-0 rounded-lg px-3 py-2 text-xs font-semibold transition ${category === v ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
+        <div className="mt-5">
+          <p id="template-library" className="text-sm font-semibold">
+            {visible.length.toLocaleString("en-US")} creative recipes
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Choose a look. Your Studio is prepared automatically, and nothing is
+            charged until you generate.
+          </p>
+        </div>
+        {visible.length > 0 ? (
+          <div className="mt-5 grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
+            {visible.map((t) => (
+              <TemplateCard
+                key={t.id}
+                template={t}
+                organizationSlug={organizationSlug}
+                favoriteAction={action(t)}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="mt-5 rounded-3xl border border-dashed border-border bg-card/60 px-6 py-14 text-center">
+            <h3 className="font-display text-xl font-semibold">
+              No matching templates
+            </h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Try another format, category or shorter search.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setQuery("");
+                setKind("ALL");
+                setCategory("All");
+                setFavoritesOnly(false);
+              }}
+              className="mt-4 text-xs font-semibold text-primary"
+            >
+              Clear filters
+            </button>
+          </div>
+        )}
+      </section>
+    </div>
+  );
 }

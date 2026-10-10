@@ -16,7 +16,8 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ slug: string }> },
 ) {
-  if (!hasTrustedMutationOrigin(request)) return NextResponse.json({ error: "Origin not allowed." }, { status: 403 });
+  if (!hasTrustedMutationOrigin(request))
+    return NextResponse.json({ error: "Origin not allowed." }, { status: 403 });
   const session = await getRequestSession(request.headers);
   if (!session)
     return NextResponse.json(

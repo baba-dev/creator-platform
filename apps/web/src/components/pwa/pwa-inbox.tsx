@@ -44,6 +44,12 @@ async function consume(id: string): Promise<Pending | null> {
         item = read.result || null;
         store.delete(id);
       };
+      const all = store.getAll();
+      all.onsuccess = () => {
+        for (const record of all.result as Pending[]) {
+          if (Date.now() - record.createdAt > 15 * 60_000) store.delete(record.id);
+        }
+      };
       transaction.oncomplete = () =>
         resolve(
           item && Date.now() - item.createdAt <= 15 * 60_000 ? item : null,
@@ -237,9 +243,7 @@ export function PwaInbox({ workspaces }: { workspaces: Workspace[] }) {
         </p>
       )}
       <p className="mt-6 text-xs leading-5 text-muted-foreground">
-        Shared files are held locally for at most 15 minutes until reviewed. The
-        import uses your existing authenticated, validated asset upload
-        workflow.
+        Pending imports expire after 15 minutes. Stale entries are purged when the inbox or share flow next runs. Imported media uses your authenticated, validated upload workflow.
       </p>
     </section>
   );

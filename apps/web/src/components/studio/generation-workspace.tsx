@@ -61,10 +61,7 @@ export async function GenerationWorkspace({
   const guideContent = guide ? publishedContent(guide.published) : null;
   const initialPrompt = guideContent?.tool === kind ? guideContent.prompt : "";
   const page = pages[kind];
-  const promptEnhancement =
-    kind === "speech"
-      ? null
-      : await getAvailableStudioModels("prompt-enhancement");
+  const promptEnhancement = await getAvailableStudioModels("prompt-enhancement");
   return (
     <main className="relative min-h-screen min-w-0 bg-background px-4 py-7 text-foreground sm:px-7 lg:px-9 lg:py-10">
       <div className="creative-glow pointer-events-none absolute inset-0" />

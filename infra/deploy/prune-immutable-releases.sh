@@ -8,8 +8,10 @@ readonly root=/var/www/creator-platform
 readonly releases="$root/releases"
 readonly current="$root/current"
 mode="${1:---dry-run}"
-if [[ $# -gt 1 || ( "$mode" != "--dry-run" && "$mode" != "--apply" ) ]]; then
-  printf 'Usage: sudo bash %s [--dry-run|--apply]\n' "$0" >&2
+recent_override="${2:-}"
+if [[ $# -gt 2 || ( "$mode" != "--dry-run" && "$mode" != "--apply" ) ||
+      ( -n "$recent_override" && "$recent_override" != "--include-recent" ) ]]; then
+  printf 'Usage: sudo bash %s [--dry-run|--apply] [--include-recent]\\n' "$0" >&2
   exit 64
 fi
 [[ "$EUID" -eq 0 ]] || { echo "Must be run as root." >&2; exit 1; }

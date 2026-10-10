@@ -46,7 +46,7 @@ function renderInline(value: string): ReactNode[] {
       );
     } else if (token.startsWith("[")) {
       const link = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(token);
-      const href = link && safeHref(link[2]);
+      const href = link?.[2] ? safeHref(link[2]) : null;
       rendered.push(
         href ? (
           <a

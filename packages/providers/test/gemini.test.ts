@@ -71,7 +71,7 @@ describe("createGeminiProvider", () => {
         ),
     });
     await expect(provider.listModels()).rejects.toThrow(
-      "Gemini request failed with status 404",
+      "Gemini returned HTTP 404",
     );
   });
 

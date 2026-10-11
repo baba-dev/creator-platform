@@ -49,7 +49,9 @@ export function PwaRuntime() {
           );
         };
       })
-      .catch(() => undefined);
+      .catch((error) => {
+        console.error("[Creators PWA] Could not observe Service Worker", error);
+      });
     return () => {
       active = false;
       cleanup();

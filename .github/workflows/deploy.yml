@@ -321,6 +321,15 @@ jobs:
               '$RELEASE_SHA' \
               '/var/www/creator-platform/incoming/creator-platform-${RELEASE_SHA}.tar.gz'"
 
+      - name: Check out exact deployed source for public probe
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+          persist-credentials: false
+
+      - name: Check public PWA through Cloudflare after activation
+        run: node ops/pwa/check-live.mjs https://creator.aiwamediagroup.com/
+
       - name: Record successful deployment
         run: |
           echo "### Staging deployed" >>"$GITHUB_STEP_SUMMARY"

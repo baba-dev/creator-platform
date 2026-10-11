@@ -130,3 +130,82 @@ test("capture actual responsive public Creators app artwork for manifest review"
     fullPage: false,
   });
 });
+
+// Activation regression: an older cache must not crash the new worker's
+// activate handler. This was not covered by first-install-only offline tests.
+test("service worker activates across a legacy cache and controls the app", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.waitForFunction(async () => {
+    const registration = await navigator.serviceWorker.ready;
+    return (
+      registration.active?.state === "activated" &&
+      !!navigator.serviceWorker.controller
+    );
+  });
+  const result = await page.evaluate(async () => {
+    const legacy = await caches.open("creators-pwa-old-public");
+    await legacy.put("/legacy-pwa-probe", new Response("legacy"));
+    const registration = await navigator.serviceWorker.register(
+      "/sw.js?activation-regression=1",
+      {
+        scope: "/",
+        updateViaCache: "none",
+      },
+    );
+    const candidate = registration.waiting || registration.installing;
+    if (!candidate) throw new Error("No updated worker was found");
+    if (candidate.state !== "installed" && candidate.state !== "activated") {
+      await new Promise<void>((resolve, reject) => {
+        candidate.addEventListener("statechange", () => {
+          if (
+            candidate.state === "installed" ||
+            candidate.state === "activated"
+          )
+            resolve();
+          if (candidate.state === "redundant")
+            reject(new Error("New worker became redundant"));
+        });
+      });
+    }
+    if (candidate.state === "installed")
+      candidate.postMessage({ type: "SKIP_WAITING" });
+    return registration.scope;
+  });
+  expect(result).toBe(new URL("/", page.url()).href);
+  await page.waitForFunction(
+    async () => {
+      const reg = await navigator.serviceWorker.getRegistration("/");
+      return (
+        !!reg?.active?.scriptURL.includes("activation-regression=1") &&
+        reg.active.state === "activated" &&
+        !(await caches.keys()).includes("creators-pwa-old-public")
+      );
+    },
+    null,
+    { timeout: 20000 },
+  );
+});
+
+test("public service worker and offline resources have correct response types", async ({
+  request,
+}) => {
+  const urls = [
+    ["/sw.js", "javascript"],
+    ["/pwa-register.js", "javascript"],
+    ["/offline.html", "text/html"],
+    ["/offline-guide.html", "text/html"],
+    ["/offline-drafts.js", "javascript"],
+    ["/manifest.webmanifest", "json"],
+  ] as const;
+  for (const [path, mime] of urls) {
+    const response = await request.get(path);
+    expect(response.status(), path).toBe(200);
+    expect(response.headers()["content-type"], path).toContain(mime);
+    expect(response.url(), path).not.toContain("/sign-in");
+  }
+  const worker = await request.get("/sw.js");
+  expect(worker.headers()["cache-control"]).toContain("no-store");
+  expect(worker.headers()["service-worker-allowed"]).toBe("/");
+});

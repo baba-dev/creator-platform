@@ -1,5 +1,5 @@
 /* Creators PWA: deliberately never persist authenticated HTML, private media, or API replies. */
-const VERSION = "creators-pwa-v2-6";
+const VERSION = "creators-pwa-v2-7";
 const CORE = VERSION + "-shell";
 const STATIC = VERSION + "-static";
 const OFFLINE = "/offline.html";
@@ -27,7 +27,26 @@ async function trim(cache, max) {
     await cache.delete(key);
 }
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CORE).then((cache) => cache.addAll(CORE_URLS)));
+  event.waitUntil(
+    (async () => {
+      // Offline navigation is a release requirement. Optional media must not
+      // strand the entire installation on a transient CDN or asset error.
+      const cache = await caches.open(CORE);
+      await cache.addAll([
+        OFFLINE,
+        "/offline-drafts.js",
+        "/offline-guide.html",
+      ]);
+      await Promise.allSettled(
+        CORE_URLS.filter(
+          (url) =>
+            ![OFFLINE, "/offline-drafts.js", "/offline-guide.html"].includes(
+              url,
+            ),
+        ).map((url) => cache.add(url)),
+      );
+    })(),
+  );
 });
 self.addEventListener("activate", (event) => {
   event.waitUntil(
@@ -37,10 +56,7 @@ self.addEventListener("activate", (event) => {
         keys
           .filter(
             (key) =>
-              key.startsWith("creators-pwa-") &&
-              key !== CORE &&
-              key !== PUBLIC &&
-              key !== STATIC,
+              key.startsWith("creators-pwa-") && key !== CORE && key !== STATIC,
           )
           .map((key) => caches.delete(key)),
       );

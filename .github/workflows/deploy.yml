@@ -321,13 +321,14 @@ jobs:
               '$RELEASE_SHA' \
               '/var/www/creator-platform/incoming/creator-platform-${RELEASE_SHA}.tar.gz'"
 
+      - name: Check out exact deployed source for public probe
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+          persist-credentials: false
+
       - name: Check public PWA through Cloudflare after activation
-        run: |
-          set -Eeuo pipefail
-          curl --fail --show-error --silent --location --retry 3 --retry-delay 2 \
-            "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$RELEASE_SHA/ops/pwa/check-live.mjs" \
-            --output "$RUNNER_TEMP/check-public-pwa.mjs"
-          node "$RUNNER_TEMP/check-public-pwa.mjs" "https://creator.aiwamediagroup.com/"
+        run: node ops/pwa/check-live.mjs https://creator.aiwamediagroup.com/
 
       - name: Record successful deployment
         run: |

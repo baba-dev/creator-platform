@@ -4,8 +4,8 @@
 
 The installable app uses one service worker at `/sw.js`. Immutable Next.js
 assets are cache-first and bounded. The offline shell, guide and existing brand
-icons are precached. Eligible public Learn navigations are fetched without
-credentials and saved only when the response explicitly permits caching.
+icons are precached. Dynamic Learn routes are network-first and never copied into the shared cache.
+The optional periodic refresh touches only the credential-free bundled guide.
 Authenticated HTML, RSC, APIs, wallets, provider media and billable requests are
 never cached by the service worker.
 
@@ -45,3 +45,9 @@ responsive public UI screenshots from the browser-smoke artifact before
 committing any manifest screenshots. Do not claim a PWABuilder 46/46 or
 cross-device native support until the actual deployed installation has been
 assessed.
+
+## Activation and external report-card checks
+
+The standalone /pwa-register.js is a same-origin, deferred early registration entrypoint independent of React hydration. In browser DevTools verify an **activated** worker with scope /; verify upgrades with a pre-existing old-version cache (the v2-6 build contained a stale PUBLIC cache identifier which broke upgrades). If installation fails, inspect failed requests for /offline.html, /offline-drafts.js, /offline-guide.html and the registration console error. Optional icon/manifest caching must not block installation.
+
+Run external PWABuilder only after confirming the deployed commit, a real browser activation and public 200 responses for the manifest, worker, images and screenshots. The PWABuilder report card is dynamic and is not itself a substitute for an independent browser check. If Cloudflare blocks its crawler, review WAF challenge logs for the exact public resources. Allow GET/HEAD to the narrow static paths without disabling application/API security or broad user-agent exemptions. Verify MIME types and that requests never return a challenge HTML page. Do not claim a passing numerical score before externally confirming it.

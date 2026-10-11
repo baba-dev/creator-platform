@@ -63,6 +63,7 @@ export default function RootLayout({
   return (
     <html lang="en" data-theme="dark" suppressHydrationWarning>
       <head>
+        <script src="/pwa-register.js" defer />
         <script
           id="aiwa-theme-boot"
           dangerouslySetInnerHTML={{ __html: themeBootScript }}

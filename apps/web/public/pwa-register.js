@@ -5,7 +5,10 @@
     navigator.serviceWorker
       .register("/sw.js", { scope: "/", updateViaCache: "none" })
       .catch((error) => {
-        console.error("[Creators PWA] Service Worker registration failed", error);
+        console.error(
+          "[Creators PWA] Service Worker registration failed",
+          error,
+        );
         window.dispatchEvent(new Event("creators:pwa-registration-error"));
       });
   };

@@ -32,10 +32,18 @@ self.addEventListener("install", (event) => {
       // Offline navigation is a release requirement. Optional media must not
       // strand the entire installation on a transient CDN or asset error.
       const cache = await caches.open(CORE);
-      await cache.addAll([OFFLINE, "/offline-drafts.js", "/offline-guide.html"]);
+      await cache.addAll([
+        OFFLINE,
+        "/offline-drafts.js",
+        "/offline-guide.html",
+      ]);
       await Promise.allSettled(
-        CORE_URLS.filter((url) => ![OFFLINE, "/offline-drafts.js", "/offline-guide.html"].includes(url))
-          .map((url) => cache.add(url)),
+        CORE_URLS.filter(
+          (url) =>
+            ![OFFLINE, "/offline-drafts.js", "/offline-guide.html"].includes(
+              url,
+            ),
+        ).map((url) => cache.add(url)),
       );
     })(),
   );
@@ -48,9 +56,7 @@ self.addEventListener("activate", (event) => {
         keys
           .filter(
             (key) =>
-              key.startsWith("creators-pwa-") &&
-              key !== CORE &&
-              key !== STATIC,
+              key.startsWith("creators-pwa-") && key !== CORE && key !== STATIC,
           )
           .map((key) => caches.delete(key)),
       );

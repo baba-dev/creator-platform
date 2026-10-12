@@ -7,8 +7,12 @@ export function ToolsHeader() {
   return (
     <header className="relative z-30 border-b border-border bg-background/90">
       <div className="mx-auto flex min-h-20 max-w-7xl items-center justify-between gap-3 px-5 sm:px-7 lg:px-10">
-        <div className="sm:hidden"><Brand compact /></div>
-        <div className="hidden sm:block"><Brand /></div>
+        <div className="sm:hidden">
+          <Brand compact />
+        </div>
+        <div className="hidden sm:block">
+          <Brand />
+        </div>
         <nav
           aria-label="Public navigation"
           className="hidden items-center gap-5 text-xs font-semibold text-muted-foreground md:flex"

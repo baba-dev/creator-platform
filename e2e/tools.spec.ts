@@ -18,7 +18,10 @@ test("public tools directory remains usable at mobile, tablet and desktop widths
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - window.innerWidth,
     );
-    expect(overflow, "Unexpected overflow at " + width + "px").toBeLessThanOrEqual(1);
+    expect(
+      overflow,
+      "Unexpected overflow at " + width + "px",
+    ).toBeLessThanOrEqual(1);
   }
 });
 
@@ -26,9 +29,13 @@ test("search, filters and rule-based tool finder are accessible without login", 
   page,
 }) => {
   await page.goto("/tools");
-  await page.getByRole("searchbox", { name: "Search creative tools" }).fill("transcription");
+  await page
+    .getByRole("searchbox", { name: "Search creative tools" })
+    .fill("transcription");
   await expect(
-    page.locator("#directory").getByRole("heading", { name: "Speech / Transcription" }),
+    page
+      .locator("#directory")
+      .getByRole("heading", { name: "Speech / Transcription" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Image & Design" }).click();
   await expect(page.getByText("No matching tools yet.")).toBeVisible();
@@ -43,16 +50,17 @@ test("search, filters and rule-based tool finder are accessible without login", 
   ).toBeVisible();
 });
 
-test("public tool detail keeps signup destination allowlisted", async ({ page }) => {
+test("public tool detail keeps signup destination allowlisted", async ({
+  page,
+}) => {
   const response = await page.goto("/tools/ai-image-generator");
   expect(response?.status()).toBe(200);
   await expect(
     page.getByRole("heading", { name: "Make the image you can imagine." }),
   ).toBeVisible();
-  await expect(page.getByRole("link", { name: "Explore pricing" }).first()).toHaveAttribute(
-    "href",
-    "/pricing",
-  );
+  await expect(
+    page.getByRole("link", { name: "Explore pricing" }).first(),
+  ).toHaveAttribute("href", "/pricing");
   await page.getByRole("link", { name: "Start creating" }).last().click();
   await expect(page).toHaveURL(/\/tools\/start\/image-studio$/);
   await expect(
@@ -60,5 +68,8 @@ test("public tool detail keeps signup destination allowlisted", async ({ page })
   ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Create an account" }),
-  ).toHaveAttribute("href", "/sign-up?returnTo=%2Ftools%2Fstart%2Fimage-studio");
+  ).toHaveAttribute(
+    "href",
+    "/sign-up?returnTo=%2Ftools%2Fstart%2Fimage-studio",
+  );
 });

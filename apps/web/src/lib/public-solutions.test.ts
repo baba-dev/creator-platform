@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { publicToolById } from "./public-tools";
-import { recommendSolution, relevantModels, solutionBySlug, solutionHref, solutions } from "./public-solutions";
+import {
+  recommendSolution,
+  relevantModels,
+  solutionBySlug,
+  solutionHref,
+  solutions,
+} from "./public-solutions";
 import { pricingCategories } from "./public-pricing-contract";
 describe("public solutions", () => {
   it("has five unique, safe routes and complete editorial content", () => {
@@ -14,8 +20,10 @@ describe("public solutions", () => {
       expect(s.questions.length).toBeGreaterThanOrEqual(3);
       expect(solutionBySlug(s.slug)).toBe(s);
       expect(solutionHref(s)).toBe("/solutions/" + s.slug);
-      for (const step of s.workflow) expect(publicToolById(step.toolId)).toBeDefined();
-      for (const category of s.modelCategories) expect(pricingCategories.some((p) => p.id === category)).toBe(true);
+      for (const step of s.workflow)
+        expect(publicToolById(step.toolId)).toBeDefined();
+      for (const category of s.modelCategories)
+        expect(pricingCategories.some((p) => p.id === category)).toBe(true);
       for (const slug of s.related) expect(solutionBySlug(slug)).toBeDefined();
     }
     expect(solutionBySlug("../admin")).toBeUndefined();
@@ -24,9 +32,13 @@ describe("public solutions", () => {
     const result = recommendSolution("ecommerce", "product", "cost");
     expect(result?.solution.slug).toBe("ecommerce");
     expect(result?.tools[0]?.id).toBe("image-studio");
-    expect(result?.tools.every((tool) => Boolean(publicToolById(tool.id)))).toBe(true);
+    expect(
+      result?.tools.every((tool) => Boolean(publicToolById(tool.id))),
+    ).toBe(true);
     expect(result?.advice).toMatch(/quote/);
-    expect(recommendSolution("not-real" as "ecommerce", "social", "speed")).toBeNull();
+    expect(
+      recommendSolution("not-real" as "ecommerce", "social", "speed"),
+    ).toBeNull();
   });
   it("filters the public-safe catalogue by category without altering prices", () => {
     const rows = [

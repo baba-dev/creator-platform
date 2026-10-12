@@ -24,7 +24,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${origin}/pricing` },
     { url: `${origin}/tools` },
     { url: `${origin}/solutions` },
-    ...solutions.map((solution) => ({ url: origin + "/solutions/" + solution.slug })),
+    ...solutions.map((solution) => ({
+      url: origin + "/solutions/" + solution.slug,
+    })),
     ...publicTools.map((tool) => ({ url: `${origin}/tools/${tool.slug}` })),
     ...operations.map((item) => ({
       url: `${origin}/tools/operations/${encodeURIComponent(item.id)}`,

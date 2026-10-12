@@ -81,7 +81,9 @@ export default async function PricingPage() {
             <a href="#faq" className="hover:text-primary">
               FAQ
             </a>
-            <Link href="/solutions" className="hover:text-primary">Solutions</Link>
+            <Link href="/solutions" className="hover:text-primary">
+              Solutions
+            </Link>
             <Link href="/learn" className="hover:text-primary">
               Learn
             </Link>

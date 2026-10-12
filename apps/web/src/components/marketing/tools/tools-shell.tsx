@@ -21,7 +21,9 @@ export function ToolsHeader() {
           <Link href="/tools" className="text-primary">
             Explore tools
           </Link>
-          <Link href="/solutions" className="hover:text-foreground">Solutions</Link>
+          <Link href="/solutions" className="hover:text-foreground">
+            Solutions
+          </Link>
           <Link href="/pricing" className="hover:text-foreground">
             Pricing
           </Link>

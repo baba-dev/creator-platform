@@ -7,18 +7,25 @@ import { getPublicPricingCatalogue } from "@/lib/public-pricing";
 export const dynamic = "force-dynamic";
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const origin = learnOrigin();
-  const [posts, pricing] = await Promise.all([db.learnPost.findMany({
-    where: { publishedAt: { not: null } },
-    take: 45000,
-    select: { slug: true, published: true, modifiedAt: true },
-  }), getPublicPricingCatalogue().catch(() => ({ models: [] }))]);
-  const operations = pricing.models.filter((item) => item.kind === "tool" && item.category === "tools");
+  const [posts, pricing] = await Promise.all([
+    db.learnPost.findMany({
+      where: { publishedAt: { not: null } },
+      take: 45000,
+      select: { slug: true, published: true, modifiedAt: true },
+    }),
+    getPublicPricingCatalogue().catch(() => ({ models: [] })),
+  ]);
+  const operations = pricing.models.filter(
+    (item) => item.kind === "tool" && item.category === "tools",
+  );
   return [
     { url: origin },
     { url: `${origin}/pricing` },
     { url: `${origin}/tools` },
     ...publicTools.map((tool) => ({ url: `${origin}/tools/${tool.slug}` })),
-    ...operations.map((item) => ({ url: `${origin}/tools/operations/${encodeURIComponent(item.id)}` })),
+    ...operations.map((item) => ({
+      url: `${origin}/tools/operations/${encodeURIComponent(item.id)}`,
+    })),
     { url: `${origin}/learn` },
     ...posts
       .filter((p) => !publishedContent(p.published).noindex)

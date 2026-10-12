@@ -12,8 +12,12 @@ import {
 describe("public tool catalogue", () => {
   it("covers the canonical workspace tools with unique, safe slugs", () => {
     expect(publicTools).toHaveLength(WORKSPACE_TOOLS.length);
-    expect(new Set(publicTools.map((tool) => tool.id)).size).toBe(publicTools.length);
-    expect(new Set(publicTools.map((tool) => tool.slug)).size).toBe(publicTools.length);
+    expect(new Set(publicTools.map((tool) => tool.id)).size).toBe(
+      publicTools.length,
+    );
+    expect(new Set(publicTools.map((tool) => tool.slug)).size).toBe(
+      publicTools.length,
+    );
     for (const tool of publicTools) {
       expect(tool.slug).toMatch(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
       expect(tool.summary.length).toBeGreaterThan(80);
@@ -25,8 +29,14 @@ describe("public tool catalogue", () => {
     }
   });
   it("supports customer language and category filtering", () => {
-    expect(findPublicTools("animate photo").some((tool) => tool.id === "video-studio")).toBe(true);
-    expect(findPublicTools("srt").some((tool) => tool.id === "transcription")).toBe(true);
+    expect(
+      findPublicTools("animate photo").some(
+        (tool) => tool.id === "video-studio",
+      ),
+    ).toBe(true);
+    expect(
+      findPublicTools("srt").some((tool) => tool.id === "transcription"),
+    ).toBe(true);
     expect(findPublicTools("narration", "image")).toHaveLength(0);
     expect(findPublicTools(" ")).toHaveLength(publicTools.length);
   });

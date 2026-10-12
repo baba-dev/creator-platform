@@ -17,9 +17,11 @@ export default async function OnboardingPage({
   searchParams: Promise<{ returnTo?: string }>;
 }) {
   const requested = safeInvitationRoute((await searchParams).returnTo);
-  const contentReturn = requested.startsWith("/learn/start/") || requested.startsWith("/tools/start/")
-    ? requested
-    : undefined;
+  const contentReturn =
+    requested.startsWith("/learn/start/") ||
+    requested.startsWith("/tools/start/")
+      ? requested
+      : undefined;
   const session = await requireRequestSession("/onboarding");
   const membership = await db.membership.findFirst({
     where: {

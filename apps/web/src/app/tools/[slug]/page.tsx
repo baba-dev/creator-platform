@@ -169,7 +169,7 @@ export default async function ToolDetailPage({ params }: PageProps) {
           ].map(([href, label]) => (
             <Link
               key={href}
-              href={href}
+              href={href as Route}
               className="shrink-0 hover:text-primary"
             >
               {label}

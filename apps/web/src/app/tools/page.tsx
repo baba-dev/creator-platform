@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Route } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { getPublicPricingCatalogue } from "@/lib/public-pricing";
@@ -150,7 +150,7 @@ export default async function ToolsPage() {
             <Link
               className="shrink-0 text-muted-foreground hover:text-primary"
               key={href}
-              href={href}
+              href={href as Route}
             >
               {label}
             </Link>

@@ -189,6 +189,7 @@ export default function HomePage() {
             ["#models", "Models"],
             ["#workflow", "Workflow"],
             ["#teams", "For teams"],
+            ["/pricing", "Pricing"],
             ["/learn", "Learn"],
           ].map(([href, label]) => (
             <a
@@ -604,6 +605,9 @@ export default function HomePage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-xs text-muted-foreground">
+            <Link href="/pricing" className="transition hover:text-foreground">
+              Pricing
+            </Link>
             <Link href="/learn" className="transition hover:text-foreground">
               Learn
             </Link>

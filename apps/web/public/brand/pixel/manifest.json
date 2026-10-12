@@ -1,0 +1,35 @@
+{
+  "version": "phase-a2",
+  "status": "artwork-only",
+  "canonicalReference": "/brand/mascots/creators-mascot-working-laptop-queued-laptop-float.svg",
+  "sourceOfTruth": "/brand/pixel/pixel-master.svg",
+  "license": "Creators first-party brand media",
+  "assetType": "vector-only SVG, no embedded raster, no external resources",
+  "master": "pixel-master.svg",
+  "staticFallback": "pixel-static-fallback.svg",
+  "heroOutline": "pixel-hero-outline.svg",
+  "facialRig": "pixel-face-rig.svg",
+  "expressionIds": [
+    "neutral",
+    "happy",
+    "curious",
+    "thinking",
+    "mischievous",
+    "awake",
+    "eye-roll",
+    "celebrating",
+    "focused",
+    "concerned"
+  ],
+  "poseIds": [
+    "fully-drawn",
+    "anticipation-crouch",
+    "bump-up-jump",
+    "landing-squash",
+    "idle-resting",
+    "hover-wave",
+    "thinking",
+    "surprised-awake"
+  ],
+  "notes": "Artwork preparation only; do not activate character animation or replace current logo/mascots until separately approved."
+}

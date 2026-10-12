@@ -7,7 +7,8 @@ export function ToolsHeader() {
   return (
     <header className="relative z-30 border-b border-border bg-background/90">
       <div className="mx-auto flex min-h-20 max-w-7xl items-center justify-between gap-3 px-5 sm:px-7 lg:px-10">
-        <Brand />
+        <div className="sm:hidden"><Brand compact /></div>
+        <div className="hidden sm:block"><Brand /></div>
         <nav
           aria-label="Public navigation"
           className="hidden items-center gap-5 text-xs font-semibold text-muted-foreground md:flex"
@@ -34,7 +35,9 @@ export function ToolsHeader() {
             href="/sign-up"
             className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-primary px-3 py-2 text-xs font-bold text-primary-foreground transition hover:opacity-90 sm:px-4"
           >
-            Start creating <Icon name="arrow" className="size-4" />
+            <span className="sm:hidden">Start</span>
+            <span className="hidden sm:inline">Start creating</span>
+            <Icon name="arrow" className="hidden size-4 sm:inline" />
           </Link>
         </div>
       </div>

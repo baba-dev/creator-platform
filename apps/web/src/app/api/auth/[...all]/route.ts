@@ -6,6 +6,7 @@ const handlers = toNextJsHandler(auth);
 const PASSWORD_RESET_PATH = "/api/auth/request-password-reset";
 const SENSITIVE_AUTH_PATHS = new Set([
   "/api/auth/two-factor/enable",
+  "/api/auth/two-factor/disable",
   "/api/auth/two-factor/verify-totp",
   "/api/auth/two-factor/verify-backup-code",
   "/api/auth/two-factor/generate-backup-codes",

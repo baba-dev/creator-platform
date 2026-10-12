@@ -19,7 +19,7 @@ a normal HTTPS link.
   Confirming that code activates the factor. Codes and provisioning data are
   only held in ephemeral component state and are cleared after success. QR
   construction is entirely client side, never via a third-party image service.
-- Existing factors cannot be re-exposed. Enrolled users can regenerate one-time
+- Existing factors cannot be re-exposed. Enrolled users can replace a disclosed authenticator (password required for credential accounts), immediately disabling the old TOTP seed and old recovery codes before reenrollment. Enrolled users can regenerate one-time
   recovery codes after password verification. Old recovery codes become invalid.
   Security notification delivery is best effort **after** rotation and cannot
   return a false failure if the notification outbox is down.
@@ -53,6 +53,7 @@ a normal HTTPS link.
 6. Validate keyboard interaction, accessible QR title, mobile layout,
    cancellation, session expiry, and stale/invalid provisioning payload
    handling.
-7. Run the full static/test/build-release/browser-smoke/quality CI lanes on the
+7. Check that replacing an exposed authenticator invalidates the old seed and recovery codes and makes admin access require new enrollment; social/passkey-only accounts must not be blocked by a nonexistent local password.
+8. Run the full static/test/build-release/browser-smoke/quality CI lanes on the
    final PR head; merge and deploy only when all pass. Production app
    compatibility requires real-device smoke tests.

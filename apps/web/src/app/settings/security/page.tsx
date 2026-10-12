@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { db } from "@aiwa/db";
 import { TotpEnrollment } from "@/components/auth/totp-enrollment";
 import { TotpSecurityPanel } from "@/components/auth/totp-security-panel";
 import { requireRequestSession } from "@/lib/request-auth";
@@ -9,6 +10,11 @@ export default async function SecurityPage() {
   const session = await requireRequestSession("/settings/security", {
     allowAdminWithoutMfa: true,
   });
+  const credential = await db.account.findFirst({
+    where: { userId: session.user.id, providerId: "credential", password: { not: null } },
+    select: { id: true },
+  });
+  const requiresPassword = Boolean(credential);
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-foreground sm:px-8 lg:py-12">
       <div className="mx-auto max-w-2xl">
@@ -28,11 +34,12 @@ export default async function SecurityPage() {
           Manage the authenticator for your own verified Creators account.
         </p>
         {session.user.twoFactorEnabled ? (
-          <TotpSecurityPanel />
+          <TotpSecurityPanel requiresPassword={requiresPassword} />
         ) : (
           <TotpEnrollment
             accountEmail={session.user.email}
             administrative={session.user.platformRole !== "USER"}
+            requiresPassword={requiresPassword}
           />
         )}
       </div>

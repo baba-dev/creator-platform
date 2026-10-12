@@ -34,9 +34,11 @@ const guideContent: Record<Guide, { name: string; instructions: string }> = {
 export function TotpEnrollment({
   accountEmail,
   administrative = false,
+  requiresPassword = true,
 }: {
   accountEmail: string;
   administrative?: boolean;
+  requiresPassword?: boolean;
 }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("intro");
@@ -60,10 +62,10 @@ export function TotpEnrollment({
     setError(null);
     setNotice(null);
     try {
-      const response = await authClient.twoFactor.enable({ password });
+      const response = await authClient.twoFactor.enable({ password: requiresPassword ? password : "" });
       if (response.error || !response.data) {
         setError(
-          "Unable to begin setup. Check your password and try again. Accounts without a password must set one before enrolling.",
+          "Unable to begin setup. Verify your session and, if required, your current password, then retry.",
         );
         return;
       }
@@ -184,18 +186,24 @@ export function TotpEnrollment({
             and Microsoft Authenticator, a manual setup key, and one-time
             recovery codes.
           </p>
-          <label className="block text-xs font-semibold">
-            Confirm your Creators password
-            <input
-              className={inputStyle}
-              type="password"
-              required
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Your current password"
-            />
-          </label>
+          {requiresPassword ? (
+            <label className="block text-xs font-semibold">
+              Confirm your Creators password
+              <input
+                className={inputStyle}
+                type="password"
+                required
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Your current password"
+              />
+            </label>
+          ) : (
+            <p className="rounded-xl border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+              Your account uses a linked sign-in or passkey without a local password. You can enroll from your authenticated session.
+            </p>
+          )}
           <Button type="submit" size="lg" className="w-full" disabled={busy}>
             {busy ? "Preparing secure setup…" : "Set up authenticator"}
           </Button>

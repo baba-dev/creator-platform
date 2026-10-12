@@ -156,10 +156,15 @@ export function publicModelItem(row: {
   };
   const tasks = listStudioTasksForModel(descriptor).filter((task) => {
     if (
-      (task === "chat" || task === "character-chat" || task === "scriptwriting" ||
-        task === "creative-director" || task === "brand-strategy" || task === "story-planning") &&
+      (task === "chat" ||
+        task === "character-chat" ||
+        task === "scriptwriting" ||
+        task === "creative-director" ||
+        task === "brand-strategy" ||
+        task === "story-planning") &&
       price.pricingDimension !== "TOKEN"
-    ) return false;
+    )
+      return false;
     if (task === "speech-synthesis")
       return (
         price.pricingDimension === "CHARACTER" ||

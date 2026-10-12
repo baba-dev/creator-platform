@@ -104,7 +104,9 @@ describe("public customer pricing safety", () => {
       providerModelId: "seed-audio-1.0",
       mediaKind: "VOICE",
       capabilities: { audioGeneration: true },
-      priceVersions: [{ ...snapshot, pricingDimension: "SECOND", usageRates: null }],
+      priceVersions: [
+        { ...snapshot, pricingDimension: "SECOND", usageRates: null },
+      ],
     });
     expect(audio).toMatchObject({
       category: "audio",

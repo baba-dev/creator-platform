@@ -282,7 +282,8 @@ export function ToolDirectory({
                             <Link
                               key={op.id}
                               href={
-                                ("/tools/operations/" + encodeURIComponent(op.id)) as Route
+                                ("/tools/operations/" +
+                                  encodeURIComponent(op.id)) as Route
                               }
                               className="group flex min-w-0 flex-col rounded-xl border border-border bg-card p-4 transition hover:border-primary hover:shadow-sm"
                             >

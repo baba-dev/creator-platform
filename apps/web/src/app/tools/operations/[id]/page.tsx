@@ -57,7 +57,7 @@ export default async function OperationPage({ params }: Props) {
           <span>/</span>
           <Link href="/tools">Tools</Link>
           <span>/</span>
-          <Link href="/tools/mediakit">MediaKit</Link>
+          <Link href="/tools/media-toolkit">MediaKit</Link>
           <span>/</span>
           <span aria-current="page">{operation.name}</span>
         </nav>

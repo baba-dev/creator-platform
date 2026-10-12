@@ -103,7 +103,7 @@ describe("Pixel Phase A2 artwork exports", () => {
       "poses/pixel-bump-up-jump.svg",
       "poses/pixel-hover-wave.svg",
     ]) {
-      const image = sharp(Buffer.from(content(file)), { density: 96 });
+      const image = sharp(Buffer.from(content(file)));
       const metadata = await image.metadata();
       expect(metadata.width).toBe(720);
       expect(metadata.height).toBe(520);

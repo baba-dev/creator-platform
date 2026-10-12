@@ -56,10 +56,12 @@ test("public tool detail keeps signup destination allowlisted", async ({
   const response = await page.goto("/tools/ai-image-generator");
   expect(response?.status()).toBe(200);
   await expect(
-    page.getByRole("heading", { name: "Make the image you can imagine." }),
+    page.getByRole("heading", {
+      name: "Turn the picture in your head into a visual you can actually use.",
+    }),
   ).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "Explore pricing" }).first(),
+    page.getByRole("link", { name: "Compare models & pricing" }).first(),
   ).toHaveAttribute("href", "/pricing");
   await page.getByRole("link", { name: "Start creating" }).last().click();
   await expect(page).toHaveURL(/\/tools\/start\/image-studio$/);

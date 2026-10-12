@@ -12,6 +12,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   });
   return [
     { url: origin },
+    { url: `${origin}/pricing` },
     { url: `${origin}/learn` },
     ...posts
       .filter((p) => !publishedContent(p.published).noindex)

@@ -91,7 +91,11 @@ export function SignInForm({
         ? await authClient.twoFactor.verifyBackupCode({ code })
         : await authClient.twoFactor.verifyTotp({ code });
       if (result.error) {
-        setError(recoveryMode ? "That recovery code is invalid or was already used." : "Invalid code. Check your phone time and try a current six-digit code.");
+        setError(
+          recoveryMode
+            ? "That recovery code is invalid or was already used."
+            : "Invalid code. Check your phone time and try a current six-digit code.",
+        );
         return;
       }
       router.push(returnTo);
@@ -109,7 +113,9 @@ export function SignInForm({
         <div>
           <h2 className="text-sm font-semibold">Two-factor authentication</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            {recoveryMode ? "Enter one of your saved single-use recovery codes." : "Enter the current six-digit code from your authenticator app."}
+            {recoveryMode
+              ? "Enter one of your saved single-use recovery codes."
+              : "Enter the current six-digit code from your authenticator app."}
           </p>
         </div>
 
@@ -127,7 +133,13 @@ export function SignInForm({
             pattern={recoveryMode ? undefined : "[0-9]{6}"}
             maxLength={recoveryMode ? 128 : 6}
             value={totpCode}
-            onChange={(e) => setTotpCode(recoveryMode ? e.target.value : e.target.value.replace(/\D/g, "").slice(0, 6))}
+            onChange={(e) =>
+              setTotpCode(
+                recoveryMode
+                  ? e.target.value
+                  : e.target.value.replace(/\D/g, "").slice(0, 6),
+              )
+            }
           />
         </label>
 
@@ -140,11 +152,30 @@ export function SignInForm({
           </p>
         ) : null}
 
-        <Button className="w-full" size="lg" disabled={pending || (!recoveryMode && totpCode.length !== 6)} type="submit">
-          {pending ? "Verifying…" : recoveryMode ? "Use recovery code" : "Verify code"}
+        <Button
+          className="w-full"
+          size="lg"
+          disabled={pending || (!recoveryMode && totpCode.length !== 6)}
+          type="submit"
+        >
+          {pending
+            ? "Verifying…"
+            : recoveryMode
+              ? "Use recovery code"
+              : "Verify code"}
         </Button>
-        <button type="button" className="w-full text-center text-xs font-semibold text-primary underline underline-offset-4" onClick={() => { setRecoveryMode((v) => !v); setTotpCode(""); setError(null); }}>
-          {recoveryMode ? "Use authenticator code instead" : "Lost your phone? Use a recovery code"}
+        <button
+          type="button"
+          className="w-full text-center text-xs font-semibold text-primary underline underline-offset-4"
+          onClick={() => {
+            setRecoveryMode((v) => !v);
+            setTotpCode("");
+            setError(null);
+          }}
+        >
+          {recoveryMode
+            ? "Use authenticator code instead"
+            : "Lost your phone? Use a recovery code"}
         </button>
 
         <Button

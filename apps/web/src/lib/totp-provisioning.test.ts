@@ -8,14 +8,23 @@ const uri = `otpauth://totp/Aiwa%20Creators:member%40example.test?secret=${secre
 describe("TOTP provisioning URI", () => {
   it("extracts the manual setup fields without changing the QR payload", () => {
     expect(parseTotpProvisioning(uri, account)).toEqual({
-      uri, issuer: "Aiwa Creators", account, secret, algorithm: "SHA1", digits: 6, period: 30,
+      uri,
+      issuer: "Aiwa Creators",
+      account,
+      secret,
+      algorithm: "SHA1",
+      digits: 6,
+      period: 30,
     });
   });
 
   it.each([
     ["untrusted scheme", uri.replace("otpauth:", "https:")],
     ["wrong factor", uri.replace("//totp/", "//hotp/")],
-    ["wrong account", uri.replace("member%40example.test", "attacker%40example.test")],
+    [
+      "wrong account",
+      uri.replace("member%40example.test", "attacker%40example.test"),
+    ],
     ["wrong issuer", uri.replace("issuer=Aiwa+Creators", "issuer=Other")],
     ["missing secret", uri.replace(secret, "")],
     ["unsupported algorithm", uri + "&algorithm=SHA256"],

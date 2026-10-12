@@ -11,7 +11,9 @@ export default async function AdminMfaSetupPage() {
   return (
     <div className="mx-auto max-w-2xl p-4 py-10 sm:p-8">
       <Eyebrow>Account security</Eyebrow>
-      <h1 className="font-display mb-5 mt-2 text-2xl font-semibold">Administrative Multi-Factor Authentication</h1>
+      <h1 className="font-display mb-5 mt-2 text-2xl font-semibold">
+        Administrative Multi-Factor Authentication
+      </h1>
       <TotpSecurityPanel />
     </div>
   );

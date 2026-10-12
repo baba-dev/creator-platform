@@ -19,7 +19,14 @@ export function parseTotpProvisioning(
   try {
     const url = new URL(value);
     if (url.protocol !== "otpauth:" || url.hostname !== "totp") return null;
-    if (url.username || url.password || url.port || url.hash || url.searchParams.has("counter")) return null;
+    if (
+      url.username ||
+      url.password ||
+      url.port ||
+      url.hash ||
+      url.searchParams.has("counter")
+    )
+      return null;
     const label = decodeURIComponent(url.pathname.replace(/^\//, ""));
     const colon = label.indexOf(":");
     if (colon < 1) return null;
@@ -35,7 +42,8 @@ export function parseTotpProvisioning(
       (url.searchParams.get("algorithm") ?? "SHA1").toUpperCase() !== "SHA1" ||
       (url.searchParams.get("digits") ?? "6") !== "6" ||
       (url.searchParams.get("period") ?? "30") !== "30"
-    ) return null;
+    )
+      return null;
     return {
       uri: value,
       issuer,

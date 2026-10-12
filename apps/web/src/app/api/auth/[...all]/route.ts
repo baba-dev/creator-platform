@@ -43,7 +43,8 @@ export async function POST(request: Request) {
 
   if (!isPasswordReset) {
     const response = await handlers.POST(request);
-    if (!SENSITIVE_AUTH_PATHS.has(new URL(request.url).pathname)) return response;
+    if (!SENSITIVE_AUTH_PATHS.has(new URL(request.url).pathname))
+      return response;
     const sensitiveHeaders = new Headers(response.headers);
     sensitiveHeaders.set("Cache-Control", "private, no-store");
     sensitiveHeaders.set("Pragma", "no-cache");

@@ -279,7 +279,7 @@ export default async function ToolDetailPage({ params }: PageProps) {
                 {operations.map((item) => (
                   <Link
                     key={item.id}
-                    href={"/tools/operations/" + encodeURIComponent(item.id)}
+                    href={("/tools/operations/" + encodeURIComponent(item.id)) as Route}
                     className="rounded-xl border border-border bg-card p-5 hover:border-primary"
                   >
                     <h3 className="font-semibold">{item.name}</h3>

@@ -235,7 +235,7 @@ export default async function ToolsPage() {
                     </td>
                     <td className="px-5 py-4">
                       <Link
-                        href={toolHref(tool)}
+                        href={toolHref(tool) as Route}
                         className="font-bold text-primary hover:underline"
                       >
                         Explore ↗
@@ -318,7 +318,7 @@ export default async function ToolsPage() {
                     </p>
                   </div>
                   <Link
-                    href={toolHref(tool)}
+                    href={toolHref(tool) as Route}
                     className="shrink-0 text-xs font-bold text-primary hover:underline"
                   >
                     Explore ↗

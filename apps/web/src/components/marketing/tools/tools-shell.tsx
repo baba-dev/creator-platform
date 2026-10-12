@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Route } from "next";
 import { Brand } from "@/components/ui/brand";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Icon } from "@/components/ui/icon";
@@ -101,7 +102,7 @@ export function ToolsConversion({
         </div>
         <div className="flex flex-col gap-3 sm:flex-row">
           <Link
-            href={toolId ? "/tools/start/" + toolId : "/sign-up"}
+            href={(toolId ? "/tools/start/" + toolId : "/sign-up") as Route}
             className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-bold text-primary-foreground hover:opacity-90"
           >
             Start creating <Icon name="arrow" className="size-4" />

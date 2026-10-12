@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import type { Route } from "next";
 import { useMemo, useState } from "react";
 import { Icon } from "@/components/ui/icon";
 import {
@@ -48,7 +49,7 @@ export function ToolCard({
   return (
     <article className="group flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-md">
       <Link
-        href={toolHref(tool)}
+        href={toolHref(tool) as Route}
         aria-label={"Explore " + tool.title}
         className="relative block overflow-hidden bg-surface-sunken"
       >
@@ -103,7 +104,7 @@ export function ToolCard({
         </div>
         <div className="mt-5 flex items-center justify-between gap-3 border-t border-border pt-4 text-xs font-bold">
           <Link
-            href={toolHref(tool)}
+            href={toolHref(tool) as Route}
             className="inline-flex min-h-9 items-center gap-1.5 text-primary hover:underline"
           >
             Explore tool <Icon name="arrow" className="size-3.5" />
@@ -281,7 +282,7 @@ export function ToolDirectory({
                             <Link
                               key={op.id}
                               href={
-                                "/tools/operations/" + encodeURIComponent(op.id)
+                                ("/tools/operations/" + encodeURIComponent(op.id)) as Route
                               }
                               className="group flex min-w-0 flex-col rounded-xl border border-border bg-card p-4 transition hover:border-primary hover:shadow-sm"
                             >
@@ -445,7 +446,7 @@ export function ToolDirectory({
                           </p>
                         </div>
                         <Link
-                          href={toolHref(tool)}
+                          href={toolHref(tool) as Route}
                           className="shrink-0 text-xs font-bold text-primary hover:underline"
                         >
                           Explore ↗

@@ -41,7 +41,7 @@ test("search, filters and rule-based tool finder are accessible without login", 
   await expect(page.getByText("No matching tools yet.")).toBeVisible();
   await page.getByRole("button", { name: "Clear filters" }).click();
   await page.getByRole("button", { name: "Make a video" }).click();
-  await page.getByRole("button", { name: "An image" }).click();
+  await page.getByRole("button", { name: "An image", exact: true }).click();
   await expect(
     page.locator("#tool-finder").getByText("Video Studio", { exact: true }),
   ).toBeVisible();

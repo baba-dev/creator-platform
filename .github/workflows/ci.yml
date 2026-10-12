@@ -85,7 +85,7 @@ jobs:
     timeout-minutes: 60
     services:
       mariadb:
-        image: public.ecr.aws/docker/library/mariadb:10.6
+        image: mariadb:10.6
         env:
           MARIADB_ROOT_PASSWORD: ci-root-only
           MARIADB_DATABASE: creator_platform
@@ -164,7 +164,7 @@ jobs:
     timeout-minutes: 45
     services:
       mariadb:
-        image: public.ecr.aws/docker/library/mariadb:10.6
+        image: mariadb:10.6
         env:
           MARIADB_ROOT_PASSWORD: ci-root-only
           MARIADB_DATABASE: creator_platform
@@ -277,7 +277,7 @@ jobs:
     timeout-minutes: 20
     services:
       mariadb:
-        image: public.ecr.aws/docker/library/mariadb:10.6
+        image: mariadb:10.6
         env:
           MARIADB_ROOT_PASSWORD: ci-root-only
           MARIADB_DATABASE: creator_platform

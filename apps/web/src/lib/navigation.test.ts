@@ -28,6 +28,22 @@ describe("safeInvitationRoute", () => {
     ).toBe("/invite/tok_0123456789abcdef?ref=mail#section");
   });
 
+  it("allows a real public tool start and blocks guessed destinations", () => {
+    expect(safeInvitationRoute("/tools/start/image-studio")).toBe(
+      "/tools/start/image-studio",
+    );
+    expect(safeInvitationRoute("/tools/start/voice-studio")).toBe(
+      "/tools/start/voice-studio",
+    );
+    expect(safeInvitationRoute("/tools/start/unknown")).toBe("/onboarding");
+    expect(
+      safeInvitationRoute("/tools/start/image-studio?next=https://evil.com"),
+    ).toBe("/onboarding");
+    expect(safeInvitationRoute("//evil.com/tools/start/image-studio")).toBe(
+      "/onboarding",
+    );
+  });
+
   it("defaults to /onboarding when no returnTo is provided", () => {
     expect(safeInvitationRoute(undefined)).toBe("/onboarding");
     expect(safeInvitationRoute("")).toBe("/onboarding");

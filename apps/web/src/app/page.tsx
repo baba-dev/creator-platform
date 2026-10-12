@@ -185,6 +185,7 @@ export default function HomePage() {
           aria-label="Public navigation"
         >
           {[
+            ["/tools", "Explore Tools"],
             ["#platform", "Platform"],
             ["#models", "Models"],
             ["#workflow", "Workflow"],

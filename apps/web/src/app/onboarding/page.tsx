@@ -17,9 +17,11 @@ export default async function OnboardingPage({
   searchParams: Promise<{ returnTo?: string }>;
 }) {
   const requested = safeInvitationRoute((await searchParams).returnTo);
-  const learnReturn = requested.startsWith("/learn/start/")
-    ? requested
-    : undefined;
+  const contentReturn =
+    requested.startsWith("/learn/start/") ||
+    requested.startsWith("/tools/start/")
+      ? requested
+      : undefined;
   const session = await requireRequestSession("/onboarding");
   const membership = await db.membership.findFirst({
     where: {
@@ -31,7 +33,7 @@ export default async function OnboardingPage({
   });
 
   if (membership) {
-    redirect(learnReturn ?? `/app/${membership.organization.slug}`);
+    redirect(contentReturn ?? `/app/${membership.organization.slug}`);
   }
 
   return (
@@ -92,7 +94,7 @@ export default async function OnboardingPage({
                 </span>
               </div>
 
-              <OnboardingForm returnTo={learnReturn} />
+              <OnboardingForm returnTo={contentReturn} />
 
               <div className="mt-8 grid gap-3 border-t border-border pt-6 sm:grid-cols-3">
                 {(

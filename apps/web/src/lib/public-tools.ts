@@ -473,7 +473,7 @@ const editorial: Record<string, ToolEditorial> = {
     relatedIds: ["creative-director", "scriptwriter", "character-chat"],
   },
   mediakit: {
-    slug: "mediakit",
+    slug: "media-toolkit",
     category: "finishing",
     headline: "Give existing media its finishing touches.",
     summary:
@@ -543,6 +543,46 @@ export type PublicTool = ToolEditorial & {
   cover: string;
 };
 const cover = (id: string) => "/tool-art/" + id + ".svg";
+
+const pixelTool: PublicTool = {
+  id: "pixel-ai",
+  title: "Pixel AI",
+  icon: "sparkles",
+  segment: "",
+  cover: cover("pixel-ai"),
+  slug: "pixel-ai",
+  category: "creative",
+  featured: true,
+  headline: "A creative copilot that knows the workspace.",
+  summary:
+    "Ask for a model recommendation, turn a rough thought into a stronger prompt, find a saved asset or get pointed to the right creative workflow without leaving the page you are on.",
+  idealFor:
+    "People who want practical creative guidance while they work, not another disconnected chat tab.",
+  useCases: [
+    "Choose a suitable model for the job",
+    "Turn an unfinished thought into a usable prompt",
+    "Find the right tool or saved media faster",
+  ],
+  capabilities: [
+    "Workspace-aware creative guidance",
+    "Model and tool discovery",
+    "Prompt improvement",
+    "In-context help across the application",
+  ],
+  workflow: [
+    "Open Pixel from anywhere in the workspace.",
+    "Describe what you are trying to make or find.",
+    "Use the suggestion to continue in the appropriate tool.",
+  ],
+  keywords: [
+    "creative assistant",
+    "ai copilot",
+    "prompt assistant",
+    "model recommendation",
+    "pixel",
+  ],
+  relatedIds: ["creative-director", "scriptwriter", "image-studio"],
+};
 export const publicTools: readonly PublicTool[] = WORKSPACE_TOOLS.map(
   (tool) => {
     const item = editorial[tool.id];
@@ -556,7 +596,7 @@ export const publicTools: readonly PublicTool[] = WORKSPACE_TOOLS.map(
       cover: cover(tool.id),
     };
   },
-);
+).concat(pixelTool);
 
 export function publicToolBySlug(slug: string): PublicTool | undefined {
   return publicTools.find((tool) => tool.slug === slug);

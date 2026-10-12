@@ -1,8 +1,12 @@
 import type { Metadata, Route } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { getPublicPricingCatalogue } from "@/lib/public-pricing";
+import {
+  modelsForToolLanding,
+  toolLandingBySlug,
+} from "@/lib/public-tool-landings";
 import {
   publicToolById,
   publicToolBySlug,
@@ -16,6 +20,7 @@ import {
   ToolsHeader,
 } from "@/components/marketing/tools/tools-shell";
 import { Icon } from "@/components/ui/icon";
+import { ToolLandingPage } from "@/components/marketing/tools/tool-landing-page";
 
 export const dynamic = "force-dynamic";
 type PageProps = { params: Promise<{ slug: string }> };
@@ -25,8 +30,45 @@ export function generateStaticParams() {
 export async function generateMetadata({
   params,
 }: PageProps): Promise<Metadata> {
-  const tool = publicToolBySlug((await params).slug);
+  const slug = (await params).slug;
+  if (slug === "mediakit") {
+    return {
+      title: "MediaKit Tools",
+      alternates: { canonical: "/tools/media-toolkit" },
+      robots: { index: false, follow: true },
+    };
+  }
+  const tool = publicToolBySlug(slug);
   if (!tool) return { title: "Tool not found", robots: { index: false } };
+  const landing = toolLandingBySlug(slug);
+  if (landing) {
+    return {
+      title: landing.seoTitle,
+      description: landing.seoDescription,
+      keywords: [...tool.keywords],
+      alternates: { canonical: "/tools/" + tool.slug },
+      robots: { index: true, follow: true },
+      openGraph: {
+        title: landing.seoTitle,
+        description: landing.seoDescription,
+        type: "website",
+        images: [
+          {
+            url: landing.screenshot.src,
+            width: 1060,
+            height: 740,
+            alt: landing.screenshot.alt,
+          },
+        ],
+      },
+      twitter: {
+        card: "summary_large_image",
+        title: landing.seoTitle,
+        description: landing.seoDescription,
+        images: [landing.screenshot.src],
+      },
+    };
+  }
   return {
     title: tool.title + " — " + tool.headline,
     description: tool.summary.slice(0, 160),
@@ -48,8 +90,26 @@ export async function generateMetadata({
   };
 }
 export default async function ToolDetailPage({ params }: PageProps) {
-  const tool = publicToolBySlug((await params).slug);
+  const slug = (await params).slug;
+  if (slug === "mediakit") permanentRedirect("/tools/media-toolkit");
+  const tool = publicToolBySlug(slug);
   if (!tool) notFound();
+  const landing = toolLandingBySlug(slug);
+  const origin = process.env.APP_URL ?? "https://creator.aiwamediagroup.com";
+  if (landing) {
+    const catalogue = await getPublicPricingCatalogue().catch(() => ({
+      models: [],
+      generatedAt: new Date(0).toISOString(),
+    }));
+    return (
+      <ToolLandingPage
+        tool={tool}
+        landing={landing}
+        models={modelsForToolLanding(landing, catalogue.models)}
+        origin={origin}
+      />
+    );
+  }
   const related = tool.relatedIds
     .map(publicToolById)
     .filter((item) => item !== undefined);
@@ -69,7 +129,6 @@ export default async function ToolDetailPage({ params }: PageProps) {
     { name: "All tools", item: "/tools" },
     { name: tool.title, item: "/tools/" + tool.slug },
   ];
-  const origin = process.env.APP_URL ?? "https://creator.aiwamediagroup.com";
   const breadcrumbData = {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",

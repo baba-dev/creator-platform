@@ -11,7 +11,7 @@ import {
 
 describe("public tool catalogue", () => {
   it("covers the canonical workspace tools with unique, safe slugs", () => {
-    expect(publicTools).toHaveLength(WORKSPACE_TOOLS.length);
+    expect(publicTools).toHaveLength(WORKSPACE_TOOLS.length + 1);
     expect(new Set(publicTools.map((tool) => tool.id)).size).toBe(
       publicTools.length,
     );
@@ -27,6 +27,8 @@ describe("public tool catalogue", () => {
       expect(tool.useCases.length).toBeGreaterThanOrEqual(3);
       expect(tool.workflow.length).toBe(3);
     }
+    expect(publicToolById("pixel-ai")?.slug).toBe("pixel-ai");
+    expect(publicToolById("mediakit")?.slug).toBe("media-toolkit");
   });
   it("supports customer language and category filtering", () => {
     expect(

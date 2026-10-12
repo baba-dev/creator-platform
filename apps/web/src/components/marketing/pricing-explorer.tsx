@@ -395,8 +395,9 @@ export function PricingExplorer({
                             {priceLabel(item)}
                           </p>
                           <p className="mt-1 text-xs tabular-nums text-muted-foreground">
-                            {item.baseOmr}
-                            {item.exampleOnly ? " · reference rate" : ""}
+                            {item.tiers.length
+                              ? "See individual token tiers"
+                              : item.baseOmr + (item.exampleOnly ? " · reference rate" : "")}
                           </p>
                         </div>
                         <p className="mt-3 text-xs text-muted-foreground">
@@ -456,7 +457,9 @@ export function PricingExplorer({
                   <p className="mt-1 tabular-nums text-muted-foreground">
                     {priceLabel(item)}
                   </p>
-                  <p className="mt-1 text-muted-foreground">{item.baseOmr}</p>
+                  <p className="mt-1 text-muted-foreground">
+                    {item.tiers.length ? "See token tiers" : item.baseOmr}
+                  </p>
                   <button
                     onClick={() => setSelected(item)}
                     className="mt-2 font-semibold text-primary underline underline-offset-4"
@@ -515,9 +518,9 @@ export function PricingExplorer({
                 {priceLabel(selected)}
               </p>
               <p className="mt-1 text-sm tabular-nums text-muted-foreground">
-                {selected.baseOmr}
+                {selected.tiers.length ? "See customer token tiers below" : selected.baseOmr}
               </p>
-              <details className="mt-3 rounded-lg bg-secondary/50 p-3 text-xs text-muted-foreground">
+              {selected.tiers.length === 0 && <details className="mt-3 rounded-lg bg-secondary/50 p-3 text-xs text-muted-foreground">
                 <summary className="cursor-pointer font-semibold">
                   Detailed retail equivalence (µUSD)
                 </summary>
@@ -529,7 +532,7 @@ export function PricingExplorer({
                   microUSD at this price snapshot. This is the customer retail
                   equivalent, not the provider purchase cost.
                 </p>
-              </details>
+              </details>}
               <p className="mt-3 text-xs leading-5 text-muted-foreground">
                 {selected.exampleOnly
                   ? "Reference rate only. Resolution, input assets, additional references and usage can change the final quote."

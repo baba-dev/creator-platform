@@ -155,6 +155,11 @@ export function publicModelItem(row: {
       : {}) as Record<string, boolean | number | string>,
   };
   const tasks = listStudioTasksForModel(descriptor).filter((task) => {
+    if (
+      (task === "chat" || task === "character-chat" || task === "scriptwriting" ||
+        task === "creative-director" || task === "brand-strategy" || task === "story-planning") &&
+      price.pricingDimension !== "TOKEN"
+    ) return false;
     if (task === "speech-synthesis")
       return (
         price.pricingDimension === "CHARACTER" ||
@@ -172,7 +177,11 @@ export function publicModelItem(row: {
       );
     return true;
   });
-  if (tasks.length === 0) return null;
+  const dedicatedAudio =
+    row.mediaKind === "VOICE" &&
+    /seed[-_.]?audio/i.test(row.providerModelId) &&
+    descriptor.capabilities.audioGeneration === true;
+  if (tasks.length === 0 && !dedicatedAudio) return null;
   const category = categoryFor(row.mediaKind, row.providerModelId, tasks);
   let tiers: PublicPriceTier[] = [];
   if (
@@ -210,6 +219,7 @@ export function publicModelItem(row: {
     return null;
   const simpleUnit =
     row.mediaKind === "VOICE" &&
+    !dedicatedAudio &&
     price.usageRates == null &&
     (price.pricingDimension === "CHARACTER" ||
       price.pricingDimension === "SECOND" ||
@@ -221,7 +231,10 @@ export function publicModelItem(row: {
     provider: row.provider,
     description: row.description.slice(0, 900),
     category,
-    availableIn: tasks.map((task) => STUDIO_TASK_LABELS[task]),
+    availableIn: [
+      ...tasks.map((task) => STUDIO_TASK_LABELS[task]),
+      ...(dedicatedAudio ? ["Audio Generation"] : []),
+    ],
     capabilities: publicCapabilities(row.capabilities),
     dimension: price.pricingDimension,
     unitQuantity: price.unitQuantity,

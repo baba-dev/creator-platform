@@ -98,6 +98,21 @@ describe("public customer pricing safety", () => {
     }
   });
 
+  it("keeps dedicated audio in its own section without promising a fixed quote", () => {
+    const audio = publicModelItem({
+      ...model,
+      providerModelId: "seed-audio-1.0",
+      mediaKind: "VOICE",
+      capabilities: { audioGeneration: true },
+      priceVersions: [{ ...snapshot, pricingDimension: "SECOND", usageRates: null }],
+    });
+    expect(audio).toMatchObject({
+      category: "audio",
+      availableIn: ["Audio Generation"],
+      calculator: "reference",
+    });
+  });
+
   it("does not manufacture text prices when a legacy snapshot lacks rate tiers", () => {
     expect(
       publicModelItem({

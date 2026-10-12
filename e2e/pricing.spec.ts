@@ -23,12 +23,17 @@ test("public pricing stays readable at mobile, tablet and desktop sizes", async 
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - window.innerWidth,
     );
-    expect(overflow, "Unexpected horizontal overflow at " + width + "px").toBeLessThanOrEqual(1);
+    expect(
+      overflow,
+      "Unexpected horizontal overflow at " + width + "px",
+    ).toBeLessThanOrEqual(1);
   }
 
   await page.getByRole("link", { name: /estimate a creation/i }).click();
   await expect(page).toHaveURL(/#calculator$/);
-  await expect(page.getByRole("heading", { name: "Quick estimate" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Quick estimate" }),
+  ).toBeVisible();
 });
 
 test("public pricing theme and filters work without authentication", async ({
@@ -36,11 +41,17 @@ test("public pricing theme and filters work without authentication", async ({
 }) => {
   await page.goto("/pricing");
   const initial = await page.locator("html").getAttribute("data-theme");
-  await page.getByRole("button", { name: /switch to (light|dark) theme/i }).click();
+  await page
+    .getByRole("button", { name: /switch to (light|dark) theme/i })
+    .click();
   await expect(page.locator("html")).toHaveAttribute(
     "data-theme",
     initial === "light" ? "dark" : "light",
   );
-  await page.getByRole("searchbox", { name: /search models or capabilities/i }).fill("unlikely-pricing-search-result");
-  await expect(page.getByText(/No matching published entries/).first()).toBeVisible();
+  await page
+    .getByRole("searchbox", { name: /search models or capabilities/i })
+    .fill("unlikely-pricing-search-result");
+  await expect(
+    page.getByText(/No matching published entries/).first(),
+  ).toBeVisible();
 });

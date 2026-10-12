@@ -4,6 +4,12 @@ import { auth } from "../../../../lib/auth";
 
 const handlers = toNextJsHandler(auth);
 const PASSWORD_RESET_PATH = "/api/auth/request-password-reset";
+const SENSITIVE_AUTH_PATHS = new Set([
+  "/api/auth/two-factor/enable",
+  "/api/auth/two-factor/verify-totp",
+  "/api/auth/two-factor/verify-backup-code",
+  "/api/auth/two-factor/generate-backup-codes",
+]);
 export const PASSWORD_RESET_RESPONSE_FLOOR_MS = 500;
 
 export const GET = handlers.GET;
@@ -35,7 +41,19 @@ function genericPasswordResetResponse() {
 export async function POST(request: Request) {
   const isPasswordReset = new URL(request.url).pathname === PASSWORD_RESET_PATH;
 
-  if (!isPasswordReset) return handlers.POST(request);
+  if (!isPasswordReset) {
+    const response = await handlers.POST(request);
+    if (!SENSITIVE_AUTH_PATHS.has(new URL(request.url).pathname)) return response;
+    const sensitiveHeaders = new Headers(response.headers);
+    sensitiveHeaders.set("Cache-Control", "private, no-store");
+    sensitiveHeaders.set("Pragma", "no-cache");
+    sensitiveHeaders.set("Referrer-Policy", "no-referrer");
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: sensitiveHeaders,
+    });
+  }
 
   const startedAt = performance.now();
   try {

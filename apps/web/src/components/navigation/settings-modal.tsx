@@ -299,7 +299,7 @@ export function SettingsModal({
                       </div>
                     </div>
                     <Link
-                      href={"/admin/mfa-setup" as Route}
+                      href={"/settings/security" as Route}
                       onClick={onClose}
                       className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground hover:border-primary/40"
                     >

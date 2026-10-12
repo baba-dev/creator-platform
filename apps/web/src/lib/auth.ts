@@ -220,6 +220,10 @@ export const auth = betterAuth({
       "/sign-in/social": { window: 60, max: 12 },
       "/sign-in/passkey": { window: 60, max: 10 },
       "/passkey/add-passkey": { window: 300, max: 5 },
+      "/two-factor/enable": { window: 300, max: 3 },
+      "/two-factor/verify-totp": { window: 300, max: 8 },
+      "/two-factor/verify-backup-code": { window: 300, max: 8 },
+      "/two-factor/generate-backup-codes": { window: 3600, max: 3 },
     },
   },
   advanced: {
@@ -271,14 +275,23 @@ export const auth = betterAuth({
       ]);
       if (!user || !factor) return;
 
-      await enqueueMail(
-        securityEventEmail({
-          to: user.email,
+      // Rotation completed before this hook. A mail outage must not turn a
+      // successful secret change into a misleading error response.
+      try {
+        await enqueueMail(
+          securityEventEmail({
+            to: user.email,
+            userId,
+            event: "BACKUP_CODES_REGENERATED",
+            idempotencyKey: `security:backup-codes-regenerated:${userId}:${factor.updatedAt.getTime()}`,
+          }),
+        );
+      } catch (error) {
+        console.error("Recovery-code notification enqueue failed", {
           userId,
-          event: "BACKUP_CODES_REGENERATED",
-          idempotencyKey: `security:backup-codes-regenerated:${userId}:${factor.updatedAt.getTime()}`,
-        }),
-      );
+          errorName: error instanceof Error ? error.name : "UnknownError",
+        });
+      }
     }),
   },
   databaseHooks: {

@@ -30,7 +30,7 @@
     "@aiwa/organizations": "workspace:*",
     "@aiwa/observability": "workspace:*",
     "@aiwa/providers": "workspace:*",
-    "sharp": "0.35.4",
+    "sharp": "0.35.5",
     "zod": "^4.1.12"
   },
   "devDependencies": {

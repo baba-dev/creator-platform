@@ -61,7 +61,12 @@ export default async function PricingPage() {
       />
       <header className="relative z-30 border-b border-border bg-background/85">
         <div className="mx-auto flex min-h-20 max-w-7xl items-center justify-between gap-3 px-5 sm:px-7 lg:px-10">
-          <Brand />
+          <div className="sm:hidden">
+            <Brand compact />
+          </div>
+          <div className="hidden sm:block">
+            <Brand />
+          </div>
           <nav
             aria-label="Public pricing navigation"
             className="hidden items-center gap-5 text-xs font-semibold text-muted-foreground md:flex"
@@ -92,7 +97,8 @@ export default async function PricingPage() {
             </Button>
             <Button size="sm" asChild>
               <Link href="/sign-up">
-                Start creating{" "}
+                <span className="sm:hidden">Start</span>
+                <span className="hidden sm:inline">Start creating</span>{" "}
                 <Icon name="arrow" className="hidden size-4 sm:inline" />
               </Link>
             </Button>

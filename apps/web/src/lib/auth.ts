@@ -220,6 +220,11 @@ export const auth = betterAuth({
       "/sign-in/social": { window: 60, max: 12 },
       "/sign-in/passkey": { window: 60, max: 10 },
       "/passkey/add-passkey": { window: 300, max: 5 },
+      "/two-factor/enable": { window: 300, max: 3 },
+      "/two-factor/disable": { window: 3600, max: 3 },
+      "/two-factor/verify-totp": { window: 300, max: 8 },
+      "/two-factor/verify-backup-code": { window: 300, max: 8 },
+      "/two-factor/generate-backup-codes": { window: 3600, max: 3 },
     },
   },
   advanced: {
@@ -252,6 +257,33 @@ export const auth = betterAuth({
       }
     }),
     after: createAuthMiddleware(async (ctx) => {
+      if (ctx.path === "/two-factor/disable") {
+        const userId = ctx.context.session?.user?.id;
+        if (!userId) return;
+        try {
+          const user = await db.user.findUnique({
+            where: { id: userId },
+            select: { email: true, twoFactorEnabled: true },
+          });
+          if (user && !user.twoFactorEnabled) {
+            await enqueueMail(
+              securityEventEmail({
+                to: user.email,
+                userId,
+                event: "MFA_DISABLED",
+                idempotencyKey: `security:mfa-disabled:${userId}:${Date.now()}`,
+              }),
+            );
+          }
+        } catch (error) {
+          // Disabling the factor has already completed. Notification is best effort.
+          console.error("MFA-disable notification enqueue failed", {
+            userId,
+            errorName: error instanceof Error ? error.name : "UnknownError",
+          });
+        }
+        return;
+      }
       if (ctx.path !== "/two-factor/generate-backup-codes") return;
 
       const session = ctx.context.session;
@@ -271,14 +303,23 @@ export const auth = betterAuth({
       ]);
       if (!user || !factor) return;
 
-      await enqueueMail(
-        securityEventEmail({
-          to: user.email,
+      // Rotation completed before this hook. A mail outage must not turn a
+      // successful secret change into a misleading error response.
+      try {
+        await enqueueMail(
+          securityEventEmail({
+            to: user.email,
+            userId,
+            event: "BACKUP_CODES_REGENERATED",
+            idempotencyKey: `security:backup-codes-regenerated:${userId}:${factor.updatedAt.getTime()}`,
+          }),
+        );
+      } catch (error) {
+        console.error("Recovery-code notification enqueue failed", {
           userId,
-          event: "BACKUP_CODES_REGENERATED",
-          idempotencyKey: `security:backup-codes-regenerated:${userId}:${factor.updatedAt.getTime()}`,
-        }),
-      );
+          errorName: error instanceof Error ? error.name : "UnknownError",
+        });
+      }
     }),
   },
   databaseHooks: {

@@ -3,6 +3,7 @@ import { db } from "@aiwa/db";
 import { publishedContent } from "@aiwa/learn";
 import { learnOrigin } from "@/lib/learn/queries";
 import { publicTools } from "@/lib/public-tools";
+import { solutions } from "@/lib/public-solutions";
 import { getPublicPricingCatalogue } from "@/lib/public-pricing";
 export const dynamic = "force-dynamic";
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
@@ -22,6 +23,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: origin },
     { url: `${origin}/pricing` },
     { url: `${origin}/tools` },
+    { url: `${origin}/solutions` },
+    ...solutions.map((solution) => ({ url: origin + "/solutions/" + solution.slug })),
     ...publicTools.map((tool) => ({ url: `${origin}/tools/${tool.slug}` })),
     ...operations.map((item) => ({
       url: `${origin}/tools/operations/${encodeURIComponent(item.id)}`,

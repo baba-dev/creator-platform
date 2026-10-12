@@ -186,6 +186,7 @@ export default function HomePage() {
         >
           {[
             ["/tools", "Explore Tools"],
+            ["/solutions", "Solutions"],
             ["#platform", "Platform"],
             ["#models", "Models"],
             ["#workflow", "Workflow"],

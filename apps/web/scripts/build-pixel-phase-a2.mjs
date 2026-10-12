@@ -29,7 +29,6 @@ const buildPixelAssets = function buildPixelAssets() {
     ivory = "#fbfaf6",
     shadow = "#dedbd5",
     tip = "#333235",
-    violet = "#8760c6",
     coral = "#e8867a";
   const xml = (s) =>
     s

@@ -6,7 +6,6 @@ import { useMemo, useState } from "react";
 import { Icon } from "@/components/ui/icon";
 import {
   findPublicTools,
-  publicTools,
   recommendTools,
   toolCategories,
   toolHref,

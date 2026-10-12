@@ -9,6 +9,7 @@ import {
   ToolsHeader,
 } from "@/components/marketing/tools/tools-shell";
 
+export const dynamic = "force-dynamic";
 type Props = { params: Promise<{ id: string }> };
 async function findOperation(id: string) {
   if (!id || id.length > 128 || !/^[a-zA-Z0-9_-]+$/.test(id)) return null;

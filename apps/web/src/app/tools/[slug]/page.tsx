@@ -8,7 +8,6 @@ import {
   publicToolBySlug,
   publicTools,
   toolCategories,
-  toolHref,
 } from "@/lib/public-tools";
 import { ToolCard } from "@/components/marketing/tools/tool-explorer";
 import {
@@ -18,6 +17,7 @@ import {
 } from "@/components/marketing/tools/tools-shell";
 import { Icon } from "@/components/ui/icon";
 
+export const dynamic = "force-dynamic";
 type PageProps = { params: Promise<{ slug: string }> };
 export function generateStaticParams() {
   return publicTools.map((tool) => ({ slug: tool.slug }));

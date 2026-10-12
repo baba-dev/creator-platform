@@ -7,11 +7,16 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("@aiwa/db", () => ({
   db: {
-    providerModel: { findMany: mocks.modelFindMany, findUnique: mocks.modelFindUnique },
+    providerModel: {
+      findMany: mocks.modelFindMany,
+      findUnique: mocks.modelFindUnique,
+    },
     providerTool: { findMany: mocks.toolFindMany },
   },
 }));
-vi.mock("@aiwa/providers/byteplus", () => ({ isBytePlusMediaKitConfigured: () => false }));
+vi.mock("@aiwa/providers/byteplus", () => ({
+  isBytePlusMediaKitConfigured: () => false,
+}));
 
 import {
   estimatePublicPricing,
@@ -21,24 +26,36 @@ import {
 } from "./public-pricing";
 
 const snapshot = {
-  id: "price-version", effectiveFrom: new Date("2026-10-01T00:00:00Z"),
-  providerCostMicroUsd: 1000n, customerCredits: 1n, fxBaisaNumerator: 769n,
-  fxBaisaDenominator: 2n, targetMarginBps: 2500, creditsPerBaisa: 1n,
-  pricingDimension: "TOKEN", unitQuantity: 1,
+  id: "price-version",
+  effectiveFrom: new Date("2026-10-01T00:00:00Z"),
+  providerCostMicroUsd: 1000n,
+  customerCredits: 1n,
+  fxBaisaNumerator: 769n,
+  fxBaisaDenominator: 2n,
+  targetMarginBps: 2500,
+  creditsPerBaisa: 1n,
+  pricingDimension: "TOKEN",
+  unitQuantity: 1,
   usageRates: {
     estimator: "text-token-v1",
-    tiers: [{
-      maxPromptTokens: 8192,
-      inputMicroUsdPerMillionTokens: "100000",
-      cachedInputMicroUsdPerMillionTokens: "20000",
-      outputMicroUsdPerMillionTokens: "200000",
-    }],
+    tiers: [
+      {
+        maxPromptTokens: 8192,
+        inputMicroUsdPerMillionTokens: "100000",
+        cachedInputMicroUsdPerMillionTokens: "20000",
+        outputMicroUsdPerMillionTokens: "200000",
+      },
+    ],
   },
 };
 const model = {
-  id: "public-id", provider: "GROQ", providerModelId: "sample-chat-model",
-  displayName: "Sample chat model", description: "Writing and reasoning.",
-  mediaKind: "TEXT", capabilities: { "task:chat": true, contextWindow: 8192 },
+  id: "public-id",
+  provider: "GROQ",
+  providerModelId: "sample-chat-model",
+  displayName: "Sample chat model",
+  description: "Writing and reasoning.",
+  mediaKind: "TEXT",
+  capabilities: { "task:chat": true, contextWindow: 8192 },
   priceVersions: [snapshot],
 };
 beforeEach(() => {
@@ -60,45 +77,87 @@ describe("public customer pricing safety", () => {
   it("projects enabled model metadata and retail tiers without leaking financial internals", () => {
     const item = publicModelItem(model);
     expect(item).toMatchObject({
-      id: "public-id", provider: "GROQ", category: "chat",
-      calculator: "text", availableIn: ["Chat"], priceVersionId: "price-version",
+      id: "public-id",
+      provider: "GROQ",
+      category: "chat",
+      calculator: "text",
+      availableIn: ["Chat"],
+      priceVersionId: "price-version",
     });
     expect(item?.tiers).toHaveLength(1);
     expect(item?.tiers[0]?.cachedInputCreditsPerMillion).not.toBeNull();
     const json = JSON.stringify(item);
-    for (const field of ["providerCostMicroUsd", "targetMarginBps", "fxBaisaNumerator", "usageRates", "test-only-key"]) {
+    for (const field of [
+      "providerCostMicroUsd",
+      "targetMarginBps",
+      "fxBaisaNumerator",
+      "usageRates",
+      "test-only-key",
+    ]) {
       expect(json).not.toContain(field);
     }
   });
 
   it("does not manufacture text prices when a legacy snapshot lacks rate tiers", () => {
-    expect(publicModelItem({ ...model, priceVersions: [{ ...snapshot, usageRates: null }] })).toBeNull();
+    expect(
+      publicModelItem({
+        ...model,
+        priceVersions: [{ ...snapshot, usageRates: null }],
+      }),
+    ).toBeNull();
   });
 
   it("does not advertise disabled or unpriced models", async () => {
-    const catalogue = await getPublicPricingCatalogue(new Date("2026-10-12T00:00:00Z"));
+    const catalogue = await getPublicPricingCatalogue(
+      new Date("2026-10-12T00:00:00Z"),
+    );
     expect(catalogue.models).toHaveLength(1);
-    expect(mocks.modelFindMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: expect.objectContaining({ enabled: true, priceVersions: { some: expect.any(Object) } }),
-    }));
+    expect(mocks.modelFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          enabled: true,
+          priceVersions: { some: expect.any(Object) },
+        }),
+      }),
+    );
     expect(JSON.stringify(catalogue)).not.toContain("providerCostMicroUsd");
   });
 
   it("uses registered token billing for a public example without reserving or creating work", async () => {
     const result = await estimatePublicPricing({
-      id: "public-id", version: "price-version",
-      promptTokens: 2000, cachedPromptTokens: 500, completionTokens: 500,
+      id: "public-id",
+      version: "price-version",
+      promptTokens: 2000,
+      cachedPromptTokens: 500,
+      completionTokens: 500,
     });
     expect(BigInt(result.estimatedCredits)).toBeGreaterThan(0n);
     expect(result.isEstimate).toBe(true);
     expect(result.note).toContain("authenticated Studio quote");
-    expect(mocks.modelFindUnique).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: "public-id" }, select: expect.objectContaining({ priceVersions: expect.any(Object) }),
-    }));
+    expect(mocks.modelFindUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "public-id" },
+        select: expect.objectContaining({ priceVersions: expect.any(Object) }),
+      }),
+    );
   });
 
   it("rejects retired client versions and unsupported quantities", async () => {
-    await expect(estimatePublicPricing({ id: "public-id", version: "retired", promptTokens: 1, completionTokens: 1 })).rejects.toThrow();
-    await expect(estimatePublicPricing({ id: "public-id", version: "price-version", promptTokens: 9000, completionTokens: 1 })).rejects.toThrow();
+    await expect(
+      estimatePublicPricing({
+        id: "public-id",
+        version: "retired",
+        promptTokens: 1,
+        completionTokens: 1,
+      }),
+    ).rejects.toThrow();
+    await expect(
+      estimatePublicPricing({
+        id: "public-id",
+        version: "price-version",
+        promptTokens: 9000,
+        completionTokens: 1,
+      }),
+    ).rejects.toThrow();
   });
 });

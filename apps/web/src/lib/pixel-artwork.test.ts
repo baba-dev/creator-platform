@@ -6,8 +6,7 @@ import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 
 const assetUrl = new URL("../../public/brand/pixel/", import.meta.url);
-const content = (file: string) =>
-  readFileSync(new URL(file, assetUrl), "utf8");
+const content = (file: string) => readFileSync(new URL(file, assetUrl), "utf8");
 
 const manifest = JSON.parse(content("manifest.json")) as {
   version: string;
@@ -61,7 +60,9 @@ describe("Pixel Phase A2 artwork exports", () => {
       );
       expect(svg).not.toMatch(/(?:href|src)=["'](?:https?:)?\/\//i);
       for (const match of svg.matchAll(/<path\b[^>]*\/>/g)) {
-        expect([...match[0].matchAll(/\sfill=/g)].length).toBeLessThanOrEqual(1);
+        expect([...match[0].matchAll(/\sfill=/g)].length).toBeLessThanOrEqual(
+          1,
+        );
       }
     },
   );

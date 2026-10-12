@@ -12,9 +12,21 @@
         <path d="M351 234 Q360 224 371 230"/>
         <path d="M445 226 Q457 218 467 229"/>
       </g>
-      <g id="pixel-eyes" fill="none" stroke="#29272a" stroke-width="3.4" stroke-linecap="round">
-      <path id="pixel-eye-left" d="M347 262 Q366 244 385 261"/>
-      <path id="pixel-eye-right" d="M442 255 Q459 240 475 256"/></g>
+      <g id="pixel-eyes"><g id="pixel-eye-left" transform="translate(367 262) scale(1)">
+      <ellipse id="pixel-sclera-left" cx="0" cy="0" rx="19" ry="26" fill="white" stroke="#29272a" stroke-width="2.8"/>
+      <g id="pixel-pupil-left" transform="translate(0 0)">
+        <ellipse cx="2" cy="1" rx="11.5" ry="20" fill="#29272a"/>
+        <ellipse cx="-2" cy="-8" rx="4.7" ry="7.5" fill="white"/>
+        <circle cx="7" cy="8" r="2.1" fill="white"/>
+      </g>
+      </g><g id="pixel-eye-right" transform="translate(461 256) scale(0.93)">
+      <ellipse id="pixel-sclera-right" cx="0" cy="0" rx="19" ry="26" fill="white" stroke="#29272a" stroke-width="2.8"/>
+      <g id="pixel-pupil-right" transform="translate(0 0)">
+        <ellipse cx="2" cy="1" rx="11.5" ry="20" fill="#29272a"/>
+        <ellipse cx="-2" cy="-8" rx="4.7" ry="7.5" fill="white"/>
+        <circle cx="7" cy="8" r="2.1" fill="white"/>
+      </g>
+      </g></g>
       <g id="pixel-whiskers" fill="none" stroke="#29272a" stroke-width="2.2" stroke-linecap="round">
         <path d="M310 278 L285 269 M313 287 L283 289 M496 277 L520 271 M493 287 L521 293"/>
       </g>

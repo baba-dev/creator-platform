@@ -4,6 +4,7 @@ import {
   type PlatformRole,
 } from "@aiwa/authz";
 import type { Route } from "next";
+import { WORKSPACE_TOOLS } from "@/lib/workspace-tools";
 
 const internalOrigin = "https://internal.aiwa.invalid";
 
@@ -48,6 +49,11 @@ export function safeInvitationRoute(
   }
 
   if (/^\/learn\/start\/[a-zA-Z0-9_-]+$/.test(pathname)) return route;
+
+  if (route === pathname && /^\/tools\/start\/[a-z0-9-]+$/.test(pathname)) {
+    const id = pathname.slice("/tools/start/".length);
+    if (WORKSPACE_TOOLS.some((tool) => tool.id === id)) return route;
+  }
 
   if (pathname.startsWith("/invite/")) {
     const token = pathname.slice("/invite/".length);

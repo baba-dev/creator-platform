@@ -11,7 +11,11 @@ export default async function SecurityPage() {
     allowAdminWithoutMfa: true,
   });
   const credential = await db.account.findFirst({
-    where: { userId: session.user.id, providerId: "credential", password: { not: null } },
+    where: {
+      userId: session.user.id,
+      providerId: "credential",
+      password: { not: null },
+    },
     select: { id: true },
   });
   const requiresPassword = Boolean(credential);

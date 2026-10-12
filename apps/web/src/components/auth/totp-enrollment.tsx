@@ -62,7 +62,9 @@ export function TotpEnrollment({
     setError(null);
     setNotice(null);
     try {
-      const response = await authClient.twoFactor.enable({ password: requiresPassword ? password : "" });
+      const response = await authClient.twoFactor.enable({
+        password: requiresPassword ? password : undefined,
+      });
       if (response.error || !response.data) {
         setError(
           "Unable to begin setup. Verify your session and, if required, your current password, then retry.",
@@ -201,7 +203,8 @@ export function TotpEnrollment({
             </label>
           ) : (
             <p className="rounded-xl border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-              Your account uses a linked sign-in or passkey without a local password. You can enroll from your authenticated session.
+              Your account uses a linked sign-in or passkey without a local
+              password. You can enroll from your authenticated session.
             </p>
           )}
           <Button type="submit" size="lg" className="w-full" disabled={busy}>

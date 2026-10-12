@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Route } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { getPublicPricingCatalogue } from "@/lib/public-pricing";
@@ -320,7 +320,7 @@ export default async function SolutionsPage() {
           ].map(([title, body, url, icon]) => (
             <Link
               key={url}
-              href={url}
+              href={url as Route}
               className="rounded-2xl border border-border bg-card p-5 transition hover:-translate-y-1 hover:shadow-md"
             >
               <Icon

@@ -44,7 +44,7 @@ describe("public solutions", () => {
     const rows = [
       { id: "a", category: "image", baseCredits: "123" },
       { id: "b", category: "chat", baseCredits: "456" },
-    ] as Parameters<typeof relevantModels>[0];
+    ] as unknown as Parameters<typeof relevantModels>[0];
     expect(relevantModels(rows, ["image"]).map((row) => row.id)).toEqual(["a"]);
     expect(relevantModels(rows, ["image"])[0]?.baseCredits).toBe("123");
   });

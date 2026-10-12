@@ -1,4 +1,4 @@
-import { WORKSPACE_TOOLS } from "@/lib/workspace-tools";
+import { WORKSPACE_TOOLS } from "./workspace-tools";
 import type { IconName } from "@/components/ui/icon";
 
 export type PublicToolCategory =

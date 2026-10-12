@@ -4,7 +4,7 @@ import {
   type PlatformRole,
 } from "@aiwa/authz";
 import type { Route } from "next";
-import { WORKSPACE_TOOLS } from "@/lib/workspace-tools";
+import { WORKSPACE_TOOLS } from "./workspace-tools";
 
 const internalOrigin = "https://internal.aiwa.invalid";
 
